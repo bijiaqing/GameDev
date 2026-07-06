@@ -3,6 +3,7 @@
 #include <graffiti_kern.cuh>
 #include <helpers_paramphys.cuh>  // for _get_hg, _get_nu
 #include <helpers_diffusion.cuh>  // for _get_term_grad_cyl
+#include <helpers_transport.cuh>  // for _if_out_of_box
 
 // =========================================================================================================================
 // Kernel: diffusion_pos
@@ -95,10 +96,22 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rs_swarm, real dt
         real x_new = x + delta_x;
         real R_new = R + delta_R;
         real Z_new = Z + delta_Z;
-        
+
+        real y_new = sqrt(R_new*R_new + Z_new*Z_new);
+        real z_new = atan2(R_new, Z_new);
+
+        real lx = dev_particle[idx].velocity.x;
+        real vy = dev_particle[idx].velocity.y;
+        real lz = dev_particle[idx].velocity.z;
+
+        _if_out_of_box(x_new, y_new, z_new, lx, vy, lz);
+
         dev_particle[idx].position.x = x_new;
-        dev_particle[idx].position.y = sqrt(R_new*R_new + Z_new*Z_new);
-        dev_particle[idx].position.z = atan2(R_new, Z_new);
+        dev_particle[idx].position.y = y_new;
+        dev_particle[idx].position.z = z_new;
+        dev_particle[idx].velocity.x = lx;
+        dev_particle[idx].velocity.y = vy;
+        dev_particle[idx].velocity.z = lz;
 
         dev_rs_swarm[idx] = rs_swarm; // update the global state, otherwise, always the same number
     }
