@@ -99,6 +99,7 @@ void col_proc_exec (swarm *dev_particle, curs *dev_rs_swarm, real *dev_col_expt,
                 #endif
             );
 
+            #ifdef MULTISIZE
             real s_i = dev_particle[idx_old_i].par_size;
             real s_j = dev_particle[idx_old_j].par_size;
             real s_k = cbrt(s_i*s_i*s_i + s_j*s_j*s_j);
@@ -132,6 +133,7 @@ void col_proc_exec (swarm *dev_particle, curs *dev_rs_swarm, real *dev_col_expt,
                 dev_particle[idx_old_i].par_size  = s_k;
                 dev_particle[idx_old_i].par_numr *= (s_i*s_i*s_i) / (s_k*s_k*s_k);
             }
+            #endif // MULTISIZE
 
             dev_rs_swarm[idx_old_i] = rs_swarm;
         }

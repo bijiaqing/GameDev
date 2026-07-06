@@ -518,8 +518,10 @@ bool save_variable (const std::string &file_name)
     file << "velocity_x = f8"                                                               << std::endl;
     file << "velocity_y = f8"                                                               << std::endl;
     file << "velocity_z = f8"                                                               << std::endl;
+    #ifdef MULTISIZE
     file << "par_size   = f8"                                                               << std::endl;
     file << "par_numr   = f8"                                                               << std::endl;
+    #endif // MULTISIZE
     #ifdef COLLISION
     file << "col_rate   = f8"                                                               << std::endl;
     file << "max_dist   = f8"                                                               << std::endl;

@@ -244,8 +244,13 @@ real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
     real vy_i = dev_particle[idx_old_i].velocity.y;
     real vy_j = dev_particle[idx_old_j].velocity.y;
     
+    #ifdef MULTISIZE
     real s_i = dev_particle[idx_old_i].par_size;
     real s_j = dev_particle[idx_old_j].par_size;
+    #else
+    real s_i = S_0;
+    real s_j = S_0;
+    #endif // MULTISIZE
     
     real R_i = y_i*sin(z_i);
     real R_j = y_j*sin(z_j);
@@ -316,7 +321,11 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     // lambda_ij = N_j * K_ij / V, where K_ij is the coagulation kernel and V is the volume of the cell
     
     real lam_ij = LAMBDA_0; // dimension issue saved for later
+    #ifdef MULTISIZE
     real numr_j = dev_particle[idx_old_j].par_numr;
+    #else
+    real numr_j = M_D / N_P;
+    #endif // MULTISIZE
 
     if constexpr (kernel == CONSTANT_KERNEL)
     {
@@ -326,8 +335,13 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     }
     else if constexpr (kernel == LINEAR_KERNEL)
     {
+        #ifdef MULTISIZE
         real s_i = dev_particle[idx_old_i].par_size;
         real s_j = dev_particle[idx_old_j].par_size;
+        #else
+        real s_i = S_0;
+        real s_j = S_0;
+        #endif // MULTISIZE
 
         // m_i + m_j
         lam_ij *= 0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
@@ -336,8 +350,13 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     }
     else if constexpr (kernel == PRODUCT_KERNEL)
     {
+        #ifdef MULTISIZE
         real s_i = dev_particle[idx_old_i].par_size;
         real s_j = dev_particle[idx_old_j].par_size;
+        #else
+        real s_i = S_0;
+        real s_j = S_0;
+        #endif // MULTISIZE
         
         // m_i * m_j
         lam_ij *= _get_grain_mass(s_i)*_get_grain_mass(s_j);
@@ -350,8 +369,13 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
         // where v_ik is the relative velocity between particle i and j
         // and sigma_ik is the collisional cross section between particle i and j
         
+        #ifdef MULTISIZE
         real s_i = dev_particle[idx_old_i].par_size;
         real s_j = dev_particle[idx_old_j].par_size;
+        #else
+        real s_i = S_0;
+        real s_j = S_0;
+        #endif // MULTISIZE
         
         real v_rel_ij = _get_vrel(dev_particle, idx_old_i, idx_old_j
             #ifdef IMPORTGAS

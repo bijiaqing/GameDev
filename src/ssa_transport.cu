@@ -30,7 +30,12 @@ void ssa_transport (swarm *dev_particle, real dt
         _load_particle(dev_particle, idx, x_i, y_i, z_i, lx_i, vy_i, lz_i);
         _ssa_substep_1(dt, x_i, y_i, z_i, lx_i, vy_i, lz_i, x_1, y_1, z_1);
 
+        #ifdef MULTISIZE
         real size = dev_particle[idx].par_size;
+        #else
+        real size = S_0;
+        #endif // MULTISIZE
+        
         real beta = 0.0; // no radiation pressure
 
         _ssa_substep_2(dt, size, beta, lx_i, vy_i, lz_i, x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j

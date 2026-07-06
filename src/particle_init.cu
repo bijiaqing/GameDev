@@ -71,7 +71,11 @@ real _get_grain_number (real size)
 
 __global__
 void particle_init (swarm *dev_particle, 
-    const real *dev_random_x, const real *dev_random_y, const real *dev_random_z, const real *dev_random_s)
+    const real *dev_random_x, const real *dev_random_y, const real *dev_random_z
+    #ifdef MULTISIZE
+    , const real *dev_random_s
+    #endif // MULTISIZE
+)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
 
@@ -85,8 +89,10 @@ void particle_init (swarm *dev_particle,
         dev_particle[idx].velocity.y = 0.0;
         dev_particle[idx].velocity.z = 0.0;
 
+        #ifdef MULTISIZE
         dev_particle[idx].par_size   = dev_random_s[idx];
         dev_particle[idx].par_numr   = _get_grain_number(dev_random_s[idx]);
+        #endif // MULTISIZE
 
         #ifdef COLLISION
         dev_particle[idx].col_rate   = 0.0;

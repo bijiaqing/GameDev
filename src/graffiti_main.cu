@@ -103,12 +103,15 @@ int main (int argc, char **argv)
         real *random_x, *dev_random_x;
         real *random_y, *dev_random_y;
         real *random_z, *dev_random_z;
-        real *random_s, *dev_random_s;
 
         cudaMallocHost((void**)&random_x, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_x, sizeof(real)*N_P);
         cudaMallocHost((void**)&random_y, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_y, sizeof(real)*N_P);
         cudaMallocHost((void**)&random_z, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_z, sizeof(real)*N_P);
+
+        #ifdef MULTISIZE
+        real *random_s, *dev_random_s;
         cudaMallocHost((void**)&random_s, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_s, sizeof(real)*N_P);
+        #endif // MULTISIZE
 
         rand_generator.seed(0); // or use rand_generator.seed(std::time(NULL));
 
@@ -136,23 +139,35 @@ int main (int argc, char **argv)
         rand_uniform(random_z, N_P, INIT_ZMIN, INIT_ZMAX);
         #endif // IMPORTGAS
         
+        #ifdef MULTISIZE
         real idx_swarm = -0.5;  // all swarms have an equal mass
         #if defined(TRANSPORT) && defined(RADIATION)
         idx_swarm = -1.5;       // all swarms have an equal surface area, see _get_grain_number
         #endif // TRANSPORT && RADIATION
         rand_pow_law(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
+        #endif // MULTISIZE
 
         cudaMemcpy(dev_random_x, random_x, sizeof(real)*N_P, cudaMemcpyHostToDevice);
         cudaMemcpy(dev_random_y, random_y, sizeof(real)*N_P, cudaMemcpyHostToDevice);
         cudaMemcpy(dev_random_z, random_z, sizeof(real)*N_P, cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_random_s, random_s, sizeof(real)*N_P, cudaMemcpyHostToDevice);
 
-        particle_init <<< NB_P, TPB >>> (dev_particle, dev_random_x, dev_random_y, dev_random_z, dev_random_s);
+        #ifdef MULTISIZE
+        cudaMemcpy(dev_random_s, random_s, sizeof(real)*N_P, cudaMemcpyHostToDevice);
+        #endif // MULTISIZE
+
+        particle_init <<< NB_P, TPB >>> (dev_particle, dev_random_x, dev_random_y, dev_random_z
+            #ifdef MULTISIZE
+            dev_random_s
+            #endif // MULTISIZE
+        );
 
         cudaFreeHost(random_x); cudaFree(dev_random_x);
         cudaFreeHost(random_y); cudaFree(dev_random_y);
         cudaFreeHost(random_z); cudaFree(dev_random_z);
+
+        #ifdef MULTISIZE
         cudaFreeHost(random_s); cudaFree(dev_random_s);
+        #endif // MULTISIZE
         
         #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
         rs_swarm_init <<< NB_P, TPB >>> (dev_rs_swarm);

@@ -8,7 +8,11 @@
 // =========================================================================================================================
 
 // always compiled
-__global__ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *dev_random_y, const real *dev_random_z, const real *dev_random_s);
+__global__ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *dev_random_y, const real *dev_random_z
+    #ifdef MULTISIZE
+    , const real *dev_random_s
+    #endif // MULTISIZE
+);
 
 // =========================================================================================================================
 
@@ -28,7 +32,8 @@ __global__ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tr
     #endif
 );
 __global__ void col_flag_calc (int *dev_col_flag, curs *dev_rs_grids, real *dev_col_rand, const real *dev_col_rate, real dt_col);
-__global__ void col_proc_exec (swarm *dev_particle, curs *dev_rs_swarm, real *dev_col_expt, const real *dev_col_rand, const int *dev_col_flag, const tree *dev_col_tree, const bbox *dev_boundbox
+__global__ void col_proc_exec (swarm *dev_particle, curs *dev_rs_swarm, real *dev_col_expt, const real *dev_col_rand, 
+    const int *dev_col_flag, const tree *dev_col_tree, const bbox *dev_boundbox
     #ifdef IMPORTGAS
     , const real *dev_gasdens
     #endif

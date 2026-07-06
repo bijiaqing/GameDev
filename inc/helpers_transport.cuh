@@ -42,7 +42,7 @@ void _save_particle (swarm *dev_particle, int idx, real x, real y, real z, real 
 __device__ __forceinline__
 void _eject_to_outer (real &y, real &z, real &lx, real &vy, real &lz)
 {
-    y  = Y_MAX;
+    y  = Y_MAX - 1e-6*Y_MAX;
     z  = 0.5*M_PI;
     lx = _get_omegaK(y)*y*y;
     vy = 0.0;
@@ -50,7 +50,8 @@ void _eject_to_outer (real &y, real &z, real &lx, real &vy, real &lz)
 }
 
 // Order: O2 | Dependencies: _eject_to_outer [O1]
-// Purpose: Enforce domain boundaries (periodic X, inner/outer Y, throw-out Z)
+// Purpose: Enforce domain boundaries (periodic X always; inner/outer Y and Z only when IMPORTGAS;
+//          HALFDISK mirrors z >= Z_MAX across the midplane and reverses polar angular momentum)
 __device__ __forceinline__
 void _if_out_of_box (real &x, real &y, real &z, real &lx, real &vy, real &lz)
 {
@@ -64,19 +65,34 @@ void _if_out_of_box (real &x, real &y, real &z, real &lx, real &vy, real &lz)
         while (x <  X_MIN) x += X_MAX - X_MIN;
     }
 
+    #ifdef IMPORTGAS
     if (y < Y_MIN) // throw it to the end of the radial domain
     {
         _eject_to_outer(y, z, lx, vy, lz);
     }
-
     if (N_Z == 1)
     {
         z = 0.5*M_PI;
     }
-    else if (z < Z_MIN || z >= Z_MAX) // throw it to the end of the radial domain
+    else if (z < Z_MIN) // throw it to the end of the radial domain
     {
         _eject_to_outer(y, z, lx, vy, lz);
     }
+    #ifndef HALFDISK
+    else if (z >= Z_MAX) // throw it to the end of the radial domain
+    {
+        _eject_to_outer(y, z, lx, vy, lz);
+    }
+    #endif // NOT HALFDISK
+    #endif // IMPORTGAS
+
+    #ifdef HALFDISK
+    if (z > Z_MAX) // mirror across midplane (theta = pi/2)
+    {
+        z  = M_PI - z;
+        lz = -lz;      // reverse polar angular momentum
+    }
+    #endif // HALFDISK
 }
 
 // Order: O0 | Dependencies: None (only kinematic integration)

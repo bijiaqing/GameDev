@@ -38,7 +38,12 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth, real dt
         real loc_z = _get_loc_z(z_1);
 
         real optdepth = _interp_field(dev_optdepth, loc_x, loc_y, loc_z, true);
+        
+        #ifdef MULTISIZE
         real size = dev_particle[idx].par_size;
+        #else
+        real size = S_0;
+        #endif // MULTISIZE
         real beta = BETA_0*exp(-optdepth) / (size / S_0);
 
         _ssa_substep_2(dt, size, beta, lx_i, vy_i, lz_i, x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j

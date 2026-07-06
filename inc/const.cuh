@@ -114,8 +114,10 @@ const real INIT_ZMIN    = Z_MIN;            // minimum Z boundary for particle i
 const real INIT_ZMAX    = Z_MAX;            // maximum Z boundary for particle initialization
 #endif // NOT IMPORTGAS
 
+#ifdef MULTISIZE
 const real INIT_SMIN    = 1.0e+00;          // minimum grain size for particle initialization
 const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle initialization
+#endif // MULTISIZE
 
 // =========================================================================================================================
 // time step and output parameters
@@ -143,8 +145,11 @@ struct swarm                                // for particle swarm
 {
     real3   position;                       // x = azimuth [radian], y = radius [R_0], z = colattitude [radian]
     real3   velocity;                       // velocity for rad but specific angular momentum for azi and col
+    
+    #ifdef MULTISIZE
     real    par_size;                       // size of an individual dust grain in the swarm
     real    par_numr;                       // number of individual dust grains in the swarm
+    #endif // MULTISIZE
 
     #ifdef COLLISION
     real    col_rate;                       // total collision rate for the particle i

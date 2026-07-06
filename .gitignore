@@ -1,5 +1,12 @@
 .github/
-obj/*
+
+.DS_Store
+
 !obj/.gitkeep
-out/*
+obj/*
+
 !out/.gitkeep
+out/*
+
+!mod/test*
+mod/*

@@ -33,19 +33,31 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
     real loc_y = _get_loc_y(dev_particle[idx].position.y);
     real loc_z = _get_loc_z(dev_particle[idx].position.z);
 
+    #ifdef HALFDISK
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1e-6); // clamp midplane particles into last Z cell
+    #endif // HALFDISK
+
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return; // particle is out of bounds, do nothing
 
     int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
     auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z);
 
-    real s = dev_particle[idx].par_size;    
+    #ifdef MULTISIZE
+    real s = dev_particle[idx].par_size;
+    #else
+    real s = S_0;
+    #endif // MULTISIZE
     real weight = 0.0;
 
     #if defined(TRANSPORT) && defined(RADIATION)
     if (field_type == OPTDEPTH)
     {
         weight  = _get_grain_mass(s);
+        #ifdef MULTISIZE
         weight *= dev_particle[idx].par_numr;
+        #else
+        weight *= M_D / N_P / _get_grain_mass(S_0);
+        #endif // MULTISIZE
         weight *= KAPPA_0 / (s / S_0); // cross section per unit mass
     }
     else
@@ -54,7 +66,11 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
     if (field_type == DUSTDENS)
     {
         weight  = _get_grain_mass(s);
+        #ifdef MULTISIZE
         weight *= dev_particle[idx].par_numr;
+        #else
+        weight *= M_D / N_P / _get_grain_mass(S_0);
+        #endif // MULTISIZE
     }
     else
     #endif // SAVE_DENS
