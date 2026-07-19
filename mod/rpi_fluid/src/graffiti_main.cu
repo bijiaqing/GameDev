@@ -1,6 +1,6 @@
-#include <cmath>        // for std::ceil, std::fmin, std::fmax
+#include <cmath>        // for std::fmin, std::fmax
 #include <filesystem>   // for creating output directory
-#include <iomanip>      // for std::setfill, std::setw 
+#include <iomanip>      // for std::setfill, std::setw
 #include <iostream>     // for std::cout, std::endl
 #include <sstream>      // for std::stringstream
 
@@ -24,7 +24,7 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMallocHost((void**)&dustvely, sizeof(real)*N_G));
     CUDA_CHECK(cudaMalloc((void**)&dev_dustvely, sizeof(real)*N_G));
     CUDA_CHECK(cudaMalloc((void**)&dev_dustmomy, sizeof(real)*N_G));
-    
+
     real *dustvelz, *dev_dustvelz, *dev_dustmomz;
     CUDA_CHECK(cudaMallocHost((void**)&dustvelz, sizeof(real)*N_G));
     CUDA_CHECK(cudaMalloc((void**)&dev_dustvelz, sizeof(real)*N_G));
@@ -33,17 +33,17 @@ int main (int argc, char **argv)
     real *dev_cfl_rate;
     CUDA_CHECK(cudaMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
 
-    int *dev_bad_state;
-    CUDA_CHECK(cudaMalloc((void**)&dev_bad_state, sizeof(int)));
+    int  *dev_badstate;
+    CUDA_CHECK(cudaMalloc((void**)&dev_badstate, sizeof(int)));
 
-    // Geometry-aware finite-volume PPM weights are fixed by the mesh and reused by every
-    // radial and polar sweep.  Four coefficients are stored for each cell face.
     real *dev_weight_y, *dev_weight_z;
     CUDA_CHECK(cudaMalloc((void**)&dev_weight_y, sizeof(real)*4*(N_Y + 1)));
     CUDA_CHECK(cudaMalloc((void**)&dev_weight_z, sizeof(real)*4*(N_Z + 1)));
+    
     std::vector<real> weight_y(4*(N_Y + 1));
     std::vector<real> weight_z(4*(N_Z + 1));
     ppm_geometry_weights_calc(weight_y.data(), weight_z.data());
+
     CUDA_CHECK(cudaMemcpy(dev_weight_y, weight_y.data(), sizeof(real)*4*(N_Y + 1), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(dev_weight_z, weight_z.data(), sizeof(real)*4*(N_Z + 1), cudaMemcpyHostToDevice));
 
@@ -53,30 +53,32 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
     #endif // RADIATION
 
-    auto validate_finite_state = [&](bool check_optdepth)
+    auto validate_finite_state = [&]()
     {
-        CUDA_CHECK(cudaMemset(dev_bad_state, 0, sizeof(int)));
-        state_finite_check <<< NB_A, TPB >>> (
-            dev_bad_state,
-            dev_dustdens,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz,
-            dev_dustvelx, dev_dustvely, dev_dustvelz
+        CUDA_CHECK(cudaMemset(dev_badstate, 0, sizeof(int)));
+        finite_verify <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz,
             #ifdef RADIATION
-            , dev_optdepth, check_optdepth
+            dev_optdepth,
             #endif
+            dev_badstate
         );
-        CUDA_KERNEL_CHECK("state_finite_check");
+        CUDA_KERNEL_CHECK("finite_verify");
 
-        int bad_state = 0;
-        CUDA_CHECK(cudaMemcpy(&bad_state, dev_bad_state, sizeof(int), cudaMemcpyDeviceToHost));
-        if (bad_state != 0)
+        int badstate = 0;
+        CUDA_CHECK(cudaMemcpy(&badstate, dev_badstate, sizeof(int), cudaMemcpyDeviceToHost));
+        if (badstate != 0)
         {
-            int idx_bad = bad_state - 1;
+            int idx_bad = badstate - 1;
             int ix_bad = idx_bad % N_X;
             int iy_bad = (idx_bad / N_X) % N_Y;
-            int iz_bad = idx_bad / (N_X*N_Y);
-            std::cerr << "Error: non-finite simulation state at cell ("
-                      << ix_bad << "," << iy_bad << "," << iz_bad << ").\n";
+            int iz_bad = idx_bad / (N_X * N_Y);
+            
+            std::cerr 
+            << "Error: non-finite simulation state at cell ("
+            << ix_bad << "," << iy_bad << "," << iz_bad << ")"
+            << std::endl;
+            
             std::exit(EXIT_FAILURE);
         }
     };
@@ -90,49 +92,49 @@ int main (int argc, char **argv)
         idx_from = 0;
 
         // Precompute convolved METAL_Z*Sigma_g dust surface density on host.
-        real *conv_pow, *dev_conv_pow;
-        CUDA_CHECK(cudaMallocHost((void**)&conv_pow, sizeof(real)*(N_Y + 1)));
-        CUDA_CHECK(cudaMalloc((void**)&dev_conv_pow, sizeof(real)*(N_Y + 1)));
-        
-        convpow_calc(conv_pow);
-        CUDA_CHECK(cudaMemcpy(dev_conv_pow, conv_pow, sizeof(real)*(N_Y + 1), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaFreeHost(conv_pow));
+        real *initdens, *dev_initdens;
+        CUDA_CHECK(cudaMallocHost((void**)&initdens, sizeof(real)*(N_Y + 1)));
+        CUDA_CHECK(cudaMalloc((void**)&dev_initdens, sizeof(real)*(N_Y + 1)));
 
-        f_rho_initial <<< NB_A, TPB >>> (dev_dustdens, dev_conv_pow);
+        convpow_calc(initdens);
+        CUDA_CHECK(cudaMemcpy(dev_initdens, initdens, sizeof(real)*(N_Y + 1), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaFreeHost(initdens));
+
+        f_rho_initial <<< NB_A, TPB >>> (dev_dustdens, dev_initdens);
         CUDA_KERNEL_CHECK("f_rho_initial");
 
         #ifdef RADIATION
-        // Build the initial optical depth from rho_d before velocities and momenta are finalized.
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
+        
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
         CUDA_KERNEL_CHECK("optdepth_csum");
+        
         CUDA_CHECK(cudaDeviceSynchronize());
         #endif // RADIATION
 
-        f_vel_initial <<< NB_A, TPB >>> (dev_dustvelx, dev_dustvely, dev_dustvelz);
-        CUDA_KERNEL_CHECK("f_vel_initial");
-        f_moment_sync <<< NB_A, TPB >>> (
-            dev_dustdens, 
-            dev_dustvelx, dev_dustvely, dev_dustvelz,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz
-        );
-        CUDA_KERNEL_CHECK("f_moment_sync");
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaFree(dev_conv_pow));
-
-        validate_finite_state(
-            #ifdef RADIATION
-            true
-            #else
-            false
+        f_vel_initial <<< NB_A, TPB >>> (
+            dev_dustvelx, dev_dustvely, dev_dustvelz
+            #ifdef DIFFUSION
+            , dev_dustdens
             #endif
         );
+        CUDA_KERNEL_CHECK("f_vel_initial");
+        
+        f_moment_setv <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
+        );
+        CUDA_KERNEL_CHECK("f_moment_setv");
+        
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaFree(dev_initdens));
+
+        validate_finite_state();
 
         std::filesystem::create_directories(PATH);
         if (!save_variable(PATH + "variables.txt"))
         {
-            std::cerr << "Error: failed to save simulation parameters.\n";
+            std::cerr << "Error: failed to save simulation parameters" << std::endl;
             return 1;
         }
 
@@ -140,7 +142,7 @@ int main (int argc, char **argv)
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from);
         #endif // RADIATION
-        
+
         msg_output(0);
     }
     else
@@ -156,93 +158,133 @@ int main (int argc, char **argv)
 
         LOAD_DUSTDATA_TO_VRAM(idx_from);
 
-        // Reconstruct momentum densities from loaded rho and v_d (not saved separately)
-        f_moment_sync <<< NB_A, TPB >>> (
-            dev_dustdens, 
-            dev_dustvelx, dev_dustvely, dev_dustvelz,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz
+        f_moment_setv <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
-        CUDA_KERNEL_CHECK("f_moment_sync");
+        CUDA_KERNEL_CHECK("f_moment_setv");
+        
         CUDA_CHECK(cudaDeviceSynchronize());
 
         #ifdef RADIATION
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
+        
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
         CUDA_KERNEL_CHECK("optdepth_csum");
+        
         CUDA_CHECK(cudaDeviceSynchronize());
         #endif // RADIATION
 
-        validate_finite_state(
-            #ifdef RADIATION
-            true
-            #else
-            false
-            #endif
-        );
+        validate_finite_state();
 
         msg_output(idx_from);
     }
 
-    // Every saved frame is separated by the fixed interval DT_OUT.
     clock_sim = static_cast<real>(idx_from)*DT_OUT;
 
     msg_step_title();
 
-    // Keep primitive velocity arrays synchronized with the authoritative conserved state.
     auto recover_dust_velocity = [&]()
     {
-        f_moment_recv <<< NB_A, TPB >>> (
-            dev_dustdens,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz,
-            dev_dustvelx, dev_dustvely, dev_dustvelz
+        f_moment_getv <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
-        CUDA_KERNEL_CHECK("f_moment_recv");
+        CUDA_KERNEL_CHECK("f_moment_getv");
     };
 
-    // Kernel completion is required before the host reduction chooses a substep size.
     auto recalc_dt_cfl = [&](bool verbose)
     {
         cfl_rate_calc <<< NB_X, TPB >>> (
-            dev_cfl_rate, dev_dustdens,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz,
-            dev_dustvelx, dev_dustvely, dev_dustvelz
+            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         CUDA_KERNEL_CHECK("cfl_rate_calc");
+        
         CUDA_CHECK(cudaDeviceSynchronize());
+        
         return get_dt_cfl(dev_cfl_rate, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
+    };
+
+    // advance one complete directional interval while refreshing the CFL bound after every substep
+    // each direction exhausts its own time budget before the next Strang operator begins
+    auto advance_x = [&](real time_interval)
+    {
+        real time_remain = time_interval;
+        while (time_remain > 0.0)
+        {
+            real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
+
+            f_advection_x <<< NB_X, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_sub
+            );
+            CUDA_KERNEL_CHECK("f_advection_x");
+
+            recover_dust_velocity();
+            time_remain -= dt_sub;
+        }
+    };
+
+    auto advance_y = [&](real time_interval)
+    {
+        real time_remain = time_interval;
+        while (time_remain > 0.0)
+        {
+            real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
+
+            f_advection_y <<< NB_Y, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dt_sub
+            );
+            CUDA_KERNEL_CHECK("f_advection_y");
+
+            recover_dust_velocity();
+            time_remain -= dt_sub;
+        }
+    };
+
+    auto advance_z = [&](real time_interval)
+    {
+        real time_remain = time_interval;
+        while (time_remain > 0.0)
+        {
+            real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
+
+            f_advection_z <<< NB_Z, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dt_sub
+            );
+            CUDA_KERNEL_CHECK("f_advection_z");
+
+            recover_dust_velocity();
+            time_remain -= dt_sub;
+        }
     };
 
     while (idx_from < SAVE_MAX) // main simulation loop
     {
-        // ---- Adaptive CFL timestep ----
         real dt_cfl_begin = recalc_dt_cfl(true);
         real dt = dt_cfl_begin;
-
-        // Cap to remaining time before next output — no overshoot, no artificial floor
         real dt_to_out = DT_OUT - clock_out;
-        if (dt > dt_to_out) dt = dt_to_out;
+        bool output_due = (dt >= dt_to_out);
+        if (output_due) dt = dt_to_out;
 
-        // Palindromic diffusion half-step.  The matching reverse half-step follows dynamics.
         #ifdef DIFFUSION
         f_diffusion_y <<< NB_Y, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         CUDA_KERNEL_CHECK("f_diffusion_y");
+        
         f_diffusion_x <<< NB_X, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         CUDA_KERNEL_CHECK("f_diffusion_x");
+        
         f_diffusion_z <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         CUDA_KERNEL_CHECK("f_diffusion_z");
-        f_moment_recv <<< NB_A, TPB >>> (
-            dev_dustdens,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz,
-            dev_dustvelx, dev_dustvely, dev_dustvelz
+        
+        f_moment_getv <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
-        CUDA_KERNEL_CHECK("f_moment_recv");
+        CUDA_KERNEL_CHECK("f_moment_getv");
         #endif // DIFFUSION
 
         // =====================================================
@@ -251,193 +293,103 @@ int main (int argc, char **argv)
         // Every D and A entry is a half-step; source is a full step.
         // =====================================================
 
-        // ---- First half advection (X Y Z): each operator covers exactly dt/2 ----
-        // Refresh the bound only between directional operators.  The substep counts may
-        // differ, but n_dir*dt_dir = dt/2 for every active direction.
+        // First half advection (X Y Z): each operator covers exactly dt/2
         real adv_interval = 0.5*dt;
 
-        if (N_X > 1)
-        {
-            #ifdef DIFFUSION
-            real dt_cfl_x_fwd = recalc_dt_cfl(false);
-            #else
-            // No operator has changed the beginning-of-step state, so reuse its bound.
-            real dt_cfl_x_fwd = dt_cfl_begin;
-            #endif // DIFFUSION
-            int n_x_fwd = static_cast<int>(std::ceil(adv_interval / dt_cfl_x_fwd));
-            if (n_x_fwd < 1) n_x_fwd = 1;
-            real dt_x_fwd = adv_interval / static_cast<real>(n_x_fwd);
-            for (int iad = 0; iad < n_x_fwd; iad++)
-            {
-                f_advection_x <<< NB_X, TPB >>> (
-                    dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_x_fwd
-                );
-                CUDA_KERNEL_CHECK("f_advection_x");
-            }
+        advance_x(adv_interval);
+        advance_y(adv_interval);
 
-            recover_dust_velocity();
-        }
-
-        real dt_cfl_y_fwd = recalc_dt_cfl(false);
-        int n_y_fwd = static_cast<int>(std::ceil(adv_interval / dt_cfl_y_fwd));
-        if (n_y_fwd < 1) n_y_fwd = 1;
-        real dt_y_fwd = adv_interval / static_cast<real>(n_y_fwd);
-        for (int iad = 0; iad < n_y_fwd; iad++)
-        {
-            f_advection_y <<< NB_Y, TPB >>> (
-                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dt_y_fwd
-            );
-            CUDA_KERNEL_CHECK("f_advection_y");
-        }
-
-        recover_dust_velocity();
         if (N_Z > 1)
         {
-            real dt_cfl_z_fwd = recalc_dt_cfl(false);
-            int n_z_fwd = static_cast<int>(std::ceil(adv_interval / dt_cfl_z_fwd));
-            if (n_z_fwd < 1) n_z_fwd = 1;
-            real dt_z_fwd = adv_interval / static_cast<real>(n_z_fwd);
-            for (int iad = 0; iad < n_z_fwd; iad++)
-            {
-                f_advection_z <<< NB_Z, TPB >>> (
-                    dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dt_z_fwd
-                );
-                CUDA_KERNEL_CHECK("f_advection_z");
-            }
-
-            // Recover v_d from midpoint momentum: v_d^{n+1/2} = mom^{n+1/2} / rho^{n+1/2}
-            recover_dust_velocity();
+            advance_z(adv_interval);
         }
 
-        // ---- Recompute τ from midpoint density ρ_d^{n+1/2} ----
+        // Recompute τ from midpoint density ρ_d^{n+1/2}
         #ifdef RADIATION
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
+        
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
         CUDA_KERNEL_CHECK("optdepth_csum");
-        validate_finite_state(true);
+        
+        validate_finite_state();
         #endif // RADIATION
 
-        // ---- Full source step (exponential drag/force update, uses tau^{n+1/2}) ----
+        // Full source step (exponential drag/force update, uses tau^{n+1/2})
         #ifdef RADIATION
-        // C1-smooth turn-on from zero to full radiation over T_BETA
-        // Evaluate the prescribed time dependence at the source step's temporal midpoint
         real taper = (clock_sim + 0.5*dt) / T_BETA;
         taper = std::fmin(std::fmax(taper, 0.0), 1.0);
         real beta_taper = taper*taper*(3.0 - 2.0*taper);
         #endif // RADIATION
 
-        f_source_term <<< NB_A, TPB >>> (dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
+        f_source_step <<< NB_A, TPB >>> (
+            dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
             #ifdef RADIATION
             dev_optdepth, beta_taper,
             #endif // RADIATION
             dt
         );
-        CUDA_KERNEL_CHECK("f_source_term");
-        // Sync moms = rho * v_d_new before second half-advection
-        f_moment_sync <<< NB_A, TPB >>> (
-            dev_dustdens, 
-            dev_dustvelx, dev_dustvely, dev_dustvelz,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz
-        );
-        CUDA_KERNEL_CHECK("f_moment_sync");
+        CUDA_KERNEL_CHECK("f_source_step");
 
-        // ---- Second half advection (Z Y X): independently bounded directional operators ----
-        // The source and each preceding sweep may change the next sweep's transport velocity.
+        f_moment_setv <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
+        );
+        CUDA_KERNEL_CHECK("f_moment_setv");
+
+        // Second half advection (Z Y X): independently bounded directional operators
+        // The source and each preceding sweep may change the next sweep's transport velocity
         if (N_Z > 1)
         {
-            real dt_cfl_z_rev = recalc_dt_cfl(false);
-            int n_z_rev = static_cast<int>(std::ceil(adv_interval / dt_cfl_z_rev));
-            if (n_z_rev < 1) n_z_rev = 1;
-            real dt_z_rev = adv_interval / static_cast<real>(n_z_rev);
-            for (int iad = 0; iad < n_z_rev; iad++)
-            {
-                f_advection_z <<< NB_Z, TPB >>> (
-                    dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dt_z_rev
-                );
-                CUDA_KERNEL_CHECK("f_advection_z");
-            }
-
-            recover_dust_velocity();
-        }
-        real dt_cfl_y_rev = recalc_dt_cfl(false);
-        int n_y_rev = static_cast<int>(std::ceil(adv_interval / dt_cfl_y_rev));
-        if (n_y_rev < 1) n_y_rev = 1;
-        real dt_y_rev = adv_interval / static_cast<real>(n_y_rev);
-        for (int iad = 0; iad < n_y_rev; iad++)
-        {
-            f_advection_y <<< NB_Y, TPB >>> (
-                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dt_y_rev
-            );
-            CUDA_KERNEL_CHECK("f_advection_y");
+            advance_z(adv_interval);
         }
 
-        recover_dust_velocity();
-        if (N_X > 1)
-        {
-            real dt_cfl_x_rev = recalc_dt_cfl(false);
-            int n_x_rev = static_cast<int>(std::ceil(adv_interval / dt_cfl_x_rev));
-            if (n_x_rev < 1) n_x_rev = 1;
-            real dt_x_rev = adv_interval / static_cast<real>(n_x_rev);
-            for (int iad = 0; iad < n_x_rev; iad++)
-            {
-                f_advection_x <<< NB_X, TPB >>> (
-                    dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_x_rev
-                );
-                CUDA_KERNEL_CHECK("f_advection_x");
-            }
-
-            // Recover final v_d^{n+1} = mom^{n+1} / rho^{n+1}
-            recover_dust_velocity();
-        }
+        advance_y(adv_interval);
+        advance_x(adv_interval);
 
         #ifdef DIFFUSION
         f_diffusion_z <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         CUDA_KERNEL_CHECK("f_diffusion_z");
+        
         f_diffusion_x <<< NB_X, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         CUDA_KERNEL_CHECK("f_diffusion_x");
+        
         f_diffusion_y <<< NB_Y, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         CUDA_KERNEL_CHECK("f_diffusion_y");
 
-        // Recover primitive velocity from the density and momentum transported by diffusion.
-        f_moment_recv <<< NB_A, TPB >>> (
-            dev_dustdens,
-            dev_dustmomx, dev_dustmomy, dev_dustmomz,
-            dev_dustvelx, dev_dustvely, dev_dustvelz
+        f_moment_getv <<< NB_A, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
-        CUDA_KERNEL_CHECK("f_moment_recv");
+        CUDA_KERNEL_CHECK("f_moment_getv");
         #endif // DIFFUSION
 
-        // Validate the final dust state before advancing clocks or writing an output frame.
-        validate_finite_state(false);
+        validate_finite_state();
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // ---- Advance clocks ----
         clock_sim += dt;
         clock_out += dt;
 
         msg_step(idx_from, dt, clock_out, clock_sim);
 
-        // ---- Output ----
-        if (clock_out >= DT_OUT - OUTPUT_TIME_TOL)
+        if (output_due)
         {
             idx_from++;
             clock_out = 0.0;
 
-            // Recompute τ for output
             #ifdef RADIATION
             optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
             CUDA_KERNEL_CHECK("optdepth_calc");
+            
             optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_csum");
-            validate_finite_state(true);
+            
+            validate_finite_state();
             #endif // RADIATION
 
             SAVE_DUSTDATA_TO_FILE(idx_from);
@@ -452,7 +404,7 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaFreeHost(dustdens));
     CUDA_CHECK(cudaFree(dev_dustdens));
     CUDA_CHECK(cudaFree(dev_cfl_rate));
-    CUDA_CHECK(cudaFree(dev_bad_state));
+    CUDA_CHECK(cudaFree(dev_badstate));
     CUDA_CHECK(cudaFree(dev_weight_y));
     CUDA_CHECK(cudaFree(dev_weight_z));
     CUDA_CHECK(cudaFreeHost(dustvelx));
@@ -464,11 +416,11 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaFreeHost(dustvelz));
     CUDA_CHECK(cudaFree(dev_dustvelz));
     CUDA_CHECK(cudaFree(dev_dustmomz));
-        
+
     #ifdef RADIATION
     CUDA_CHECK(cudaFreeHost(optdepth));
     CUDA_CHECK(cudaFree(dev_optdepth));
     #endif // RADIATION
-    
+
     return 0;
 }

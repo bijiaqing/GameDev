@@ -12,3 +12,4 @@ out/*
 mod/*
 
 !mod/rpi_fluid
+mod/rpi_fluid/out

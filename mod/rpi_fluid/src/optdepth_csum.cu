@@ -17,7 +17,6 @@ void optdepth_csum (real *dev_optdepth)
     int ix = idx % N_X;
     int iz = idx / N_X;
 
-    // No race condition: each thread cumulatively sums one unique radial row.
     for (int iy = 1; iy < N_Y; iy++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;

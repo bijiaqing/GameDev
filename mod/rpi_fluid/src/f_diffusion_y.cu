@@ -5,11 +5,12 @@
 
 // ---- Y direction (radial) -- Implicit CN TDMA, NB_Y blocks, 1 thread per (ix,iz) column ----
 // Face areas and cell volumes use the same radial geometry:
-//   pow_y=2: radial-only or azimuthal-radial disk (face area proportional to r)
-//   pow_y=3: radial-colatitude or full 3D spherical grid (face area proportional to r^2)
-// Turbulent dust flux: J_r = -D_r*rho_g*d(rho_d/rho_g)/dr.
-// The minimum conservative momentum closure carries donor-cell specific momentum with the
-// time-centred CN mass flux at each radial face.
+//   pow_y=2: 2D azimuthal-radial disk (face area proportional to y)
+//   pow_y=3: full 3D spherical grid (face area proportional to y^2)
+// In 3D each line holds z fixed, so y is the spherical radial coordinate throughout the solve.
+// Turbulent dust flux: J_y = -D_y*rho_g*d(rho_d/rho_g)/dy
+// The minimum conservative momentum closure carries upwind-cell specific momentum with the
+// time-centred CN mass flux at each radial face
 
 __global__
 void f_diffusion_y (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
@@ -23,70 +24,77 @@ void f_diffusion_y (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     int iz = idx / N_X;
 
     real dy = _get_dy();
+    real dz = _get_dz();
+
     real pow_y = _get_powy();
 
-    real zc = (N_Z > 1) ? (Z_MIN + (iz + 0.5)*_get_dz()) : 0.5*(Z_MIN + Z_MAX);
+    real zc = Z_MIN + (iz + 0.5)*dz;
 
-    // Convert rho_d to q=rho_d/rho_g at cell centres.
+    // convert rho_d to q = rho_d/rho_g at cell centres
     real ratio[N_Y];
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real r_c = Y_MIN*pow(dy, iy + 0.5);
-        real R_c = r_c*sin(zc);
-        real Z_c = r_c*cos(zc);
-        real h_g = _get_hg(R_c);
-        real rhog_c = _get_rhog(R_c, Z_c, h_g);
-        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-        ratio[iy] = dev_dustdens[idx_cell] / rhog_c;
+        real yc = Y_MIN*pow(dy, iy + 0.5);
+        real Rc = yc*sin(zc);
+        real Zc = yc*cos(zc);
+
+        real h_g  = _get_hg(Rc);
+        real rhog = _get_rhog(Rc, Zc, h_g);
+
+        int ic = ix + iy*N_X + iz*N_X*N_Y;
+
+        ratio[iy] = dev_dustdens[ic] / rhog;
     }
 
-    // Store the full-step off-diagonal coefficients first.  CN is linearly stable for any dt,
-    // but a sufficient positivity condition is cn_in + cn_out <= 1 in every cell.  Equal
-    // substeps enforce that condition without a mass-destroying clamp after the solve.
+    // store the full-step off-diagonal coefficients first
+    // CN is linearly stable for any dt, but a sufficient positivity condition is cn_i + cn_o <= 1 in every cell
+    // equal substeps enforce that condition without a mass-destroying clamp after the solve
     real cn_lower[N_Y], cn_diag[N_Y], cn_upper[N_Y], ratio_rhs[N_Y];
     real max_cn_sum = 0.0;
-
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real y0    = Y_MIN*pow(dy, static_cast<real>(iy)); // inner face radius
-        real r_in  = y0;
-        real r_out = y0*dy;                                // outer face radius
-        real r_c   = Y_MIN*pow(dy, iy + 0.5);             // cell centre (geometric mean)
+        real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
+        real y1 = Y_MIN*pow(dy, static_cast<real>(iy + 1));
+        real yc = Y_MIN*pow(dy, iy + 0.5);
+
         real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
 
-        // Centre-to-centre distances (for gradient at each face)
-        real dr_out = r_c*(dy - 1.0);          // r_c(iy+1) - r_c(iy)
-        real dr_in  = r_c / dy*(dy - 1.0); // r_c(iy)   - r_c(iy-1)
+        // centre-to-centre distances (for gradient at each face)
+        real dy_len_i = yc*(dy - 1.0) / dy;   // yc(iy)   - yc(iy - 1)
+        real dy_len_o = yc*(dy - 1.0);        // yc(iy+1) - yc(iy)
 
-        // Analytic gas density at the cell centre and radial faces.
-        real R_c = r_c*sin(zc);
-        real Z_c = r_c*cos(zc);
-        real h_c = _get_hg(R_c);
-        real rhog_c = _get_rhog(R_c, Z_c, h_c);
+        // analytic gas density at the cell centre and radial faces
+        real Rc = yc*sin(zc);
+        real Zc = yc*cos(zc);
 
-        real R_out = r_out*sin(zc);
-        real Z_out = r_out*cos(zc);
-        real h_out = _get_hg(R_out);
-        real rhog_out = _get_rhog(R_out, Z_out, h_out);
-        real diff_out = _get_nu(R_out, h_out) / SC_Y;
+        real h_g  = _get_hg(Rc);
+        real rhog = _get_rhog(Rc, Zc, h_g);
 
-        real R_in = r_in*sin(zc);
-        real Z_in = r_in*cos(zc);
-        real h_in = _get_hg(R_in);
-        real rhog_in = _get_rhog(R_in, Z_in, h_in);
-        real diff_in = _get_nu(R_in, h_in) / SC_Y;
+        real R_i = y0*sin(zc);
+        real Z_i = y0*cos(zc);
+        real h_i = _get_hg(R_i);
+        real rhog_i = _get_rhog(R_i, Z_i, h_i);
+        real Dy_i = _get_nu(R_i, h_i) / SC_Y;
 
-        // CN half-step coefficients (zero at boundaries -> no-flux BC).  Dividing the
-        // conservative rho_d equation by cell-centred rho_g gives
-        //   coeff = 0.5*dt*area*D_face*rho_g_face/(dr*volume*rho_g_cell).
-        real area_out = pow(r_out, pow_y - 1.0);
-        real area_in  = pow(r_in,  pow_y - 1.0);
-        real cn_out = (iy < N_Y-1) ? (0.5*dt*area_out*diff_out*rhog_out / (dr_out*vol_y*rhog_c)) : 0.0;
-        real cn_in  = (iy > 0)     ? (0.5*dt*area_in*diff_in*rhog_in   / (dr_in*vol_y*rhog_c))  : 0.0;
+        real R_o = y1*sin(zc);
+        real Z_o = y1*cos(zc);
+        real h_o = _get_hg(R_o);
+        real rhog_o = _get_rhog(R_o, Z_o, h_o);
+        real Dy_o = _get_nu(R_o, h_o) / SC_Y;
 
-        cn_lower[iy] = -cn_in;
-        cn_upper[iy] = -cn_out;
-        max_cn_sum = fmax(max_cn_sum, cn_in + cn_out);
+        // CN half-step coefficients (zero at boundaries -> no-flux BC)
+        // dividing the conservative rho_d equation by cell-centred rho_g gives
+        // coeff = 0.5*dt*area*D_face*rho_g_face/(dy_len*volume*rho_g_cell)
+        real area_i = pow(y0, pow_y - 1.0);
+        real area_o = pow(y1, pow_y - 1.0);
+
+        real cn_i = (iy > 0)       ? (0.5*dt*area_i*Dy_i*rhog_i / (dy_len_i*vol_y*rhog)) : 0.0;
+        real cn_o = (iy < N_Y - 1) ? (0.5*dt*area_o*Dy_o*rhog_o / (dy_len_o*vol_y*rhog)) : 0.0;
+
+        cn_lower[iy] = -cn_i;
+        cn_upper[iy] = -cn_o;
+
+        max_cn_sum = fmax(max_cn_sum, cn_i + cn_o);
     }
 
     int n_sub = static_cast<int>(ceil(max_cn_sum / POS_LIMIT));
@@ -98,145 +106,170 @@ void f_diffusion_y (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     {
         cn_lower[iy] *= inv_n_sub;
         cn_upper[iy] *= inv_n_sub;
+
         cn_diag[iy] = 1.0 - cn_lower[iy] - cn_upper[iy];
     }
 
-    real upper_mod[N_Y], ratio_mod[N_Y];
+    real upper_work[N_Y], ratio_work[N_Y];
     for (int i_sub = 0; i_sub < n_sub; i_sub++)
     {
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real cn_in  = -cn_lower[iy];
-            real cn_out = -cn_upper[iy];
-            real ratio_prev = (iy > 0)     ? ratio[iy-1] : ratio[iy];
-            real ratio_next = (iy < N_Y-1) ? ratio[iy+1] : ratio[iy];
-            ratio_rhs[iy] = cn_in*ratio_prev
-                          + (1.0 - cn_in - cn_out)*ratio[iy]
-                          + cn_out*ratio_next;
+            real cn_i = -cn_lower[iy];
+            real cn_o = -cn_upper[iy];
+
+            real ratio_prev = (iy > 0)       ? ratio[iy - 1] : ratio[iy];
+            real ratio_next = (iy < N_Y - 1) ? ratio[iy + 1] : ratio[iy];
+
+            ratio_rhs[iy] = cn_i*ratio_prev + (1.0 - cn_i - cn_o)*ratio[iy] + cn_o*ratio_next;
         }
 
-        // ---- Thomas algorithm: forward sweep and backward substitution ----
-        upper_mod[0] = cn_upper[0] / cn_diag[0];
-        ratio_mod[0] = ratio_rhs[0] / cn_diag[0];
+        // Thomas algorithm: forward sweep and backward substitution
+        upper_work[0] = cn_upper[0]  / cn_diag[0];
+        ratio_work[0] = ratio_rhs[0] / cn_diag[0];
 
         for (int iy = 1; iy < N_Y; iy++)
         {
-            real pivot = cn_diag[iy] - cn_lower[iy]*upper_mod[iy-1];
-            upper_mod[iy] = (iy < N_Y-1) ? (cn_upper[iy] / pivot) : 0.0;
-            ratio_mod[iy] = (ratio_rhs[iy] - cn_lower[iy]*ratio_mod[iy-1]) / pivot;
+            real pivot = cn_diag[iy] - cn_lower[iy]*upper_work[iy - 1];
+
+            upper_work[iy] = (iy < N_Y - 1) ? (cn_upper[iy] / pivot) : 0.0;
+            ratio_work[iy] = (ratio_rhs[iy] - cn_lower[iy]*ratio_work[iy - 1]) / pivot;
         }
 
-        // Keep ratio as q_old and complete q_new in ratio_mod so the CN face flux can be
-        // reconstructed after the solve.
-        for (int iy = N_Y-2; iy >= 0; iy--)
-            ratio_mod[iy] -= upper_mod[iy]*ratio_mod[iy+1];
+        // keep ratio as q_old and complete q_new in ratio_work so the CN face flux can be reconstructed after the solve
+        for (int iy = N_Y - 2; iy >= 0; iy--)
+        {
+            ratio_work[iy] -= upper_work[iy]*ratio_work[iy + 1];
+        }
 
-        // Area-weighted radial mass flux A*J at each outer face.  Recovering it from cn_out
-        // guarantees that its divergence is exactly the conservative CN density increment.
-        // The last outer face is the no-flux domain boundary.
+        // area-weighted radial mass flux A*J at each outer face
+        // recovering it from cn_o guarantees that its divergence is exactly the conservative CN density increment
+        // the last outer face is the no-flux domain boundary
         for (int iy = 0; iy < N_Y; iy++)
         {
-            if (iy == N_Y-1)
+            if (iy == N_Y - 1)
             {
-                upper_mod[iy] = 0.0;
+                upper_work[iy] = 0.0;
                 continue;
             }
 
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
             real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real r_c = Y_MIN*pow(dy, iy + 0.5);
-            real R_c = r_c*sin(zc);
-            real Z_c = r_c*cos(zc);
-            real h_c = _get_hg(R_c);
-            real rhog_c = _get_rhog(R_c, Z_c, h_c);
-            real cn_out = -cn_upper[iy];
-            upper_mod[iy] = -(cn_out*vol_y*rhog_c / dt_sub)*
-                ((ratio[iy+1] - ratio[iy]) + (ratio_mod[iy+1] - ratio_mod[iy]));
+
+            real yc = Y_MIN*pow(dy, iy + 0.5);
+            real Rc = yc*sin(zc);
+            real Zc = yc*cos(zc);
+
+            real h_g  = _get_hg(Rc);
+            real rhog = _get_rhog(Rc, Zc, h_g);
+            real cn_o = -cn_upper[iy];
+
+            upper_work[iy]  = -(cn_o*vol_y*rhog / dt_sub);
+            upper_work[iy] *= (ratio[iy + 1] - ratio[iy]) + (ratio_work[iy + 1] - ratio_work[iy]);
         }
 
         // ratio_rhs is no longer needed, so reuse it for one momentum face flux at a time.
         for (int iy = 0; iy < N_Y; iy++)
         {
-            int donor = (upper_mod[iy] >= 0.0) ? iy : iy + 1;
-            if (iy == N_Y-1) donor = iy;
-            real r_donor = Y_MIN*pow(dy, donor + 0.5);
-            real R_donor = r_donor*sin(zc);
-            real Z_donor = r_donor*cos(zc);
-            real h_donor = _get_hg(R_donor);
-            real rho_donor = _get_rhog(R_donor, Z_donor, h_donor)*ratio[donor];
-            int idx_donor = ix + donor*N_X + iz*N_X*N_Y;
-            real spec_mom = (rho_donor >= RHO_VAC) ? dev_dustmomx[idx_donor] / rho_donor
-                                                    : sqrt(G*M_S*fmax(R_donor, 0.0));
-            ratio_rhs[iy] = upper_mod[iy]*spec_mom;
-        }
-        for (int iy = 0; iy < N_Y; iy++)
-        {
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real flux_in = (iy > 0) ? ratio_rhs[iy-1] : 0.0;
-            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomx[idx_cell] -= dt_sub*(ratio_rhs[iy] - flux_in) / vol_y;
+            int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
+            if (iy == N_Y - 1) iy_up = iy;
+
+            real y_up = Y_MIN*pow(dy, iy_up + 0.5);
+            real R_up = y_up*sin(zc);
+            real Z_up = y_up*cos(zc);
+
+            real h_up = _get_hg(R_up);
+            real dens_up = _get_rhog(R_up, Z_up, h_up)*ratio[iy_up];
+
+            int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
+            real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(R_up, 0.0));
+
+            ratio_rhs[iy] = upper_work[iy]*velx_up;
         }
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            int donor = (upper_mod[iy] >= 0.0) ? iy : iy + 1;
-            if (iy == N_Y-1) donor = iy;
-            real r_donor = Y_MIN*pow(dy, donor + 0.5);
-            real R_donor = r_donor*sin(zc);
-            real Z_donor = r_donor*cos(zc);
-            real h_donor = _get_hg(R_donor);
-            real rho_donor = _get_rhog(R_donor, Z_donor, h_donor)*ratio[donor];
-            int idx_donor = ix + donor*N_X + iz*N_X*N_Y;
-            real spec_mom = (rho_donor >= RHO_VAC) ? dev_dustmomy[idx_donor] / rho_donor : 0.0;
-            ratio_rhs[iy] = upper_mod[iy]*spec_mom;
-        }
-        for (int iy = 0; iy < N_Y; iy++)
-        {
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
             real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real flux_in = (iy > 0) ? ratio_rhs[iy-1] : 0.0;
-            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomy[idx_cell] -= dt_sub*(ratio_rhs[iy] - flux_in) / vol_y;
+            real flux_i = (iy > 0) ? ratio_rhs[iy - 1] : 0.0;
+
+            int ic = ix + iy*N_X + iz*N_X*N_Y;
+            dev_dustmomx[ic] -= dt_sub*(ratio_rhs[iy] - flux_i) / vol_y;
         }
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            int donor = (upper_mod[iy] >= 0.0) ? iy : iy + 1;
-            if (iy == N_Y-1) donor = iy;
-            real r_donor = Y_MIN*pow(dy, donor + 0.5);
-            real R_donor = r_donor*sin(zc);
-            real Z_donor = r_donor*cos(zc);
-            real h_donor = _get_hg(R_donor);
-            real rho_donor = _get_rhog(R_donor, Z_donor, h_donor)*ratio[donor];
-            int idx_donor = ix + donor*N_X + iz*N_X*N_Y;
-            real spec_mom = (rho_donor >= RHO_VAC) ? dev_dustmomz[idx_donor] / rho_donor : 0.0;
-            ratio_rhs[iy] = upper_mod[iy]*spec_mom;
+            int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
+            if (iy == N_Y - 1) iy_up = iy;
+
+            real y_up = Y_MIN*pow(dy, iy_up + 0.5);
+            real R_up = y_up*sin(zc);
+            real Z_up = y_up*cos(zc);
+
+            real h_up = _get_hg(R_up);
+            real dens_up = _get_rhog(R_up, Z_up, h_up)*ratio[iy_up];
+
+            int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
+            real vely_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
+
+            ratio_rhs[iy] = upper_work[iy]*vely_up;
         }
+
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
             real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real flux_in = (iy > 0) ? ratio_rhs[iy-1] : 0.0;
-            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomz[idx_cell] -= dt_sub*(ratio_rhs[iy] - flux_in) / vol_y;
-            ratio[iy] = ratio_mod[iy];
+            real flux_i = (iy > 0) ? ratio_rhs[iy - 1] : 0.0;
+
+            int ic = ix + iy*N_X + iz*N_X*N_Y;
+            dev_dustmomy[ic] -= dt_sub*(ratio_rhs[iy] - flux_i) / vol_y;
+        }
+
+        for (int iy = 0; iy < N_Y; iy++)
+        {
+            int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
+            if (iy == N_Y - 1) iy_up = iy;
+
+            real y_up = Y_MIN*pow(dy, iy_up + 0.5);
+            real R_up = y_up*sin(zc);
+            real Z_up = y_up*cos(zc);
+
+            real h_up = _get_hg(R_up);
+            real dens_up = _get_rhog(R_up, Z_up, h_up)*ratio[iy_up];
+
+            int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
+            real velz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
+
+            ratio_rhs[iy] = upper_work[iy]*velz_up;
+        }
+
+        for (int iy = 0; iy < N_Y; iy++)
+        {
+            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
+            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+            real flux_i = (iy > 0) ? ratio_rhs[iy - 1] : 0.0;
+
+            int ic = ix + iy*N_X + iz*N_X*N_Y;
+            dev_dustmomz[ic] -= dt_sub*(ratio_rhs[iy] - flux_i) / vol_y;
+
+            ratio[iy] = ratio_work[iy];
         }
     }
 
-    // ---- Write back ----
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real r_c = Y_MIN*pow(dy, iy + 0.5);
-        real R_c = r_c*sin(zc);
-        real Z_c = r_c*cos(zc);
-        real h_c = _get_hg(R_c);
-        real rhog_c = _get_rhog(R_c, Z_c, h_c);
-        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-        dev_dustdens[idx_cell] = rhog_c*ratio[iy];
+        real yc = Y_MIN*pow(dy, iy + 0.5);
+        real Rc = yc*sin(zc);
+        real Zc = yc*cos(zc);
+
+        real h_g  = _get_hg(Rc);
+        real rhog = _get_rhog(Rc, Zc, h_g);
+
+        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        dev_dustdens[ic] = rhog*ratio[iy];
     }
 }
 
-// ====================================================================
+// =========================================================================================================================
 
 #endif // DIFFUSION

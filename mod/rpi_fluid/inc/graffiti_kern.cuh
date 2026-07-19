@@ -1,6 +1,10 @@
 #ifndef GRAFFITI_KERN_CUH
 #define GRAFFITI_KERN_CUH
 
+// Naming convention: velx/vely/velz and momx/momy/momz are used uniformly.
+// Internally, the X and Z pairs are metric-weighted angular quantities:
+// velx=R*v_x, momx=dens*velx, velz=y*v_z, and momz=dens*velz.
+
 #include <const.cuh>
 
 // =========================================================================================================================
@@ -8,12 +12,17 @@
 // =========================================================================================================================
 
 __global__ void f_rho_initial (real *dev_dustdens, const real *dev_initdens);
-__global__ void f_vel_initial (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz);
+__global__ void f_vel_initial (
+    real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
+    #ifdef DIFFUSION
+    , const real *dev_dustdens
+    #endif
+);
 
 // Exact linear-drag relaxation + second-order exponential endpoint-force update at fixed cell center
-__global__ void f_source_term (
+__global__ void f_source_step (
     real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz, const real *dev_dustdens,
-    #if defined(RADIATION)
+    #ifdef RADIATION
     const real *dev_optdepth, real beta_taper,
     #endif
     real dt
@@ -21,14 +30,14 @@ __global__ void f_source_term (
 
 // FARGO + PPM azimuthal advection — primitives recovered from the current conserved state
 __global__ void f_advection_x (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real dt
 );
 
 // Volume-coordinate PPM radial advection — primitives recovered from the current conserved state
-// Vacuum cells (rho < RHO_VAC) use lx = sqrt(R) = lx_K to prevent retrograde FARGO residual
+// Vacuum cells (dens < RHO_VAC) use velx = sqrt(R) = velx_K to prevent retrograde FARGO residual
 __global__ void f_advection_y (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     const real *dev_weight_y, real dt
 );
 
@@ -39,8 +48,8 @@ __global__ void f_advection_z (
     const real *dev_weight_z, real dt
 );
 
-// Positivity-subcycled implicit Crank-Nicolson diffusion of q = rho_d/rho_g.  The reconstructed
-// diffusive mass flux carries donor-cell specific momentum in the minimum conservative closure.
+// Positivity-subcycled implicit Crank-Nicolson diffusion of q = rho_d/rho_g
+// The reconstructed diffusive mass flux carries upwind-cell specific momentum in the minimum conservative closure
 __global__ void f_diffusion_x (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt
 );
@@ -63,26 +72,27 @@ __global__ void cfl_rate_calc (
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz
 );
 
-// Record the first non-finite cell as idx+1 in dev_bad_state (zero means valid).
-__global__ void state_finite_check (
-    int *dev_bad_state,
+// Record the first non-finite cell as idx+1 in dev_badstate (zero means valid)
+// Radiation builds always include optical depth in the verified state
+__global__ void finite_verify (
     const real *dev_dustdens,
     const real *dev_dustmomx, const real *dev_dustmomy, const real *dev_dustmomz,
-    const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz
+    const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
     #ifdef RADIATION
-    , const real *dev_optdepth, bool check_optdepth
+    const real *dev_optdepth,
     #endif
+    int *dev_badstate
 );
 
-// Momentum recovery:  v_d = mom/rho  (after advection)
-__global__ void f_moment_recv (
-    const real *dev_dustdens, 
-    real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+// Primitive recovery from momx, momy, and momz after conservative updates
+__global__ void f_moment_getv (
+    const real *dev_dustdens,
+    real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
 );
 
-// Momentum sync: enforce the common vacuum state, then set mom = rho*v_d
-__global__ void f_moment_sync (
+// Conserved-state rebuild from velx, vely, and velz
+__global__ void f_moment_setv (
     const real *dev_dustdens,
     real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz
