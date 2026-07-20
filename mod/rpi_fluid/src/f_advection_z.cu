@@ -16,7 +16,9 @@
 //
 // PPM edge indexing: edge[i] is the face between cells i-1 and i
 // Interior faces use conservative nonuniform volume-average weights; physical boundary states remain first order
-// SSPRK2 evaluates the instantaneous PPM/HLL spatial operator twice, time-centring both normal
+// High-order PPM/HLL corrections are convex-limited from a first-order HLL state so density stays
+// positive and all three specific momenta remain within the local stage bounds
+// SSPRK(3,3) evaluates the instantaneous PPM/HLL spatial operator three times, time-centring both normal
 // velocity divergence and sin(z) geometric dilution without a separate characteristic trace correction
 // =========================================================================================================================
 
@@ -47,7 +49,7 @@ void f_advection_z (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         momz[iz] = dev_dustmomz[ic];
     }
 
-    for (int stage = 0; stage < 2; stage++)
+    for (int stage = 0; stage < 3; stage++)
     {
         real velx[N_Z], vely[N_Z], velz[N_Z];
         for (int iz = 0; iz < N_Z; iz++)
@@ -83,11 +85,12 @@ void f_advection_z (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_momy[iz] = flux_dens[iz]*vely[iz];
                 flux_momz[iz] = flux_dens[iz]*velz[iz];
                 #endif
+                edge_dens[iz] = edge_velx[iz] = edge_vely[iz] = edge_velz[iz] = 0.0;
 
                 continue;
             }
 
-            // Instantaneous limited PPM states. SSPRK2 supplies the temporal centring.
+            // Instantaneous limited PPM states. SSPRK(3,3) supplies the temporal centring.
             real dens_L = fmax(_ppm_face_value(edge_dens, dens, iz,     iz + 1, true,  0.0), 0.0);
             real dens_R = fmax(_ppm_face_value(edge_dens, dens, iz + 1, iz + 2, false, 0.0), 0.0);
             real velx_L =      _ppm_face_value(edge_velx, velx, iz,     iz + 1, true,  0.0);
@@ -103,6 +106,25 @@ void f_advection_z (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 dens_R, velx_R, vely_R, velz_R,
                 flux_dens[iz], flux_momx[iz], flux_momy[iz], flux_momz[iz]
             );
+
+            // First-order cell-centred HLL is the invariant-domain base flux. Reuse the edge
+            // storage at completed faces for the high-minus-low antidiffusive correction.
+            real flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low;
+            _pressureless_hll_flux(
+                velz[iz] / yc, velz[iz + 1] / yc,
+                dens[iz], velx[iz], vely[iz], velz[iz],
+                dens[iz + 1], velx[iz + 1], vely[iz + 1], velz[iz + 1],
+                flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low
+            );
+
+            edge_dens[iz] = flux_dens[iz] - flux_dens_low;
+            edge_velx[iz] = flux_momx[iz] - flux_momx_low;
+            edge_vely[iz] = flux_momy[iz] - flux_momy_low;
+            edge_velz[iz] = flux_momz[iz] - flux_momz_low;
+            flux_dens[iz] = flux_dens_low;
+            flux_momx[iz] = flux_momx_low;
+            flux_momy[iz] = flux_momy_low;
+            flux_momz[iz] = flux_momz_low;
         }
 
         // upper-colatitude domain boundary: permit decreasing-Z outflow only
@@ -112,39 +134,7 @@ void f_advection_z (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         real flux_momy_ib = flux_dens_ib*vely[0];
         real flux_momz_ib = flux_dens_ib*velz[0];
 
-        // positivity-preserving conservative face scaling
-        real flux_scale[N_Z];
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            real z0 = Z_MIN + static_cast<real>(iz)*dz;
-            real z1 = z0 + dz;
-            real vol_z = cos(z0) - cos(z1);
-            real flux_i = (iz == 0) ? flux_dens_ib : flux_dens[iz - 1];
-
-            real mass_leave = dt*(sin(z1)*fmax(flux_dens[iz], 0.0) + sin(z0)*fmax(-flux_i, 0.0));
-            real mass_avail = fmax(dens[iz], 0.0)*yc*vol_z;
-            real mass_allow = (1.0 - 1.0e-12)*mass_avail;
-
-            flux_scale[iz] = (mass_leave > mass_allow && mass_leave > 0.0) ? mass_allow / mass_leave : 1.0;
-        }
-
-        flux_dens_ib *= flux_scale[0];
-        flux_momx_ib *= flux_scale[0];
-        flux_momy_ib *= flux_scale[0];
-        flux_momz_ib *= flux_scale[0];
-
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            int iz_up = (flux_dens[iz] >= 0.0 || iz == N_Z - 1) ? iz : iz + 1;
-            real scale = flux_scale[iz_up];
-
-            flux_dens[iz] *= scale;
-            flux_momx[iz] *= scale;
-            flux_momy[iz] *= scale;
-            flux_momz[iz] *= scale;
-        }
-
-        // conservative update with sin(z) geometry
+        // Positivity-safe first-order update with sin(z) geometry
         // divergence theorem for the Z-direction flux at fixed y = yc requires an explicit 1/y factor:
         // (1/(y*sin(z))) d(sin(z)*dens*v_z)/dz, discretized as
         // dt*(sin(z_out)*F_out - sin(z_in)*F_in) / (yc*vol_z)
@@ -177,17 +167,82 @@ void f_advection_z (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             if (dens[iz] < 0.0) dens[iz] = momx[iz] = momy[iz] = momz[iz] = 0.0;
         }
 
+        // Add the PPM antidiffusive correction one face at a time. One coefficient shared by
+        // both face neighbours keeps the correction conservative and every specific momentum bounded.
+        for (int iz = 0; iz < N_Z - 1; iz++)
+        {
+            real z_face = Z_MIN + static_cast<real>(iz + 1)*dz;
+            real z0_L = z_face - dz;
+            real z1_R = z_face + dz;
+            real area_f = sin(z_face);
+            real vol_L = cos(z0_L) - cos(z_face);
+            real vol_R = cos(z_face) - cos(z1_R);
+
+            real corr_dens_L = -dt*area_f*edge_dens[iz] / (yc*vol_L);
+            real corr_momx_L = -dt*area_f*edge_velx[iz] / (yc*vol_L);
+            real corr_momy_L = -dt*area_f*edge_vely[iz] / (yc*vol_L);
+            real corr_momz_L = -dt*area_f*edge_velz[iz] / (yc*vol_L);
+            real corr_dens_R =  dt*area_f*edge_dens[iz] / (yc*vol_R);
+            real corr_momx_R =  dt*area_f*edge_velx[iz] / (yc*vol_R);
+            real corr_momy_R =  dt*area_f*edge_vely[iz] / (yc*vol_R);
+            real corr_momz_R =  dt*area_f*edge_velz[iz] / (yc*vol_R);
+
+            real velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L;
+            real velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R;
+            _local_bounds(velx, iz,     N_Z, velx_min_L, velx_max_L);
+            _local_bounds(vely, iz,     N_Z, vely_min_L, vely_max_L);
+            _local_bounds(velz, iz,     N_Z, velz_min_L, velz_max_L);
+            _local_bounds(velx, iz + 1, N_Z, velx_min_R, velx_max_R);
+            _local_bounds(vely, iz + 1, N_Z, vely_min_R, vely_max_R);
+            _local_bounds(velz, iz + 1, N_Z, velz_min_R, velz_max_R);
+
+            real scale_L = _invariant_scale(
+                dens[iz], momx[iz], momy[iz], momz[iz],
+                corr_dens_L, corr_momx_L, corr_momy_L, corr_momz_L,
+                velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L
+            );
+            real scale_R = _invariant_scale(
+                dens[iz + 1], momx[iz + 1], momy[iz + 1], momz[iz + 1],
+                corr_dens_R, corr_momx_R, corr_momy_R, corr_momz_R,
+                velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R
+            );
+            real scale = fmin(scale_L, scale_R);
+
+            dens[iz] += scale*corr_dens_L;
+            momx[iz] += scale*corr_momx_L;
+            momy[iz] += scale*corr_momy_L;
+            momz[iz] += scale*corr_momz_L;
+            dens[iz + 1] += scale*corr_dens_R;
+            momx[iz + 1] += scale*corr_momx_R;
+            momy[iz + 1] += scale*corr_momy_R;
+            momz[iz + 1] += scale*corr_momz_R;
+        }
+
+        // After the second forward-Euler evaluation, form the second Shu-Osher stage.
+        // The device arrays remain U^n throughout the kernel, so no extra line-local state is needed.
+        if (stage == 1)
+        {
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                int ic = ix + iy*N_X + iz*N_X*N_Y;
+
+                dens[iz] = 0.75*dev_dustdens[ic] + 0.25*dens[iz];
+                momx[iz] = 0.75*dev_dustmomx[ic] + 0.25*momx[iz];
+                momy[iz] = 0.75*dev_dustmomy[ic] + 0.25*momy[iz];
+                momz[iz] = 0.75*dev_dustmomz[ic] + 0.25*momz[iz];
+            }
+        }
     }
 
-    // The device arrays still contain U^n, so no additional local copy or global work array is needed.
+    // Complete the final Shu-Osher convex combination; the device arrays still contain U^n.
     for (int iz = 0; iz < N_Z; iz++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;
 
-        dev_dustdens[ic] = 0.5*(dev_dustdens[ic] + dens[iz]);
-        dev_dustmomx[ic] = 0.5*(dev_dustmomx[ic] + momx[iz]);
-        dev_dustmomy[ic] = 0.5*(dev_dustmomy[ic] + momy[iz]);
-        dev_dustmomz[ic] = 0.5*(dev_dustmomz[ic] + momz[iz]);
+        dev_dustdens[ic] = (1.0/3.0)*dev_dustdens[ic] + (2.0/3.0)*dens[iz];
+        dev_dustmomx[ic] = (1.0/3.0)*dev_dustmomx[ic] + (2.0/3.0)*momx[iz];
+        dev_dustmomy[ic] = (1.0/3.0)*dev_dustmomy[ic] + (2.0/3.0)*momy[iz];
+        dev_dustmomz[ic] = (1.0/3.0)*dev_dustmomz[ic] + (2.0/3.0)*momz[iz];
     }
 }
 

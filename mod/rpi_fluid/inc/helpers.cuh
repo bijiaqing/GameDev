@@ -277,6 +277,77 @@ static real _ppm_face_value (const real *edge, const real *cellval, int iupL, in
 }
 
 // =========================================================================================================================
+// Local invariant-domain bounds for a primitive field. The one-cell stencil is the domain of
+// dependence of the first-order HLL update used as the safe state in the antidiffusive limiter.
+
+__device__ __forceinline__
+static void _local_bounds (const real *value, int idx, int count, real &value_min, real &value_max)
+{
+    int idx_min = (idx > 0) ? idx - 1 : idx;
+    int idx_max = (idx < count - 1) ? idx + 1 : idx;
+
+    value_min = value[idx_min];
+    value_max = value[idx_min];
+    for (int ii = idx_min + 1; ii <= idx_max; ii++)
+    {
+        value_min = fmin(value_min, value[ii]);
+        value_max = fmax(value_max, value[ii]);
+    }
+
+    real bound_pad = 1.0e-12*fmax(1.0, fmax(fabs(value_min), fabs(value_max)));
+    value_min -= bound_pad;
+    value_max += bound_pad;
+}
+
+__device__ __forceinline__
+static void _local_bounds_periodic (const real *value, int idx, int count, real &value_min, real &value_max)
+{
+    int idx_prev = (idx - 1 + count) % count;
+    int idx_next = (idx + 1) % count;
+
+    value_min = fmin(value[idx_prev], fmin(value[idx], value[idx_next]));
+    value_max = fmax(value[idx_prev], fmax(value[idx], value[idx_next]));
+
+    real bound_pad = 1.0e-12*fmax(1.0, fmax(fabs(value_min), fabs(value_max)));
+    value_min -= bound_pad;
+    value_max += bound_pad;
+}
+
+// Maximum fraction of one conservative face correction that keeps a cell in the convex set
+//   dens >= 0 and value_min*dens <= momentum <= value_max*dens
+// for all three stored specific momenta. The small reserve prevents roundoff from landing exactly
+// outside a constraint. Applying the minimum fraction from both face neighbours retains one common
+// equal-and-opposite conservative flux.
+
+__device__ __forceinline__
+static void _restrict_scale (real available, real change, real &scale)
+{
+    if (change >= 0.0) return;
+    scale = (available > 0.0) ? fmin(scale, (1.0 - 1.0e-12)*available / (-change)) : 0.0;
+}
+
+__device__ __forceinline__
+static real _invariant_scale (
+    real dens, real momx, real momy, real momz,
+    real corr_dens, real corr_momx, real corr_momy, real corr_momz,
+    real velx_min, real velx_max,
+    real vely_min, real vely_max,
+    real velz_min, real velz_max)
+{
+    real scale = 1.0;
+
+    _restrict_scale(dens, corr_dens, scale);
+    _restrict_scale(momx - velx_min*dens, corr_momx - velx_min*corr_dens, scale);
+    _restrict_scale(velx_max*dens - momx, velx_max*corr_dens - corr_momx, scale);
+    _restrict_scale(momy - vely_min*dens, corr_momy - vely_min*corr_dens, scale);
+    _restrict_scale(vely_max*dens - momy, vely_max*corr_dens - corr_momy, scale);
+    _restrict_scale(momz - velz_min*dens, corr_momz - velz_min*corr_dens, scale);
+    _restrict_scale(velz_max*dens - momz, velz_max*corr_dens - corr_momz, scale);
+
+    return fmax(0.0, fmin(1.0, scale));
+}
+
+// =========================================================================================================================
 // TODO(pressureless-flux): For quantitative dust-clumping studies, compare this HLL flux with the pressureless
 // dust Riemann flux of Huang & Bai (2022, ApJS 262, 11; doi:10.3847/1538-4365/ac76cb)
 // Their normal-velocity branches are:
@@ -285,7 +356,7 @@ static real _ppm_face_value (const real *edge, const real *cellval, int iupL, in
 //   vL < 0, vR > 0 : use zero flux (diverging streams / interface vacuum)
 //   vL > 0, vR < 0 : use F_L + F_R (converging, interpenetrating dust streams)
 // If added, apply exactly the same branch to density and all three momentum components, retain
-// the common upwind positivity scaling in f_advection_x/y/z, and expose HLL versus Huang-Bai as
+// the invariant-domain face limiting in the geometric sweeps, and expose HLL versus Huang-Bai as
 // a compile-time choice for clump-growth and resolution-convergence comparisons
 
 // =========================================================================================================================

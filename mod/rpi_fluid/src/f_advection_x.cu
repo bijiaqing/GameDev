@@ -20,6 +20,8 @@
 // Left and right primitive states are reconstructed with PPM
 // The pressureless HLL solve converts them to one interface flux, so the conserved fields cannot select different upwind states
 // All shifted primitive variables correspond to the current conserved state
+// High-order PPM/HLL corrections are convex-limited from a first-order HLL state so density stays
+// positive and all three specific momenta remain within the local periodic stage bounds
 //
 // PPM edges: PERIODIC, all faces use the full 4-point stencil (modular wrapping)
 //   qedge[i] = face between cells i-1 and i
@@ -144,34 +146,33 @@ void f_advection_x (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         );
     }
 
-    // positivity-preserving conservative flux scaling
-    real flux_scale[N_X];
-    for (int ix = 0; ix < N_X; ix++)
-    {
-        int ixm1 = (ix - 1 + N_X) % N_X;
-
-        // the 1.0e-12 fudge factor prevents roundoff from leaving a tiny negative density in the upwind cell
-        real mass_leave = dt*(fmax(flux_dens[ix], 0.0) + fmax(-flux_dens[ixm1], 0.0));
-        real mass_avail = fmax(dens_shift[ix], 0.0)*dx;
-        real mass_allow = (1.0 - 1.0e-12)*mass_avail;
-
-        flux_scale[ix] = (mass_leave > mass_allow && mass_leave > 0.0) ? mass_allow / mass_leave : 1.0;
-    }
-
+    // Replace the working flux with the first-order invariant-domain HLL flux and reuse the
+    // original unshifted conserved arrays for the high-minus-low correction.
     for (int ix = 0; ix < N_X; ix++)
     {
         int ixp1 = (ix + 1) % N_X;
-        int ix_up = (flux_dens[ix] >= 0.0) ? ix : ixp1;
+        real omega_L = velx_res[ix] / (Rc*Rc);
+        real omega_R = velx_res[ixp1] / (Rc*Rc);
+        real flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low;
 
-        real scale = flux_scale[ix_up];
+        _pressureless_hll_flux(
+            omega_L, omega_R,
+            dens_shift[ix], velx_shift[ix], vely_shift[ix], velz_shift[ix],
+            dens_shift[ixp1], velx_shift[ixp1], vely_shift[ixp1], velz_shift[ixp1],
+            flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low
+        );
 
-        flux_dens[ix] *= scale;
-        flux_momx[ix] *= scale;
-        flux_momy[ix] *= scale;
-        flux_momz[ix] *= scale;
+        dens[ix] = flux_dens[ix] - flux_dens_low;
+        momx[ix] = flux_momx[ix] - flux_momx_low;
+        momy[ix] = flux_momy[ix] - flux_momy_low;
+        momz[ix] = flux_momz[ix] - flux_momz_low;
+        flux_dens[ix] = flux_dens_low;
+        flux_momx[ix] = flux_momx_low;
+        flux_momy[ix] = flux_momy_low;
+        flux_momz[ix] = flux_momz_low;
     }
 
-    // conservative update: dens^{n+1} = dens_shift - dt*(flux[ix] - flux[ix-1]) / dx
+    // Positivity-safe first-order update: dens^{n+1} = dens_shift - dt*(flux[ix] - flux[ix-1]) / dx
     for (int ix = 0; ix < N_X; ix++)
     {
         int ixm1 = (ix - 1 + N_X) % N_X;
@@ -182,6 +183,51 @@ void f_advection_x (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         momz_shift[ix] -= dt*(flux_momz[ix] - flux_momz[ixm1]) / dx;
 
         if (dens_shift[ix] < 0.0) dens_shift[ix] = momx_shift[ix] = momy_shift[ix] = momz_shift[ix] = 0.0;
+    }
+
+    // Add the periodic PPM antidiffusive corrections sequentially. The common face coefficient
+    // keeps both neighbouring states inside the same convex density/specific-momentum domain.
+    for (int ix = 0; ix < N_X; ix++)
+    {
+        int ixp1 = (ix + 1) % N_X;
+        real corr_dens_L = -dt*dens[ix] / dx;
+        real corr_momx_L = -dt*momx[ix] / dx;
+        real corr_momy_L = -dt*momy[ix] / dx;
+        real corr_momz_L = -dt*momz[ix] / dx;
+        real corr_dens_R =  dt*dens[ix] / dx;
+        real corr_momx_R =  dt*momx[ix] / dx;
+        real corr_momy_R =  dt*momy[ix] / dx;
+        real corr_momz_R =  dt*momz[ix] / dx;
+
+        real velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L;
+        real velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R;
+        _local_bounds_periodic(velx_shift, ix,   N_X, velx_min_L, velx_max_L);
+        _local_bounds_periodic(vely_shift, ix,   N_X, vely_min_L, vely_max_L);
+        _local_bounds_periodic(velz_shift, ix,   N_X, velz_min_L, velz_max_L);
+        _local_bounds_periodic(velx_shift, ixp1, N_X, velx_min_R, velx_max_R);
+        _local_bounds_periodic(vely_shift, ixp1, N_X, vely_min_R, vely_max_R);
+        _local_bounds_periodic(velz_shift, ixp1, N_X, velz_min_R, velz_max_R);
+
+        real scale_L = _invariant_scale(
+            dens_shift[ix], momx_shift[ix], momy_shift[ix], momz_shift[ix],
+            corr_dens_L, corr_momx_L, corr_momy_L, corr_momz_L,
+            velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L
+        );
+        real scale_R = _invariant_scale(
+            dens_shift[ixp1], momx_shift[ixp1], momy_shift[ixp1], momz_shift[ixp1],
+            corr_dens_R, corr_momx_R, corr_momy_R, corr_momz_R,
+            velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R
+        );
+        real scale = fmin(scale_L, scale_R);
+
+        dens_shift[ix] += scale*corr_dens_L;
+        momx_shift[ix] += scale*corr_momx_L;
+        momy_shift[ix] += scale*corr_momy_L;
+        momz_shift[ix] += scale*corr_momz_L;
+        dens_shift[ixp1] += scale*corr_dens_R;
+        momx_shift[ixp1] += scale*corr_momx_R;
+        momy_shift[ixp1] += scale*corr_momy_R;
+        momz_shift[ixp1] += scale*corr_momz_R;
     }
 
     for (int ix = 0; ix < N_X; ix++)
