@@ -1,10 +1,5 @@
 #include <fluid_kern.cuh>
 
-
-
-
-
-
 __global__
 void inf_cell_flag (
     const real *dev_dustdens,
@@ -19,6 +14,7 @@ void inf_cell_flag (
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_G) return;
 
+    // test every evolved field in the current cell
     bool finite = isfinite(dev_dustdens[idx]);
     finite = finite && isfinite(dev_dustmomx[idx]) && isfinite(dev_dustmomy[idx]) && isfinite(dev_dustmomz[idx]);
     finite = finite && isfinite(dev_dustvelx[idx]) && isfinite(dev_dustvely[idx]) && isfinite(dev_dustvelz[idx]);
@@ -27,5 +23,6 @@ void inf_cell_flag (
     finite = finite && isfinite(dev_optdepth[idx]);
     #endif
 
+    // record the first nonfinite cell with zero reserved for a clean state
     if (!finite) atomicCAS(dev_badstate, 0, idx + 1);
 }

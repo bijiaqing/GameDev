@@ -2,21 +2,20 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
+// =========================================================================================================================
+// kernel: source_update
+// purpose: update dust primitives under gas drag, gravity, radiation pressure, and spherical geometric forces
+//
+// parallelization: one thread per grid cell
+//
+// per call:
+//   1 near-vacuum state recovery
+//   2 exact exponential drag relaxation
+//   3 drag-weighted old-to-new force quadrature
+//   4 sequential azimuthal, polar, and radial primitive updates
+// =========================================================================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// evaluate spherical radial force, radial centrifugal acceleration, and polar geometric torque
 static __device__ __forceinline__
 void _get_force_term (real yc, real zc, real Rc, real velx, real velz, real beta, real &Fy, real &Fcy, real &Tcz)
 {
@@ -49,8 +48,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real Rc = yc*sin(zc);
     real Zc = yc*cos(zc);
 
-
-
+    // reset near-vacuum cells to the fallback primitive state
     if (dev_dustdens[idx] < RHO_VAC)
     {
         dev_dustvelx[idx] = sqrt(G*M_S*fmax(Rc, 0.0));
@@ -63,18 +61,15 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real omega = _get_omegaK(Rc);
     real h_g = _get_hg(Rc);
 
+    // construct exact exponential drag relaxation coefficients
     real stokes = _get_stokes(Rc, Zc, h_g);
     real ts = stokes / omega;
     real drag_h = dt / ts;
 
-
     real drag_relax = -expm1(-drag_h);
     real drag_decay = 1.0 - drag_relax;
 
-
-
-
-
+    // evaluate drag-weighted force quadrature with a cancellation-safe small-step series
     real force_weight_n, force_weight_new;
     if (drag_h < 1.0e-4)
     {
@@ -90,6 +85,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
         force_weight_n   = ts*drag_relax - force_weight_new;
     }
 
+    // attenuate radiation pressure by the cell-centred optical depth
     #ifdef RADIATION
     real tau_i = (iy > 0) ? dev_optdepth[idx - N_X] : 0.0;
     real tau_o = dev_optdepth[idx];
@@ -98,6 +94,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real beta  = 0.0;
     #endif
 
+    // load dust primitives and construct the local gas equilibrium state
     real velx = dev_dustvelx[idx];
     real vely = dev_dustvely[idx];
     real velz = dev_dustvelz[idx];
@@ -107,14 +104,14 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real vely_g = 0.0;
     real velz_g = 0.0;
 
-
+    // evaluate forces at the old state and relax azimuthal specific angular momentum
     real Fy_n, Fcy_n, Tcz_n, velx_new;
     _get_force_term(yc, zc, Rc, velx, velz, beta, Fy_n, Fcy_n, Tcz_n);
 
     velx_new  = drag_decay*velx;
     velx_new += drag_relax*velx_g;
 
-
+    // reevaluate polar torque and update polar specific angular momentum
     real Fy_tmp, Fcy_tmp, Tcz_new, velz_new;
     _get_force_term(yc, zc, Rc, velx_new, velz, beta, Fy_tmp, Fcy_tmp, Tcz_new);
 
@@ -123,7 +120,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     velz_new += force_weight_n*Tcz_n;
     velz_new += force_weight_new*Tcz_new;
 
-
+    // reevaluate radial forces and update radial velocity
     real Fy_new, Fcy_new, vely_new;
     _get_force_term(yc, zc, Rc, velx_new, velz_new, beta, Fy_new, Fcy_new, Tcz_new);
 
@@ -132,6 +129,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     vely_new += force_weight_n*(Fy_n + Fcy_n);
     vely_new += force_weight_new*(Fy_new + Fcy_new);
 
+    // write the updated primitive state to global memory
     dev_dustvelx[idx] = velx_new;
     dev_dustvely[idx] = vely_new;
     dev_dustvelz[idx] = velz_new;

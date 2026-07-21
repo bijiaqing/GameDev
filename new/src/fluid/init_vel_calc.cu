@@ -2,19 +2,8 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-
-
-
-
-
-
-
-
-
-
-
-
 #ifdef DIFFUSION
+// evaluate the local dust-to-gas ratio for the initial diffusion velocity
 static __device__ __forceinline__
 real _get_init_ratio (const real *dev_dustdens, int idx, real yc, real zc)
 {
@@ -49,6 +38,7 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     real Rc = yc*sin(zc);
     real Zc = yc*cos(zc);
 
+    // construct the steady drag-coupled azimuthal and cylindrical radial drift
     real h_g = _get_hg(Rc);
     real omega = _get_omegaK(Rc);
     real v_K = Rc*omega;
@@ -63,10 +53,12 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     #ifdef DIFFUSION
     if (N_Z > 1)
     {
+        // add the polar diffusion velocity that balances the initialized ratio gradient
         real Dz = _get_nu(Rc, h_g) / SC_Z;
         real ratio = _get_init_ratio(dev_dustdens, idx, yc, zc);
         real grad_ratio;
 
+        // differentiate the ratio with one-sided boundary and centred interior stencils
         if (iz == 0)
         {
             int idx_next = idx + N_X*N_Y;
@@ -92,6 +84,7 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     }
     #endif
 
+    // project cylindrical radial drift into spherical components and store angular primitives
     real v_y = v_R*sin(zc);
     real v_z = v_R*cos(zc) + speed_z_diff;
 

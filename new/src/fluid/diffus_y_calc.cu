@@ -4,14 +4,18 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-
-
-
-
-
-
-
-
+// =========================================================================================================================
+// kernel: diffus_y_calc
+// purpose: radial diffusion of the dust-to-gas ratio with geometry-aware conservative momentum transport
+//
+// parallelization: one thread per azimuthal-polar column with a serial loop over N_Y radial cells
+//
+// per call:
+//   1 radial Crank-Nicolson coefficient construction with zero boundary fluxes
+//   2 positivity-controlled subcycling and tridiagonal solution
+//   3 time-centred diffusive mass flux construction
+//   4 donor-state momentum transport with the diffusing mass
+// =========================================================================================================================
 
 __global__
 void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
@@ -27,11 +31,12 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real dy = _get_dy();
     real dz = _get_dz();
 
+    // select cylindrical radial geometry in 2D and spherical radial geometry in 3D
     real pow_y = _get_powy();
 
     real zc = Z_MIN + (iz + 0.5)*dz;
 
-
+    // load the dust-to-gas ratio along one radial column
     real ratio[N_Y];
     for (int iy = 0; iy < N_Y; iy++)
     {
@@ -47,9 +52,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         ratio[iy] = dev_dustdens[ic] / rhog;
     }
 
-
-
-
+    // assemble full-step Crank-Nicolson face couplings and measure the largest local coefficient sum
     real cn_lower[N_Y], cn_diag[N_Y], cn_upper[N_Y], ratio_rhs[N_Y];
     real max_cn_sum = 0.0;
     for (int iy = 0; iy < N_Y; iy++)
@@ -60,10 +63,8 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
         real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
 
-
         real dy_len_i = yc*(dy - 1.0) / dy;
         real dy_len_o = yc*(dy - 1.0);
-
 
         real Rc = yc*sin(zc);
         real Zc = yc*cos(zc);
@@ -83,9 +84,6 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real rhog_o = _get_rhog(R_o, Z_o, h_o);
         real Dy_o = _get_nu(R_o, h_o) / SC_Y;
 
-
-
-
         real area_i = pow(y0, pow_y - 1.0);
         real area_o = pow(y1, pow_y - 1.0);
 
@@ -98,6 +96,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         max_cn_sum = fmax(max_cn_sum, cn_i + cn_o);
     }
 
+    // choose positivity-controlled substeps and rescale the implicit matrix coefficients
     int n_sub = static_cast<int>(ceil(max_cn_sum / POS_LIMIT));
     if (n_sub < 1) n_sub = 1;
 
@@ -111,9 +110,11 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         cn_diag[iy] = 1.0 - cn_lower[iy] - cn_upper[iy];
     }
 
+    // advance the ratio and momentum through each diffusion substep
     real upper_work[N_Y], ratio_work[N_Y];
     for (int i_sub = 0; i_sub < n_sub; i_sub++)
     {
+        // build the explicit Crank-Nicolson right-hand side with zero boundary gradients
         for (int iy = 0; iy < N_Y; iy++)
         {
             real cn_i = -cn_lower[iy];
@@ -125,10 +126,11 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             ratio_rhs[iy] = cn_i*ratio_prev + (1.0 - cn_i - cn_o)*ratio[iy] + cn_o*ratio_next;
         }
 
-
+        // initialize the Thomas forward elimination
         upper_work[0] = cn_upper[0]  / cn_diag[0];
         ratio_work[0] = ratio_rhs[0] / cn_diag[0];
 
+        // eliminate the lower diagonal of the implicit system
         for (int iy = 1; iy < N_Y; iy++)
         {
             real pivot = cn_diag[iy] - cn_lower[iy]*upper_work[iy - 1];
@@ -137,15 +139,13 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             ratio_work[iy] = (ratio_rhs[iy] - cn_lower[iy]*ratio_work[iy - 1]) / pivot;
         }
 
-
+        // back-substitute the ratio solution
         for (int iy = N_Y - 2; iy >= 0; iy--)
         {
             ratio_work[iy] -= upper_work[iy]*ratio_work[iy + 1];
         }
 
-
-
-
+        // reconstruct time-centred outward diffusive mass fluxes with zero boundary fluxes
         for (int iy = 0; iy < N_Y; iy++)
         {
             if (iy == N_Y - 1)
@@ -169,7 +169,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             upper_work[iy] *= (ratio[iy + 1] - ratio[iy]) + (ratio_work[iy + 1] - ratio_work[iy]);
         }
 
-
+        // combine each face mass flux with the donor azimuthal primitive quantity
         for (int iy = 0; iy < N_Y; iy++)
         {
             int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
@@ -188,6 +188,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             ratio_rhs[iy] = upper_work[iy]*velx_up;
         }
 
+        // update azimuthal momentum from the geometry-aware conservative flux divergence
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
@@ -198,6 +199,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             dev_dustmomx[ic] -= dt_sub*(ratio_rhs[iy] - flux_i) / vol_y;
         }
 
+        // combine each face mass flux with the donor radial velocity
         for (int iy = 0; iy < N_Y; iy++)
         {
             int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
@@ -216,6 +218,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             ratio_rhs[iy] = upper_work[iy]*vely_up;
         }
 
+        // update radial momentum from the geometry-aware conservative flux divergence
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
@@ -226,6 +229,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             dev_dustmomy[ic] -= dt_sub*(ratio_rhs[iy] - flux_i) / vol_y;
         }
 
+        // combine each face mass flux with the donor polar primitive quantity
         for (int iy = 0; iy < N_Y; iy++)
         {
             int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
@@ -244,6 +248,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             ratio_rhs[iy] = upper_work[iy]*velz_up;
         }
 
+        // update polar momentum and accept the ratio solution for this substep
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
@@ -257,6 +262,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
     }
 
+    // recover dust density from the final dust-to-gas ratio
     for (int iy = 0; iy < N_Y; iy++)
     {
         real yc = Y_MIN*pow(dy, iy + 0.5);
@@ -270,7 +276,5 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         dev_dustdens[ic] = rhog*ratio[iy];
     }
 }
-
-
 
 #endif

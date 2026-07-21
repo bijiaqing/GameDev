@@ -1,23 +1,6 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 __global__
 void cfl_rate_calc (
     real *dev_cfl_rate, const real *dev_dustdens,
@@ -42,6 +25,7 @@ void cfl_rate_calc (
     real pow_y = _get_powy();
     real vol_y = (pow(y0*dy, pow_y) - pow(y0, pow_y)) / pow_y;
 
+    // construct radial and polar inverse length scales from finite-volume geometry
     real cfl_invlen_y = pow(y0*dy, pow_y - 1.0) / vol_y;
     real cfl_invlen_z = 0.0;
 
@@ -60,6 +44,7 @@ void cfl_rate_calc (
     real velx_avg = 0.0;
     bool ring_finite = true;
 
+    // validate one ring and average azimuthal specific angular momentum for the FARGO frame
     for (int ix = 0; ix < N_X; ix++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;
@@ -82,6 +67,7 @@ void cfl_rate_calc (
 
     velx_avg /= static_cast<real>(N_X);
 
+    // force timestep rejection when any ring state is nonfinite
     if (!ring_finite || !isfinite(velx_avg))
     {
         for (int ix = 0; ix < N_X; ix++)
@@ -92,6 +78,7 @@ void cfl_rate_calc (
         return;
     }
 
+    // store the largest directional transport rate for each non-vacuum cell
     for (int ix = 0; ix < N_X; ix++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;
@@ -105,6 +92,8 @@ void cfl_rate_calc (
         real velx = dev_dustvelx[ic];
         real vely = dev_dustvely[ic];
         real velz = dev_dustvelz[ic];
+
+        // convert angular primitives to residual azimuthal and linear polar speeds
         real speed_z = velz / yc;
 
         real omega_res = (velx - velx_avg) / fmax(Rc*Rc, 1.0e-30);

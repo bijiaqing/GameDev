@@ -1,15 +1,6 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-
-
-
-
-
-
-
-
-
 __global__
 void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz)
@@ -22,6 +13,7 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
     real vely = dev_dustvely[idx];
     real velz = dev_dustvelz[idx];
 
+    // reset near-vacuum primitives to the fallback state
     if (dens < RHO_VAC)
     {
         int iy = (idx / N_X) % N_Y;
@@ -43,6 +35,7 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
         dev_dustvelz[idx] = velz;
     }
 
+    // rebuild conserved momentum from density and synchronized primitives
     dev_dustmomx[idx] = dens*velx;
     dev_dustmomy[idx] = dens*vely;
     dev_dustmomz[idx] = dens*velz;

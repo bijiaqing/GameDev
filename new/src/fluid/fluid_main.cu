@@ -15,6 +15,7 @@ const std::string PATH = PATH_OUT;
 
 int main (int argc, char **argv)
 {
+    // allocate host output buffers and persistent device fields
     real *dustdens, *dev_dustdens;
     CUDA_CHECK(cudaMallocHost((void**)&dustdens, sizeof(real)*N_G));
     CUDA_CHECK(cudaMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
@@ -46,6 +47,8 @@ int main (int argc, char **argv)
 
     std::vector<real> weight_y(4*(N_Y + 1));
     std::vector<real> weight_z(4*(N_Z + 1));
+
+    // precompute nonuniform PPM face weights and upload them once
     ppm_geometry_weights_calc(weight_y.data(), weight_z.data());
 
     CUDA_CHECK(cudaMemcpy(dev_weight_y, weight_y.data(), sizeof(real)*4*(N_Y + 1), cudaMemcpyHostToDevice));
@@ -57,6 +60,7 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
     #endif
 
+    // abort at the first cell containing a nonfinite evolved value
     auto validate_finite_state = [&]()
     {
         CUDA_CHECK(cudaMemset(dev_badstate, 0, sizeof(int)));
@@ -95,7 +99,7 @@ int main (int argc, char **argv)
     {
         idx_from = 0;
 
-
+        // initialize density from the convolved surface profile
         real *initdens, *dev_initdens;
         CUDA_CHECK(cudaMallocHost((void**)&initdens, sizeof(real)*(N_Y + 1)));
         CUDA_CHECK(cudaMalloc((void**)&dev_initdens, sizeof(real)*(N_Y + 1)));
@@ -108,6 +112,7 @@ int main (int argc, char **argv)
         CUDA_KERNEL_CHECK("init_rho_calc");
 
         #ifdef RADIATION
+        // construct the initial cumulative radial optical depth
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
 
@@ -117,6 +122,7 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaDeviceSynchronize());
         #endif
 
+        // initialize primitive velocities and build their conserved fields
         init_vel_calc <<< NB_A, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz
             #ifdef DIFFUSION
@@ -135,6 +141,7 @@ int main (int argc, char **argv)
 
         validate_finite_state();
 
+        // create the output directory and save the initial state
         std::filesystem::create_directories(PATH);
         if (!save_variable(PATH + "variables.txt"))
         {
@@ -152,6 +159,7 @@ int main (int argc, char **argv)
     }
     else
     {
+        // restore density and linear velocity output from the selected frame
         std::stringstream ss{argv[1]};
         if (!(ss >> idx_from))
         {
@@ -169,6 +177,7 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaDeviceSynchronize());
 
         #ifdef RADIATION
+        // reconstruct optical depth from the restored density
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
 
@@ -187,6 +196,7 @@ int main (int argc, char **argv)
 
     msg_step_title();
 
+    // recover synchronized primitives after every conservative operator
     auto recover_dust_velocity = [&]()
     {
         momentum_getv <<< NB_A, TPB >>> (
@@ -195,6 +205,7 @@ int main (int argc, char **argv)
         CUDA_KERNEL_CHECK("momentum_getv");
     };
 
+    // recompute the global transport timestep from the current state
     auto recalc_dt_cfl = [&](bool verbose)
     {
         cfl_rate_calc <<< NB_X, TPB >>> (
@@ -207,8 +218,7 @@ int main (int argc, char **argv)
         return get_dt_cfl(dev_cfl_rate, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
     };
 
-
-
+    // advance each directional transport operator with fresh CFL-limited substeps
     auto advance_x = [&](real time_interval)
     {
         real time_remain = time_interval;
@@ -262,12 +272,14 @@ int main (int argc, char **argv)
 
     while (idx_from < SAVE_MAX)
     {
+        // clip the global step at the next output time
         real dt_cfl_begin = recalc_dt_cfl(true);
         real dt = dt_cfl_begin;
         real dt_to_out = DT_OUT - clock_out;
         bool output_due = (dt >= dt_to_out);
         if (output_due) dt = dt_to_out;
 
+        // apply the opening half of the symmetric diffusion composition
         #ifdef DIFFUSION
         diffus_y_calc <<< NB_Y, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
@@ -297,6 +309,7 @@ int main (int argc, char **argv)
 
 
 
+        // apply the opening half of the symmetric directional transport composition
         real adv_interval = 0.5*dt;
 
         advance_x(adv_interval);
@@ -308,6 +321,7 @@ int main (int argc, char **argv)
         }
 
 
+        // evaluate optical depth at the source-step midpoint state
         #ifdef RADIATION
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
@@ -319,12 +333,14 @@ int main (int argc, char **argv)
         #endif
 
 
+        // ramp radiation pressure smoothly during the configured startup interval
         #ifdef RADIATION
         real taper = (clock_sim + 0.5*dt) / T_BETA;
         taper = std::fmin(std::fmax(taper, 0.0), 1.0);
         real beta_taper = taper*taper*(3.0 - 2.0*taper);
         #endif
 
+        // advance the centred source operator and synchronize conserved momentum
         source_update <<< NB_A, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
             #ifdef RADIATION
@@ -341,6 +357,7 @@ int main (int argc, char **argv)
 
 
 
+        // close the symmetric directional transport composition in reverse order
         if (N_Z > 1)
         {
             advance_z(adv_interval);
@@ -349,6 +366,7 @@ int main (int argc, char **argv)
         advance_y(adv_interval);
         advance_x(adv_interval);
 
+        // close the symmetric diffusion composition in reverse order
         #ifdef DIFFUSION
         diffus_z_calc <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
@@ -375,6 +393,7 @@ int main (int argc, char **argv)
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
+        // advance simulation and output clocks after the accepted step
         clock_sim += dt;
         clock_out += dt;
 
@@ -382,6 +401,7 @@ int main (int argc, char **argv)
 
         if (output_due)
         {
+            // refresh derived output fields and save the completed frame
             idx_from++;
             clock_out = 0.0;
 
@@ -405,6 +425,7 @@ int main (int argc, char **argv)
         }
     }
 
+    // release all persistent host and device allocations
     CUDA_CHECK(cudaFreeHost(dustdens));
     CUDA_CHECK(cudaFree(dev_dustdens));
     CUDA_CHECK(cudaFree(dev_cfl_rate));

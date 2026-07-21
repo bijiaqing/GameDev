@@ -1,21 +1,8 @@
 #include <curand_kernel.h> // curand_init, curand_normal_double, curandState
+
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 __global__
 void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
@@ -40,6 +27,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 
     real H_g = h_g*Rc;
 
+    // set the equilibrium dust scale height from vertical diffusion and settling
     #ifdef DIFFUSION
     real alpha_z = _get_alpha(Rc, h_g) / SC_Z;
     real stokes_mid = _get_stokes(Rc, 0.0, h_g);
@@ -48,6 +36,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
     real H_d     = H_g;
     #endif
 
+    // interpolate the convolved dust surface density at cylindrical radius
     real sigma_d = 0.0;
     if (Rc >= Y_MIN && Rc <= Y_MAX)
     {
@@ -59,13 +48,14 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
         sigma_d = (1.0 - frac_u)*dev_initdens[iu] + frac_u*dev_initdens[iu + 1];
     }
 
+    // embed the surface profile with the settled dust-to-gas vertical stratification
     real sigma_g = SIGMA_0*pow(Rc / R_0, IDX_P);
     real rhog = _get_rhog(Rc, Zc, h_g);
     real ratio_mid = sigma_d*H_g / (sigma_g*H_d);
     real settle_exp = exp(-0.5*Zc*Zc*(1.0/(H_d*H_d) - 1.0/(H_g*H_g)));
     real dens = rhog*ratio_mid*settle_exp;
 
-
+    // apply azimuthal density noise shared across radius and polar angle
     curandState rng;
     curand_init(static_cast<unsigned long long>(ix), 0ULL, 0ULL, &rng);
     real xi = curand_normal_double(&rng);

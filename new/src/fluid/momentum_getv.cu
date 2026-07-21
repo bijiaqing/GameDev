@@ -1,26 +1,6 @@
-#include <fluid_kern.cuh>
 #include <advection.cuh>
+#include <fluid_kern.cuh>
 #include <param_grid.cuh>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 __global__
 void momentum_getv (const real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
@@ -45,9 +25,11 @@ void momentum_getv (const real *dev_dustdens, real *dev_dustmomx, real *dev_dust
     real momy = dev_dustmomy[idx];
     real momz = dev_dustmomz[idx];
 
+    // recover primitive quantities and repair the conserved fallback state in near-vacuum cells
     real velx, vely, velz;
     _recover_dust_state(dens, Rc, momx, momy, momz, velx, vely, velz);
 
+    // write the synchronized conserved and primitive states to global memory
     dev_dustmomx[idx] = momx;
     dev_dustmomy[idx] = momy;
     dev_dustmomz[idx] = momz;
