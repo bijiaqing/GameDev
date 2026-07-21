@@ -51,7 +51,7 @@ const real  ST_0        = 1.0e-03;      // reference Stokes number at R_0 (can b
 
 #ifdef RADIATION
 const real  BETA_0      = 1.0e+01;      // radiation-pressure-to-gravity ratio
-const real  KAPPA_0     = 1.0e+05;
+const real  KAPPA_0     = 5.0e+04;
 
 const real  T_BETA      = 2.0*M_PI;     // Smoothly turn radiation on over time
 
@@ -68,14 +68,14 @@ const real  POS_LIMIT   = 0.9;          // maximum explicit-side CN coefficient 
 // =========================================================================================================================
 // time step and output
 
-const int  SAVE_MAX     = 500;
+const int  SAVE_MAX     = 100;
 
 const real DT_OUT       = 2.0*M_PI;     // output interval
 const real DT_MAX       = 1.0e-01;      // maximum time step
 
 constexpr real CFL_NUM  = 0.5;          // CFL safety factor for advection
 
-const real RHO_VAC      = 1.0e-15;      // vacuum threshold for density and momentum recovery
+const real RHO_VAC      = 1.0e-30;      // vacuum threshold for density and momentum recovery
 
 // =========================================================================================================================
 // CUDA numerical parameters

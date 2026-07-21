@@ -1,0 +1,4 @@
+
+DUST_REPR := fluid
+
+NVCC += -DRADIATION
