@@ -1,8 +1,12 @@
-#include <cmath>
-#include <filesystem>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
+#include <cmath>          // std::fmax, std::fmin
+#include <cstdlib>        // std::exit, EXIT_FAILURE
+#include <filesystem>     // std::filesystem::create_directories
+#include <iostream>       // std::cerr, std::endl
+#include <sstream>        // std::stringstream
+#include <string>         // std::string
+#include <vector>         // std::vector
+
+#include <cuda_runtime.h> // cudaDeviceSynchronize, cudaFree, cudaFreeHost, cudaMalloc, cudaMallocHost, cudaMemcpy, cudaMemset
 
 #include <fluid_kern.cuh>
 #include <fluid_host.cuh>
@@ -138,7 +142,8 @@ int main (int argc, char **argv)
             return 1;
         }
 
-        SAVE_DUSTDATA_TO_FILE(idx_from);
+        SAVE_DUSTDENS_TO_FILE(idx_from);
+        SAVE_DUST_VEL_TO_FILE(idx_from);
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from);
         #endif
@@ -153,8 +158,6 @@ int main (int argc, char **argv)
             std::cerr << "Error: invalid resume frame number: " << argv[1] << "\n";
             return 1;
         }
-
-        if (!validate_restart_config(PATH + "variables.txt")) return 1;
 
         LOAD_DUSTDATA_TO_VRAM(idx_from);
 
@@ -392,7 +395,8 @@ int main (int argc, char **argv)
             validate_finite_state();
             #endif
 
-            SAVE_DUSTDATA_TO_FILE(idx_from);
+            SAVE_DUSTDENS_TO_FILE(idx_from);
+            SAVE_DUST_VEL_TO_FILE(idx_from);
             #ifdef RADIATION
             SAVE_OPTDEPTH_TO_FILE(idx_from);
             #endif

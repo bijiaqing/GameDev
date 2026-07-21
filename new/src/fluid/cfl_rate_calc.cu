@@ -1,5 +1,3 @@
-#include <cmath>
-
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
@@ -119,4 +117,3 @@ void cfl_rate_calc (
         dev_cfl_rate[ic] = isfinite(cfl_rate) ? cfl_rate : INFINITY;
     }
 }
-

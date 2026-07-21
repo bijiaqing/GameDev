@@ -1,6 +1,8 @@
 #ifndef PARAM_GRID_CUH
 #define PARAM_GRID_CUH
 
+#include <cmath> // pow, for host-side calculations
+
 #include <const.cuh>
 
 // =========================================================================================================================

@@ -1,12 +1,13 @@
-#include <algorithm>
-#include <cmath>
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <iomanip>
-#include <iostream>
-#include <string>
-#include <vector>
+#include <cmath>          // cos, exp, fmin, pow, sin, sqrt, std::cyl_bessel_j, std::cyl_neumann
+#include <cstdlib>        // std::exit, EXIT_FAILURE
+#include <filesystem>     // std::filesystem::create_directories
+#include <fstream>        // std::ofstream
+#include <iomanip>        // std::setprecision
+#include <iostream>       // std::cerr, std::cout, std::endl
+#include <string>         // std::string, std::to_string
+#include <vector>         // std::vector
+
+#include <cuda_runtime.h> // cudaDeviceSynchronize, cudaFree, cudaMalloc, cudaMemcpy
 
 #include <fluid_kern.cuh>
 #include <fluid_host.cuh>
@@ -285,7 +286,7 @@ void save_state (const std::string &stage, real *dev_dens, real *dev_momx,
     CUDA_CHECK(cudaMemcpy(vely.data(), dev_vely, sizeof(real)*N_G, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(velz.data(), dev_velz, sizeof(real)*N_G, cudaMemcpyDeviceToHost));
 
-    velocity_to_file(velx.data(), velz.data());
+    save_sam_as_velocity(velx.data(), velz.data());
     save_array("dustdens_" + stage, dens);
     save_array("dustmomx_" + stage, momx);
     save_array("dustmomy_" + stage, momy);

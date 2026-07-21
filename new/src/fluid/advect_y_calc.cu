@@ -2,31 +2,18 @@
 #include <advection.cuh>
 #include <param_grid.cuh>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// =========================================================================================================================
+// kernel: advect_y_calc
+// purpose: radial transport with nonuniform PPM, pressureless HLL fluxes, open boundaries, and invariant-domain limiting
+//
+// parallelization: one thread per azimuthal-polar column with a serial loop over N_Y radial cells
+//
+// per call:
+//   1 three SSPRK(3,3) forward-Euler evaluations
+//   2 PPM high-order and cell-centred low-order HLL flux construction
+//   3 geometry-aware low-order conservative update
+//   4 invariant-domain-limited antidiffusive correction
+// =========================================================================================================================
 
 __global__
 void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
@@ -43,8 +30,10 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
     real zc = Z_MIN + (iz + 0.5)*dz;
 
+    // select cylindrical radial geometry in 2D and spherical radial geometry in 3D
     real pow_y = _get_powy();
 
+    // load one radial column from global memory
     real dens[N_Y], momx[N_Y], momy[N_Y], momz[N_Y];
     for (int iy = 0; iy < N_Y; iy++)
     {
@@ -56,10 +45,10 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         momz[iy] = dev_dustmomz[ic];
     }
 
+    // advance three forward-Euler operator evaluations for SSPRK(3,3)
     for (int stage = 0; stage < 3; stage++)
     {
-
-
+        // recover primitive quantities from the current stage state
         real velx[N_Y], vely[N_Y], velz[N_Y];
         for (int iy = 0; iy < N_Y; iy++)
         {
@@ -69,7 +58,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             _recover_dust_state(dens[iy], Rc, momx[iy], momy[iy], momz[iy], velx[iy], vely[iy], velz[iy]);
         }
 
-
+        // reconstruct PPM face values in the radial finite-volume coordinate
         real edge_dens[N_Y + 1], edge_velx[N_Y + 1], edge_vely[N_Y + 1], edge_velz[N_Y + 1];
 
         _ppm_edges_nonuniform(dens, dev_weight_y, edge_dens, N_Y);
@@ -77,12 +66,13 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         _ppm_edges_nonuniform(vely, dev_weight_y, edge_vely, N_Y);
         _ppm_edges_nonuniform(velz, dev_weight_y, edge_velz, N_Y);
 
-
+        // compute interior face fluxes and the outflow-only outer boundary flux
         real flux_dens[N_Y], flux_momx[N_Y], flux_momy[N_Y], flux_momz[N_Y];
         for (int iy = 0; iy < N_Y; iy++)
         {
             if (iy == N_Y - 1)
             {
+                // permit outward transport and suppress inflow at the outer radial boundary
                 real speed_ob = vely[iy];
                 real outflow = (speed_ob > 0.0) ? 1.0 : 0.0;
 
@@ -95,7 +85,8 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 continue;
             }
 
-
+            // reconstruct high-order PPM states at the interior radial face
+            // use zero PPM tracing fraction because SSPRK supplies temporal integration
             real dens_L = fmax(_ppm_face_value(edge_dens, dens, iy,     iy + 1, true,  0.0), 0.0);
             real dens_R = fmax(_ppm_face_value(edge_dens, dens, iy + 1, iy + 2, false, 0.0), 0.0);
             real velx_L =      _ppm_face_value(edge_velx, velx, iy,     iy + 1, true,  0.0);
@@ -112,8 +103,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_dens[iy], flux_momx[iy], flux_momy[iy], flux_momz[iy]
             );
 
-
-
+            // compute the low-order HLL flux from adjacent cell-centred states
             real flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low;
             _pressureless_hll_flux(
                 vely[iy], vely[iy + 1],
@@ -122,26 +112,29 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low
             );
 
+            // retain low-order fluxes and store high-minus-low differences for the antidiffusive correction
             edge_dens[iy] = flux_dens[iy] - flux_dens_low;
             edge_velx[iy] = flux_momx[iy] - flux_momx_low;
             edge_vely[iy] = flux_momy[iy] - flux_momy_low;
             edge_velz[iy] = flux_momz[iy] - flux_momz_low;
+            
             flux_dens[iy] = flux_dens_low;
             flux_momx[iy] = flux_momx_low;
             flux_momy[iy] = flux_momy_low;
             flux_momz[iy] = flux_momz_low;
         }
 
-
+        // permit outward transport and suppress inflow at the inner radial boundary
         real speed_ib = vely[0];
         real flux_dens_ib = (speed_ib < 0.0) ? speed_ib*fmax(dens[0], 0.0) : 0.0;
         real flux_momx_ib = flux_dens_ib*velx[0];
         real flux_momy_ib = flux_dens_ib*vely[0];
         real flux_momz_ib = flux_dens_ib*velz[0];
 
-
+        // precompute the outer-to-inner face area ratio for logarithmic radial cells
         real area_ratio = pow(dy, pow_y - 1.0);
 
+        // apply the geometry-aware low-order update to the innermost radial cell
         {
             real y0 = Y_MIN;
             real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
@@ -155,6 +148,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             if (dens[0] < 0.0) dens[0] = momx[0] = momy[0] = momz[0] = 0.0;
         }
 
+        // apply the geometry-aware low-order update to the remaining radial cells
         for (int iy = 1; iy < N_Y; iy++)
         {
             real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
@@ -169,8 +163,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             if (dens[iy] < 0.0) dens[iy] = momx[iy] = momy[iy] = momz[iy] = 0.0;
         }
 
-
-
+        // apply volume-scaled antidiffusive transfers across interior radial faces
         for (int iy = 0; iy < N_Y - 1; iy++)
         {
             real y_face = Y_MIN*pow(dy, static_cast<real>(iy + 1));
@@ -189,6 +182,8 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
             real velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L;
             real velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R;
+
+            // bound each transported primitive quantity by neighboring stage values
             _local_bounds(velx, iy,     N_Y, velx_min_L, velx_max_L);
             _local_bounds(vely, iy,     N_Y, vely_min_L, vely_max_L);
             _local_bounds(velz, iy,     N_Y, velz_min_L, velz_max_L);
@@ -206,6 +201,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 corr_dens_R, corr_momx_R, corr_momy_R, corr_momz_R,
                 velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R
             );
+            // limit both cell corrections by one shared scale to preserve conservation and the local invariant domain
             real scale = fmin(scale_L, scale_R);
 
             dens[iy] += scale*corr_dens_L;
@@ -218,8 +214,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             momz[iy + 1] += scale*corr_momz_R;
         }
 
-
-
+        // form the second SSPRK(3,3) convex combination after the second Euler evaluation
         if (stage == 1)
         {
             for (int iy = 0; iy < N_Y; iy++)
@@ -234,7 +229,7 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
     }
 
-
+    // form the final SSPRK(3,3) combination and write the radial column to global memory
     for (int iy = 0; iy < N_Y; iy++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;

@@ -1,5 +1,3 @@
-#include <cmath>
-
 #include <fluid_kern.cuh>
 
 
@@ -31,4 +29,3 @@ void inf_cell_flag (
 
     if (!finite) atomicCAS(dev_badstate, 0, idx + 1);
 }
-

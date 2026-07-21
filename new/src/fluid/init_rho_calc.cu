@@ -1,4 +1,4 @@
-#include <curand_kernel.h>
+#include <curand_kernel.h> // curand_init, curand_normal_double, curandState
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>

@@ -2,26 +2,18 @@
 #include <advection.cuh>
 #include <param_grid.cuh>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// =========================================================================================================================
+// kernel: advect_z_calc
+// purpose: polar transport with nonuniform PPM, pressureless HLL fluxes, boundary fluxes, and invariant-domain limiting
+//
+// parallelization: one thread per azimuthal-radial column with a serial loop over N_Z polar cells
+//
+// per call:
+//   1 three SSPRK(3,3) forward-Euler evaluations
+//   2 PPM high-order and cell-centred low-order HLL flux construction
+//   3 spherical-geometry low-order conservative update
+//   4 invariant-domain-limited antidiffusive correction
+// =========================================================================================================================
 
 __global__
 void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
@@ -39,6 +31,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
     real yc = Y_MIN*pow(dy, iy + 0.5);
 
+    // load one polar column from global memory
     real dens[N_Z], momx[N_Z], momy[N_Z], momz[N_Z];
     for (int iz = 0; iz < N_Z; iz++)
     {
@@ -50,8 +43,10 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         momz[iz] = dev_dustmomz[ic];
     }
 
+    // advance three forward-Euler operator evaluations for SSPRK(3,3)
     for (int stage = 0; stage < 3; stage++)
     {
+        // recover primitive quantities from the current stage state
         real velx[N_Z], vely[N_Z], velz[N_Z];
         for (int iz = 0; iz < N_Z; iz++)
         {
@@ -61,7 +56,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             _recover_dust_state(dens[iz], Rc, momx[iz], momy[iz], momz[iz], velx[iz], vely[iz], velz[iz]);
         }
 
-
+        // reconstruct PPM face values in the spherical polar finite-volume coordinate
         real edge_dens[N_Z + 1], edge_velx[N_Z + 1], edge_vely[N_Z + 1], edge_velz[N_Z + 1];
 
         _ppm_edges_nonuniform(dens, dev_weight_z, edge_dens, N_Z);
@@ -69,17 +64,17 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         _ppm_edges_nonuniform(vely, dev_weight_z, edge_vely, N_Z);
         _ppm_edges_nonuniform(velz, dev_weight_z, edge_velz, N_Z);
 
-
+        // compute interior face fluxes and the configured outer boundary flux
         real flux_dens[N_Z], flux_momx[N_Z], flux_momy[N_Z], flux_momz[N_Z];
         for (int iz = 0; iz < N_Z; iz++)
         {
             if (iz == N_Z - 1)
             {
                 #ifdef HALFDISK
-
+                // impose zero flux at the reflecting midplane boundary
                 flux_dens[iz] = flux_momx[iz] = flux_momy[iz] = flux_momz[iz] = 0.0;
                 #else
-
+                // permit outward transport and suppress inflow at the outer polar boundary
                 real speed_ob = velz[iz] / yc;
                 flux_dens[iz] = (speed_ob > 0.0) ? speed_ob*fmax(dens[iz], 0.0) : 0.0;
                 flux_momx[iz] = flux_dens[iz]*velx[iz];
@@ -91,7 +86,8 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 continue;
             }
 
-
+            // reconstruct high-order PPM states at the interior polar face
+            // use zero PPM tracing fraction because SSPRK supplies temporal integration
             real dens_L = fmax(_ppm_face_value(edge_dens, dens, iz,     iz + 1, true,  0.0), 0.0);
             real dens_R = fmax(_ppm_face_value(edge_dens, dens, iz + 1, iz + 2, false, 0.0), 0.0);
             real velx_L =      _ppm_face_value(edge_velx, velx, iz,     iz + 1, true,  0.0);
@@ -108,8 +104,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_dens[iz], flux_momx[iz], flux_momy[iz], flux_momz[iz]
             );
 
-
-
+            // compute the low-order HLL flux from adjacent cell-centred states
             real flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low;
             _pressureless_hll_flux(
                 velz[iz] / yc, velz[iz + 1] / yc,
@@ -118,29 +113,26 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low
             );
 
+            // retain low-order fluxes and store high-minus-low differences for the antidiffusive correction
             edge_dens[iz] = flux_dens[iz] - flux_dens_low;
             edge_velx[iz] = flux_momx[iz] - flux_momx_low;
             edge_vely[iz] = flux_momy[iz] - flux_momy_low;
             edge_velz[iz] = flux_momz[iz] - flux_momz_low;
+            
             flux_dens[iz] = flux_dens_low;
             flux_momx[iz] = flux_momx_low;
             flux_momy[iz] = flux_momy_low;
             flux_momz[iz] = flux_momz_low;
         }
 
-
+        // permit outward transport and suppress inflow at the inner polar boundary
         real speed_ib = velz[0] / yc;
         real flux_dens_ib = (speed_ib < 0.0) ? speed_ib*fmax(dens[0], 0.0) : 0.0;
         real flux_momx_ib = flux_dens_ib*velx[0];
         real flux_momy_ib = flux_dens_ib*vely[0];
         real flux_momz_ib = flux_dens_ib*velz[0];
 
-
-
-
-
-
-
+        // apply the spherical-geometry low-order update to the innermost polar cell
         {
             real z0 = Z_MIN;
             real z1 = z0 + dz;
@@ -154,6 +146,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             if (dens[0] < 0.0) dens[0] = momx[0] = momy[0] = momz[0] = 0.0;
         }
 
+        // apply the spherical-geometry low-order update to the remaining polar cells
         for (int iz = 1; iz < N_Z; iz++)
         {
             real z0 = Z_MIN + static_cast<real>(iz)*dz;
@@ -168,8 +161,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             if (dens[iz] < 0.0) dens[iz] = momx[iz] = momy[iz] = momz[iz] = 0.0;
         }
 
-
-
+        // apply volume-scaled antidiffusive transfers across interior polar faces
         for (int iz = 0; iz < N_Z - 1; iz++)
         {
             real z_face = Z_MIN + static_cast<real>(iz + 1)*dz;
@@ -190,6 +182,8 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
             real velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L;
             real velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R;
+
+            // bound each transported primitive quantity by neighboring stage values
             _local_bounds(velx, iz,     N_Z, velx_min_L, velx_max_L);
             _local_bounds(vely, iz,     N_Z, vely_min_L, vely_max_L);
             _local_bounds(velz, iz,     N_Z, velz_min_L, velz_max_L);
@@ -207,6 +201,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 corr_dens_R, corr_momx_R, corr_momy_R, corr_momz_R,
                 velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R
             );
+            // limit both cell corrections by one shared scale to preserve conservation and the local invariant domain
             real scale = fmin(scale_L, scale_R);
 
             dens[iz] += scale*corr_dens_L;
@@ -219,8 +214,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             momz[iz + 1] += scale*corr_momz_R;
         }
 
-
-
+        // form the second SSPRK(3,3) convex combination after the second Euler evaluation
         if (stage == 1)
         {
             for (int iz = 0; iz < N_Z; iz++)
@@ -235,7 +229,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
     }
 
-
+    // form the final SSPRK(3,3) combination and write the polar column to global memory
     for (int iz = 0; iz < N_Z; iz++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;

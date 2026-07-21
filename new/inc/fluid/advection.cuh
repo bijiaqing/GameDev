@@ -3,6 +3,10 @@
 
 #include <const.cuh>
 
+// =========================================================================================================================
+// dust state recovery
+
+// recover primitive velocities from conserved momenta, with a Keplerian fallback in near-vacuum cells
 __device__ __forceinline__
 void _recover_dust_state (real dens, real R, real &momx, real &momy, real &momz, real &velx, real &vely, real &velz)
 {
@@ -24,6 +28,10 @@ void _recover_dust_state (real dens, real R, real &momx, real &momy, real &momz,
     }
 }
 
+// =========================================================================================================================
+// PPM face reconstruction
+
+// reconstruct a bounded PPM face value on a uniform grid from four neighboring cells (for x direction)
 __device__ __forceinline__
 static real _ppm_edge (real qm1, real q0, real qp1, real qp2)
 {
@@ -33,13 +41,7 @@ static real _ppm_edge (real qm1, real q0, real qp1, real qp2)
     return fmax(lo, fmin(hi, qe));
 }
 
-
-
-
-
-
-
-
+// reconstruct bounded face values on a nonuniform grid using precomputed PPM weights (for y and z directions)
 __device__ __forceinline__
 static void _ppm_edges_nonuniform (const real *cellval, const real *face_weight, real *edge, int ncells)
 {
@@ -50,12 +52,12 @@ static void _ppm_edges_nonuniform (const real *cellval, const real *face_weight,
         const real *weight = face_weight + 4*iface;
         if (iface >= 2 && iface <= ncells - 2)
         {
-            edge[iface] = weight[0]*cellval[iface - 2] + weight[1]*cellval[iface - 1]
-                        + weight[2]*cellval[iface]     + weight[3]*cellval[iface + 1];
+            edge[iface]  = weight[0]*cellval[iface - 2] + weight[1]*cellval[iface - 1];
+            edge[iface] += weight[2]*cellval[iface]     + weight[3]*cellval[iface + 1];
         }
         else
         {
-            edge[iface] = weight[0]*cellval[iface - 1] + weight[1]*cellval[iface];
+            edge[iface]  = weight[0]*cellval[iface - 1] + weight[1]*cellval[iface];
         }
 
         real edge_min = fmin(cellval[iface - 1], cellval[iface]);
@@ -67,14 +69,10 @@ static void _ppm_edges_nonuniform (const real *cellval, const real *face_weight,
     edge[ncells] = cellval[ncells - 1];
 }
 
+// =========================================================================================================================
+// PPM profile limiting and upwind tracing
 
-
-
-
-
-
-
-
+// limit a cell parabolic profile to prevent new extrema and oscillations
 __device__ __forceinline__
 static void _ppm_limit (real q0, real &ql, real &qr, real &dq, real &q6)
 {
@@ -104,38 +102,17 @@ static void _ppm_limit (real q0, real &ql, real &qr, real &dq, real &q6)
     }
 }
 
-
-
-
-
-
+// integrate the PPM profile over the right-side upwind domain of dependence
 __device__ __forceinline__
 static real _ppm_state_R (real qb, real dq, real q6, real cfl)
-{
-    return qb - 0.5*cfl*(dq - (1.0 - 2.0*cfl/3.0)*q6);
-}
+{ return qb - 0.5*cfl*(dq - (1.0 - 2.0*cfl/3.0)*q6); }
 
-
-
-
-
-
+// integrate the PPM profile over the left-side upwind domain of dependence
 __device__ __forceinline__
 static real _ppm_state_L (real qa, real dq, real q6, real cfl)
-{
-    return qa + 0.5*cfl*(dq + (1.0 - 2.0*cfl/3.0)*q6);
-}
+{ return qa + 0.5*cfl*(dq + (1.0 - 2.0*cfl/3.0)*q6); }
 
-
-
-
-
-
-
-
-
-
-
+// produce the time-averaged upwind face state for the Riemann solver
 __device__ __forceinline__
 static real _ppm_face_value (const real *edge, const real *cellval, int iupL, int iupR, bool upwind_on_left, real cfl)
 {
@@ -150,10 +127,25 @@ static real _ppm_face_value (const real *edge, const real *cellval, int iupL, in
         _ppm_state_L(val_L, dval, coeff_curv, cfl) ;
 }
 
+// =========================================================================================================================
+// invariant-domain correction limiting
 
+// find local extrema from a cell and its periodic neighbors (for x direction)
+__device__ __forceinline__
+static void _local_bounds_periodic (const real *value, int idx, int count, real &value_min, real &value_max)
+{
+    int idx_prev = (idx - 1 + count) % count;
+    int idx_next = (idx + 1) % count;
 
+    value_min = fmin(value[idx_prev], fmin(value[idx], value[idx_next]));
+    value_max = fmax(value[idx_prev], fmax(value[idx], value[idx_next]));
 
+    real bound_pad = 1.0e-12*fmax(1.0, fmax(fabs(value_min), fabs(value_max)));
+    value_min -= bound_pad;
+    value_max += bound_pad;
+}
 
+// find local extrema from a cell and its nonperiodic neighbors (for y and z directions)
 __device__ __forceinline__
 static void _local_bounds (const real *value, int idx, int count, real &value_min, real &value_max)
 {
@@ -173,26 +165,7 @@ static void _local_bounds (const real *value, int idx, int count, real &value_mi
     value_max += bound_pad;
 }
 
-__device__ __forceinline__
-static void _local_bounds_periodic (const real *value, int idx, int count, real &value_min, real &value_max)
-{
-    int idx_prev = (idx - 1 + count) % count;
-    int idx_next = (idx + 1) % count;
-
-    value_min = fmin(value[idx_prev], fmin(value[idx], value[idx_next]));
-    value_max = fmax(value[idx_prev], fmax(value[idx], value[idx_next]));
-
-    real bound_pad = 1.0e-12*fmax(1.0, fmax(fabs(value_min), fabs(value_max)));
-    value_min -= bound_pad;
-    value_max += bound_pad;
-}
-
-
-
-
-
-
-
+// reduce a correction scale to preserve one positivity or boundedness constraint
 __device__ __forceinline__
 static void _restrict_scale (real available, real change, real &scale)
 {
@@ -200,6 +173,7 @@ static void _restrict_scale (real available, real change, real &scale)
     scale = (available > 0.0) ? fmin(scale, (1.0 - 1.0e-12)*available / (-change)) : 0.0;
 }
 
+// find one correction scale that preserves positive density and locally bounded velocities
 __device__ __forceinline__
 static real _invariant_scale (
     real dens, real momx, real momy, real momz,
@@ -210,7 +184,7 @@ static real _invariant_scale (
 {
     real scale = 1.0;
 
-    _restrict_scale(dens, corr_dens, scale);
+    _restrict_scale(dens,                 corr_dens,                      scale);
     _restrict_scale(momx - velx_min*dens, corr_momx - velx_min*corr_dens, scale);
     _restrict_scale(velx_max*dens - momx, velx_max*corr_dens - corr_momx, scale);
     _restrict_scale(momy - vely_min*dens, corr_momy - vely_min*corr_dens, scale);
@@ -221,23 +195,10 @@ static real _invariant_scale (
     return fmax(0.0, fmin(1.0, scale));
 }
 
+// =========================================================================================================================
+// pressureless Riemann flux
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// compute conservative dust density and momentum fluxes with the pressureless HLL solver
 __device__ __forceinline__
 static void _pressureless_hll_flux (
     real speed_L, real speed_R,
@@ -280,6 +241,6 @@ static void _pressureless_hll_flux (
     flux_momz = (wave_R*speed_L*momz_L - wave_L*speed_R*momz_R + wave_L*wave_R*(momz_R - momz_L))*inv_span;
 }
 
-
+// =========================================================================================================================
 
 #endif

@@ -31,15 +31,18 @@ __global__ void cfl_rate_calc (
 // =========================================================================================================================
 
 __global__ void diffus_x_calc (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real dt
 );
 
 __global__ void diffus_y_calc (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real dt
 );
 
 __global__ void diffus_z_calc (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real dt
 );
 
 // =========================================================================================================================
@@ -89,7 +92,8 @@ __global__ void optdepth_csum (real *dev_optdepth);
 // =========================================================================================================================
 
 __global__ void source_update (
-    real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz, const real *dev_dustdens,
+    real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz, 
+    const real *dev_dustdens,
     #ifdef RADIATION
     const real *dev_optdepth, real beta_taper,
     #endif

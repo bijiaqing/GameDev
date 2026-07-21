@@ -1,32 +1,27 @@
 #ifndef FLUID_HOST_CUH
 #define FLUID_HOST_CUH
 
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cstdlib>
-#include <ctime>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <vector>
+#include <algorithm>           // std::copy, std::fill, std::max, std::swap
+#include <chrono>              // std::chrono::system_clock
+#include <cmath>               // std::abs, std::cos, std::exp, std::fmin, std::fmax, std::isfinite, ...
+#include <cstdlib>             // std::exit, EXIT_FAILURE
+#include <ctime>               // std::ctime, std::time_t
+#include <fstream>             // std::ifstream, std::ofstream
+#include <iomanip>             // std::defaultfloat, std::scientific, std::setfill, std::setprecision, std::setw
+#include <iostream>            // std::cerr, std::cout, std::endl
+#include <string>              // std::string, std::to_string
+#include <vector>              // std::vector
 
-#include <cuda_runtime.h>
-#include <thrust/device_ptr.h>
-#include <thrust/extrema.h>
-#include <thrust/reduce.h>
+#include <cuda_runtime.h>      // cudaGetErrorString, cudaGetLastError, cudaMemcpy
+#include <thrust/device_ptr.h> // thrust::device_ptr
+#include <thrust/extrema.h>    // thrust::max_element
+#include <thrust/reduce.h>     // thrust::reduce
 
 #include <const.cuh>
 #include <param_grid.cuh>
 
-
-
-
-
-
-
+// =========================================================================================================================
+// cuda error handling
 
 inline __host__
 void cuda_fail (cudaError_t status, const char *operation, const char *file, int line)
@@ -35,6 +30,7 @@ void cuda_fail (cudaError_t status, const char *operation, const char *file, int
     << "CUDA error at " << file << ":" << line
     << " during " << operation << ": " << cudaGetErrorString(status)
     << " (" << static_cast<int>(status) << ")\n";
+    
     std::exit(EXIT_FAILURE);
 }
 
@@ -45,10 +41,6 @@ do {                                                                            
     { cuda_fail(cuda_status_, #OPERATION, __FILE__, __LINE__); }                    \
 } while (0)
 
-
-
-
-
 #define CUDA_KERNEL_CHECK(KERNEL_NAME)                                              \
 do {                                                                                \
     cudaError_t cuda_status_ = cudaGetLastError();                                  \
@@ -56,26 +48,23 @@ do {                                                                            
     { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
 } while (0)
 
+// =========================================================================================================================
+// precompute geometry-aware PPM face interpolation weights from cell averages
 
-
-
-
-
-
-
-
-
+// solve four-cell interpolation weights that reproduce cubic data at one interior face
 inline __host__
 void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *weight)
 {
     real face = face_s[iface];
     real scale = std::max(face - face_s[iface - 2], face_s[iface + 2] - face);
 
-
-
+    // assemble moment constraints that make the face interpolation exact for cubic data
     real aug_matrix[4][5] = {};
+
+    // impose exactness for polynomial moments from degree zero through three
     for (int n = 0; n < 4; n++)
     {
+        // evaluate each monomial cell average over the four-cell stencil
         for (int j = 0; j < 4; j++)
         {
             int icell = iface - 2 + j;
@@ -88,11 +77,12 @@ void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *
         aug_matrix[n][4] = (n == 0) ? 1.0 : 0.0;
     }
 
-
+    // solve the interpolation weights by Gauss-Jordan elimination with partial pivoting
     for (int col = 0; col < 4; col++)
     {
         int pivot_row = col;
 
+        // select the largest available pivot in the current column
         for (int row = col + 1; row < 4; row++)
         {
             if (std::abs(aug_matrix[row][col]) > std::abs(aug_matrix[pivot_row][col]))
@@ -101,22 +91,28 @@ void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *
             }
         }
 
+        // move the selected pivot row into the current row
         for (int k = col; k < 5; k++)
         {
             std::swap(aug_matrix[col][k], aug_matrix[pivot_row][k]);
         }
 
         real pivot = aug_matrix[col][col];
+
+        // normalize the current pivot row
         for (int k = col; k < 5; k++)
         {
             aug_matrix[col][k] /= pivot;
         }
 
+        // eliminate the current column from every other row
         for (int row = 0; row < 4; row++)
         {
             if (row == col) continue;
 
             real factor = aug_matrix[row][col];
+
+            // update the remaining augmented entries in the target row
             for (int k = col; k < 5; k++)
             {
                 aug_matrix[row][k] -= factor*aug_matrix[col][k];
@@ -124,22 +120,21 @@ void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *
         }
     }
 
+    // copy the solved interpolation weights
     for (int j = 0; j < 4; j++)
     {
         weight[j] = aug_matrix[j][4];
     }
 }
 
-
-
-
-
+// build face interpolation weights for one nonuniform volume coordinate
 inline __host__
 void _ppm_nonuniform_weights (const std::vector<real> &face_s, real *weight)
 {
     int n_cells = static_cast<int>(face_s.size()) - 1;
     std::fill(weight, weight + 4*(n_cells + 1), 0.0);
 
+    // assign cubic interior weights and linear boundary-adjacent weights to every internal face
     for (int iface = 1; iface < n_cells; iface++)
     {
         real *face_weight = weight + 4*iface;
@@ -157,9 +152,7 @@ void _ppm_nonuniform_weights (const std::vector<real> &face_s, real *weight)
     }
 }
 
-
-
-
+// build radial and polar PPM weights in their finite-volume coordinates
 inline __host__
 void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
 {
@@ -167,6 +160,7 @@ void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
     real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     std::vector<real> y_face_s(N_Y + 1);
 
+    // map radial faces to the volume coordinate used by the radial finite-volume operator
     for (int iy = 0; iy <= N_Y; iy++)
     {
         real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
@@ -178,6 +172,7 @@ void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
     real dz = _get_dz();
     std::vector<real> z_face_s(N_Z + 1);
 
+    // map polar faces to the spherical volume coordinate minus cosine theta
     for (int iz = 0; iz <= N_Z; iz++)
     {
         z_face_s[iz] = -std::cos(Z_MIN + static_cast<real>(iz)*dz);
@@ -186,18 +181,8 @@ void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
     _ppm_nonuniform_weights(z_face_s, weight_z);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+// =========================================================================================================================
+// calculate the power-law surface density after convolution with a Gaussian kernel 
 
 inline __host__
 void convpow_calc (real *initdens)
@@ -218,9 +203,8 @@ void convpow_calc (real *initdens)
         u_axis[i] = Y_MIN + i*du;
     }
 
+    // normalization factor for the Gaussian kernel
     const real norm = 1.0 / (std::sqrt(2.0*M_PI)*sig_u);
-
-
 
     for (int j = 0; j <= n_bin; j++)
     {
@@ -241,9 +225,9 @@ void convpow_calc (real *initdens)
     std::copy(v_axis.begin(), v_axis.end(), initdens);
 }
 
-
-
-
+// =========================================================================================================================
+// obtain the CFL time step based on the maximum CFL rate across all cells, 
+// and print information about the cell with the maximum rate if verbose is true
 
 inline __host__
 real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
@@ -259,7 +243,7 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
 
         int ix_bad = idx_bad % N_X;
         int iy_bad = (idx_bad / N_X) % N_Y;
-        int iz_bad = idx_bad / (N_X*N_Y);
+        int iz_bad = idx_bad / (N_X * N_Y);
 
         std::cerr
         << "Error: non-finite dust state detected by CFL validation at cell ("
@@ -274,6 +258,7 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     real dt_cfl = std::fmin(CFL_NUM / max_rate, DT_MAX);
     if (!verbose) return dt_cfl;
 
+    // print the cell with the maximum CFL rate and its corresponding velocity components
     int idx_max = static_cast<int>(max_it - ptr_cfl);
     int ix = idx_max % N_X;
     int iy = (idx_max / N_X) % N_Y;
@@ -284,11 +269,12 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     CUDA_CHECK(cudaMemcpy(&vely, dev_dustvely + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(&velz, dev_dustvelz + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
 
-    real yc = Y_MIN*std::pow(_get_dy(), iy + 0.5);
-    real zc = Z_MIN + (iz + 0.5)*_get_dz();
+    real dy = _get_dy();
+    real dz = _get_dz();
+
+    real yc = Y_MIN*std::pow(dy, iy + 0.5);
+    real zc = Z_MIN + (iz + 0.5)*dz;
     real Rc = yc*std::sin(zc);
-
-
 
     int idx_base = iy*N_X + iz*N_X*N_Y;
     thrust::device_ptr <const real> ptr_velx(dev_dustvelx + idx_base);
@@ -301,21 +287,20 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     << "  [CFL] cell=("
     << std::setw(4) << ix << ","
     << std::setw(4) << iy << ","
-    << std::setw(3) << iz << ")"
+    << std::setw(4) << iz << ")"
     << "  Rc="   << std::scientific << std::setprecision(3) << Rc
-    << "  vely=" << std::setw(11) << vely
-    << "  velz=" << std::setw(11) << speed_z
-    << "  dvx="  << std::setw(11) << vx_res
-    << "  rate=" << std::setw(11) << max_rate
-    << "  dt="   << std::setw(11) << CFL_NUM / max_rate
+    << "  dvx="  << std::setw(8) << vx_res
+    << "  vely=" << std::setw(8) << vely
+    << "  velz=" << std::setw(8) << speed_z
+    << "  rate=" << std::setw(8) << max_rate
+    << "  dt="   << std::setw(8) << CFL_NUM / max_rate
     << std::endl;
 
     return dt_cfl;
 }
 
-
-
-
+// =========================================================================================================================
+// diagnostic message output functions for simulation progress
 
 inline __host__
 void msg_output (int idx_file)
@@ -357,9 +342,8 @@ void msg_step (int idx_from, real dt, real clock_out, real clock_sim)
     << std::endl;
 }
 
-
-
-
+// =========================================================================================================================
+// save and load binary data to/from files
 
 inline __host__
 std::string frame_num (int number)
@@ -374,10 +358,6 @@ std::string frame_num (int number)
 
     return num_str;
 }
-
-
-
-
 
 template <typename T> inline __host__
 bool save_binary (const std::string &fname, T *data, int number)
@@ -399,12 +379,8 @@ bool load_binary (const std::string &fname, T *data, int number)
     return file.good();
 }
 
-
-
-
-
 inline __host__
-void velocity_to_file (real *dustvelx, real *dustvelz)
+void save_sam_as_velocity (real *dustvelx, real *dustvelz)
 {
     const real dy = _get_dy();
     const real dz = _get_dz();
@@ -431,7 +407,7 @@ void velocity_to_file (real *dustvelx, real *dustvelz)
 }
 
 inline __host__
-void velocity_from_file (real *dustvelx, real *dustvelz)
+void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 {
     const real dy = _get_dy();
     const real dz = _get_dz();
@@ -457,10 +433,6 @@ void velocity_from_file (real *dustvelx, real *dustvelz)
     }
 }
 
-
-
-
-
 #ifdef RADIATION
 #define SAVE_OPTDEPTH_TO_FILE(IDX)                                                              \
 do {                                                                                            \
@@ -470,15 +442,19 @@ do {                                                                            
 } while(0)
 #endif
 
-#define SAVE_DUSTDATA_TO_FILE(IDX)                                                              \
+#define SAVE_DUSTDENS_TO_FILE(IDX)                                                              \
 do {                                                                                            \
     CUDA_CHECK(cudaMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
     if (!save_binary(PATH + "dustdens_" + frame_num(IDX) + ".dat", dustdens, N_G))              \
     { std::cerr << "Error: failed to save dustdens frame " << IDX << "\n"; }                    \
+} while(0)
+
+#define SAVE_DUST_VEL_TO_FILE(IDX)                                                              \
+do {                                                                                            \
     CUDA_CHECK(cudaMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
     CUDA_CHECK(cudaMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
     CUDA_CHECK(cudaMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
-    velocity_to_file(dustvelx, dustvelz);                                                       \
+    save_sam_as_velocity(dustvelx, dustvelz);                                                   \
     if (!save_binary(PATH + "dustvelx_" + frame_num(IDX) + ".dat", dustvelx, N_G))              \
     { std::cerr << "Error: failed to save dustvelx frame " << IDX << "\n"; }                    \
     if (!save_binary(PATH + "dustvely_" + frame_num(IDX) + ".dat", dustvely, N_G))              \
@@ -497,144 +473,15 @@ do {                                                                            
     { std::cerr << "Error: failed to load dustvely frame " << IDX << "\n"; return 1; }          \
     if (!load_binary(PATH + "dustvelz_" + frame_num(IDX) + ".dat", dustvelz, N_G))              \
     { std::cerr << "Error: failed to load dustvelz frame " << IDX << "\n"; return 1; }          \
-    velocity_from_file(dustvelx, dustvelz);                                                     \
+    load_velocity_as_sam(dustvelx, dustvelz);                                                   \
     CUDA_CHECK(cudaMemcpy(dev_dustdens, dustdens, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
     CUDA_CHECK(cudaMemcpy(dev_dustvelx, dustvelx, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
     CUDA_CHECK(cudaMemcpy(dev_dustvely, dustvely, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
     CUDA_CHECK(cudaMemcpy(dev_dustvelz, dustvelz, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
 } while(0)
 
-
-
-
-
-
-
-
-
-
-inline __host__
-std::string restart_config_signature ()
-{
-    std::ostringstream signature;
-
-    signature
-    << std::hexfloat
-    << "real_bytes=" << sizeof(real)    << ';'
-    << "G="          << G               << ';'
-    << "M_S="        << M_S             << ';'
-    << "R_0="        << R_0             << ';'
-    << "N_X="        << N_X             << ';'
-    << "X_MIN="      << X_MIN           << ';'
-    << "X_MAX="      << X_MAX           << ';'
-    << "N_Y="        << N_Y             << ';'
-    << "Y_MIN="      << Y_MIN           << ';'
-    << "Y_MAX="      << Y_MAX           << ';'
-    << "N_Z="        << N_Z             << ';'
-    << "Z_MIN="      << Z_MIN           << ';'
-    << "Z_MAX="      << Z_MAX           << ';'
-    << "SIGMA_0="    << SIGMA_0         << ';'
-    << "ASPR_0="     << ASPR_0          << ';'
-    << "IDX_P="      << IDX_P           << ';'
-    << "IDX_Q="      << IDX_Q           << ';'
-    << "METAL_Z="    << METAL_Z         << ';'
-    << "STOKES_0="   << STOKES_0        << ';'
-    << "DT_OUT="     << DT_OUT          << ';'
-    << "DT_MAX="     << DT_MAX          << ';'
-    << "CFL_NUM="    << CFL_NUM         << ';'
-    << "RHO_VAC="    << RHO_VAC         << ';'
-    << "TPB="        << TPB             << ';';
-
-    #ifdef RADIATION
-    signature
-    << "RADIATION=1"                    << ';'
-    << "BETA_0="     << BETA_0          << ';'
-    << "KAPPA_0="    << KAPPA_0         << ';'
-    << "T_BETA="     << T_BETA          << ';';
-    #else
-    signature
-    << "RADIATION=0"                    << ';';
-    #endif
-
-    #ifdef DIFFUSION
-    signature
-    << "DIFFUSION=1"                    << ';'
-    << "SC_X="        << SC_X           << ';'
-    << "SC_Y="        << SC_Y           << ';'
-    << "SC_Z="        << SC_Z           << ';'
-    << "POS_LIMIT="   << POS_LIMIT      << ';';
-    #ifdef CONST_NU
-    signature
-    << "CONST_NU=1"                     << ';'
-    << "NU="         << NU              << ';';
-    #else
-    signature
-    << "CONST_NU=0"                     << ';'
-    << "ALPHA="      << ALPHA           << ';';
-    #endif
-    #else
-    signature
-    << "DIFFUSION=0"                    << ';';
-    #endif
-
-    #ifdef HALFDISK
-    signature
-    << "HALFDISK=1";
-    #else
-    signature
-    << "HALFDISK=0";
-    #endif
-
-    return signature.str();
-}
-
-inline __host__
-bool validate_restart_config (const std::string &fname)
-{
-    std::ifstream file(fname);
-    if (!file)
-    {
-        std::cerr << "Error: cannot open restart configuration file " << fname << std::endl;
-        return false;
-    }
-
-    const std::string prefix = "RESTART_CONFIG = ";
-    std::string line, saved_signature;
-    while (std::getline(file, line))
-    {
-        if (line.rfind(prefix, 0) == 0)
-        {
-            saved_signature = line.substr(prefix.size());
-            break;
-        }
-    }
-
-    if (saved_signature.empty())
-    {
-        std::cerr
-        << "Error: restart configuration signature is missing from " << fname << '.'
-        << " The run cannot be resumed safely."
-        << std::endl;
-
-        return false;
-    }
-
-    std::string current_signature = restart_config_signature();
-    if (saved_signature != current_signature)
-    {
-        std::cerr
-        << "Error: restart configuration does not match the current build."
-        << std::endl
-        << "Saved:   " << saved_signature
-        << std::endl
-        << "Current: " << current_signature
-        << std::endl;
-
-        return false;
-    }
-
-    return true;
-}
+// =========================================================================================================================
+// saving variables to file 
 
 inline __host__
 bool save_variable (const std::string &fname)
@@ -644,29 +491,6 @@ bool save_variable (const std::string &fname)
 
     file << "[PARAMETERS]"                                                             << "\n";
     file                                                                               << "\n";
-
-    #ifdef RADIATION
-    file << "RADIATION   = 1"                                                          << "\n";
-    #else
-    file << "RADIATION   = 0"                                                          << "\n";
-    #endif
-    #ifdef DIFFUSION
-    file << "DIFFUSION   = 1"                                                          << "\n";
-    #else
-    file << "DIFFUSION   = 0"                                                          << "\n";
-    #endif
-    #ifdef CONST_NU
-    file << "CONST_NU    = 1"                                                          << "\n";
-    #else
-    file << "CONST_NU    = 0"                                                          << "\n";
-    #endif
-    #ifdef HALFDISK
-    file << "HALFDISK    = 1"                                                          << "\n";
-    #else
-    file << "HALFDISK    = 0"                                                          << "\n";
-    #endif
-    file                                                                               << "\n";
-
 
     file << "SIGMA_0     = " << std::scientific   << std::setprecision(8) << SIGMA_0   << "\n";
     file << "ASPR_0      = " << std::defaultfloat << std::setprecision(8) << ASPR_0    << "\n";
@@ -680,7 +504,6 @@ bool save_variable (const std::string &fname)
     #endif
     #endif
     file                                                                               << "\n";
-
 
     file << "STOKES_0    = " << std::scientific   << std::setprecision(8) << STOKES_0  << "\n";
     file << "METAL_Z     = " << std::scientific   << std::setprecision(8) << METAL_Z   << "\n";
@@ -698,7 +521,6 @@ bool save_variable (const std::string &fname)
     #endif
     file                                                                               << "\n";
 
-
     file << "N_X         = " << std::defaultfloat << std::setprecision(8) << N_X       << "\n";
     file << "X_MIN       = " << std::defaultfloat << std::setprecision(8) << X_MIN     << "\n";
     file << "X_MAX       = " << std::defaultfloat << std::setprecision(8) << X_MAX     << "\n";
@@ -711,9 +533,6 @@ bool save_variable (const std::string &fname)
     file << "Z_MIN       = " << std::scientific   << std::setprecision(8) << Z_MIN     << "\n";
     file << "Z_MAX       = " << std::scientific   << std::setprecision(8) << Z_MAX     << "\n";
     file                                                                               << "\n";
-    file << "N_G         = " << std::scientific   << std::setprecision(8) << N_G       << "\n";
-    file                                                                               << "\n";
-
 
     file << "SAVE_MAX    = " << std::defaultfloat << std::setprecision(8) << SAVE_MAX  << "\n";
     file << "DT_OUT      = " << std::scientific   << std::setprecision(8) << DT_OUT    << "\n";
@@ -721,13 +540,9 @@ bool save_variable (const std::string &fname)
     file << "CFL_NUM     = " << std::scientific   << std::setprecision(8) << CFL_NUM   << "\n";
     file                                                                               << "\n";
 
-
-    file << "RESTART_CONFIG = " << restart_config_signature()                          << "\n";
-    file                                                                               << "\n";
-
     return file.good();
 }
 
-
+// =========================================================================================================================
 
 #endif

@@ -47,4 +47,3 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
     dev_dustmomy[idx] = dens*vely;
     dev_dustmomz[idx] = dens*velz;
 }
-
