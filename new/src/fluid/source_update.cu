@@ -111,7 +111,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     velx_new  = drag_decay*velx;
     velx_new += drag_relax*velx_g;
 
-    // reevaluate polar torque and update polar specific angular momentum
+    // re-evaluate polar torque and update polar specific angular momentum
     real Fy_tmp, Fcy_tmp, Tcz_new, velz_new;
     _get_force_term(yc, zc, Rc, velx_new, velz, beta, Fy_tmp, Fcy_tmp, Tcz_new);
 
@@ -120,7 +120,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     velz_new += force_weight_n*Tcz_n;
     velz_new += force_weight_new*Tcz_new;
 
-    // reevaluate radial forces and update radial velocity
+    // re-evaluate radial forces and update radial velocity
     real Fy_new, Fcy_new, vely_new;
     _get_force_term(yc, zc, Rc, velx_new, velz_new, beta, Fy_new, Fcy_new, Tcz_new);
 

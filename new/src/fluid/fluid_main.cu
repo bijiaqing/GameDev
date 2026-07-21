@@ -6,7 +6,7 @@
 #include <string>         // std::string
 #include <vector>         // std::vector
 
-#include <cuda_runtime.h> // cudaDeviceSynchronize, cudaFree, cudaFreeHost, cudaMalloc, cudaMallocHost, cudaMemcpy, cudaMemset
+#include <cuda_runtime.h> // cudaDeviceSynchronize, cudaFree, cudaFreeHost, ...
 
 #include <fluid_kern.cuh>
 #include <fluid_host.cuh>
@@ -302,13 +302,6 @@ int main (int argc, char **argv)
         CUDA_KERNEL_CHECK("momentum_getv");
         #endif
 
-
-
-
-
-
-
-
         // apply the opening half of the symmetric directional transport composition
         real adv_interval = 0.5*dt;
 
@@ -320,7 +313,6 @@ int main (int argc, char **argv)
             advance_z(adv_interval);
         }
 
-
         // evaluate optical depth at the source-step midpoint state
         #ifdef RADIATION
         optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
@@ -331,7 +323,6 @@ int main (int argc, char **argv)
 
         validate_finite_state();
         #endif
-
 
         // ramp radiation pressure smoothly during the configured startup interval
         #ifdef RADIATION
@@ -354,8 +345,6 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
         CUDA_KERNEL_CHECK("momentum_setv");
-
-
 
         // close the symmetric directional transport composition in reverse order
         if (N_Z > 1)
