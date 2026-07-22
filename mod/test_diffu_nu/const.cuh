@@ -74,7 +74,7 @@ const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
 
 const real  ST_0        = 1.0e-01;          // the reference Stokes number of dust with the reference size
 
-const real  M_D         = 1.0e30;           // the total dust mass in the disk, decoupled from M_S for flexibility
+const real  M_D         = 1.0e30;           // dust mass represented inside this computational domain
 const real  RHO_0       = 1.0;              // the reference internal density of the dust
 
 #if defined(TRANSPORT) && defined(RADIATION)
@@ -125,6 +125,7 @@ const real DT_OUT       = 0.78125;
 
 #ifdef TRANSPORT
 const real DT_DYN       = 0.09765625;
+const real CFL_DYN      = 0.5;
 #endif // TRANSPORT
 
 #if defined(LOGTIMING) || defined(LOGOUTPUT)

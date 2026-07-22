@@ -7,7 +7,7 @@
 #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
 #include "curand_kernel.h"                  // for curandState
 using curs = curandState;
-#endif // COLLISION or DIFFUSION
+#endif // COLLISION || (TRANSPORT && DIFFUSION)
 
 #ifdef COLLISION
 #include "cukd/builder.h"   // for cukd::get_coord, cukd::box_t
@@ -23,12 +23,12 @@ using real3 = double3;                      // double3 is a built-in CUDA type
 const real  G           = 1.0;              // gravitational constant
 const real  M_S         = 1.0;              // mass of the central star
 const real  R_0         = 1.0;              // reference radius of the disk
-const real  S_0         = 1.0;              // the reference grain size of the dust, decoupled from R_0 for flexibility
+const real  S_0         = 1.0;              // reference grain diameter, independent of the disk reference radius
 
 // =========================================================================================================================
 // mesh domain size and resolution
 
-const int   N_P         = 1e+07;            // total number of super-particles in the model
+const int   N_P         = 1e+07;            // total number of representative particles
 
 const int   N_X         = 100;              // number of grid cells in X direction (azimuth)
 const real  X_MIN       = -M_PI;            // minimum X boundary (azimuth)
@@ -47,7 +47,7 @@ const int   N_G         = N_X*N_Y*N_Z;      // total number of grid cells
 // =========================================================================================================================
 // gas parameters
 
-const real  SIGMA_0     = 1.0e-02;          // the reference gas surface density at R_0, used for collision rate calculation
+const real  SIGMA_0     = 1.0e-02;          // reference gas surface density at R_0
 const real  ASPR_0      = 0.05;             // the reference aspect ratio of the gas disk
 const real  IDX_P       = -1.0;             // the radial power-law index of the gas surface density profile
 const real  IDX_Q       = -0.4;             // the radial power-law index of the gas temperature profile (vertically isothermal)
@@ -58,7 +58,7 @@ const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity par
 #else  // CONST_NU
 const real  NU          = 1.0e-05;          // the kinematic viscosity parameter of the gas
 #endif // NOT CONST_NU
-#endif // COLLISION or DIFFUSION
+#endif // COLLISION || (TRANSPORT && DIFFUSION)
 
 #ifdef COLLISION
 #ifndef CODE_UNIT
@@ -74,30 +74,31 @@ const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
 
 const real  ST_0        = 1.0e-03;          // the reference Stokes number of dust with the reference size
 
-const real  M_D         = 1.0e30;           // the total dust mass in the disk, decoupled from M_S for flexibility
-const real  RHO_0       = 1.0;              // the reference internal density of the dust
+const real  M_D         = 1.0e30;           // total dust mass represented inside the computational domain
+const real  RHO_0       = 1.0;              // compact-grain internal density
 
 #if defined(TRANSPORT) && defined(RADIATION)
 const real  BETA_0      = 1.0e+01;          // the reference ratio between the radiation pressure and the gravity
 const real  KAPPA_0     = 1.0;              // the reference gray opacity of the dust
-#endif // RADIATION
+#endif // TRANSPORT && RADIATION
 
 #if defined(TRANSPORT) && defined(DIFFUSION)
 const real  SC_R        = 1.0;              // the Schmidt number for radial     diffusion
 const real  SC_X        = 1.0;              // the Schmidt number for azimuthal  diffusion
-#endif // DIFFUSION
+#endif // TRANSPORT && DIFFUSION
 
 #if (defined(TRANSPORT) && defined(DIFFUSION)) || defined(COLLISION)
 const real  SC_Z        = 1.0;              // the Schmidt number for vertical   diffusion
-#endif // DIFFUSION or COLLISION
+#endif // (TRANSPORT && DIFFUSION) || COLLISION
 
 #ifdef COLLISION
 const int   COAG_KERNEL = 0;                // coagulation kernels: 0 = constant, 1 = linear, 2 = product, 3 = custom
-const int   N_K         = 200;              // the maximum number for KNN neighbor search
+const int   N_K         = 200;              // number of candidate slots returned by each KNN query
 
-const real  H_SEARCH    = 1.0;              // KNN will only search within the distance of H_SEARCH*H_GAS
-const real  LAMBDA_0    = N_P / N_K / M_D;  // normalization factor for collision rate
+const real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
+const real  LAMBDA_0    = N_P / (N_K - 1.0) / M_D; // normalization for dimensionless test kernels excluding self
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
+const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
 #endif // COLLISION
 
 // =========================================================================================================================
@@ -128,6 +129,7 @@ const real DT_OUT       = 1.0;
 
 #ifdef TRANSPORT
 const real DT_DYN       = 0.1;
+const real CFL_DYN      = 0.5;              // maximum fraction of a local mesh scale crossed in one dynamics step
 #endif // TRANSPORT
 
 #if defined(LOGTIMING) || defined(LOGOUTPUT)
@@ -141,28 +143,29 @@ const real DT_MIN       = 1.0e-14;          // calculation steps with smaller dt
 // =========================================================================================================================
 // structures
 
-struct swarm                                // for particle swarm
+struct swarm                                // representative-particle state
 {
-    real3   position;                       // x = azimuth [radian], y = radius [R_0], z = colattitude [radian]
-    real3   velocity;                       // velocity for rad but specific angular momentum for azi and col
+    real3   position;                       // x = azimuth, y = spherical radius, z = polar angle
+    real3   velocity;                       // x = l_phi, y = v_r, z = l_theta
     
     #ifdef MULTISIZE
-    real    par_size;                       // size of an individual dust grain in the swarm
-    real    par_numr;                       // number of individual dust grains in the swarm
+    real    par_size;                       // diameter of one physical grain in the represented species
+    real    par_numr;                       // number of physical grains represented by this particle
     #endif // MULTISIZE
 
     #ifdef COLLISION
-    real    col_rate;                       // total collision rate for the particle i
-    real    max_dist;                       // maximum distance to the KNN neighbors
+    real    col_rate;                       // total local collision propensity
+    real    max_dist;                       // radius of the local KNN neighborhood
     #endif // COLLISION
 };
 
 #ifdef COLLISION
-struct tree                                 // KD-tree node structure for cukd::builder
+struct tree                                 // KD-tree node consumed by cukd::builder
 {
-    float3  cartesian;                      // xyz position of a tree node in Cartesian coordinate
-    int     index_old;                      // index of the particle before index shuffling by the KD-tree builder
+    float3  cartesian;                      // Cartesian position of the physical particle or periodic image
+    int     index_old;                      // stable particle-array index before KD-tree reordering
     int     split_dim;                      // splitting dimension of the tree node
+    int     image;                          // zero for a physical node and nonzero for a periodic image
 };
 
 struct tree_traits                          // traits for cukd::builder
@@ -170,7 +173,7 @@ struct tree_traits                          // traits for cukd::builder
     using point_t = float3;
     enum { has_explicit_dim = true };
     
-    // getter and setter functions
+    // expose point coordinates and split dimensions through the cuKD traits interface
     static inline __host__ __device__ const point_t &get_point (const tree &node) { return node.cartesian; }
     static inline __host__ __device__ float get_coord (const tree &node, int dim) { return cukd::get_coord(node.cartesian, dim); }
     static inline __host__ __device__ int get_dim (const tree &node) { return node.split_dim; }

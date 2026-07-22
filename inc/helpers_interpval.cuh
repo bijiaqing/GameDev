@@ -7,21 +7,20 @@
 #include <helpers_paramgrid.cuh>
 
 // =========================================================================================================================
-// Interpolation Data Structure
+// interpolation stencil
 // =========================================================================================================================
 
 struct interp
 {
-    int  next_x, next_y, next_z;    // indices of the next grid cell in each direction
-    real frac_x, frac_y, frac_z;    // fractional distance to the next grid cell in each direction
+    int  next_x, next_y, next_z;    // flattened offsets to the neighboring cells
+    real frac_x, frac_y, frac_z;    // weights assigned to the neighboring cells
 };
 
 // =========================================================================================================================
-// 1D Interpolation Helpers
-// Purpose: Calculate interpolation weights for each dimension (periodic X, logarithmic Y, linear Z)
+// one-dimensional interpolation weights
 // =========================================================================================================================
 
-// Order: O0 | Dependencies: None (only constants)
+// construct periodic azimuthal cell-centred interpolation weights
 __device__ __forceinline__
 void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
 {
@@ -64,7 +63,7 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
     }
 }
 
-// Order: O0 | Dependencies: None (only constants)
+// construct logarithmic-radial interpolation weights for cell centres or outer faces
 __device__ __forceinline__
 void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool outer_edge = false)
 {
@@ -86,7 +85,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
         {
             real idx_dim = static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1) + 1.0;
             
-            // volume centroid: r_c = (D/(D+1))*(r_out^(D+1) - r_in^(D+1)) / (r_out^D - r_in^D)
+            // place cell-centred values at the exact volume centroid in the active spatial dimension
             m_y = log((idx_dim / (idx_dim + 1.0))*(pow(d_y, idx_dim + 1.0) - 1.0) / (pow(d_y, idx_dim) - 1.0)) / log(d_y);
         }
         
@@ -102,7 +101,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
             else                    // at the Y domain boundaries
             {
                 frac_y = (d_y - pow(d_y, deci_y)) / (d_y - 1.0);
-                next_y = 0;         // the particles are unfortunately 100% self-shadowed
+                next_y = 0;         // the inner-face zero is applied after interpolation
             }
         }
         else
@@ -129,7 +128,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     }
 }
 
-// Order: O0 | Dependencies: None (only constants)
+// construct nonperiodic polar cell-centred interpolation weights
 __device__ __forceinline__
 void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
 {
@@ -165,16 +164,14 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
 }
 
 // =========================================================================================================================
-// 3D Interpolation Helpers
-// Purpose: Combine 1D interpolations into 3D trilinear interpolation
+// multidimensional interpolation stencil
 // =========================================================================================================================
 
-// Order: O1 | Dependencies: _1d_interp_x/y/z [O0]
+// combine the directional weights and flattened neighbor offsets into one trilinear stencil
 __device__ __forceinline__
 interp _3d_interp (real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 {
-    // this function exists because the optical depth field is defined at the outer radial boundary of each cell
-    // the particle needs to be interpolated based on the location of the radial cell edges to get the shadow
+    // optical depth uses radial outer-face locations while ordinary fields use cell centroids
 
     real frac_x, frac_y, frac_z;
     int  next_x, next_y, next_z;
@@ -191,24 +188,21 @@ interp _3d_interp (real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 }
 
 // =========================================================================================================================
-// Field Interpolation Function
-// Purpose: Trilinear interpolation of scalar field values from grid to particle positions
+// grid-to-particle interpolation
 // =========================================================================================================================
 
-// Order: O2 | Dependencies: _is_in_bounds [O0], _get_cell_index [O0], _3d_interp [O1]
+// interpolate a scalar grid field at continuous index coordinates with optional radial outer-face centring
 __device__ __forceinline__
 real _interp_field (const real *dev_field, real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 {
-    if (outer_edge) // meaning we are interpolating optical depth
+    if (outer_edge) // optical depth is defined on radial outer faces
     {
-        // Optical depth interpolation (outer_edge = true)
         if (loc_y < 0) return 0.0;
-        if (!_is_in_bounds(loc_x, loc_y, loc_z)) return DBL_MAX; // out of bounds, return a large value
+        if (!_is_in_bounds(loc_x, loc_y, loc_z)) return DBL_MAX; // suppress radiation outside the optical-depth mesh
     }
     else
     {
-        // Standard field interpolation (outer_edge = false)
-        if (!_is_in_bounds(loc_x, loc_y, loc_z)) return 0.0; // out of bounds, returns 0.0
+        if (!_is_in_bounds(loc_x, loc_y, loc_z)) return 0.0;
     }
 
     int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
@@ -224,6 +218,8 @@ real _interp_field (const real *dev_field, real loc_x, real loc_y, real loc_z, b
     value += dev_field[idx_cell + next_x          + next_z]*       frac_x *(1.0 - frac_y)*       frac_z ;
     value += dev_field[idx_cell          + next_y + next_z]*(1.0 - frac_x)*       frac_y *       frac_z ;
     value += dev_field[idx_cell + next_x + next_y + next_z]*       frac_x *       frac_y *       frac_z ;
+
+    if (outer_edge && loc_y < 1.0) value *= 1.0 - frac_y; // interpolate from zero optical depth at the inner face
 
     return value;
 }

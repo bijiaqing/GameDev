@@ -4,9 +4,8 @@
 #include <helpers_paramgrid.cuh>  // for _get_grid_volume
 
 // =========================================================================================================================
-// Kernel: optdepth_calc
-// Purpose: Normalize optical depth by grid cell volume and prepare for radial integration
-// Dependencies: helpers_paramgrid.cuh (_get_grid_volume)
+// kernel: optdepth_calc
+// convert scattered extinction cross section to one radial cell's optical-depth increment
 // =========================================================================================================================
 
 __global__
@@ -19,10 +18,11 @@ void optdepth_calc (real *dev_optdepth)
         real y0, dy;
         real volume = _get_grid_volume(idx, &y0, &dy);
         dev_optdepth[idx] /= volume;
-        dev_optdepth[idx] *= y0*(dy - 1.0); // prepare for radial integration
+
+        dev_optdepth[idx] *= y0*(dy - 1.0); // integrate extinction density across the logarithmic radial cell
     }
 }
 
 // =========================================================================================================================
 
-#endif // RADIATION
+#endif // TRANSPORT && RADIATION

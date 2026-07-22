@@ -3,9 +3,8 @@
 #include <graffiti_kern.cuh>
 
 // =========================================================================================================================
-// Kernel: optdepth_mean
-// Purpose: Compute azimuthal average of optical depth (average in X direction)
-// Dependencies: None
+// kernel: optdepth_mean
+// replace every azimuthal ring of optical depth with its ring average
 // =========================================================================================================================
 
 __global__
@@ -20,8 +19,7 @@ void optdepth_mean (real *dev_optdepth)
 
         real optdepth_sum = 0.0;
 
-        // sum in X direction
-        // no race condition since each thread works on a unique X row
+        // sum one independent azimuthal ring at fixed radius and polar angle
         for (int i = 0; i < N_X; i++)
         {
             int idx_cell = idx_z*N_X*N_Y + idx_y*N_X + i;
@@ -30,6 +28,7 @@ void optdepth_mean (real *dev_optdepth)
 
         real optdepth_avg = optdepth_sum / N_X;
 
+        // broadcast the ring mean to every azimuthal cell
         for (int j = 0; j < N_X; j++)
         {
             int idx_cell = idx_z*N_X*N_Y + idx_y*N_X + j;
@@ -40,4 +39,4 @@ void optdepth_mean (real *dev_optdepth)
 
 // =========================================================================================================================
 
-#endif // RADIATION
+#endif // TRANSPORT && RADIATION

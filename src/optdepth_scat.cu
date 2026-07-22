@@ -4,9 +4,8 @@
 #include <helpers_scatfield.cuh>
 
 // =========================================================================================================================
-// Kernel: optdepth_scat
-// Purpose: Scatter particle optical depths to grid using trilinear interpolation
-// Dependencies: helpers_scatfield.cuh (provides _particle_to_grid_core template)
+// kernel: optdepth_scat
+// scatter each representative particle's extinction cross section to the cell-centred grid
 // =========================================================================================================================
 
 __global__
@@ -22,4 +21,4 @@ void optdepth_scat (real *dev_optdepth, const swarm *dev_particle)
 
 // =========================================================================================================================
 
-#endif // RADIATION
+#endif // TRANSPORT && RADIATION

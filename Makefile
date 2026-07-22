@@ -51,16 +51,15 @@ _INC =						\
 	helpers_transport.cuh
 
 _OBJ =				\
-	col_flag_calc.o	\
 	col_proc_exec.o	\
 	col_rate_calc.o	\
-	col_rate_init.o	\
 	col_tree_init.o	\
 	diffusion_pos.o	\
-	diffusion_vel.o	\
+	dt_rate_calc.o	\
 	dustdens_calc.o	\
 	dustdens_init.o	\
 	dustdens_scat.o	\
+	gas_interp_calc.o	\
 	graffiti_main.o	\
 	optdepth_calc.o	\
 	optdepth_csum.o	\
@@ -68,7 +67,6 @@ _OBJ =				\
 	optdepth_mean.o	\
 	optdepth_scat.o	\
 	particle_init.o	\
-	rs_grids_init.o	\
 	rs_swarm_init.o	\
 	ssa_substep_1.o	\
 	ssa_substep_2.o	\

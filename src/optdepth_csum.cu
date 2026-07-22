@@ -3,13 +3,12 @@
 #include <graffiti_kern.cuh>
 
 // =========================================================================================================================
-// Kernel: optdepth_csum
-// Purpose: Compute cumulative sum of optical depth in the radial direction
-// Dependencies: None
+// kernel: optdepth_csum
+// integrate radial optical-depth increments from the inner boundary to every outer cell face
 // =========================================================================================================================
 
 __global__
-void optdepth_csum (real *dev_optdepth) // cumulative sum in the radial direction
+void optdepth_csum (real *dev_optdepth)
 {
     int idx_y = threadIdx.x+blockDim.x*blockIdx.x;
 
@@ -18,8 +17,7 @@ void optdepth_csum (real *dev_optdepth) // cumulative sum in the radial directio
         int idx_x = idx_y % N_X;
         int idx_z = idx_y / N_X;
 
-        // cumulative sum in Y direction
-        // no race condition since each thread works on a unique Y row
+        // accumulate one independent radial ray at fixed azimuth and polar angle
         for (int i = 1; i < N_Y; i++)
         {
             int idx_cell = idx_z*N_X*N_Y + i*N_X + idx_x;
@@ -30,4 +28,4 @@ void optdepth_csum (real *dev_optdepth) // cumulative sum in the radial directio
 
 // =========================================================================================================================
 
-#endif // RADIATION
+#endif // TRANSPORT && RADIATION

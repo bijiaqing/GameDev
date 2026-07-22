@@ -6,9 +6,15 @@
 #include <helpers_collision.cuh>  // for candidatelist, KernelType, _get_col_rate_ij
 
 // =========================================================================================================================
-// Kernel: col_rate_calc
-// Purpose: Calculate total collision rate for each grid cell
-// Dependencies: helpers_collision.cuh (provides candidatelist, KernelType, vrel helpers, _get_col_rate_ij)
+// kernel: col_rate_calc
+// calculate each representative particle's total local collision propensity from its K nearest neighbors
+//
+// parallelization: one thread per primary KD-tree node with periodic image nodes skipped
+//
+// per call:
+//   1 query neighbors within the scale-height search radius
+//   2 sum pair propensity numerators while excluding the representative itself
+//   3 divide by the accessible KNN measure and expose the rate for the host reduction
 // =========================================================================================================================
 
 __global__
@@ -18,48 +24,45 @@ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col
     #endif
 )
 {
-    // calculates the total collision rate for each cell, to help determine whether a collision is going to happen in the cell
-    // it goes through each particle (i) and calculates the colision rate of it, then adds the rate to the corresponding cell
-    
-    int idx_tree = threadIdx.x+blockDim.x*blockIdx.x; // this is the index for the particle (idx_old_i) on the k-d tree
+    int idx_tree = threadIdx.x+blockDim.x*blockIdx.x;
 
-    if (idx_tree < N_P)
-    {
-        int idx_old_i = dev_col_tree[idx_tree].index_old;
+    int tree_size = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P;
+    if (idx_tree >= tree_size || dev_col_tree[idx_tree].image != 0) return;
+    int idx_old_i = dev_col_tree[idx_tree].index_old;
+    dev_col_rate[idx_old_i] = 0.0;
 
-        real x = dev_particle[idx_old_i].position.x;
-        real y = dev_particle[idx_old_i].position.y;
-        real z = dev_particle[idx_old_i].position.z;
+    real x = dev_particle[idx_old_i].position.x;
+    real y = dev_particle[idx_old_i].position.y;
+    real z = dev_particle[idx_old_i].position.z;
+
+    real loc_x = _get_loc_x(x);
+    real loc_y = _get_loc_y(y);
+    real loc_z = _get_loc_z(z);
+
+    if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
+
+    // limit the KNN query to a configured fraction of the local gas scale height
+    real R = y*sin(z);
+    float max_search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
         
-        real loc_x = _get_loc_x(x);
-        real loc_y = _get_loc_y(y);
-        real loc_z = _get_loc_z(z);
+    candidatelist query_result(max_search_dist);
+    cukd::cct::knn <candidatelist, tree, tree_traits> (query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, tree_size);
 
-        if (!_is_in_bounds(loc_x, loc_y, loc_z)) return; // particle is out of bounds, do nothing
+    real col_rate_i = 0.0;
+    float max_dist2 = 0.0f;
 
-        int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
-
-        // maximum search distance for KNN neighbor search defined by gas scale height
-        real R = y*sin(z);
-        float max_search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
-        
-        candidatelist query_result(max_search_dist);
-        cukd::cct::knn <candidatelist, tree, tree_traits> (query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_P);
-
-        real col_rate_i = 0.0; // total collision rate for particle i
-        float max_dist2 = 0.0f;
-
-        for(int j = 0; j < N_K; j++)
+    for(int j = 0; j < N_K; j++)
         {
-            real col_rate_ij = 0.0; // collision rate between particle i and j
+            real col_rate_ij = 0.0;
             int idx_query = query_result.returnIndex(j);
 
-            if (idx_query != -1) // if the j-th nearest neighbor exists
+            if (idx_query != -1)
             {
+                int idx_old_j = dev_col_tree[idx_query].index_old;
+                if (idx_old_j == idx_old_i) continue;
+
                 float dist2 = query_result.returnDist2(j);
                 max_dist2 = fmaxf(max_dist2, dist2);
-                
-                int idx_old_j = dev_col_tree[idx_query].index_old;
                 col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (dev_particle, idx_old_i, idx_old_j
                     #ifdef IMPORTGAS
                     , dev_gasdens
@@ -68,21 +71,23 @@ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col
             }
 
             col_rate_i += col_rate_ij;
-        }
-
-        real idx_dim = static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1) + 1.0;
-        real coeff = (idx_dim == 1) ? 2.0 : (idx_dim == 2) ? M_PI : 4.0*M_PI / 3.0;
-        real radius = sqrtf(static_cast<real>(max_dist2));
-        real volume = coeff*pow(radius, idx_dim);
-
-        col_rate_i /= volume;
-
-        dev_particle[idx_old_i].max_dist = radius;
-        dev_particle[idx_old_i].col_rate = col_rate_i;
-        atomicAdd(&dev_col_rate[idx_cell], col_rate_i);
     }
+
+    // normalize by the accessible measure of the smallest ball containing the returned neighbors
+    real radius = sqrtf(static_cast<real>(max_dist2));
+    real volume = _get_ball_measure(x, y, z, radius);
+    #ifdef COLLISION_UNIT_VOLUME
+    // bypass KNN geometry only for dimensionless analytic kernel tests
+    volume = 1.0;
+    #endif
+    col_rate_i = (volume > 0.0) ? col_rate_i/volume : 0.0;
+
+    // retain the neighborhood radius and total rate for event execution
+    dev_particle[idx_old_i].max_dist = radius;
+    dev_particle[idx_old_i].col_rate = col_rate_i;
+    dev_col_rate[idx_old_i] = col_rate_i;
 }
 
-// =================================================================================================================================
+// =========================================================================================================================
 
 #endif // COLLISION

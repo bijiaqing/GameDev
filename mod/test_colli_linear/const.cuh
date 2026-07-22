@@ -74,7 +74,7 @@ const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
 
 const real  ST_0        = 1.0e-01;          // the reference Stokes number of dust with the reference size
 
-const real  M_D         = 1.0e30;           // the total dust mass in the disk, decoupled from M_S for flexibility
+const real  M_D         = 1.0e30;           // dust mass represented inside this computational domain
 const real  RHO_0       = 1.0;              // the reference internal density of the dust
 
 #if defined(TRANSPORT) && defined(RADIATION)
@@ -95,8 +95,10 @@ const real  SC_Z        = 1.0;              // the Schmidt number for vertical  
 const int   COAG_KERNEL = 1;                // coagulation kernels: 0 = constant, 1 = linear, 2 = product, 3 = custom
 const int   N_K         = 200;              // the maximum number for KNN neighbor search 
 
-const real  LAMBDA_0    = N_P / N_K / M_D;  // for serial collision algorithm: 1.0 / M_D;
+const real  H_SEARCH    = 1.0;
+const real  LAMBDA_0    = N_P / (N_K - 1.0) / M_D;
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
+const real  CFL_COL     = 0.01;
 #endif // COLLISION
 
 // =========================================================================================================================
@@ -125,6 +127,7 @@ const real DT_OUT       = 0.25;
 
 #ifdef TRANSPORT
 const real DT_DYN       = 0.1;
+const real CFL_DYN      = 0.5;
 #endif // TRANSPORT
 
 #if defined(LOGTIMING) || defined(LOGOUTPUT)
@@ -157,6 +160,7 @@ struct tree                                 // KD-tree node structure for cukd::
     float3  cartesian;                      // xyz position of a tree node in Cartesian coordinate
     int     index_old;                      // index of the particle before index shuffling by the KD-tree builder
     int     split_dim;                      // splitting dimension of the tree node
+    int     image;
 };
 
 struct tree_traits                          // traits for cukd::builder

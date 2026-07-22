@@ -4,25 +4,24 @@
 #include <const.cuh>
 
 // =========================================================================================================================
-// Grid Coordinate Conversion Functions
-// Purpose: Convert physical coordinates to grid cell coordinates
+// continuous grid coordinates
 // =========================================================================================================================
 
-// Order: O0 | Dependencies: None (only constants)
+// convert azimuth to its continuous uniform-grid coordinate
 __device__ __forceinline__
 real _get_loc_x (real x)
 {
     return (N_X > 1) ? (static_cast<real>(N_X)*   (x - X_MIN) /    (X_MAX - X_MIN)) : 0.0;
 }
 
-// Order: O0 | Dependencies: None (only constants)
+// convert spherical radius to its continuous logarithmic-grid coordinate
 __device__ __forceinline__
 real _get_loc_y (real y)
 {
     return (N_Y > 1) ? (static_cast<real>(N_Y)*log(y / Y_MIN) / log(Y_MAX / Y_MIN)) : 0.0;
 }
 
-// Order: O0 | Dependencies: None (only constants)
+// convert polar angle to its continuous uniform-grid coordinate
 __device__ __forceinline__
 real _get_loc_z (real z)
 {
@@ -30,11 +29,10 @@ real _get_loc_z (real z)
 }
 
 // =========================================================================================================================
-// Grid Boundary and Indexing Functions
-// Purpose: Check bounds and calculate grid cell indices
+// grid bounds and indexing
 // =========================================================================================================================
 
-// Order: O0 | Dependencies: None (only constants)
+// test whether continuous grid coordinates lie inside every active dimension
 __device__ __forceinline__
 bool _is_in_bounds (real loc_x, real loc_y, real loc_z)
 {
@@ -45,7 +43,7 @@ bool _is_in_bounds (real loc_x, real loc_y, real loc_z)
     return in_x && in_y && in_z;
 }
 
-// Order: O0 | Dependencies: None (only constants)
+// flatten the cell containing a valid continuous grid position
 __device__ __forceinline__
 int _get_cell_index (real loc_x, real loc_y, real loc_z)
 {
@@ -53,16 +51,14 @@ int _get_cell_index (real loc_x, real loc_y, real loc_z)
 }
 
 // =========================================================================================================================
-// Grid Cell Volume Calculation
-// Purpose: Calculate spherical grid cell volume in cylindrical coordinates
-// Used by: optdepth_calc, dustdens_calc, col_proc_exec, col_rate_calc
+// grid measure
 // =========================================================================================================================
 
-// Order: O0 | Dependencies: None (only constants)
+// calculate the exact spherical cell measure for the active one-, two-, or three-dimensional geometry
 __device__ __forceinline__
 real _get_grid_volume (int idx_cell, real *y0_ptr = nullptr, real *dy_ptr = nullptr)
 {
-    // Convert 1D cell index to 3D grid indices
+    // recover the radial and polar indices from the flattened cell index
     int idx_x = idx_cell % N_X;
     int idx_y = (idx_cell / N_X) % N_Y;
     int idx_z = idx_cell / (N_X*N_Y);

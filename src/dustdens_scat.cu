@@ -4,9 +4,8 @@
 #include <helpers_scatfield.cuh>
 
 // =========================================================================================================================
-// Kernel: dustdens_scat
-// Purpose: Scatter particle dust densities to grid using trilinear interpolation
-// Dependencies: helpers_scatfield.cuh (provides _particle_to_grid_core template)
+// kernel: dustdens_scat
+// scatter each representative particle's dust mass to the cell-centred grid
 // =========================================================================================================================
 
 __global__

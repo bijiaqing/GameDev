@@ -15,7 +15,7 @@ real _get_grain_number (real size)
     // the question is, if we want 
     // (1) the grain size distribution follows a -3.5 power-law,
     // (2) all swarms have an equal total surface area, and
-    // (3) a certain total particle number N_P and total dust mass M_D,
+    // (3) a certain total particle number N_P and represented domain dust mass M_D,
     // what is the size distribution of swarms (to be fixed in main.cu), and
     // and what is the grain number inside each swarm (to be solved here)
 

@@ -4,45 +4,59 @@
 #include <iostream>         // for std::cout, std::endl
 #include <sstream>          // for std::stringstream
 
-#ifdef COLLISION
+#if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // for thrust::device_ptr
 #include <thrust/extrema.h>     // for thrust::max_element
-#endif // COLLISION
+#endif
 
 #include <graffiti_kern.cuh>
 #include <graffiti_host.cuh>
 
 std::mt19937 rand_generator;
 
-const std::string PATH = PATH_OUT; // PATH_OUT is defined by Makefile as a string literal, convert to std::string
+const std::string PATH = PATH_OUT; // convert the Makefile string literal to the output-path string used below
 
+// =========================================================================================================================
+// main program
+// initialize or resume a swarm and advance enabled operators between successive output frames
+//
+// combined dynamics sequence:
+//   1 half collision step
+//   2 half spatial-diffusion step
+//   3 full staggered semi-analytic transport step with optional midpoint radiation reconstruction
+//   4 half spatial-diffusion step
+//   5 half collision step
 // =========================================================================================================================
 
 int main (int argc, char **argv)
-{   // pre-loop memory allocation
+{
     
     int idx_from;
-    real clock_sim;   // total simulation time
-    real clock_out;   // time accumulated toward the next output
-    real dt_out;      // output timestep
+    real clock_sim;   // total simulated time
+    real clock_out;   // elapsed time in the current output interval
+    real dt_out;      // duration of the current output interval
 
     #ifdef TRANSPORT
-    int count_dyn;    // how many dynamics timesteps in one output timestep
-    real dt_dyn;      // dynamical timestep
+    int count_dyn;    // dynamics steps completed in the current output interval
+    real dt_dyn;      // current dynamics timestep
     #endif // TRANSPORT
     
     #ifdef COLLISION
-    int count_col;    // how many collision calculations in one dynamics timestep
-    real clock_dyn;   // time accumulated toward the next dynamics timestep
-    real dt_col;      // collisional timestep
+    int count_col;    // collision batches completed in the current dynamics interval
+    real clock_dyn;   // elapsed collision time in the current dynamics interval
+    real dt_col;      // current collision-batch timestep
     #endif // COLLISION
     
+    // allocate the particle state and feature-dependent work arrays
     std::string fname;
-    std::uniform_real_distribution <real> random(0.0, 1.0); // distribution in [0, 1)
-
     swarm *particle, *dev_particle;
     cudaMallocHost((void**)&particle, sizeof(swarm)*N_P);
     cudaMalloc((void**)&dev_particle, sizeof(swarm)*N_P);
+
+    #ifdef TRANSPORT
+    real *dev_dt_rate;
+    cudaMalloc((void**)&dev_dt_rate, sizeof(real)*N_P);
+    #endif
     
     #ifdef SAVE_DENS
     real *dustdens, *dev_dustdens;
@@ -63,40 +77,43 @@ int main (int argc, char **argv)
     cudaMalloc((void**)&dev_gasvelx,  sizeof(real)*N_G);
     cudaMalloc((void**)&dev_gasvely,  sizeof(real)*N_G);
     cudaMalloc((void**)&dev_gasvelz,  sizeof(real)*N_G);
+    real *dev_gasdens_next, *dev_gasvelx_next, *dev_gasvely_next, *dev_gasvelz_next;
+    cudaMalloc((void**)&dev_gasdens_next, sizeof(real)*N_G);
+    cudaMalloc((void**)&dev_gasvelx_next, sizeof(real)*N_G);
+    cudaMalloc((void**)&dev_gasvely_next, sizeof(real)*N_G);
+    cudaMalloc((void**)&dev_gasvelz_next, sizeof(real)*N_G);
     #endif // IMPORTGAS
     
     #if defined(TRANSPORT) && defined(RADIATION)
     real *optdepth, *dev_optdepth;
     cudaMallocHost((void**)&optdepth, sizeof(real)*N_G);
     cudaMalloc((void**)&dev_optdepth, sizeof(real)*N_G);
-    #endif // RADIATION
+    #endif // TRANSPORT && RADIATION
 
     #ifdef COLLISION
     bbox *dev_boundbox;
     cudaMalloc((void**)&dev_boundbox, sizeof(bbox));
 
+    // azimuthal wedges require two periodic image nodes per representative
+    int col_tree_size = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P;
     tree *dev_col_tree;
-    cudaMalloc((void**)&dev_col_tree, sizeof(tree)*N_P);
+    cudaMalloc((void**)&dev_col_tree, sizeof(tree)*col_tree_size);
 
-    curs *dev_rs_grids;
-    cudaMalloc((void**)&dev_rs_grids, sizeof(curs)*N_G);
-    
-    real *dev_col_rand, *dev_col_expt, *dev_col_rate;
-    cudaMalloc((void**)&dev_col_rand, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_col_expt, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_G);
+    swarm *dev_particle_old;
+    cudaMalloc((void**)&dev_particle_old, sizeof(swarm)*N_P);
 
-    int  *dev_col_flag;
-    cudaMalloc((void**)&dev_col_flag, sizeof(int) *N_G);
+    real *dev_col_rate;
+    cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_P);
     #endif // COLLISION
 
     #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
     curs *dev_rs_swarm;
     cudaMalloc((void**)&dev_rs_swarm, sizeof(curs)*N_P);
-    #endif // COLLISION or DIFFUSION
+    #endif // COLLISION || (TRANSPORT && DIFFUSION)
 
     if (argc <= 1)
-	{   // no argument input, start a new simulation with certain initial conditions
+	{
+        // construct a fresh realization from the configured analytic or imported distribution
         
         idx_from = 0;
 
@@ -113,10 +130,10 @@ int main (int argc, char **argv)
         cudaMallocHost((void**)&random_s, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_s, sizeof(real)*N_P);
         #endif // MULTISIZE
 
-        rand_generator.seed(0); // or use rand_generator.seed(std::time(NULL));
+        rand_generator.seed(0); // keep initialization reproducible across runs
 
         #ifdef IMPORTGAS
-        LOAD_GAS_DATA_TO_VRAM(idx_from); // for gasdens, gasvelx, gasvely, gasvelz, and dev_*
+        LOAD_GAS_DATA_TO_VRAM(idx_from);
 
         real *epsilon;
         cudaMallocHost((void**)&epsilon,  sizeof(real)*N_G);
@@ -127,24 +144,25 @@ int main (int argc, char **argv)
             return 1;
         }
 
-        // note: the current implementation only works for equal-size, equal-mass dust particles
+        // use one imported total-dust spatial distribution for all grain species sampled below
         rand_from_file(random_x, random_y, random_z, N_P, gasdens, epsilon);
         
         cudaFreeHost(epsilon);
         #else // NOT IMPORTGAS
-        real idx_rho_g = IDX_P - 0.5*IDX_Q - 1.5; // volumetric gas density power-law index
-
         rand_uniform(random_x, N_P, INIT_XMIN, INIT_XMAX);
-        rand_convpow(random_y, N_P, INIT_YMIN, INIT_YMAX, idx_rho_g, 0.05*R_0, N_Y);
-        rand_uniform(random_z, N_P, INIT_ZMIN, INIT_ZMAX);
+        rand_disk(random_y, random_z, N_P, S_0);
         #endif // IMPORTGAS
         
         #ifdef MULTISIZE
-        real idx_swarm = -0.5;  // all swarms have an equal mass
+        real idx_swarm = -0.5;  // equal represented mass per swarm
         #if defined(TRANSPORT) && defined(RADIATION)
-        idx_swarm = -1.5;       // all swarms have an equal surface area, see _get_grain_number
+        idx_swarm = -1.5;       // equal represented surface area per swarm, see _get_grain_number
         #endif // TRANSPORT && RADIATION
+        #ifdef COLLISION_LINEAR_TEST
+        rand_4_linear(random_s, N_P);
+        #else
         rand_pow_law(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
+        #endif
         #endif // MULTISIZE
 
         cudaMemcpy(dev_random_x, random_x, sizeof(real)*N_P, cudaMemcpyHostToDevice);
@@ -155,9 +173,10 @@ int main (int argc, char **argv)
         cudaMemcpy(dev_random_s, random_s, sizeof(real)*N_P, cudaMemcpyHostToDevice);
         #endif // MULTISIZE
 
+        // convert sampled coordinates and sizes into the device particle state
         particle_init <<< NB_P, TPB >>> (dev_particle, dev_random_x, dev_random_y, dev_random_z
             #ifdef MULTISIZE
-            dev_random_s
+            , dev_random_s
             #endif // MULTISIZE
         );
 
@@ -171,18 +190,15 @@ int main (int argc, char **argv)
         
         #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
         rs_swarm_init <<< NB_P, TPB >>> (dev_rs_swarm);
-        #endif // COLLISION or DIFFUSION
+        #endif // COLLISION || (TRANSPORT && DIFFUSION)
         
-        #ifdef COLLISION
-        rs_grids_init <<< NB_A, TPB >>> (dev_rs_grids);
-        #endif // COLLISION
-
+        // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
         save_variable(PATH + "variables.txt");
 
         #if defined(TRANSPORT) && defined(RADIATION)
-        SAVE_OPTDEPTH_TO_FILE(idx_from, true);
-        #endif // RADIATION
+        SAVE_OPTDEPTH_TO_FILE(idx_from, false);
+        #endif // TRANSPORT && RADIATION
 
         #ifdef SAVE_DENS
         SAVE_DUSTDENS_TO_FILE(idx_from);
@@ -193,10 +209,11 @@ int main (int argc, char **argv)
         msg_output(0);
     }
     else
-    {   // with argument input, resume from a previous simulation by loading data files
+    {
+        // resume particle and imported-gas states from the requested output frame
 
-        std::stringstream convert{argv[1]}; // read resume file number from input argument
-        if (!(convert >> idx_from)) // set idx_from by input argument, exit if failed
+        std::stringstream convert{argv[1]};
+        if (!(convert >> idx_from))
         {
             std::cerr << "Error: Invalid resume file number: " << argv[1] << std::endl;
             return 1;
@@ -210,19 +227,10 @@ int main (int argc, char **argv)
 
         #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
         rs_swarm_init <<< NB_P, TPB >>> (dev_rs_swarm);
-        #endif // COLLISION or DIFFUSION
+        #endif // COLLISION || (TRANSPORT && DIFFUSION)
         
-        #ifdef COLLISION
-        rs_grids_init <<< NB_A, TPB >>> (dev_rs_grids);
-        #endif // COLLISION
-
         msg_output(idx_from);
     }
-
-    #if defined(COLLISION) && !defined(TRANSPORT) // only need to build KD-tree once and can use it forever
-    col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
-    cukd::buildTree <tree, tree_traits> (dev_col_tree, N_P, dev_boundbox);
-    #endif // COLLISION but NO TRANSPORT
 
     #if !defined(TRANSPORT) && !defined(COLLISION)
     {
@@ -258,31 +266,118 @@ int main (int argc, char **argv)
     clock_sim =                         static_cast<real>(idx_from)*DT_OUT;
     #endif // LOGTIMING
 
+    #ifdef COLLISION
+    // evolve collisions over a fixed-position interval with controlled frozen-rate Bernoulli batches
+    auto evolve_collisions = [&] (real duration)
+    {
+        // collisions change grain properties but not positions, so one KD tree serves the full interval
+        col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
+        cukd::buildTree <tree, tree_traits> (dev_col_tree, col_tree_size, dev_boundbox);
+
+        real elapsed = 0.0;
+        while (elapsed < duration)
+        {
+            // calculate rates from a read-only snapshot and copy its diagnostics back to the live array
+            cudaMemcpy(dev_particle_old, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToDevice);
+            int tree_blocks = col_tree_size/TPB + 1;
+            col_rate_calc <<< tree_blocks, TPB >>> (dev_col_rate, dev_particle_old, dev_col_tree, dev_boundbox
+                #ifdef IMPORTGAS
+                , dev_gasdens
+                #endif
+            );
+            cudaMemcpy(dev_particle, dev_particle_old, sizeof(swarm)*N_P, cudaMemcpyDeviceToDevice);
+
+            // use the largest total propensity to control every representative's event probability
+            thrust::device_ptr <const real> rate_ptr(dev_col_rate);
+            real max_rate = *thrust::max_element(rate_ptr, rate_ptr + N_P);
+            real remaining = duration - elapsed;
+
+            if (!(max_rate > 0.0))
+            {
+                // consume the remaining interval when no collision channel is active
+                dt_col = remaining;
+                elapsed = duration;
+                break;
+            }
+
+            // keep the fastest frozen propensity below CFL_COL before sampling one event at most
+            dt_col = fmin(CFL_COL/max_rate, remaining);
+            col_proc_exec <<< tree_blocks, TPB >>> (dev_particle, dev_particle_old, dev_rs_swarm, dt_col,
+                dev_col_tree, dev_boundbox
+                #ifdef IMPORTGAS
+                , dev_gasdens
+                #endif
+            );
+            cudaDeviceSynchronize();
+
+            elapsed += dt_col;
+            clock_dyn = elapsed;
+            count_col++;
+        }
+    };
+    #endif
+
     for (int idx_file = idx_from + 1; idx_file <= SAVE_MAX; idx_file++)
-    {   // parental loop over output files
+    {
+        // preload the next external frame and advance exactly one output interval
         
         dt_out = _get_dt_out(idx_file);
+
+        #ifdef IMPORTGAS
+        LOAD_GAS_NEXT_TO_VRAM(idx_file);
+        real gas_frac = 0.0;
+        #endif
         
-        clock_out = 0.0; // reset output clock
+        clock_out = 0.0;
         
         #ifdef TRANSPORT
-        count_dyn = 0; // reset dynamical step counter
+        count_dyn = 0;
         #endif // TRANSPORT
 
         PRINT_TITLE_TO_SCREEN();
         
-        do  // begin of while (clock_out < dt_out)
-        {   // loop over dynamics timesteps within one output timestep
-            
+        do
+        {
             #ifdef TRANSPORT
-            dt_dyn = fmin(DT_DYN, dt_out - clock_out);
-            
-            if (dt_dyn < DT_MIN)
-            {
-                break; // jump to file save if dt_dyn is too small
-            }
+            // reduce all local inverse rates to a globally valid dynamics timestep
+            dt_rate_calc <<< NB_P, TPB >>> (dev_dt_rate, dev_particle
+                #ifdef IMPORTGAS
+                , dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz,
+                  dev_gasdens_next, dev_gasvelx_next, dev_gasvely_next, dev_gasvelz_next
+                #endif
+            );
+            thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rate);
+            real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
+            dt_dyn = fmin(DT_DYN, fmin(1.0/max_dt_rate, dt_out - clock_out));
+            if (dt_dyn < DT_MIN) break;
+
+            #ifdef IMPORTGAS
+            // interpolate the working gas fields to the midpoint time of this dynamics step
+            real gas_target = (clock_out + 0.5*dt_dyn)/dt_out;
+            real gas_blend = (gas_target - gas_frac)/(1.0 - gas_frac);
+            gas_interp_calc <<< NB_A, TPB >>> (dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz,
+                dev_gasdens_next, dev_gasvelx_next, dev_gasvely_next, dev_gasvelz_next, gas_blend);
+            gas_frac = gas_target;
+            #endif
+
+            #ifdef COLLISION
+            // begin the symmetric composition with half a collision interval
+            count_col = 0;
+            clock_dyn = 0.0;
+            evolve_collisions(0.5*dt_dyn);
+            #endif
+
+            #ifdef DIFFUSION
+            // apply the first half of the spatial diffusion operator
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rs_swarm, 0.5*dt_dyn
+                #ifdef IMPORTGAS
+                , dev_gasdens
+                #endif
+            );
+            #endif
 
             #ifdef RADIATION
+            // drift to midpoint positions and reconstruct the optical depth used by the force solve
             ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt_dyn);
             optdepth_init <<< NB_A, TPB >>> (dev_optdepth);
             optdepth_scat <<< NB_P, TPB >>> (dev_optdepth, dev_particle);
@@ -291,126 +386,69 @@ int main (int argc, char **argv)
             ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth, dt_dyn
                 #ifdef IMPORTGAS
                 , dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz
-                #endif // IMPORTGAS
+                #endif
             );
-            #else  // NO RADIATION
+            #else
+            // complete transport in one launch when no midpoint radiation field is required
             ssa_transport <<< NB_P, TPB >>> (dev_particle, dt_dyn
                 #ifdef IMPORTGAS
                 , dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz
-                #endif // IMPORTGAS
+                #endif
             );
-            #endif // RADIATION
-            
+            #endif
+
             #ifdef DIFFUSION
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rs_swarm, dt_dyn
+            // apply the second half of the spatial diffusion operator
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rs_swarm, 0.5*dt_dyn
                 #ifdef IMPORTGAS
                 , dev_gasdens
-                #endif // IMPORTGAS
+                #endif
             );
-            #endif // DIFFUSION
+            #endif
+
+            #ifdef COLLISION
+            // close the symmetric composition with half a collision interval
+            evolve_collisions(0.5*dt_dyn);
+            #endif
 
             cudaDeviceSynchronize();
-
-            #ifndef COLLISION // only update simulation clock here if NO COLLISION
             clock_sim += dt_dyn;
-            #endif // NO COLLISION
-
             clock_out += dt_dyn;
-            count_dyn ++;
-
+            count_dyn++;
             PRINT_VALUE_TO_SCREEN();
-            #endif // TRANSPORT
-            
-            #ifdef COLLISION
-            count_col = 0;
+            #endif
 
-            #ifdef TRANSPORT
-            clock_dyn = 0.0;
-            
-            // need to rebuild KD-tree for every dynamical timestep
-            col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
-            cukd::buildTree <tree, tree_traits> (dev_col_tree, N_P, dev_boundbox);
-            #endif // TRANSPORT
-        
-            do  // begin of while (clock_dyn < dt_dyn) or while (clock_out < dt_out)
-            {   // loop over collision calculations within one dynamics timestep or output timestep
-                
-                col_rate_init <<< NB_A, TPB >>> (dev_col_rate, dev_col_expt, dev_col_rand);
-                col_rate_calc <<< NB_P, TPB >>> (dev_col_rate, dev_particle, dev_col_tree, dev_boundbox
-                    #ifdef IMPORTGAS
-                    , dev_gasdens
-                    #endif
-                );
-                
-                // use thrust to find maximum collision rate on device
-                thrust::device_ptr <const real> dev_ptr(dev_col_rate);
-                thrust::device_ptr <const real> max_ptr = thrust::max_element(dev_ptr, dev_ptr + N_G);
-                real max_rate = *max_ptr; // dereference triggers single-value cudaMemcpy from device to host
-                
-                // Compute collisional timestep
-                dt_col = 1.0 / max_rate;
-
-                if (dt_col < DT_MIN)
-                {
-                    std::cerr << "Error: Minimum collisional timestep reached due to high collision rate." << std::endl;
-                    return 1;
-                }
-                
-                #ifdef TRANSPORT
-                dt_col = fmin(dt_col, dt_dyn - clock_dyn);
-                #else  // NO TRANSPORT
-                dt_col = fmin(dt_col, dt_out - clock_out);
-                #endif // TRANSPORT
-
-                if (dt_col < DT_MIN)
-                {
-                    break; // jump to transport, or file save, if dt_col is too small
-                }
-
-                col_flag_calc <<< NB_A, TPB >>> (dev_col_flag, dev_rs_grids, dev_col_rand, dev_col_rate, dt_col);
-                col_proc_exec <<< NB_P, TPB >>> (dev_particle, dev_rs_swarm, dev_col_expt, dev_col_rand, dev_col_flag, dev_col_tree, dev_boundbox
-                    #ifdef IMPORTGAS
-                    , dev_gasdens
-                    #endif
-                );
-
-                cudaDeviceSynchronize();
-
-                #ifdef TRANSPORT
-                clock_dyn += dt_col;
-                #else  // NO TRANSPORT
-                clock_out += dt_col;
-                #endif // TRANSPORT
-                
-                clock_sim += dt_col;
-                count_col ++;
-
-                PRINT_VALUE_TO_SCREEN();
-            }
-            #ifdef TRANSPORT
-            while (clock_dyn < dt_dyn);
-            #else  // NO TRANSPORT
-            while (clock_out < dt_out);
-            #endif // TRANSPORT
-            #endif // COLLISION
-
-            // prevent infinite loop when COLLISION but NO TRANSPORT
             #if defined(COLLISION) && !defined(TRANSPORT)
-            if (dt_out - clock_out < DT_MIN) 
-            {
-                break; // jump to file save if remaining time is too small
-            }
-            #endif // COLLISION but NO TRANSPORT
-
+            // collision-only runs evolve directly across the complete output interval
+            count_col = 0;
+            clock_dyn = 0.0;
+            real duration = dt_out - clock_out;
+            #ifdef IMPORTGAS
+            real gas_target = (clock_out + 0.5*duration)/dt_out;
+            real gas_blend = (gas_target - gas_frac)/(1.0 - gas_frac);
+            gas_interp_calc <<< NB_A, TPB >>> (dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz,
+                dev_gasdens_next, dev_gasvelx_next, dev_gasvely_next, dev_gasvelz_next, gas_blend);
+            gas_frac = gas_target;
+            #endif
+            evolve_collisions(duration);
+            clock_out += duration;
+            clock_sim += duration;
+            PRINT_VALUE_TO_SCREEN();
+            #endif
         } while (clock_out < dt_out);
 
         #ifdef IMPORTGAS
-        LOAD_GAS_DATA_TO_VRAM(idx_file);
+        // replace the incrementally blended working fields by the exact endpoint snapshot
+        cudaMemcpy(dev_gasdens, dev_gasdens_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
+        cudaMemcpy(dev_gasvelx, dev_gasvelx_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
+        cudaMemcpy(dev_gasvely, dev_gasvely_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
+        cudaMemcpy(dev_gasvelz, dev_gasvelz_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
         #endif // IMPORTGAS
 
+        // reconstruct requested mesh fields and save particle frames under the configured output cadence
         #if defined(TRANSPORT) && defined(RADIATION)
         SAVE_OPTDEPTH_TO_FILE(idx_file, false);
-        #endif // RADIATION
+        #endif // TRANSPORT && RADIATION
     
         #ifdef SAVE_DENS
         SAVE_DUSTDENS_TO_FILE(idx_file);

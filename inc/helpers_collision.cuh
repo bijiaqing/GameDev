@@ -22,46 +22,72 @@ enum KernelType {
 };
 
 // =========================================================================================================================
-// Collision Helper Functions (Orders 0-5)
-// Purpose: Relative velocity components and collision kernel calculations
+// resolved velocity and KNN geometry
 // =========================================================================================================================
 
-// Order: O1 | Dependencies: _get_eta [O0], _get_omegaK [O0]
-// Purpose: Radial drift-induced relative velocity
+// reconstruct one particle's physical Cartesian velocity from its spherical stored variables
 __device__ __forceinline__
-real _get_vrel_x (real R, real St_i, real St_j, real h_g)
+real3 _get_cart_vel (const swarm &particle)
 {
-    real v_drift = -_get_eta(R, 0.0, h_g)*_get_omegaK(R)*R;
-    real vrel_x = v_drift*(1.0 / (1.0 + St_i*St_i) - 1.0 / (1.0 + St_j*St_j));
-    
-    return abs(vrel_x);
+    real x = particle.position.x;
+    real y = particle.position.y;
+    real z = particle.position.z;
+    real v_phi = particle.velocity.x/(y*sin(z));
+    real v_rad = particle.velocity.y;
+    real v_pol = particle.velocity.z/y;
+
+    real3 velocity;
+    velocity.x = v_rad*sin(z)*cos(x) + v_pol*cos(z)*cos(x) - v_phi*sin(x);
+    velocity.y = v_rad*sin(z)*sin(x) + v_pol*cos(z)*sin(x) + v_phi*cos(x);
+    velocity.z = v_rad*cos(z)        - v_pol*sin(z);
+    return velocity;
 }
 
-// Order: O0 | Dependencies: None (direct velocity difference)
-// Purpose: Vertical velocity difference
+// approximate the part of a local KNN ball lying inside radial and polar domain boundaries
 __device__ __forceinline__
-real _get_vrel_y (real vy_i, real vy_j)
+real _get_ball_measure (real x, real y, real z, real radius)
 {
-    return abs(vy_i - vy_j);
-}
+    if (radius <= 0.0) return 0.0;
 
-// Order: O3 | Dependencies: _get_hd [O2], _get_omegaK [O0]
-// Purpose: Vertical settling-induced relative velocity
-__device__ __forceinline__
-real _get_vrel_z (real R_i, real R_j, real St_i, real St_j)
-{
-    real h_di = _get_hd(R_i, St_i);
-    real h_dj = _get_hd(R_j, St_j);
+    int dim = 1 + static_cast<int>(N_X > 1) + static_cast<int>(N_Z > 1);
+    real measure = (dim == 1) ? 2.0*radius
+                 : (dim == 2) ? M_PI*radius*radius
+                              : 4.0*M_PI*radius*radius*radius/3.0;
 
-    real R = 0.5*(R_i + R_j);
+    real distances[4] = {y - Y_MIN, Y_MAX - y, 1.0e100, 1.0e100};
+    if (N_Z > 1)
+    {
+        distances[2] = y*(z - Z_MIN);
+        distances[3] = y*(Z_MAX - z);
+    }
 
-    return abs(min(St_i, 0.5)*h_di - min(St_j, 0.5)*h_dj)*_get_omegaK(R)*R;
+    int bounds = (N_Z > 1) ? 4 : 2;
+    for (int k = 0; k < bounds; k++)
+    {
+        real d = fmax(0.0, distances[k]);
+        if (d >= radius) continue;
+
+        if (dim == 1)
+        {
+            measure *= 0.5*(1.0 + d/radius);
+        }
+        else if (dim == 2)
+        {
+            real cap = radius*radius*acos(d/radius) - d*sqrt(radius*radius - d*d);
+            measure *= 1.0 - cap/(M_PI*radius*radius);
+        }
+        else
+        {
+            real cap = M_PI*(radius - d)*(radius - d)*(2.0*radius + d)/3.0;
+            measure *= 1.0 - cap/(4.0*M_PI*radius*radius*radius/3.0);
+        }
+    }
+
+    return measure;
 }
 
 #ifndef CODE_UNIT
-// Order: O2 | Dependencies: _get_cs [O1], _get_grain_mass [O0]
-// Flags: Only compiled in cgs units (not CODE_UNIT)
-// Purpose: Brownian motion-induced relative velocity
+// calculate the Brownian relative speed and cap it at the sound speed
 __device__ __forceinline__
 real _get_vrel_b (real R, real s_i, real s_j, real h_g)
 {
@@ -79,8 +105,7 @@ real _get_vrel_b (real R, real s_i, real s_j, real h_g)
 }
 #endif // NOT CODE_UNIT
 
-// Order: O2 | Dependencies: _get_sigma_g [O0], _get_alpha [O1]
-// Purpose: Calculate inverse sqrt of Reynolds number for turbulent relative velocity
+// calculate the inverse square root of the turbulent Reynolds number
 __device__ __forceinline__
 real _get_ReInvSqrt (real R, real alpha)
 {
@@ -97,8 +122,7 @@ real _get_ReInvSqrt (real R, real alpha)
     return 1.0 / sqrt(Re);
 }
 
-// Order: O3 | Dependencies: _get_cs [O1], _get_alpha [O1], _get_ReInvSqrt [O2]
-// Purpose: Turbulence-induced relative velocity (Ormel & Cuzzi 2007)
+// calculate the turbulence-induced relative speed using the Ormel--Cuzzi regimes
 __device__ __forceinline__
 real _get_vrel_t (real R, real St_i, real St_j, real h_g)
 {
@@ -112,7 +136,7 @@ real _get_vrel_t (real R, real St_i, real St_j, real h_g)
     //      t_large = omega_K^(-1)                                          (page 413, section 2)
     // (2)  t_small: turnover timescale of the smallest eddies (Kolmogorov scale)
     //      t_small = t_eta = Re^(-1/2)*t_large                             (page 414, section 2)
-    // (3)  t_k: turnover timescale of arbitrary eddy k with spacial scale l = 1 / k and velocity V(k)
+    // (3)  t_k: turnover timescale of arbitrary eddy k with spatial scale l = 1 / k and velocity V(k)
     //      t_k = l / V(k) = (k*V(k))^(-1)                                  (page 413, section 2)
     // (4)  t_cross: eddy crossing timescale due to particle-eddy relative velocity
     //      t_cross = l / V_rel = (k*V_rel(k))^(-1)                         (page 414, section 2)
@@ -189,7 +213,7 @@ real _get_vrel_t (real R, real St_i, real St_j, real h_g)
         
         vrel_sq = v_gas2*coeff;
     }
-    else if (St_large < 0.2*ReInvSqrt)
+    else if (St_large < 0.2)
     {
         // regime 4: fully intermediate regime (5t_small < t_stop_large < 0.2t_large) following eq. 28
         
@@ -220,9 +244,7 @@ real _get_vrel_t (real R, real St_i, real St_j, real h_g)
     return sqrt(vrel_sq);
 }
 
-// Order: O4 | Dependencies: _get_hg [O0], _get_St [O3], _get_vrel_x [O1], _get_vrel_y [O0], _get_vrel_z [O3], _get_vrel_b [O2], _get_vrel_t [O3]
-// Flags: IMPORTGAS enables gas density for Stokes number calculation
-// Purpose: Calculate total relative velocity from all sources (drift, settling, Brownian, turbulence)
+// combine resolved Cartesian motion with unresolved Brownian and turbulent speeds in quadrature
 __device__ __forceinline__
 real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
@@ -230,19 +252,14 @@ real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
     #endif
 )
 {
-    #ifdef IMPORTGAS
     real x_i = dev_particle[idx_old_i].position.x;
     real x_j = dev_particle[idx_old_j].position.x;
-    #endif // IMPORTGAS
     
     real y_i = dev_particle[idx_old_i].position.y;
     real y_j = dev_particle[idx_old_j].position.y;
     
     real z_i = dev_particle[idx_old_i].position.z;
     real z_j = dev_particle[idx_old_j].position.z;
-    
-    real vy_i = dev_particle[idx_old_i].velocity.y;
-    real vy_j = dev_particle[idx_old_j].velocity.y;
     
     #ifdef MULTISIZE
     real s_i = dev_particle[idx_old_i].par_size;
@@ -261,51 +278,45 @@ real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
     real R = 0.5*(R_i + R_j);
 
     real h_g = _get_hg(R);
+    real h_i = _get_hg(R_i);
+    real h_j = _get_hg(R_j);
 
-    real St_i = _get_St(R_i, Z_i, s_i, h_g
+    real St_i = _get_St(R_i, Z_i, s_i, h_i
         #ifdef IMPORTGAS
         , x_i, y_i, z_i, dev_gasdens
         #endif
     );
-    real St_j = _get_St(R_j, Z_j, s_j, h_g
+    real St_j = _get_St(R_j, Z_j, s_j, h_j
         #ifdef IMPORTGAS
         , x_j, y_j, z_j, dev_gasdens
         #endif
     );
 
-    real vrel_sq = 0.0;
-    
-    // Calculate velocity components with pre-calculated values
-    real vrel_x = _get_vrel_x(R, St_i, St_j, h_g);
-    vrel_sq += vrel_x*vrel_x;
-    
-    real vrel_y = _get_vrel_y(vy_i, vy_j);
-    vrel_sq += vrel_y*vrel_y;
+    real3 vel_i = _get_cart_vel(dev_particle[idx_old_i]);
+    real3 vel_j = _get_cart_vel(dev_particle[idx_old_j]);
+    real dv_x = vel_i.x - vel_j.x;
+    real dv_y = vel_i.y - vel_j.y;
+    real dv_z = vel_i.z - vel_j.z;
+    real vrel_sq = dv_x*dv_x + dv_y*dv_y + dv_z*dv_z;
 
-    real vrel_z = _get_vrel_z(R_i, R_j, St_i, St_j);
-    vrel_sq += vrel_z*vrel_z;
-
-    // brownian motion will not be considered when code units are used
-    // for turbulent motion, Reynolds number will be prescribed when code units are used
+    // omit Brownian motion in code units and use the prescribed Reynolds-number normalization for turbulence
 
     #ifndef CODE_UNIT
     real vrel_b = _get_vrel_b(R, s_i, s_j, h_g);
-    vrel_sq += vrel_b*vrel_b; // Brownian motion
+    vrel_sq += vrel_b*vrel_b;
     #endif // NOT CODE_UNIT
 
     real vrel_t = _get_vrel_t(R, St_i, St_j, h_g);
-    vrel_sq += vrel_t*vrel_t; // turbulence
+    vrel_sq += vrel_t*vrel_t;
     
     return sqrt(vrel_sq);
 }
 
 // =========================================================================================================================
-// Collision Rate Calculation (Order 5)
-// Purpose: Calculate collision rate between particle pair using coagulation kernel
+// pair collision propensity
 // =========================================================================================================================
 
-// Order: O5 | Dependencies: _get_grain_mass [O0], _get_vrel [O4]
-// Purpose: Compute collision rate λ_ij = N_j * K_ij for particle pair
+// calculate the pair propensity numerator N_j K_ij before division by the local KNN measure
 template <KernelType kernel> __device__ __forceinline__
 real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
@@ -320,18 +331,15 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     // the probability of a collision between particles i and j is determined as 
     // lambda_ij = N_j * K_ij / V, where K_ij is the coagulation kernel and V is the volume of the cell
     
-    real lam_ij = LAMBDA_0; // dimension issue saved for later
     #ifdef MULTISIZE
     real numr_j = dev_particle[idx_old_j].par_numr;
     #else
-    real numr_j = M_D / N_P;
+    real numr_j = M_D / (static_cast<real>(N_P)*_get_grain_mass(S_0));
     #endif // MULTISIZE
 
     if constexpr (kernel == CONSTANT_KERNEL)
     {
-        lam_ij *= 1.0; // by definition
-        
-        return lam_ij*numr_j;
+        return LAMBDA_0*numr_j;
     }
     else if constexpr (kernel == LINEAR_KERNEL)
     {
@@ -344,9 +352,7 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
         #endif // MULTISIZE
 
         // m_i + m_j
-        lam_ij *= 0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
-        
-        return lam_ij*numr_j;
+        return LAMBDA_0*numr_j*0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
     }
     else if constexpr (kernel == PRODUCT_KERNEL)
     {
@@ -359,15 +365,11 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
         #endif // MULTISIZE
         
         // m_i * m_j
-        lam_ij *= _get_grain_mass(s_i)*_get_grain_mass(s_j);
-        
-        return lam_ij*numr_j;
+        return LAMBDA_0*numr_j*_get_grain_mass(s_i)*_get_grain_mass(s_j);
     }
     else if constexpr (kernel == CUSTOM_KERNEL)
     {
-        // K_ij should be v_ik * sigma_ik, 
-        // where v_ik is the relative velocity between particle i and j
-        // and sigma_ik is the collisional cross section between particle i and j
+        // use K_ij = sigma_ij delta_v_ij for the physical collision kernel
         
         #ifdef MULTISIZE
         real s_i = dev_particle[idx_old_i].par_size;
@@ -384,9 +386,32 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
         );
         real sigma_ij = M_PI*(s_i + s_j)*(s_i + s_j) / 4.0;
         
-        lam_ij *= v_rel_ij*sigma_ij;
-        
-        return lam_ij*numr_j;
+        real rate_volume = numr_j*v_rel_ij*sigma_ij;
+        if (N_Z == 1)
+        {
+            // convert the vertically integrated neighbor area to an effective pair volume
+            real R_i = dev_particle[idx_old_i].position.y*sin(dev_particle[idx_old_i].position.z);
+            real R_j = dev_particle[idx_old_j].position.y*sin(dev_particle[idx_old_j].position.z);
+            real Z_i = dev_particle[idx_old_i].position.y*cos(dev_particle[idx_old_i].position.z);
+            real Z_j = dev_particle[idx_old_j].position.y*cos(dev_particle[idx_old_j].position.z);
+            real St_i = _get_St(R_i, Z_i, s_i, _get_hg(R_i)
+                #ifdef IMPORTGAS
+                , dev_particle[idx_old_i].position.x, dev_particle[idx_old_i].position.y,
+                  dev_particle[idx_old_i].position.z, dev_gasdens
+                #endif
+            );
+            real St_j = _get_St(R_j, Z_j, s_j, _get_hg(R_j)
+                #ifdef IMPORTGAS
+                , dev_particle[idx_old_j].position.x, dev_particle[idx_old_j].position.y,
+                  dev_particle[idx_old_j].position.z, dev_gasdens
+                #endif
+            );
+            real H_i = R_i*_get_hd(R_i, St_i);
+            real H_j = R_j*_get_hd(R_j, St_j);
+            rate_volume /= sqrt(2.0*M_PI*(H_i*H_i + H_j*H_j));
+        }
+
+        return rate_volume;
     }
     else
     {

@@ -3,9 +3,8 @@
 #include <graffiti_kern.cuh>
 
 // =========================================================================================================================
-// Kernel: optdepth_init
-// Purpose: Initialize optical depth grid to zero
-// Dependencies: None (simple initialization)
+// kernel: optdepth_init
+// clear the opacity-weighted mass grid before particle scattering
 // =========================================================================================================================
 
 __global__
@@ -21,4 +20,4 @@ void optdepth_init (real *dev_optdepth)
 
 // =========================================================================================================================
 
-#endif // RADIATION
+#endif // TRANSPORT && RADIATION

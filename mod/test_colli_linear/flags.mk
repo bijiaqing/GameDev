@@ -5,6 +5,9 @@
 #																								#
 # COLLISION: Enable dust collision and coagulation/fragmentation								#
 NVCC += -DCOLLISION #																			#
+NVCC += -DMULTISIZE #
+NVCC += -DCOLLISION_UNIT_VOLUME #
+NVCC += -DCOLLISION_LINEAR_TEST #
 #																								#
 # TRANSPORT: Enable particle transport (position/velocity evolution) 							#
 # NOTE: If TRANSPORT is off, RADIATION and DIFFUSION are inactive regardless of their flags		#

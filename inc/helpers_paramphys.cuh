@@ -10,32 +10,40 @@
 #include <helpers_interpval.cuh>
 
 // =========================================================================================================================
-// Basic Disk Parameter Functions (Order 0)
-// Purpose: Fundamental physical quantities from constants only
+// grain and disk profiles
 // =========================================================================================================================
 
-// Order: O0 | Dependencies: None (only constants: M_PI, RHO_0)
+// calculate the mass of one compact spherical grain of diameter s
 __device__ __forceinline__
 real _get_grain_mass (real s)
 {
     return M_PI*RHO_0*s*s*s / 6.0;
 }
 
-// Order: O0 | Dependencies: None (only constants: G, M_S)
+// calculate the Keplerian angular frequency at cylindrical radius R
 __device__ __forceinline__
 real _get_omegaK (real R)
 {
     return sqrt(G*M_S / R / R / R);
 }
 
-// Order: O0 | Dependencies: None (only constants: ASPR_0, R_0, IDX_Q)
+// calculate the gas aspect ratio at cylindrical radius R
 __device__ __forceinline__
 real _get_hg (real R)
 {
     return ASPR_0*pow(R / R_0, 0.5*(IDX_Q + 1.0));
 }
 
-// Order: O0 | Dependencies: None (only constants: IDX_P, IDX_Q)
+// calculate the exact vertically isothermal spherical gas stratification relative to the midplane
+__device__ __forceinline__
+real _get_rhog_strat (real R, real Z, real h_g)
+{
+    real y = sqrt(R*R + Z*Z);
+
+    return exp((R / y - 1.0) / (h_g*h_g));
+}
+
+// calculate the dimensionless radial pressure-support parameter at cylindrical position R,Z
 __device__ __forceinline__
 real _get_eta (real R, real Z, real h_g)
 {
@@ -43,8 +51,7 @@ real _get_eta (real R, real Z, real h_g)
 }
 
 #ifdef COLLISION
-// Order: O0 | Dependencies: None (only constants: SIGMA_0, R_0, IDX_P)
-// Flags: Only compiled when COLLISION is enabled
+// calculate the gas surface density at cylindrical radius R
 __device__ __forceinline__
 real _get_sigma_g (real R)
 {
@@ -53,11 +60,10 @@ real _get_sigma_g (real R)
 #endif // COLLISION
 
 // =========================================================================================================================
-// Derived Disk Parameter Functions (Order 1)
-// Purpose: Physical quantities derived from Order 0 functions
+// thermodynamic and turbulent transport profiles
 // =========================================================================================================================
 
-// Order: O1 | Dependencies: _get_omegaK [O0]
+// calculate the vertically isothermal sound speed
 __device__ __forceinline__
 real _get_cs (real R, real h_g)
 {
@@ -65,9 +71,7 @@ real _get_cs (real R, real h_g)
 }
 
 #if defined(DIFFUSION) || defined(COLLISION)
-// Order: O1 | Dependencies: _get_omegaK [O0]
-// Flags: Only compiled when DIFFUSION or COLLISION is enabled
-// Conditional: Returns constant NU if CONST_NU defined, else calculates from ALPHA
+// calculate the kinematic viscosity from the configured constant-nu or alpha prescription
 __device__ __forceinline__
 real _get_nu (real R, real h_g)
 {
@@ -80,9 +84,7 @@ real _get_nu (real R, real h_g)
 #endif // DIFFUSION || COLLISION
 
 #ifdef COLLISION
-// Order: O1 | Dependencies: _get_omegaK [O0]
-// Flags: Only compiled when COLLISION is enabled
-// Conditional: Returns constant ALPHA if not CONST_NU, else calculates from NU
+// calculate the local dimensionless turbulence strength from the configured viscosity prescription
 __device__ __forceinline__
 real _get_alpha (real R, real h_g)
 {
@@ -93,28 +95,24 @@ real _get_alpha (real R, real h_g)
     #endif // NOT CONST_NU
 }
 
-// Order: O2 | Dependencies: _get_hg [O0], _get_nu [O1]
-// Flags: Only compiled when COLLISION is enabled
+// calculate the settled dust aspect ratio used by vertically integrated collision rates
 __device__ __forceinline__
 real _get_hd (real R, real St)
 {
-    // h_g cannot be passed by a parameter here because _get_hd is for individual particles
-    // whereas h_g is, in most cases, evaluated at the midpoint between particles
+    // evaluate h_g at the individual particle radius rather than at the pair midpoint
     
     real h_g = _get_hg(R);
-    real delta_Z = _get_nu(R, h_g) / SC_Z;
+    real delta_Z = _get_alpha(R, h_g) / SC_Z;
     
     return h_g*sqrt(delta_Z / (delta_Z + St));
 }
 #endif // COLLISION
 
 // =========================================================================================================================
-// Stokes Number Calculation (Order 3)
-// Purpose: Calculate particle Stokes number with optional gas density interpolation
+// stopping-time coupling
 // =========================================================================================================================
 
-// Order: O3 | Dependencies: _get_loc_x/y/z [O0], _interp_field [O2]
-// Flags: IMPORTGAS adds gas field interpolation; CONST_ST disables all scaling but grain size 
+// calculate the local Stokes number from grain size and the analytic or imported gas density
 __device__ __forceinline__
 real _get_St (real R, real Z, real s, real h_g
     #ifdef IMPORTGAS
@@ -128,7 +126,7 @@ real _get_St (real R, real Z, real s, real h_g
     #ifdef IMPORTGAS
     if (dev_gasdens != nullptr)
     {
-        // Use imported gas density
+        // scale the reference midplane Stokes number by the interpolated gas-density ratio
         real loc_x = _get_loc_x(x);
         real loc_y = _get_loc_y(y);
         real loc_z = _get_loc_z(z);
@@ -147,9 +145,9 @@ real _get_St (real R, real Z, real s, real h_g
     else
     #endif // IMPORTGAS
     {
-        // Analytical gas density profile
-        St /= pow(R / R_0, IDX_P);           // scale with radial   profile for volumetric gas density and sound speed
-        St /= exp(-Z*Z / (2.0*h_g*h_g*R*R)); // scale with vertical profile for volumetric gas density
+        // apply the radial surface-density scaling and exact spherical vertical stratification
+        St /= pow(R / R_0, IDX_P);
+        St /= _get_rhog_strat(R, Z, h_g);
     }
     #endif // NOT CONST_ST
 

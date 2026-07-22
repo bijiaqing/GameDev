@@ -7,25 +7,22 @@
 #include <helpers_paramphys.cuh>
 
 // =========================================================================================================================
-// Grid Field Scattering (Order 2)
-// Purpose: Scatter particle properties onto grid using trilinear interpolation
+// particle-to-grid scattering
 // =========================================================================================================================
 
-enum FieldType                              // field type for particle-to-grid scattering
+enum FieldType
 {
     #ifdef SAVE_DENS
-    DUSTDENS,                               // dust density field
+    DUSTDENS,
     #endif // SAVE_DENS
     #if defined(TRANSPORT) && defined(RADIATION)
-    OPTDEPTH,                               // optical depth field
-    #endif // RADIATION
+    OPTDEPTH,
+    #endif // TRANSPORT && RADIATION
     
-    FIELDTYPE_NONE                          // to prevent empty enum
+    FIELDTYPE_NONE                          // keep the enum valid when no scattered field is enabled
 };
 
-// Order: O2 | Dependencies: _get_loc_x/y/z [O0], _is_in_bounds [O0], _get_cell_index [O0], _3d_interp [O1], _get_grain_mass [O0]
-// Flags: TRANSPORT+RADIATION for OPTDEPTH; SAVE_DENS for DUSTDENS
-// Purpose: Scatter particle mass/opacity to 8 neighboring grid cells using trilinear weights
+// scatter one particle's mass or opacity-weighted mass to its trilinear grid stencil
 template <FieldType field_type> __device__ __forceinline__
 void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
 {
@@ -37,7 +34,7 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
     loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1e-6); // clamp midplane particles into last Z cell
     #endif // HALFDISK
 
-    if (!_is_in_bounds(loc_x, loc_y, loc_z)) return; // particle is out of bounds, do nothing
+    if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
 
     int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
     auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z);
@@ -58,10 +55,31 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
         #else
         weight *= M_D / N_P / _get_grain_mass(S_0);
         #endif // MULTISIZE
-        weight *= KAPPA_0 / (s / S_0); // cross section per unit mass
+        weight *= KAPPA_0 / (s / S_0); // convert represented mass to extinction cross section
+
+        if (N_Z == 1)
+        {
+            // close the vertically integrated model with the local Gaussian midplane density
+            real R = dev_particle[idx].position.y*sin(dev_particle[idx].position.z);
+            real h_g = _get_hg(R);
+            real H_d = h_g*R;
+            #ifdef DIFFUSION
+            #ifndef CONST_NU
+            real alpha_z = ALPHA / SC_Z;
+            #else
+            real alpha_z = NU/(h_g*h_g*R*R*_get_omegaK(R)*SC_Z);
+            #endif
+            real stokes_mid = ST_0*(s / S_0);
+            #ifndef CONST_ST
+            stokes_mid /= pow(R / R_0, IDX_P);
+            #endif
+            H_d *= sqrt(alpha_z/(alpha_z + stokes_mid));
+            #endif
+            weight /= sqrt(2.0*M_PI)*H_d;
+        }
     }
     else
-    #endif // RADIATION
+    #endif // TRANSPORT && RADIATION
     #ifdef SAVE_DENS
     if (field_type == DUSTDENS)
     {
@@ -75,9 +93,10 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
     else
     #endif // SAVE_DENS
     {
-        return; // unknown field type, do nothing
+        return;
     }
 
+    // deposit the conserved particle weight to all corners of the interpolation stencil
     atomicAdd(&dev_grid[idx_cell                           ], (1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z)*weight);
     atomicAdd(&dev_grid[idx_cell + next_x                  ],        frac_x *(1.0 - frac_y)*(1.0 - frac_z)*weight);
     atomicAdd(&dev_grid[idx_cell          + next_y         ], (1.0 - frac_x)*       frac_y *(1.0 - frac_z)*weight);

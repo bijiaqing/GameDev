@@ -3,9 +3,8 @@
 #include <graffiti_kern.cuh>
 
 // =========================================================================================================================
-// Kernel: rs_swarm_init
-// Purpose: Initialize cuRAND random number generator states for each particle swarm
-// Dependencies: curand (curand_init)
+// kernel: rs_swarm_init
+// initialize one reproducible cuRAND stream for each representative particle
 // =========================================================================================================================
 
 __global__
@@ -21,4 +20,4 @@ void rs_swarm_init (curs *dev_rs_swarm, int seed)
 
 // =========================================================================================================================
 
-#endif // COLLISION or DIFFUSION
+#endif // COLLISION || (TRANSPORT && DIFFUSION)

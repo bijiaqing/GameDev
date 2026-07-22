@@ -3,9 +3,8 @@
 #include <graffiti_kern.cuh>
 
 // =========================================================================================================================
-// Kernel: dustdens_init
-// Purpose: Initialize dust density grid to zero
-// Dependencies: None (simple initialization)
+// kernel: dustdens_init
+// clear the particle-mass accumulation grid before scattering
 // =========================================================================================================================
 
 __global__

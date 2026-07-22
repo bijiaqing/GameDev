@@ -4,7 +4,7 @@
 #include <algorithm>        // for std::lower_bound
 #include <chrono>           // for std::chrono::system_clock
 #include <ctime>            // for std::time_t, std::time, std::ctime
-#include <cmath>            // for std::abs, std::exp, std::log, std::pow, std::sqrt
+#include <cmath>            // for std::abs, std::acos, std::cos, std::exp, std::log, std::pow, std::sin, std::sqrt
 #include <fstream>          // for std::ofstream, std::ifstream
 #include <iomanip>          // for std::setw, std::setfill, std::setprecision
 #include <iostream>         // for std::cout, std::endl
@@ -16,12 +16,13 @@
 #include <const.cuh>
 
 // =========================================================================================================================
-// Random profile generation
-// Note: rand_generator must be defined in exactly one .cu file (e.g., main.cu)
+// elementary random profiles
 // =========================================================================================================================
 
+// share one deterministic host generator across all initialization samplers
 extern std::mt19937 rand_generator;
 
+// sample a uniform distribution over the parameter range
 inline __host__
 void rand_uniform (real *profile, int number, real p_min, real p_max)
 {
@@ -33,6 +34,7 @@ void rand_uniform (real *profile, int number, real p_min, real p_max)
     }
 }
 
+// sample a Gaussian distribution truncated to the parameter interval by rejection
 inline __host__
 void rand_gaussian (real *profile, int number, real p_min, real p_max, real mu, real std)
 {
@@ -52,6 +54,7 @@ void rand_gaussian (real *profile, int number, real p_min, real p_max, real mu, 
     }
 }
 
+// sample a probability density proportional to p raised to idx_pow
 inline __host__
 void rand_pow_law (real *profile, int number, real p_min, real p_max, real idx_pow)
 {
@@ -60,23 +63,25 @@ void rand_pow_law (real *profile, int number, real p_min, real p_max, real idx_p
     real tmp_min = std::pow(p_min, idx_pow + 1.0);
     real tmp_max = std::pow(p_max, idx_pow + 1.0);
 
-    // check https://mathworld.wolfram.com/RandomNumber.html for derivations
-    // NOTE: this is the probability distribution function dN(x) ~ x^n*dx
+    // invert the cumulative distribution for dN proportional to p^idx_pow dp
     for (int i = 0; i < number; i++)
     {
         profile[i] = std::pow((tmp_max - tmp_min)*random(rand_generator) + tmp_min, 1.0/(idx_pow + 1.0));
     }
 }
 
-// ========================================================================================================================
-// rand_convpow: generate random numbers following a convolved power-law distribution using inverse transform sampling
+// =========================================================================================================================
+// smoothed power-law profiles
+// =========================================================================================================================
 
+// evaluate an unnormalized Gaussian convolution kernel
 inline static __host__
 real _get_gaussian (real x, real mu, real std)
 {
     return std::exp(-(x - mu)*(x - mu)/(2.0*std*std));
 }
 
+// evaluate the compactly supported power-law profile before edge smoothing
 inline static __host__
 real _get_tapered_pow (real x, real x_min, real x_max, real idx_pow)
 {
@@ -90,29 +95,40 @@ real _get_tapered_pow (real x, real x_min, real x_max, real idx_pow)
     }
 }
 
-inline __host__
-void rand_convpow (real *profile, int number, real x_min, real x_max, real idx_pow, real smooth, int bins)
+// convolve a tapered power law with a Gaussian on a uniform numerical grid
+inline static __host__
+void _get_convpow_profile (std::vector <real> &x_axis, std::vector <real> &y_axis,
+    real x_min, real x_max, real idx_pow, real smooth, int bins)
 {
     real p_min = x_min + 2.0*smooth;
     real p_max = x_max - 2.0*smooth;
-    
-    std::vector <real> x_axis(bins + 1);
-    std::vector <real> y_axis(bins + 1, 0.0);
-    
     real dx = (x_max - x_min) / static_cast<real>(bins);
-    
-    for (int i = 0; i < bins + 1; i++)
-    {
-        x_axis[i] = x_min + i*dx;
-    }
 
-    for (int j = 0; j < bins + 1; j++)
+    x_axis.resize(bins + 1);
+    y_axis.assign(bins + 1, 0.0);
+
+    for (int i = 0; i <= bins; i++) x_axis[i] = x_min + static_cast<real>(i)*dx;
+
+    // accumulate every source bin into every destination bin
+    for (int j = 0; j <= bins; j++)
     {
-        for (int k = 0; k < bins + 1; k++)
+        for (int k = 0; k <= bins; k++)
         {
-            y_axis[k] += _get_tapered_pow(x_axis[j], p_min, p_max, idx_pow)*_get_gaussian(x_axis[k], x_axis[j], 0.5*smooth);
+            y_axis[k] += _get_tapered_pow(x_axis[j], p_min, p_max, idx_pow)
+                       *_get_gaussian(x_axis[k], x_axis[j], 0.5*smooth);
         }
     }
+}
+
+// sample the numerically convolved power law by inverse-CDF interpolation
+inline __host__
+void rand_convpow (real *profile, int number, real x_min, real x_max, real idx_pow, real smooth, int bins)
+{
+    std::vector <real> x_axis;
+    std::vector <real> y_axis;
+    real dx = (x_max - x_min) / static_cast<real>(bins);
+
+    _get_convpow_profile(x_axis, y_axis, x_min, x_max, idx_pow, smooth, bins);
 
     std::uniform_real_distribution <real> random(0.0, 1.0);
     std::vector <real> cdf(bins + 1);
@@ -136,16 +152,133 @@ void rand_convpow (real *profile, int number, real x_min, real x_max, real idx_p
         auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), u_sample);
         int bin_lower = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
         
-        // interpolate between x_axis[bin_lower] and x_axis[bin_lower+1]
+        // interpolate within the selected CDF bin
         real bin_frac = (u_sample - cdf[bin_lower]) / (cdf[bin_lower + 1] - cdf[bin_lower]);
         profile[sample_idx] = x_axis[bin_lower] + bin_frac*dx;
     }
 }
 
+// interpolate a tabulated convolved profile on its uniform axis
+inline static __host__
+real _interp_convpow_profile (real x, const std::vector <real> &profile, real x_min, real x_max)
+{
+    if (x < x_min || x > x_max) return 0.0;
+
+    int bins = static_cast<int>(profile.size()) - 1;
+    real loc = (x - x_min)*static_cast<real>(bins) / (x_max - x_min);
+    int idx = std::min(static_cast<int>(loc), bins - 1);
+    real frac = loc - static_cast<real>(idx);
+
+    return (1.0 - frac)*profile[idx] + frac*profile[idx + 1];
+}
+
+#ifndef IMPORTGAS
+// sample the analytic dust mass distribution with the mesh's exact spherical cell measure
+inline __host__
+void rand_disk (real *pos_y, real *pos_z, int number, real size)
+{
+    std::uniform_real_distribution <real> random(0.0, 1.0);
+
+    std::vector <real> radial_axis;
+    std::vector <real> sigma_profile;
+    _get_convpow_profile(radial_axis, sigma_profile, INIT_YMIN, INIT_YMAX, IDX_P, 0.05*R_0, N_Y);
+
+    real dy = std::pow(INIT_YMAX / INIT_YMIN, 1.0 / static_cast<real>(N_Y));
+    real dz = (N_Z > 1) ? (INIT_ZMAX - INIT_ZMIN) / static_cast<real>(N_Z) : 0.0;
+    real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
+    real dy_pow = std::pow(dy, pow_y);
+
+    std::vector <real> cell_mass(N_Y*N_Z);
+    std::vector <real> cdf(N_Y*N_Z + 1, 0.0);
+
+    // integrate the local dust profile over each radial-polar cell
+    for (int iz = 0; iz < N_Z; iz++)
+    {
+        real z0 = (N_Z > 1) ? INIT_ZMIN + static_cast<real>(iz)*dz : 0.5*(INIT_ZMIN + INIT_ZMAX);
+        real z1 = (N_Z > 1) ? z0 + dz : z0;
+        real zc = (N_Z > 1) ? 0.5*(z0 + z1) : z0;
+        real vol_z = (N_Z > 1) ? std::cos(z0) - std::cos(z1) : 1.0;
+
+        for (int iy = 0; iy < N_Y; iy++)
+        {
+            real y0 = INIT_YMIN*std::pow(dy, static_cast<real>(iy));
+            real y1 = y0*dy;
+            real yc = std::sqrt(y0*y1);
+            real R = yc*std::sin(zc);
+            real Z = yc*std::cos(zc);
+            real sigma = _interp_convpow_profile(R, sigma_profile, INIT_YMIN, INIT_YMAX);
+            real density = sigma;
+
+            if (N_Z > 1 && sigma > 0.0)
+            {
+                real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
+                real H_g = h_g*R;
+                real H_d = H_g;
+
+                #ifdef DIFFUSION
+                #ifndef CONST_NU
+                real alpha_z = ALPHA / SC_Z;
+                #else  // CONST_NU
+                real omega = std::sqrt(G*M_S / (R*R*R));
+                real alpha_z = NU / (h_g*h_g*R*R*omega*SC_Z);
+                #endif // NOT CONST_NU
+
+                real stokes_mid = ST_0*(size / S_0);
+                #ifndef CONST_ST
+                stokes_mid /= std::pow(R / R_0, IDX_P);
+                #endif // NOT CONST_ST
+
+                H_d *= std::sqrt(alpha_z / (alpha_z + stokes_mid));
+                #endif // DIFFUSION
+
+                real gas_strat = std::exp((R / yc - 1.0) / (h_g*h_g));
+                real settle_exp = std::exp(-0.5*Z*Z*(1.0/(H_d*H_d) - 1.0/(H_g*H_g)));
+                density = sigma*gas_strat*settle_exp / H_d;
+            }
+
+            real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
+            int idx = iy + iz*N_Y;
+            cell_mass[idx] = density*vol_y*vol_z;
+            cdf[idx + 1] = cdf[idx] + cell_mass[idx];
+        }
+    }
+
+    // normalize the cell-mass CDF before inverse sampling
+    real total_mass = cdf.back();
+    for (real &value : cdf) value /= total_mass;
+
+    for (int i = 0; i < number; i++)
+    {
+        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), random(rand_generator));
+        int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
+        int iy = idx_cell % N_Y;
+        int iz = idx_cell / N_Y;
+
+        // sample uniformly in the exact radial and polar volume coordinates inside the chosen cell
+        real y0 = INIT_YMIN*std::pow(dy, static_cast<real>(iy));
+        real y_pow = std::pow(y0, pow_y)*(1.0 + (dy_pow - 1.0)*random(rand_generator));
+        pos_y[i] = std::pow(y_pow, 1.0 / pow_y);
+
+        if (N_Z > 1)
+        {
+            real z0 = INIT_ZMIN + static_cast<real>(iz)*dz;
+            real cos_z = std::cos(z0) + (std::cos(z0 + dz) - std::cos(z0))*random(rand_generator);
+            pos_z[i] = std::acos(cos_z);
+        }
+        else
+        {
+            pos_z[i] = 0.5*(INIT_ZMIN + INIT_ZMAX);
+        }
+    }
+}
+#endif // NOT IMPORTGAS
+
 // =========================================================================================================================
-// Random profile generation for special cases (e.g., Lambert W function for linear coagulation kernel)
+// collision-test random profiles
+// =========================================================================================================================
 
 #ifdef COLLISION
+// solve the negative real Lambert-W branch with Newton iteration
 inline static __host__
 real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
 {
@@ -154,7 +287,7 @@ real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
         throw std::domain_error("lambertWm1: z out of domain");
     }
 
-    // initial guess (asymptotic for k = -1)
+    // initialize from the asymptotic form of the negative branch
     double val = std::log(-z);
 
     for (int i = 0; i < max_iter; ++i)
@@ -173,8 +306,9 @@ real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
     throw std::runtime_error("lambertWm1: did not converge");
 }
 
+// sample the analytic initial distribution used by the linear-kernel collision test
 inline __host__
-void rand_4_linear (real *profile, int number) // initial distribution for linear kernel tests
+void rand_4_linear (real *profile, int number)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
@@ -186,9 +320,11 @@ void rand_4_linear (real *profile, int number) // initial distribution for linea
 #endif // COLLISION
 
 // =========================================================================================================================
-// rand_from_file: generate random positions following dust mass distribution from gas density and dust-to-gas ratio
+// imported dust distribution
+// =========================================================================================================================
 
 #ifdef IMPORTGAS
+// sample positions from imported gas density times dust-to-gas ratio and exact cell measure
 inline __host__
 void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const real *gas_dens, const real *epsilon)
 {
@@ -201,7 +337,7 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     real idx_dim = static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1) + 1.0;
     real dy_pow = std::pow(dy, idx_dim);
     
-    // compute dust mass in each cell using same volume calculation as _get_grid_volume
+    // integrate the imported dust density with the same cell measure as _get_grid_volume
     std::vector <real> dust_mass(N_G);
     real total_mass = 0.0;
     
@@ -227,7 +363,7 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
         }
     }
     
-    // build cumulative distribution function
+    // build the cell-mass cumulative distribution
     std::vector <real> cdf(N_G + 1);
     cdf[0] = 0.0;
     
@@ -236,18 +372,18 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
         cdf[idx + 1] = cdf[idx] + dust_mass[idx];
     }
     
-    // normalize CDF to [0, 1]
+    // normalize the CDF to unit total probability
     for (int idx = 0; idx <= N_G; idx++)
     {
         cdf[idx] /= total_mass;
     }
     
-    // sample particles using inverse transform sampling
+    // select cells by inverse transform sampling
     for (int i = 0; i < number; i++)
     {
         real u_sample = random(rand_generator);
         
-        // binary search to find cell
+        // locate the cell containing the sampled cumulative probability
         auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), u_sample);
         int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
         
@@ -255,23 +391,33 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
         int idx_y = (idx_cell / N_X) % N_Y;
         int idx_z = idx_cell / (N_X * N_Y);
         
-        // y: radius (logarithmic spacing) - sample uniformly in r^idx_dim within cell
+        // sample logarithmic radial cells uniformly in the exact radial volume coordinate
         real y0 = Y_MIN*std::pow(dy, static_cast<real>(idx_y));
         real y0_pow = std::pow(y0, idx_dim);
         real y_pow = y0_pow*(1.0 + (dy_pow - 1.0)*random(rand_generator));
 
-        // randomly position particle within the cell
+        // sample azimuth uniformly and polar angle uniformly in cos(z)
         pos_x[i] = X_MIN + dx*(static_cast<real>(idx_x) + random(rand_generator));
         pos_y[i] = std::pow(y_pow, 1.0 / idx_dim);
-        pos_z[i] = Z_MIN + dz*(static_cast<real>(idx_z) + random(rand_generator));
+        if (N_Z > 1)
+        {
+            real z0 = Z_MIN + dz*static_cast<real>(idx_z);
+            real cos_z = std::cos(z0) + (std::cos(z0 + dz) - std::cos(z0))*random(rand_generator);
+            pos_z[i] = std::acos(cos_z);
+        }
+        else
+        {
+            pos_z[i] = 0.5*(Z_MIN + Z_MAX);
+        }
     }
 }
 #endif // IMPORTGAS
 
 // =========================================================================================================================
-// Get dt_out based on output index and output mode
+// output timing
 // =========================================================================================================================
 
+// calculate a nonnegative integer power without floating-point roundoff
 inline __host__
 real int_pow (int base, int exp)
 {
@@ -285,6 +431,7 @@ real int_pow (int base, int exp)
     return static_cast<real>(result);
 }
 
+// calculate the physical duration between the preceding and requested output frames
 inline __host__
 real _get_dt_out (int idx_file)
 {
@@ -303,9 +450,10 @@ real _get_dt_out (int idx_file)
 }
 
 // =========================================================================================================================
-// Binary file I/O templates
+// binary file I/O
 // =========================================================================================================================
 
+// write a contiguous host array without format conversion
 template <typename DataType> __host__ inline
 bool save_binary (const std::string &file_name, DataType *data, int number)
 {
@@ -316,6 +464,7 @@ bool save_binary (const std::string &file_name, DataType *data, int number)
     return file.good();
 }
 
+// read a contiguous host array without format conversion
 template <typename DataType> __host__ inline
 bool load_binary (const std::string &file_name, DataType *data, int number)
 {
@@ -327,9 +476,10 @@ bool load_binary (const std::string &file_name, DataType *data, int number)
 }
 
 // =========================================================================================================================
-// File I/O helpers
+// file naming, loading, and metadata
 // =========================================================================================================================
 
+// format a frame index with the zero padding used by binary output files
 inline __host__
 std::string frame_num (int number)
 {
@@ -339,6 +489,7 @@ std::string frame_num (int number)
     return str;
 }
 
+// report completion time for one output frame
 inline __host__
 void msg_output (int idx_file)
 {
@@ -352,18 +503,19 @@ void msg_output (int idx_file)
 }
 
 #ifdef LOGOUTPUT
+// test whether a linear frame index is an integer power selected for logarithmic output
 inline __host__
 bool is_log_power (int idx_file)
 {
-    // Check if n is an integer power of LOG_BASE (including 0th power: n=1)
+    // include the zeroth power at idx_file = 1
     if (LOG_BASE == 2)
     {
-        // Fast bit-manipulation for powers of 2
+        // use the bit test for the common base-two case
         return (idx_file > 0) && ((idx_file & (idx_file - 1)) == 0);
     }
     else
     {
-        // General case for any base
+        // repeatedly remove factors for an arbitrary integer base
         if (idx_file <= 0)
         {
             return false;
@@ -380,6 +532,7 @@ bool is_log_power (int idx_file)
 #endif // LOGOUTPUT
 
 #ifdef IMPORTGAS
+// load one dust-to-gas ratio frame from the imported dataset
 inline __host__
 bool load_epsilon (const std::string &path, int idx_file, real *epsilon)
 {
@@ -387,6 +540,7 @@ bool load_epsilon (const std::string &path, int idx_file, real *epsilon)
     return load_binary(fname, epsilon, N_G);
 }
 
+// load density and all three linear velocity components for one gas frame
 inline __host__
 bool load_gas_data (const std::string &path, int idx_file, real *gasdens, real *gasvelx, real *gasvely, real *gasvelz)
 {
@@ -409,6 +563,7 @@ bool load_gas_data (const std::string &path, int idx_file, real *gasdens, real *
 }
 #endif // IMPORTGAS
 
+// write the active physical, numerical, grid, and binary-layout configuration
 inline __host__
 bool save_variable (const std::string &file_name)
 {
@@ -418,7 +573,7 @@ bool save_variable (const std::string &file_name)
     file << "[PARAMETERS]"                                                                  << std::endl;
     file                                                                                    << std::endl;
 
-    // Gas parameters
+    // gas parameters
     file << "SIGMA_0     = " << std::scientific     << std::setprecision(8) << SIGMA_0      << std::endl;
     file << "ASPR_0      = " << std::defaultfloat   << std::setprecision(8) << ASPR_0       << std::endl;
     file << "IDX_P       = " << std::defaultfloat   << std::setprecision(8) << IDX_P        << std::endl;
@@ -429,7 +584,7 @@ bool save_variable (const std::string &file_name)
     #else  // CONST_NU
     file << "NU          = " << std::scientific     << std::setprecision(8) << NU           << std::endl;
     #endif // NOT CONST_NU
-    #endif // DIFFUSION or COLLISION
+    #endif // (TRANSPORT && DIFFUSION) || COLLISION
     #ifdef COLLISION
     #ifndef CODE_UNIT
     file << "M_MOL       = " << std::scientific     << std::setprecision(8) << M_MOL        << std::endl;
@@ -440,31 +595,33 @@ bool save_variable (const std::string &file_name)
     #endif // COLLISION
     file                                                                                    << std::endl;
     
-    // Dust parameters
+    // dust parameters
     file << "ST_0        = " << std::scientific     << std::setprecision(8) << ST_0         << std::endl;
     file << "M_D         = " << std::scientific     << std::setprecision(8) << M_D          << std::endl;
     file << "RHO_0       = " << std::scientific     << std::setprecision(8) << RHO_0        << std::endl;
     #if (defined(TRANSPORT) && defined(RADIATION))
     file << "BETA_0      = " << std::scientific     << std::setprecision(8) << BETA_0       << std::endl;
     file << "KAPPA_0     = " << std::scientific     << std::setprecision(8) << KAPPA_0      << std::endl;
-    #endif // RADIATION
+    #endif // TRANSPORT && RADIATION
     #if (defined(TRANSPORT) && defined(DIFFUSION))
     file << "SC_X        = " << std::scientific     << std::setprecision(8) << SC_X         << std::endl;
     file << "SC_R        = " << std::scientific     << std::setprecision(8) << SC_R         << std::endl;
-    #endif // DIFFUSION
+    #endif // TRANSPORT && DIFFUSION
     #if (defined(TRANSPORT) && defined(DIFFUSION)) || defined(COLLISION)
     file << "SC_Z        = " << std::scientific     << std::setprecision(8) << SC_Z         << std::endl;
-    #endif // DIFFUSION or COLLISION
+    #endif // (TRANSPORT && DIFFUSION) || COLLISION
 
     #ifdef COLLISION
     file << "LAMBDA_0    = " << std::scientific     << std::setprecision(8) << LAMBDA_0     << std::endl;
     file << "V_FRAG      = " << std::scientific     << std::setprecision(8) << V_FRAG       << std::endl;
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
+    file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
+    file << "CFL_COL     = " << std::defaultfloat   << std::setprecision(8) << CFL_COL      << std::endl;
     #endif // COLLISION
     file                                                                                    << std::endl;
 
-    // Mesh domain
+    // mesh domain
     file << "N_P         = " << std::scientific     << std::setprecision(8) << N_P          << std::endl;
     file                                                                                    << std::endl;
     file << "N_X         = " << std::defaultfloat   << std::setprecision(8) << N_X          << std::endl;
@@ -482,7 +639,7 @@ bool save_variable (const std::string &file_name)
     file << "N_G         = " << std::scientific     << std::setprecision(8) << N_G          << std::endl;
     file                                                                                    << std::endl;
 
-    // Initialization parameters
+    // initialization parameters
     #ifndef IMPORTGAS
     file << "INIT_XMIN   = " << std::defaultfloat   << std::setprecision(8) << INIT_XMIN    << std::endl;
     file << "INIT_XMAX   = " << std::defaultfloat   << std::setprecision(8) << INIT_XMAX    << std::endl;
@@ -495,7 +652,7 @@ bool save_variable (const std::string &file_name)
     file << "INIT_SMAX   = " << std::scientific     << std::setprecision(8) << INIT_SMAX    << std::endl;
     file                                                                                    << std::endl;
 
-    // Time step and output
+    // timestep and output parameters
     file << "SAVE_MAX    = " << std::defaultfloat   << std::setprecision(8) << SAVE_MAX     << std::endl;
     #if defined(LOGTIMING) || defined(LOGOUTPUT)
     file << "LOG_BASE    = " << std::defaultfloat   << std::setprecision(8) << LOG_BASE     << std::endl;
@@ -505,11 +662,12 @@ bool save_variable (const std::string &file_name)
     file << "DT_OUT      = " << std::scientific     << std::setprecision(8) << DT_OUT       << std::endl;
     #ifdef TRANSPORT
     file << "DT_DYN      = " << std::scientific     << std::setprecision(8) << DT_DYN       << std::endl;
+    file << "CFL_DYN     = " << std::defaultfloat   << std::setprecision(8) << CFL_DYN      << std::endl;
     #endif // TRANSPORT
     file << "DT_MIN      = " << std::scientific     << std::setprecision(8) << DT_MIN       << std::endl;
     file                                                                                    << std::endl;
 
-    // Swarm structure as numpy dtype (configparser-compatible), in python, write as:
+    // swarm structure as a configparser-compatible NumPy dtype, in Python write as:
     // dtype = np.dtype([(name, dtype) for name, dtype in config['SWARM_DTYPE'].items()])
     file << "[SWARM_DTYPE]"                                                                 << std::endl;
     file << "position_x = f8"                                                               << std::endl;
@@ -531,7 +689,7 @@ bool save_variable (const std::string &file_name)
 }
 
 // =========================================================================================================================
-// File I/O macros for main evolution loop
+// main-loop file transfers
 // =========================================================================================================================
 
 #define SAVE_PARTICLE_TO_FILE(idx)                                                          \
@@ -565,6 +723,19 @@ do {                                                                            
     cudaMemcpy(dev_gasvely, gasvely, sizeof(real)*N_G, cudaMemcpyHostToDevice);             \
     cudaMemcpy(dev_gasvelz, gasvelz, sizeof(real)*N_G, cudaMemcpyHostToDevice);             \
 } while(0)
+
+#define LOAD_GAS_NEXT_TO_VRAM(idx)                                                          \
+do {                                                                                        \
+    if (!load_gas_data(PATH, idx, gasdens, gasvelx, gasvely, gasvelz))                      \
+    {                                                                                       \
+        std::cerr << "Error: Failed to load gas data files for frame " << idx << std::endl; \
+        return 1;                                                                           \
+    }                                                                                       \
+    cudaMemcpy(dev_gasdens_next, gasdens, sizeof(real)*N_G, cudaMemcpyHostToDevice);        \
+    cudaMemcpy(dev_gasvelx_next, gasvelx, sizeof(real)*N_G, cudaMemcpyHostToDevice);        \
+    cudaMemcpy(dev_gasvely_next, gasvely, sizeof(real)*N_G, cudaMemcpyHostToDevice);        \
+    cudaMemcpy(dev_gasvelz_next, gasvelz, sizeof(real)*N_G, cudaMemcpyHostToDevice);        \
+} while(0)
 #endif // IMPORTGAS
 
 #ifdef SAVE_DENS
@@ -594,7 +765,7 @@ do {                                                                            
 #endif // TRANSPORT && RADIATION
 
 // =========================================================================================================================
-// Console output macros (access local variables directly, no parameters needed)
+// main-loop console output
 // =========================================================================================================================
 
 #ifdef TRANSPORT

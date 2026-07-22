@@ -4,9 +4,10 @@
 #include <helpers_transport.cuh>
 
 // =========================================================================================================================
-// Kernel: ssa_transport
-// Purpose: Complete staggered semi-analytic integrator for particle evolution (no radiation pressure)
-// Dependencies: helpers_transport.cuh (_load_particle, _save_particle, _if_out_of_box, _ssa_substep_1, _ssa_substep_2)
+// kernel: ssa_transport
+// complete one gravity-and-drag transport step when radiation does not require a midpoint mesh reconstruction
+//
+// parallelization: one thread per representative particle
 // =========================================================================================================================
 
 __global__
@@ -27,6 +28,7 @@ void ssa_transport (swarm *dev_particle, real dt
         real lx_i, vy_i, lz_i;
         real lx_j, vy_j, lz_j;
 
+        // construct the staggered midpoint position from the initial state
         _load_particle(dev_particle, idx, x_i, y_i, z_i, lx_i, vy_i, lz_i);
         _ssa_substep_1(dt, x_i, y_i, z_i, lx_i, vy_i, lz_i, x_1, y_1, z_1);
 
@@ -36,7 +38,7 @@ void ssa_transport (swarm *dev_particle, real dt
         real size = S_0;
         #endif // MULTISIZE
         
-        real beta = 0.0; // no radiation pressure
+        real beta = 0.0;
 
         _ssa_substep_2(dt, size, beta, lx_i, vy_i, lz_i, x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j
             #ifdef IMPORTGAS
@@ -44,6 +46,7 @@ void ssa_transport (swarm *dev_particle, real dt
             #endif
         );
 
+        // enforce boundaries after the completed transport update
         _if_out_of_box(x_j, y_j, z_j, lx_j, vy_j, lz_j);
         _save_particle(dev_particle, idx, x_j, y_j, z_j, lx_j, vy_j, lz_j);
     }
@@ -51,4 +54,4 @@ void ssa_transport (swarm *dev_particle, real dt
 
 // =========================================================================================================================
 
-#endif // NO RADIATION
+#endif // TRANSPORT && !RADIATION
