@@ -10,7 +10,8 @@
 #endif
 
 #include <graffiti_kern.cuh>
-#include <graffiti_host.cuh>
+#include <host_rand.cuh>
+#include <host_file.cuh>
 
 std::mt19937 rand_generator;
 
@@ -48,68 +49,69 @@ int main (int argc, char **argv)
     #endif // COLLISION
     
     // allocate the particle state and feature-dependent work arrays
-    std::string fname;
     swarm *particle, *dev_particle;
-    cudaMallocHost((void**)&particle, sizeof(swarm)*N_P);
-    cudaMalloc((void**)&dev_particle, sizeof(swarm)*N_P);
+    CUDA_CHECK(cudaMallocHost((void**)&particle, sizeof(swarm)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_particle, sizeof(swarm)*N_P));
 
     #ifdef TRANSPORT
-    real *dev_dt_rate;
-    cudaMalloc((void**)&dev_dt_rate, sizeof(real)*N_P);
-    #endif
+    real *dev_dt_rates;
+    CUDA_CHECK(cudaMalloc((void**)&dev_dt_rates, sizeof(real)*N_P));
+    #endif // TRANSPORT
     
     #ifdef SAVE_DENS
     real *dustdens, *dev_dustdens;
-    cudaMallocHost((void**)&dustdens, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_dustdens, sizeof(real)*N_G);
+    CUDA_CHECK(cudaMallocHost((void**)&dustdens, sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
     #endif // SAVE_DENS
     
     #ifdef IMPORTGAS
-    real *gasdens, *dev_gasdens;
-    real *gasvelx, *dev_gasvelx;
-    real *gasvely, *dev_gasvely;
-    real *gasvelz, *dev_gasvelz;
-    cudaMallocHost((void**)&gasdens,  sizeof(real)*N_G);
-    cudaMallocHost((void**)&gasvelx,  sizeof(real)*N_G);
-    cudaMallocHost((void**)&gasvely,  sizeof(real)*N_G);
-    cudaMallocHost((void**)&gasvelz,  sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasdens,  sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasvelx,  sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasvely,  sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasvelz,  sizeof(real)*N_G);
-    real *dev_gasdens_next, *dev_gasvelx_next, *dev_gasvely_next, *dev_gasvelz_next;
-    cudaMalloc((void**)&dev_gasdens_next, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasvelx_next, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasvely_next, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_gasvelz_next, sizeof(real)*N_G);
+    real *gas_dens, *dev_gas_dens;
+    CUDA_CHECK(cudaMallocHost((void**)&gas_dens,  sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_dens,  sizeof(real)*N_G));
+
+    real *gas_velx, *dev_gas_velx;
+    CUDA_CHECK(cudaMallocHost((void**)&gas_velx,  sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velx,  sizeof(real)*N_G));
+
+    real *gas_vely, *dev_gas_vely;
+    CUDA_CHECK(cudaMallocHost((void**)&gas_vely,  sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_vely,  sizeof(real)*N_G));
+
+    real *gas_velz, *dev_gas_velz;
+    CUDA_CHECK(cudaMallocHost((void**)&gas_velz,  sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velz,  sizeof(real)*N_G));
+
+    real *dev_gas_dens_next, *dev_gas_velx_next, *dev_gas_vely_next, *dev_gas_velz_next;
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_dens_next, sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velx_next, sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_vely_next, sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velz_next, sizeof(real)*N_G));
     #endif // IMPORTGAS
     
-    #if defined(TRANSPORT) && defined(RADIATION)
+    #ifdef RADIATION
     real *optdepth, *dev_optdepth;
-    cudaMallocHost((void**)&optdepth, sizeof(real)*N_G);
-    cudaMalloc((void**)&dev_optdepth, sizeof(real)*N_G);
-    #endif // TRANSPORT && RADIATION
+    CUDA_CHECK(cudaMallocHost((void**)&optdepth, sizeof(real)*N_G));
+    CUDA_CHECK(cudaMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
+    #endif // RADIATION
 
     #ifdef COLLISION
     bbox *dev_boundbox;
-    cudaMalloc((void**)&dev_boundbox, sizeof(bbox));
+    CUDA_CHECK(cudaMalloc((void**)&dev_boundbox, sizeof(bbox)));
 
-    // azimuthal wedges require two periodic image nodes per representative
-    int col_tree_size = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P;
     tree *dev_col_tree;
-    cudaMalloc((void**)&dev_col_tree, sizeof(tree)*col_tree_size);
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_tree, sizeof(tree)*N_T));
 
-    swarm *dev_particle_old;
-    cudaMalloc((void**)&dev_particle_old, sizeof(swarm)*N_P);
-
-    real *dev_col_rate;
-    cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_P);
+    real *dev_size_old, *dev_numr_old, *dev_col_rate, *dev_col_dist;
+    CUDA_CHECK(cudaMalloc((void**)&dev_size_old, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
     #endif // COLLISION
 
-    #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
-    curs *dev_rs_swarm;
-    cudaMalloc((void**)&dev_rs_swarm, sizeof(curs)*N_P);
-    #endif // COLLISION || (TRANSPORT && DIFFUSION)
+    #if defined(COLLISION) || defined(DIFFUSION)
+    curs *dev_rngstate;
+    CUDA_CHECK(cudaMalloc((void**)&dev_rngstate, sizeof(curs)*N_P));
+    #endif // COLLISION || DIFFUSION
 
     if (argc <= 1)
 	{
@@ -118,25 +120,43 @@ int main (int argc, char **argv)
         idx_from = 0;
 
         real *random_x, *dev_random_x;
-        real *random_y, *dev_random_y;
-        real *random_z, *dev_random_z;
+        CUDA_CHECK(cudaMallocHost((void**)&random_x, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_random_x, sizeof(real)*N_P));
 
-        cudaMallocHost((void**)&random_x, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_x, sizeof(real)*N_P);
-        cudaMallocHost((void**)&random_y, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_y, sizeof(real)*N_P);
-        cudaMallocHost((void**)&random_z, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_z, sizeof(real)*N_P);
+        real *random_y, *dev_random_y;
+        CUDA_CHECK(cudaMallocHost((void**)&random_y, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_random_y, sizeof(real)*N_P));
+
+        real *random_z, *dev_random_z;
+        CUDA_CHECK(cudaMallocHost((void**)&random_z, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_random_z, sizeof(real)*N_P));
 
         #ifdef MULTISIZE
         real *random_s, *dev_random_s;
-        cudaMallocHost((void**)&random_s, sizeof(real)*N_P); cudaMalloc((void**)&dev_random_s, sizeof(real)*N_P);
+        CUDA_CHECK(cudaMallocHost((void**)&random_s, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_random_s, sizeof(real)*N_P));
         #endif // MULTISIZE
 
         rand_generator.seed(0); // keep initialization reproducible across runs
+
+        #ifdef MULTISIZE
+        // sample grain properties before positions so settled spatial distributions can depend on size
+        real idx_swarm = -0.5;  // equal represented mass per swarm
+        #ifdef RADIATION
+        idx_swarm = -1.5;       // equal represented surface area per swarm, see _get_grain_number
+        #endif // RADIATION
+        #ifdef COLLISION_LINEAR_TEST
+        rand_gamma_k2(random_s, N_P);
+        #else
+        rand_powerlaw(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
+        #endif // COLLISION_LINEAR_TEST
+        #endif // MULTISIZE
 
         #ifdef IMPORTGAS
         LOAD_GAS_DATA_TO_VRAM(idx_from);
 
         real *epsilon;
-        cudaMallocHost((void**)&epsilon,  sizeof(real)*N_G);
+        CUDA_CHECK(cudaMallocHost((void**)&epsilon,  sizeof(real)*N_G));
         
         if (!load_epsilon(PATH, idx_from, epsilon))
         {
@@ -144,33 +164,24 @@ int main (int argc, char **argv)
             return 1;
         }
 
-        // use one imported total-dust spatial distribution for all grain species sampled below
-        rand_from_file(random_x, random_y, random_z, N_P, gasdens, epsilon);
+        // use one imported total-dust spatial distribution for all previously sampled grain species
+        rand_from_file(random_x, random_y, random_z, N_P, gas_dens, epsilon);
         
-        cudaFreeHost(epsilon);
+        CUDA_CHECK(cudaFreeHost(epsilon));
         #else // NOT IMPORTGAS
-        rand_uniform(random_x, N_P, INIT_XMIN, INIT_XMAX);
-        rand_disk(random_y, random_z, N_P, S_0);
+        #if defined(MULTISIZE) && defined(DIFFUSION)
+        rand_disk_poly(random_x, random_y, random_z, random_s, N_P);
+        #else // NOT MULTISIZE or NO DIFFUSION
+        rand_disk_mono(random_x, random_y, random_z, S_0,      N_P);
+        #endif // MULTISIZE and DIFFUSION
         #endif // IMPORTGAS
-        
-        #ifdef MULTISIZE
-        real idx_swarm = -0.5;  // equal represented mass per swarm
-        #if defined(TRANSPORT) && defined(RADIATION)
-        idx_swarm = -1.5;       // equal represented surface area per swarm, see _get_grain_number
-        #endif // TRANSPORT && RADIATION
-        #ifdef COLLISION_LINEAR_TEST
-        rand_4_linear(random_s, N_P);
-        #else
-        rand_pow_law(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
-        #endif
-        #endif // MULTISIZE
 
-        cudaMemcpy(dev_random_x, random_x, sizeof(real)*N_P, cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_random_y, random_y, sizeof(real)*N_P, cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_random_z, random_z, sizeof(real)*N_P, cudaMemcpyHostToDevice);
+        CUDA_CHECK(cudaMemcpy(dev_random_x, random_x, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_random_y, random_y, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_random_z, random_z, sizeof(real)*N_P, cudaMemcpyHostToDevice));
 
         #ifdef MULTISIZE
-        cudaMemcpy(dev_random_s, random_s, sizeof(real)*N_P, cudaMemcpyHostToDevice);
+        CUDA_CHECK(cudaMemcpy(dev_random_s, random_s, sizeof(real)*N_P, cudaMemcpyHostToDevice));
         #endif // MULTISIZE
 
         // convert sampled coordinates and sizes into the device particle state
@@ -179,26 +190,32 @@ int main (int argc, char **argv)
             , dev_random_s
             #endif // MULTISIZE
         );
+        CUDA_KERNEL_CHECK("particle_init");
 
-        cudaFreeHost(random_x); cudaFree(dev_random_x);
-        cudaFreeHost(random_y); cudaFree(dev_random_y);
-        cudaFreeHost(random_z); cudaFree(dev_random_z);
+        CUDA_CHECK(cudaFreeHost(random_x));
+        CUDA_CHECK(cudaFree(dev_random_x));
+        CUDA_CHECK(cudaFreeHost(random_y));
+        CUDA_CHECK(cudaFree(dev_random_y));
+        CUDA_CHECK(cudaFreeHost(random_z));
+        CUDA_CHECK(cudaFree(dev_random_z));
 
         #ifdef MULTISIZE
-        cudaFreeHost(random_s); cudaFree(dev_random_s);
+        CUDA_CHECK(cudaFreeHost(random_s));
+        CUDA_CHECK(cudaFree(dev_random_s));
         #endif // MULTISIZE
         
-        #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
-        rs_swarm_init <<< NB_P, TPB >>> (dev_rs_swarm);
-        #endif // COLLISION || (TRANSPORT && DIFFUSION)
+        #if defined(COLLISION) || defined(DIFFUSION)
+        rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
+        CUDA_KERNEL_CHECK("rngstate_init");
+        #endif // COLLISION || DIFFUSION
         
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
         save_variable(PATH + "variables.txt");
 
-        #if defined(TRANSPORT) && defined(RADIATION)
+        #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from, false);
-        #endif // TRANSPORT && RADIATION
+        #endif // RADIATION
 
         #ifdef SAVE_DENS
         SAVE_DUSTDENS_TO_FILE(idx_from);
@@ -211,8 +228,8 @@ int main (int argc, char **argv)
     else
     {
         // resume particle and imported-gas states from the requested output frame
-
         std::stringstream convert{argv[1]};
+
         if (!(convert >> idx_from))
         {
             std::cerr << "Error: Invalid resume file number: " << argv[1] << std::endl;
@@ -225,40 +242,13 @@ int main (int argc, char **argv)
         LOAD_GAS_DATA_TO_VRAM(idx_from);
         #endif // IMPORTGAS
 
-        #if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
-        rs_swarm_init <<< NB_P, TPB >>> (dev_rs_swarm);
-        #endif // COLLISION || (TRANSPORT && DIFFUSION)
+        #if defined(COLLISION) || defined(DIFFUSION)
+        rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
+        CUDA_KERNEL_CHECK("rngstate_init");
+        #endif // COLLISION || DIFFUSION
         
         msg_output(idx_from);
     }
-
-    #if !defined(TRANSPORT) && !defined(COLLISION)
-    {
-        std::cerr << "Error: No evolution module is enabled." << std::endl;
-        return 1;
-    }
-    #endif // NO TRANSPORT and NO COLLISION
-
-    #ifdef LOGTIMING
-    #ifdef LOGOUTPUT
-    {
-        std::cerr << "Error: LOGTIMING and LOGOUTPUT cannot be enabled simultaneously." << std::endl;
-        return 1;
-    }
-    #endif // LOGOUTPUT
-    #ifdef TRANSPORT
-    {
-        std::cerr << "Error: LOGTIMING is not compatible with TRANSPORT module." << std::endl;
-        return 1;
-    }
-    #endif // TRANSPORT
-    #ifdef SAVE_DENS
-    {
-        std::cerr << "Error: LOGTIMING is not compatible with SAVE_DENS module." << std::endl;
-        return 1;
-    }
-    #endif // SAVE_DENS
-    #endif // LOGTIMING
 
     #ifdef LOGTIMING
     clock_sim = (idx_from == 0) ? 0.0 : int_pow(LOG_BASE, idx_from)*DT_OUT;
@@ -272,20 +262,23 @@ int main (int argc, char **argv)
     {
         // collisions change grain properties but not positions, so one KD tree serves the full interval
         col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
-        cukd::buildTree <tree, tree_traits> (dev_col_tree, col_tree_size, dev_boundbox);
+        CUDA_KERNEL_CHECK("col_tree_init");
+        cukd::buildTree <tree, tree_traits> (dev_col_tree, N_T, dev_boundbox);
+        CUDA_KERNEL_CHECK("cukd::buildTree");
 
         real elapsed = 0.0;
         while (elapsed < duration)
         {
-            // calculate rates from a read-only snapshot and copy its diagnostics back to the live array
-            cudaMemcpy(dev_particle_old, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToDevice);
-            int tree_blocks = col_tree_size/TPB + 1;
-            col_rate_calc <<< tree_blocks, TPB >>> (dev_col_rate, dev_particle_old, dev_col_tree, dev_boundbox
+            // freeze only the species fields changed by collisions while positions and velocities remain fixed
+            col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
+            CUDA_KERNEL_CHECK("col_snap_save");
+            col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
+                dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox
                 #ifdef IMPORTGAS
-                , dev_gasdens
+                , dev_gas_dens
                 #endif
             );
-            cudaMemcpy(dev_particle, dev_particle_old, sizeof(swarm)*N_P, cudaMemcpyDeviceToDevice);
+            CUDA_KERNEL_CHECK("col_rate_calc");
 
             // use the largest total propensity to control every representative's event probability
             thrust::device_ptr <const real> rate_ptr(dev_col_rate);
@@ -302,13 +295,16 @@ int main (int argc, char **argv)
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
             dt_col = fmin(CFL_COL/max_rate, remaining);
-            col_proc_exec <<< tree_blocks, TPB >>> (dev_particle, dev_particle_old, dev_rs_swarm, dt_col,
-                dev_col_tree, dev_boundbox
+            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate,
+                dev_col_dist, dev_size_old, dev_numr_old,
+                dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
-                , dev_gasdens
+                dev_gas_dens,
                 #endif
+                dt_col
             );
-            cudaDeviceSynchronize();
+            CUDA_KERNEL_CHECK("col_event_run");
+            CUDA_CHECK(cudaDeviceSynchronize());
 
             elapsed += dt_col;
             clock_dyn = elapsed;
@@ -340,13 +336,14 @@ int main (int argc, char **argv)
         {
             #ifdef TRANSPORT
             // reduce all local inverse rates to a globally valid dynamics timestep
-            dt_rate_calc <<< NB_P, TPB >>> (dev_dt_rate, dev_particle
+            dt_rates_calc <<< NB_P, TPB >>> (dev_dt_rates, dev_particle
                 #ifdef IMPORTGAS
-                , dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz,
-                  dev_gasdens_next, dev_gasvelx_next, dev_gasvely_next, dev_gasvelz_next
+                , dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
+                  dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
                 #endif
             );
-            thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rate);
+            CUDA_KERNEL_CHECK("dt_rates_calc");
+            thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rates);
             real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
             dt_dyn = fmin(DT_DYN, fmin(1.0/max_dt_rate, dt_out - clock_out));
             if (dt_dyn < DT_MIN) break;
@@ -355,8 +352,9 @@ int main (int argc, char **argv)
             // interpolate the working gas fields to the midpoint time of this dynamics step
             real gas_target = (clock_out + 0.5*dt_dyn)/dt_out;
             real gas_blend = (gas_target - gas_frac)/(1.0 - gas_frac);
-            gas_interp_calc <<< NB_A, TPB >>> (dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz,
-                dev_gasdens_next, dev_gasvelx_next, dev_gasvely_next, dev_gasvelz_next, gas_blend);
+            gas_lerp_calc <<< NB_G, TPB >>> (dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
+                dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend);
+            CUDA_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
             #endif
 
@@ -369,41 +367,54 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the first half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rs_swarm, 0.5*dt_dyn
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate,
                 #ifdef IMPORTGAS
-                , dev_gasdens
+                dev_gas_dens,
                 #endif
+                0.5*dt_dyn
             );
+            CUDA_KERNEL_CHECK("diffusion_pos");
             #endif
 
             #ifdef RADIATION
             // drift to midpoint positions and reconstruct the optical depth used by the force solve
             ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt_dyn);
-            optdepth_init <<< NB_A, TPB >>> (dev_optdepth);
+            CUDA_KERNEL_CHECK("ssa_substep_1");
+            optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
+            CUDA_KERNEL_CHECK("optdepth_init");
             optdepth_scat <<< NB_P, TPB >>> (dev_optdepth, dev_particle);
-            optdepth_calc <<< NB_A, TPB >>> (dev_optdepth);
+            CUDA_KERNEL_CHECK("optdepth_scat");
+            optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);
+            CUDA_KERNEL_CHECK("optdepth_calc");
             optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
-            ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth, dt_dyn
+            CUDA_KERNEL_CHECK("optdepth_csum");
+            ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth,
                 #ifdef IMPORTGAS
-                , dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz
+                dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
                 #endif
+                dt_dyn
             );
+            CUDA_KERNEL_CHECK("ssa_substep_2");
             #else
             // complete transport in one launch when no midpoint radiation field is required
-            ssa_transport <<< NB_P, TPB >>> (dev_particle, dt_dyn
+            ssa_transport <<< NB_P, TPB >>> (dev_particle,
                 #ifdef IMPORTGAS
-                , dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz
+                dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
                 #endif
+                dt_dyn
             );
+            CUDA_KERNEL_CHECK("ssa_transport");
             #endif
 
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rs_swarm, 0.5*dt_dyn
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate,
                 #ifdef IMPORTGAS
-                , dev_gasdens
+                dev_gas_dens,
                 #endif
+                0.5*dt_dyn
             );
+            CUDA_KERNEL_CHECK("diffusion_pos");
             #endif
 
             #ifdef COLLISION
@@ -411,7 +422,7 @@ int main (int argc, char **argv)
             evolve_collisions(0.5*dt_dyn);
             #endif
 
-            cudaDeviceSynchronize();
+            CUDA_CHECK(cudaDeviceSynchronize());
             clock_sim += dt_dyn;
             clock_out += dt_dyn;
             count_dyn++;
@@ -426,8 +437,9 @@ int main (int argc, char **argv)
             #ifdef IMPORTGAS
             real gas_target = (clock_out + 0.5*duration)/dt_out;
             real gas_blend = (gas_target - gas_frac)/(1.0 - gas_frac);
-            gas_interp_calc <<< NB_A, TPB >>> (dev_gasdens, dev_gasvelx, dev_gasvely, dev_gasvelz,
-                dev_gasdens_next, dev_gasvelx_next, dev_gasvely_next, dev_gasvelz_next, gas_blend);
+            gas_lerp_calc <<< NB_G, TPB >>> (dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
+                dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend);
+            CUDA_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
             #endif
             evolve_collisions(duration);
@@ -439,16 +451,16 @@ int main (int argc, char **argv)
 
         #ifdef IMPORTGAS
         // replace the incrementally blended working fields by the exact endpoint snapshot
-        cudaMemcpy(dev_gasdens, dev_gasdens_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
-        cudaMemcpy(dev_gasvelx, dev_gasvelx_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
-        cudaMemcpy(dev_gasvely, dev_gasvely_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
-        cudaMemcpy(dev_gasvelz, dev_gasvelz_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice);
+        CUDA_CHECK(cudaMemcpy(dev_gas_dens, dev_gas_dens_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_gas_velx, dev_gas_velx_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_gas_vely, dev_gas_vely_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_gas_velz, dev_gas_velz_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
         #endif // IMPORTGAS
 
         // reconstruct requested mesh fields and save particle frames under the configured output cadence
-        #if defined(TRANSPORT) && defined(RADIATION)
+        #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_file, false);
-        #endif // TRANSPORT && RADIATION
+        #endif // RADIATION
     
         #ifdef SAVE_DENS
         SAVE_DUSTDENS_TO_FILE(idx_file);

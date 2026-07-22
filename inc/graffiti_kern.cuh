@@ -1,11 +1,35 @@
 #ifndef GRAFFITI_KERN_CUH 
 #define GRAFFITI_KERN_CUH
 
-#include <const.cuh>
+#if defined(DIFFUSION) && !defined(TRANSPORT)
+#error "DIFFUSION requires TRANSPORT"
+#endif
+
+#if defined(RADIATION) && !defined(TRANSPORT)
+#error "RADIATION requires TRANSPORT"
+#endif
 
 #if defined(COLLISION) && !defined(MULTISIZE)
 #error "COLLISION requires MULTISIZE because collision outcomes evolve grain size and represented grain number"
 #endif
+
+#if !defined(TRANSPORT) && !defined(COLLISION)
+#error "No evolution module is enabled"
+#endif
+
+#if defined(LOGTIMING) && defined(LOGOUTPUT)
+#error "LOGTIMING and LOGOUTPUT cannot be enabled simultaneously"
+#endif
+
+#if defined(LOGTIMING) && defined(TRANSPORT)
+#error "LOGTIMING is not compatible with TRANSPORT"
+#endif
+
+#if defined(LOGTIMING) && defined(SAVE_DENS)
+#error "LOGTIMING is not compatible with SAVE_DENS"
+#endif
+
+#include <const.cuh>
 
 // =========================================================================================================================
 // particle initialization
@@ -20,9 +44,9 @@ __global__ void particle_init (swarm *dev_particle, const real *dev_random_x, co
 // imported gas interpolation
 
 #ifdef IMPORTGAS
-__global__ void gas_interp_calc (real *dev_gasdens, real *dev_gasvelx, real *dev_gasvely, real *dev_gasvelz,
-    const real *dev_gasdens_next, const real *dev_gasvelx_next,
-    const real *dev_gasvely_next, const real *dev_gasvelz_next, real blend);
+__global__ void gas_lerp_calc (real *dev_gas_dens, real *dev_gas_velx, real *dev_gas_vely, real *dev_gas_velz,
+    const real *dev_gas_dens_next, const real *dev_gas_velx_next,
+    const real *dev_gas_vely_next, const real *dev_gas_velz_next, real blend);
 #endif
 
 // =========================================================================================================================
@@ -38,34 +62,38 @@ __global__ void dustdens_calc (real *dev_dustdens);
 // representative-particle collisions and random states
 
 #ifdef COLLISION
-__global__ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col_tree, const bbox *dev_boundbox
+__global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
+__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
+    const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    , const real *dev_gas_dens
     #endif
 );
-__global__ void col_proc_exec (swarm *dev_particle, const swarm *dev_particle_old, curs *dev_rs_swarm, real dt_col,
-    const tree *dev_col_tree, const bbox *dev_boundbox
+__global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
+    const real *dev_col_dist, const real *dev_size_old, const real *dev_numr_old,
+    const tree *dev_col_tree, const bbox *dev_boundbox,
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    const real *dev_gas_dens,
     #endif
+    real dt_col
 );
 __global__ void col_tree_init (tree *dev_col_tree, const swarm *dev_particle);
 #endif // COLLISION
 
-#if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
-__global__ void rs_swarm_init (curs *dev_rs_swarm, int seed = 1);
-#endif // COLLISION || (TRANSPORT && DIFFUSION)
+#if defined(COLLISION) || defined(DIFFUSION)
+__global__ void rngstate_init (curs *dev_rngstate, int seed = 1);
+#endif // COLLISION || DIFFUSION
 
 // =========================================================================================================================
 // particle transport and runtime timestep
 
 #ifdef TRANSPORT
-__global__ void dt_rate_calc (real *dev_dt_rate, const swarm *dev_particle
+__global__ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     #ifdef IMPORTGAS
-    , const real *dev_gasdens, const real *dev_gasvelx,
-      const real *dev_gasvely, const real *dev_gasvelz,
-      const real *dev_gasdens_next, const real *dev_gasvelx_next,
-      const real *dev_gasvely_next, const real *dev_gasvelz_next
+    , const real *dev_gas_dens, const real *dev_gas_velx,
+      const real *dev_gas_vely, const real *dev_gas_velz,
+      const real *dev_gas_dens_next, const real *dev_gas_velx_next,
+      const real *dev_gas_vely_next, const real *dev_gas_velz_next
     #endif
 );
 
@@ -76,30 +104,33 @@ __global__ void optdepth_calc (real *dev_optdepth);
 __global__ void optdepth_csum (real *dev_optdepth);
 __global__ void optdepth_mean (real *dev_optdepth);
 __global__ void ssa_substep_1 (swarm *dev_particle, real dt);
-__global__ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth, real dt
+__global__ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     #ifdef IMPORTGAS
-    , const real *dev_gasdens, const real *dev_gasvelx, const real *dev_gasvely, const real *dev_gasvelz
+    const real *dev_gas_dens, const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz,
     #endif
+    real dt
 );
 #else  // NO RADIATION
-__global__ void ssa_transport (swarm *dev_particle, real dt
+__global__ void ssa_transport (swarm *dev_particle,
     #ifdef IMPORTGAS
-    , const real *dev_gasdens, const real *dev_gasvelx, const real *dev_gasvely, const real *dev_gasvelz
+    const real *dev_gas_dens, const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz,
     #endif
+    real dt
 );
 #endif // RADIATION
+#endif // TRANSPORT
 
 // =========================================================================================================================
 // turbulent spatial diffusion
 
 #ifdef DIFFUSION
-__global__ void diffusion_pos (swarm *dev_particle, curs *dev_rs_swarm, real dt
+__global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    const real *dev_gas_dens,
     #endif
+    real dt
 );
 #endif // DIFFUSION
-#endif // TRANSPORT
 
 // =========================================================================================================================
 

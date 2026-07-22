@@ -177,9 +177,16 @@ With `-DIMPORTGAS`, the following calculations use imported data instead of anal
 graffiti/
 ├── inc/                      # Header files
 │   ├── const.cuh            # Default simulation constants
-│   ├── graffiti_host.cuh    # Host function declarations
 │   ├── graffiti_kern.cuh    # Kernel declarations
-│   ├── helpers_*.cuh        # Device helper functions
+│   ├── host_rand.cuh        # Host initialization and random sampling
+│   ├── host_file.cuh        # Host file, output, and timing utilities
+│   ├── collision.cuh        # Collision device utilities
+│   ├── diffusion.cuh        # Diffusion device utilities
+│   ├── interpval.cuh        # Field-interpolation utilities
+│   ├── paramgrid.cuh        # Grid and coordinate utilities
+│   ├── paramphys.cuh        # Physical-parameter utilities
+│   ├── scatfield.cuh        # Particle-to-grid scattering utilities
+│   ├── transport.cuh        # Transport device utilities
 │   └── cukd/                # KD-tree library (header-only)
 ├── src/                      # Default source implementations
 │   ├── graffiti_main.cu     # Main program & evolution loop
@@ -204,7 +211,7 @@ graffiti/
 
 - **`src/graffiti_main.cu`**: Program entry point, main evolution loop, tree building, and I/O orchestration
 - **`inc/const.cuh`**: Single source for simulation constants and structures (e.g., `struct swarm`)
-- **`src/col_*.cu`**: Collision-related kernels including rate calculation and handling (`col_rate_calc`, `col_proc_exec`)
+- **`src/col_*.cu`**: Collision-related kernels including rate calculation and event handling (`col_rate_calc`, `col_event_run`)
 - **`src/*_init.cu`**: Initialization routines for particles, grids, and RNG states
 
 ### Particle Data Structure
@@ -222,7 +229,7 @@ This representation differs from imported gas data (`gasvelx/y/z`), which stores
 
 ### Coding Conventions
 
-- **Declarations**: Kernels in `inc/graffiti_kern.cuh`, host helpers in `inc/graffiti_host.cuh`, device helpers in `inc/helpers_*.cuh`
+- **Declarations**: Kernels in `inc/graffiti_kern.cuh`, host utilities in `inc/host_rand.cuh` and `inc/host_file.cuh`, and device utilities in the remaining topical headers
 - **Implementations**: In corresponding `src/*.cu` files
 - **Memory**: Host uses `cudaMallocHost` (pinned), device uses `cudaMalloc`
 - **Grid Indexing**: Cells computed from positions; respect `N_X/N_Y/N_Z` constants
@@ -233,7 +240,7 @@ This representation differs from imported gas data (`gasvelx/y/z`), which stores
 Binary output files saved to `out/<MODEL>/`:
 - Particle data: positions, velocities (and specific angular momenta), sizes, masses
 - Grid fields: optical depth, dust density
-- Frame naming controlled by `open_bin_file()` and `save_bin_file()` in `inc/graffiti_host.cuh`
+- Frame naming and binary I/O are defined in `inc/host_file.cuh`
 
 ## License
 

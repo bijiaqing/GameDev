@@ -1,14 +1,14 @@
-#ifndef HELPERS_COLLISION_CUH
-#define HELPERS_COLLISION_CUH
+#ifndef COLLISION_CUH
+#define COLLISION_CUH
 
 #ifdef COLLISION
 
 #include <cassert>      // for assert
 
 #include <const.cuh>
-#include <helpers_paramgrid.cuh>
-#include <helpers_interpval.cuh>
-#include <helpers_paramphys.cuh>
+#include <paramgrid.cuh>
+#include <interpval.cuh>
+#include <paramphys.cuh>
 
 #include "cukd/knn.h"   // for cukd::cct::knn, cukd::HeapCandidateList
 
@@ -246,9 +246,9 @@ real _get_vrel_t (real R, real St_i, real St_j, real h_g)
 
 // combine resolved Cartesian motion with unresolved Brownian and turbulent speeds in quadrature
 __device__ __forceinline__
-real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
+real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    , const real *dev_gas_dens
     #endif
 )
 {
@@ -261,13 +261,8 @@ real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
     real z_i = dev_particle[idx_old_i].position.z;
     real z_j = dev_particle[idx_old_j].position.z;
     
-    #ifdef MULTISIZE
-    real s_i = dev_particle[idx_old_i].par_size;
-    real s_j = dev_particle[idx_old_j].par_size;
-    #else
-    real s_i = S_0;
-    real s_j = S_0;
-    #endif // MULTISIZE
+    real s_i = dev_size_old[idx_old_i];
+    real s_j = dev_size_old[idx_old_j];
     
     real R_i = y_i*sin(z_i);
     real R_j = y_j*sin(z_j);
@@ -283,12 +278,12 @@ real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
 
     real St_i = _get_St(R_i, Z_i, s_i, h_i
         #ifdef IMPORTGAS
-        , x_i, y_i, z_i, dev_gasdens
+        , x_i, y_i, z_i, dev_gas_dens
         #endif
     );
     real St_j = _get_St(R_j, Z_j, s_j, h_j
         #ifdef IMPORTGAS
-        , x_j, y_j, z_j, dev_gasdens
+        , x_j, y_j, z_j, dev_gas_dens
         #endif
     );
 
@@ -318,9 +313,10 @@ real _get_vrel (const swarm *dev_particle, int idx_old_i, int idx_old_j
 
 // calculate the pair propensity numerator N_j K_ij before division by the local KNN measure
 template <KernelType kernel> __device__ __forceinline__
-real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
+real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
+    int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    , const real *dev_gas_dens
     #endif
 )
 {
@@ -331,11 +327,7 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     // the probability of a collision between particles i and j is determined as 
     // lambda_ij = N_j * K_ij / V, where K_ij is the coagulation kernel and V is the volume of the cell
     
-    #ifdef MULTISIZE
-    real numr_j = dev_particle[idx_old_j].par_numr;
-    #else
-    real numr_j = M_D / (static_cast<real>(N_P)*_get_grain_mass(S_0));
-    #endif // MULTISIZE
+    real numr_j = dev_numr_old[idx_old_j];
 
     if constexpr (kernel == CONSTANT_KERNEL)
     {
@@ -343,26 +335,16 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     }
     else if constexpr (kernel == LINEAR_KERNEL)
     {
-        #ifdef MULTISIZE
-        real s_i = dev_particle[idx_old_i].par_size;
-        real s_j = dev_particle[idx_old_j].par_size;
-        #else
-        real s_i = S_0;
-        real s_j = S_0;
-        #endif // MULTISIZE
+        real s_i = dev_size_old[idx_old_i];
+        real s_j = dev_size_old[idx_old_j];
 
         // m_i + m_j
         return LAMBDA_0*numr_j*0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
     }
     else if constexpr (kernel == PRODUCT_KERNEL)
     {
-        #ifdef MULTISIZE
-        real s_i = dev_particle[idx_old_i].par_size;
-        real s_j = dev_particle[idx_old_j].par_size;
-        #else
-        real s_i = S_0;
-        real s_j = S_0;
-        #endif // MULTISIZE
+        real s_i = dev_size_old[idx_old_i];
+        real s_j = dev_size_old[idx_old_j];
         
         // m_i * m_j
         return LAMBDA_0*numr_j*_get_grain_mass(s_i)*_get_grain_mass(s_j);
@@ -371,17 +353,12 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
     {
         // use K_ij = sigma_ij delta_v_ij for the physical collision kernel
         
-        #ifdef MULTISIZE
-        real s_i = dev_particle[idx_old_i].par_size;
-        real s_j = dev_particle[idx_old_j].par_size;
-        #else
-        real s_i = S_0;
-        real s_j = S_0;
-        #endif // MULTISIZE
+        real s_i = dev_size_old[idx_old_i];
+        real s_j = dev_size_old[idx_old_j];
         
-        real v_rel_ij = _get_vrel(dev_particle, idx_old_i, idx_old_j
+        real v_rel_ij = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
-            , dev_gasdens
+            , dev_gas_dens
             #endif
         );
         real sigma_ij = M_PI*(s_i + s_j)*(s_i + s_j) / 4.0;
@@ -397,13 +374,13 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
             real St_i = _get_St(R_i, Z_i, s_i, _get_hg(R_i)
                 #ifdef IMPORTGAS
                 , dev_particle[idx_old_i].position.x, dev_particle[idx_old_i].position.y,
-                  dev_particle[idx_old_i].position.z, dev_gasdens
+                  dev_particle[idx_old_i].position.z, dev_gas_dens
                 #endif
             );
             real St_j = _get_St(R_j, Z_j, s_j, _get_hg(R_j)
                 #ifdef IMPORTGAS
                 , dev_particle[idx_old_j].position.x, dev_particle[idx_old_j].position.y,
-                  dev_particle[idx_old_j].position.z, dev_gasdens
+                  dev_particle[idx_old_j].position.z, dev_gas_dens
                 #endif
             );
             real H_i = R_i*_get_hd(R_i, St_i);
@@ -429,4 +406,4 @@ real _get_col_rate_ij (const swarm *dev_particle, int idx_old_i, int idx_old_j
 
 // =========================================================================================================================
 
-#endif // NOT HELPERS_COLLISION_CUH
+#endif // NOT COLLISION_CUH

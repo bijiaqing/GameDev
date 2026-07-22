@@ -1,9 +1,9 @@
 #ifdef COLLISION
 
 #include <graffiti_kern.cuh>
-#include <helpers_paramgrid.cuh>  // for _get_loc_x/y/z, _is_in_bounds, _get_cell_index
-#include <helpers_paramphys.cuh>  // for _get_hg
-#include <helpers_collision.cuh>  // for candidatelist, KernelType, _get_col_rate_ij
+#include <paramgrid.cuh>  // for _get_loc_x/y/z, _is_in_bounds, _get_cell_index
+#include <paramphys.cuh>  // for _get_hg
+#include <collision.cuh>  // for candidatelist, KernelType, _get_col_rate_ij
 
 // =========================================================================================================================
 // kernel: col_rate_calc
@@ -18,18 +18,19 @@
 // =========================================================================================================================
 
 __global__
-void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col_tree, const bbox *dev_boundbox
+void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
+    const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    , const real *dev_gas_dens
     #endif
 )
 {
     int idx_tree = threadIdx.x+blockDim.x*blockIdx.x;
-
-    int tree_size = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P;
-    if (idx_tree >= tree_size || dev_col_tree[idx_tree].image != 0) return;
+    if (idx_tree >= N_T || dev_col_tree[idx_tree].image != 0) return;
+    
     int idx_old_i = dev_col_tree[idx_tree].index_old;
     dev_col_rate[idx_old_i] = 0.0;
+    dev_col_dist[idx_old_i] = 0.0;
 
     real x = dev_particle[idx_old_i].position.x;
     real y = dev_particle[idx_old_i].position.y;
@@ -46,7 +47,7 @@ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col
     float max_search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
         
     candidatelist query_result(max_search_dist);
-    cukd::cct::knn <candidatelist, tree, tree_traits> (query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, tree_size);
+    cukd::cct::knn <candidatelist, tree, tree_traits> (query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T);
 
     real col_rate_i = 0.0;
     float max_dist2 = 0.0f;
@@ -63,9 +64,10 @@ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col
 
                 float dist2 = query_result.returnDist2(j);
                 max_dist2 = fmaxf(max_dist2, dist2);
-                col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (dev_particle, idx_old_i, idx_old_j
+                col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+                    dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
                     #ifdef IMPORTGAS
-                    , dev_gasdens
+                    , dev_gas_dens
                     #endif
                 );
             }
@@ -83,8 +85,7 @@ void col_rate_calc (real *dev_col_rate, swarm *dev_particle, const tree *dev_col
     col_rate_i = (volume > 0.0) ? col_rate_i/volume : 0.0;
 
     // retain the neighborhood radius and total rate for event execution
-    dev_particle[idx_old_i].max_dist = radius;
-    dev_particle[idx_old_i].col_rate = col_rate_i;
+    dev_col_dist[idx_old_i] = radius;
     dev_col_rate[idx_old_i] = col_rate_i;
 }
 

@@ -1,9 +1,9 @@
-#if defined(TRANSPORT) && defined(DIFFUSION)
+#ifdef DIFFUSION
 
 #include <graffiti_kern.cuh>
-#include <helpers_paramphys.cuh>  // for _get_hg, _get_nu
-#include <helpers_diffusion.cuh>  // for _get_term_grad_cyl
-#include <helpers_transport.cuh>  // for _if_out_of_box
+#include <paramphys.cuh>  // for _get_hg, _get_nu
+#include <diffusion.cuh>  // for _get_term_grad_cyl
+#include <transport.cuh>  // for _if_out_of_box
 
 // =========================================================================================================================
 // kernel: diffusion_pos
@@ -18,129 +18,125 @@
 // =========================================================================================================================
 
 __global__
-void diffusion_pos (swarm *dev_particle, curs *dev_rs_swarm, real dt
+void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    const real *dev_gas_dens,
     #endif // IMPORTGAS
+    real dt
 )
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    if (idx >= N_P) return;
 
-    if (idx < N_P)
+    real x = dev_particle[idx].position.x;
+    real y = dev_particle[idx].position.y;
+    real z = dev_particle[idx].position.z;
+
+    real R = y*sin(z);
+    real Z = y*cos(z);
+
+    real lx = dev_particle[idx].velocity.x;
+    real vy = dev_particle[idx].velocity.y;
+    real lz = dev_particle[idx].velocity.z;
+
+    // reconstruct the pre-displacement velocity in a fixed Cartesian basis
+    real vphi  = lx / R;
+    real vtheta = lz / y;
+    real vel_R = vy*sin(z) + vtheta*cos(z);
+    real vel_Z = vy*cos(z) - vtheta*sin(z);
+    real vel_Cx = vel_R*cos(x) - vphi*sin(x);
+    real vel_Cy = vel_R*sin(x) + vphi*cos(x);
+
+    real h_g = _get_hg(R);
+    real nu = _get_nu(R, h_g);
+
+    curs rs_swarm = dev_rngstate[idx]; // keep the random state local until all directional draws are complete
+
+    real delta_x = 0.0;
+    real delta_R = 0.0;
+    real delta_Z = 0.0;
+
+    real term_x, term_R, term_Z;
+
+    // evaluate the logarithmic gas-density gradients driving concentration diffusion
+    _get_term_grad_cyl(x, y, z, term_x, term_R, term_Z
+        #ifdef IMPORTGAS
+        , dev_gas_dens
+        #endif // IMPORTGAS
+    );
+
+    if (N_X > 1)
     {
-        real x = dev_particle[idx].position.x;
-        real y = dev_particle[idx].position.y;
-        real z = dev_particle[idx].position.z;
+        // convert physical azimuthal diffusion length to angular drift and noise
+        real coeff_x = nu / SCHMIDT_X;
 
-        real R = y*sin(z);
-        real Z = y*cos(z);
+        real avg_x = dt*coeff_x*term_x / (R*R);
+        real std_x = sqrt(2.0*dt*coeff_x) / R;
 
-        real lx = dev_particle[idx].velocity.x;
-        real vy = dev_particle[idx].velocity.y;
-        real lz = dev_particle[idx].velocity.z;
-
-        // reconstruct the pre-displacement velocity in a fixed Cartesian basis
-        real vphi  = lx / R;
-        real vtheta = lz / y;
-        real vel_R = vy*sin(z) + vtheta*cos(z);
-        real vel_Z = vy*cos(z) - vtheta*sin(z);
-        real vel_Cx = vel_R*cos(x) - vphi*sin(x);
-        real vel_Cy = vel_R*sin(x) + vphi*cos(x);
-        
-        real h_g = _get_hg(R);
-        real nu = _get_nu(R, h_g);
-        
-        curs rs_swarm = dev_rs_swarm[idx]; // keep the random state local until all directional draws are complete
-
-        real delta_x = 0.0;
-        real delta_R = 0.0;
-        real delta_Z = 0.0;
-
-        real term_x, term_R, term_Z;
-        
-        // evaluate the logarithmic gas-density gradients driving concentration diffusion
-        _get_term_grad_cyl(x, y, z, term_x, term_R, term_Z
-            #ifdef IMPORTGAS
-            , dev_gasdens
-            #endif // IMPORTGAS
-        );
-        
-        if (N_X > 1)
-        {
-            // convert physical azimuthal diffusion length to angular drift and noise
-            real coeff_x = nu / SC_X;
-
-            real avg_x = dt*coeff_x*term_x / (R*R);
-            real std_x = sqrt(2.0*dt*coeff_x) / R;
-
-            delta_x = avg_x + std_x*curand_normal_double(&rs_swarm);
-        }
-        
-        if (N_Y > 1)
-        {
-            // include gas-density drift, cylindrical Ito drift, and variable-diffusivity drift
-            real coeff_R = nu / SC_R;
-
-            real avg_R = dt*coeff_R*(term_R + 1.0 / R);
-
-            #ifndef CONST_NU
-            // given nu proportional to R^(IDX_Q + 1.5), d(coeff_R)/dR = (IDX_Q + 1.5)*coeff_R/R
-            avg_R += dt*coeff_R*(IDX_Q + 1.5) / R;
-            #endif // NOT CONST_NU
-
-            real std_R = sqrt(2.0*dt*coeff_R);
-
-            delta_R = avg_R + std_R*curand_normal_double(&rs_swarm);
-        }
-
-        if (N_Z > 1)
-        {
-            // apply physical vertical diffusion without an additional coordinate metric
-            real coeff_Z = nu / SC_Z;
-
-            real avg_Z = dt*coeff_Z*term_Z;
-            real std_Z = sqrt(2.0*dt*coeff_Z);
-
-            delta_Z = avg_Z + std_Z*curand_normal_double(&rs_swarm);
-        }
-        
-        real x_new = x + delta_x;
-        real R_new = R + delta_R;
-        real Z_new = Z + delta_Z;
-
-        // map a negative cylindrical radius to the equivalent positive-radius coordinate
-        if (R_new < 0.0)
-        {
-            R_new = -R_new;
-            x_new += M_PI;
-        }
-
-        real y_new = sqrt(R_new*R_new + Z_new*Z_new);
-        real z_new = atan2(R_new, Z_new);
-
-        // project the unchanged Cartesian velocity into the new local spherical basis
-        real sin_znew = R_new / y_new;
-        real cos_znew = Z_new / y_new;
-        real vel_Rnew = vel_Cx*cos(x_new) + vel_Cy*sin(x_new);
-        real vphi_new = vel_Cy*cos(x_new) - vel_Cx*sin(x_new);
-
-        lx = vphi_new*R_new;
-        vy = vel_Rnew*sin_znew + vel_Z*cos_znew;
-        lz = (vel_Rnew*cos_znew - vel_Z*sin_znew)*y_new;
-
-        _if_out_of_box(x_new, y_new, z_new, lx, vy, lz);
-
-        dev_particle[idx].position.x = x_new;
-        dev_particle[idx].position.y = y_new;
-        dev_particle[idx].position.z = z_new;
-        dev_particle[idx].velocity.x = lx;
-        dev_particle[idx].velocity.y = vy;
-        dev_particle[idx].velocity.z = lz;
-
-        dev_rs_swarm[idx] = rs_swarm; // persist the advanced random stream
+        delta_x = avg_x + std_x*curand_normal_double(&rs_swarm);
     }
+
+    if (N_Y > 1)
+    {
+        // include gas-density drift, cylindrical Ito drift, and variable-diffusivity drift
+        real coeff_R = nu / SCHMIDT_R;
+        real avg_R = dt*coeff_R*(term_R + 1.0/R);
+
+        #ifndef CONST_NU
+        // use nu proportional to R^(IDX_Q + 1.5) for the radial diffusivity derivative
+        avg_R += dt*coeff_R*(IDX_Q + 1.5)/R;
+        #endif // NOT CONST_NU
+
+        real std_R = sqrt(2.0*dt*coeff_R);
+        delta_R = avg_R + std_R*curand_normal_double(&rs_swarm);
+    }
+
+    if (N_Z > 1)
+    {
+        // apply physical vertical diffusion at fixed cylindrical radius
+        real coeff_Z = nu / SCHMIDT_Z;
+        real avg_Z = dt*coeff_Z*term_Z;
+        real std_Z = sqrt(2.0*dt*coeff_Z);
+
+        delta_Z = avg_Z + std_Z*curand_normal_double(&rs_swarm);
+    }
+
+    real x_new = x + delta_x;
+    real R_new = R + delta_R;
+    real Z_new = Z + delta_Z;
+
+    // map a negative cylindrical radius to the equivalent positive-radius coordinate
+    if (R_new < 0.0)
+    {
+        R_new = -R_new;
+        x_new += M_PI;
+    }
+
+    real y_new = sqrt(R_new*R_new + Z_new*Z_new);
+    real z_new = atan2(R_new, Z_new);
+
+    // project the unchanged Cartesian velocity into the new local spherical basis
+    real sin_znew = R_new / y_new;
+    real cos_znew = Z_new / y_new;
+    real vel_Rnew = vel_Cx*cos(x_new) + vel_Cy*sin(x_new);
+    real vphi_new = vel_Cy*cos(x_new) - vel_Cx*sin(x_new);
+
+    lx = vphi_new*R_new;
+    vy = vel_Rnew*sin_znew + vel_Z*cos_znew;
+    lz = (vel_Rnew*cos_znew - vel_Z*sin_znew)*y_new;
+
+    _if_out_of_box(x_new, y_new, z_new, lx, vy, lz);
+
+    dev_particle[idx].position.x = x_new;
+    dev_particle[idx].position.y = y_new;
+    dev_particle[idx].position.z = z_new;
+    dev_particle[idx].velocity.x = lx;
+    dev_particle[idx].velocity.y = vy;
+    dev_particle[idx].velocity.z = lz;
+
+    dev_rngstate[idx] = rs_swarm; // persist the advanced random stream
 }
 
 // =========================================================================================================================
 
-#endif // TRANSPORT && DIFFUSION
+#endif // DIFFUSION

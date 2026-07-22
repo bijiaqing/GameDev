@@ -1,7 +1,7 @@
-#if defined(TRANSPORT) && defined(RADIATION)
+#ifdef RADIATION
 
 #include <graffiti_kern.cuh>
-#include <helpers_paramgrid.cuh>  // for _get_grid_volume
+#include <paramgrid.cuh>  // for _get_grid_volume
 
 // =========================================================================================================================
 // kernel: optdepth_calc
@@ -12,17 +12,15 @@ __global__
 void optdepth_calc (real *dev_optdepth)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    if (idx >= N_G) return;
 
-    if (idx < N_G)
-    {	
-        real y0, dy;
-        real volume = _get_grid_volume(idx, &y0, &dy);
-        dev_optdepth[idx] /= volume;
+    real y0, dy;
+    real volume = _get_grid_volume(idx, &y0, &dy);
+    dev_optdepth[idx] /= volume;
 
-        dev_optdepth[idx] *= y0*(dy - 1.0); // integrate extinction density across the logarithmic radial cell
-    }
+    dev_optdepth[idx] *= y0*(dy - 1.0); // integrate extinction density across the logarithmic radial cell
 }
 
 // =========================================================================================================================
 
-#endif // TRANSPORT && RADIATION
+#endif // RADIATION

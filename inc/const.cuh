@@ -4,13 +4,13 @@
 #include <cmath>                            // for M_PI
 #include <string>                           // for std::string
 
-#if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
+#if defined(COLLISION) || defined(DIFFUSION)
 #include "curand_kernel.h"                  // for curandState
 using curs = curandState;
-#endif // COLLISION || (TRANSPORT && DIFFUSION)
+#endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION
-#include "cukd/builder.h"   // for cukd::get_coord, cukd::box_t
+#include "cukd/builder.h"                   // for cukd::get_coord, cukd::box_t
 using bbox = cukd::box_t<float3>;           // axis-aligned bounding box type for KD-tree
 #endif // COLLISION
 
@@ -44,6 +44,10 @@ const real  Z_MAX       = 0.5*M_PI;         // maximum Z boundary (colattitude)
 
 const int   N_G         = N_X*N_Y*N_Z;      // total number of grid cells
 
+#ifndef DIFFUSION
+static_assert(N_Z == 1, "N_Z > 1 requires DIFFUSION");
+#endif // NO DIFFUSION
+
 // =========================================================================================================================
 // gas parameters
 
@@ -52,13 +56,13 @@ const real  ASPR_0      = 0.05;             // the reference aspect ratio of the
 const real  IDX_P       = -1.0;             // the radial power-law index of the gas surface density profile
 const real  IDX_Q       = -0.4;             // the radial power-law index of the gas temperature profile (vertically isothermal)
 
-#if defined(COLLISION) || (defined(TRANSPORT) && defined(DIFFUSION))
+#if defined(COLLISION) || defined(DIFFUSION)
 #ifndef CONST_NU
 const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity parameter of the gas
 #else  // CONST_NU
 const real  NU          = 1.0e-05;          // the kinematic viscosity parameter of the gas
 #endif // NOT CONST_NU
-#endif // COLLISION || (TRANSPORT && DIFFUSION)
+#endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION
 #ifndef CODE_UNIT
@@ -77,43 +81,32 @@ const real  ST_0        = 1.0e-03;          // the reference Stokes number of du
 const real  M_D         = 1.0e30;           // total dust mass represented inside the computational domain
 const real  RHO_0       = 1.0;              // compact-grain internal density
 
-#if defined(TRANSPORT) && defined(RADIATION)
+#ifdef RADIATION
 const real  BETA_0      = 1.0e+01;          // the reference ratio between the radiation pressure and the gravity
 const real  KAPPA_0     = 1.0;              // the reference gray opacity of the dust
-#endif // TRANSPORT && RADIATION
+#endif // RADIATION
 
-#if defined(TRANSPORT) && defined(DIFFUSION)
-const real  SC_R        = 1.0;              // the Schmidt number for radial     diffusion
-const real  SC_X        = 1.0;              // the Schmidt number for azimuthal  diffusion
-#endif // TRANSPORT && DIFFUSION
+#ifdef DIFFUSION
+const real  SCHMIDT_X   = 1.0;              // the Schmidt number for azimuthal  diffusion
+const real  SCHMIDT_R   = 1.0;              // the Schmidt number for radial     diffusion
+#endif // DIFFUSION
 
-#if (defined(TRANSPORT) && defined(DIFFUSION)) || defined(COLLISION)
-const real  SC_Z        = 1.0;              // the Schmidt number for vertical   diffusion
-#endif // (TRANSPORT && DIFFUSION) || COLLISION
+#if defined(DIFFUSION) || defined(COLLISION)
+const real  SCHMIDT_Z   = 1.0;              // the Schmidt number for vertical   diffusion
+#endif // DIFFUSION || COLLISION
 
 #ifdef COLLISION
 const int   COAG_KERNEL = 0;                // coagulation kernels: 0 = constant, 1 = linear, 2 = product, 3 = custom
 const int   N_K         = 200;              // number of candidate slots returned by each KNN query
 
 const real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
-const real  LAMBDA_0    = N_P / (N_K - 1.0) / M_D; // normalization for dimensionless test kernels excluding self
+const real  LAMBDA_0    = N_P / (N_K - 1.0) / M_D;  // normalization for dimensionless test kernels excluding self
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
 const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
 #endif // COLLISION
 
 // =========================================================================================================================
 // dust initialization parameters
-
-#ifndef IMPORTGAS
-const real INIT_XMIN    = X_MIN;            // minimum X boundary for particle initialization
-const real INIT_XMAX    = X_MAX;            // maximum X boundary for particle initialization
-
-const real INIT_YMIN    = Y_MIN;            // minimum Y boundary for particle initialization
-const real INIT_YMAX    = Y_MAX;            // maximum Y boundary for particle initialization
-
-const real INIT_ZMIN    = Z_MIN;            // minimum Z boundary for particle initialization
-const real INIT_ZMAX    = Z_MAX;            // maximum Z boundary for particle initialization
-#endif // NOT IMPORTGAS
 
 #ifdef MULTISIZE
 const real INIT_SMIN    = 1.0e+00;          // minimum grain size for particle initialization
@@ -152,11 +145,6 @@ struct swarm                                // representative-particle state
     real    par_size;                       // diameter of one physical grain in the represented species
     real    par_numr;                       // number of physical grains represented by this particle
     #endif // MULTISIZE
-
-    #ifdef COLLISION
-    real    col_rate;                       // total local collision propensity
-    real    max_dist;                       // radius of the local KNN neighborhood
-    #endif // COLLISION
 };
 
 #ifdef COLLISION
@@ -186,10 +174,15 @@ struct tree_traits                          // traits for cukd::builder
 
 const int TPB = 32; // number of threads per block
 
-const int NB_P = N_P     / TPB + 1; // number of blocks for swarm-level parallelization
-const int NB_A = N_G     / TPB + 1; // number of blocks for cell-level  parallelization
-const int NB_X = N_Y*N_Z / TPB + 1; // number of blocks for X-direction parallelization
-const int NB_Y = N_X*N_Z / TPB + 1; // number of blocks for Y-direction parallelization
+const int NB_P = N_P     / TPB + 1;         // number of blocks for swarm-level parallelization
+const int NB_G = N_G     / TPB + 1;         // number of blocks for grid-level  parallelization
+const int NB_X = N_Y*N_Z / TPB + 1;         // number of blocks for X-direction parallelization
+const int NB_Y = N_X*N_Z / TPB + 1;         // number of blocks for Y-direction parallelization
+
+#ifdef COLLISION
+const int N_T  = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P; // physical and periodic-image tree nodes
+const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level parallelization
+#endif // COLLISION
 
 // =========================================================================================================================
 

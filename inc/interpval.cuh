@@ -1,10 +1,10 @@
-#ifndef HELPERS_INTERPVAL_CUH
-#define HELPERS_INTERPVAL_CUH
+#ifndef INTERPVAL_CUH
+#define INTERPVAL_CUH
 
 #include <cfloat>                   // for DBL_MAX
 
 #include <const.cuh>
-#include <helpers_paramgrid.cuh>
+#include <paramgrid.cuh>
 
 // =========================================================================================================================
 // interpolation stencil
@@ -193,7 +193,7 @@ interp _3d_interp (real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 
 // interpolate a scalar grid field at continuous index coordinates with optional radial outer-face centring
 __device__ __forceinline__
-real _interp_field (const real *dev_field, real loc_x, real loc_y, real loc_z, bool outer_edge = false)
+real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 {
     if (outer_edge) // optical depth is defined on radial outer faces
     {
@@ -210,14 +210,14 @@ real _interp_field (const real *dev_field, real loc_x, real loc_y, real loc_z, b
 
     real value = 0.0;
 
-    value += dev_field[idx_cell                           ]*(1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z);
-    value += dev_field[idx_cell + next_x                  ]*       frac_x *(1.0 - frac_y)*(1.0 - frac_z);
-    value += dev_field[idx_cell          + next_y         ]*(1.0 - frac_x)*       frac_y *(1.0 - frac_z);
-    value += dev_field[idx_cell + next_x + next_y         ]*       frac_x *       frac_y *(1.0 - frac_z);
-    value += dev_field[idx_cell                   + next_z]*(1.0 - frac_x)*(1.0 - frac_y)*       frac_z ;
-    value += dev_field[idx_cell + next_x          + next_z]*       frac_x *(1.0 - frac_y)*       frac_z ;
-    value += dev_field[idx_cell          + next_y + next_z]*(1.0 - frac_x)*       frac_y *       frac_z ;
-    value += dev_field[idx_cell + next_x + next_y + next_z]*       frac_x *       frac_y *       frac_z ;
+    value += dev_field_in[idx_cell                           ]*(1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z);
+    value += dev_field_in[idx_cell + next_x                  ]*       frac_x *(1.0 - frac_y)*(1.0 - frac_z);
+    value += dev_field_in[idx_cell          + next_y         ]*(1.0 - frac_x)*       frac_y *(1.0 - frac_z);
+    value += dev_field_in[idx_cell + next_x + next_y         ]*       frac_x *       frac_y *(1.0 - frac_z);
+    value += dev_field_in[idx_cell                   + next_z]*(1.0 - frac_x)*(1.0 - frac_y)*       frac_z ;
+    value += dev_field_in[idx_cell + next_x          + next_z]*       frac_x *(1.0 - frac_y)*       frac_z ;
+    value += dev_field_in[idx_cell          + next_y + next_z]*(1.0 - frac_x)*       frac_y *       frac_z ;
+    value += dev_field_in[idx_cell + next_x + next_y + next_z]*       frac_x *       frac_y *       frac_z ;
 
     if (outer_edge && loc_y < 1.0) value *= 1.0 - frac_y; // interpolate from zero optical depth at the inner face
 
@@ -226,4 +226,4 @@ real _interp_field (const real *dev_field, real loc_x, real loc_y, real loc_z, b
 
 // =========================================================================================================================
 
-#endif // HELPERS_INTERPVAL_CUH
+#endif // INTERPVAL_CUH

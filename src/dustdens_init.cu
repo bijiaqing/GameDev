@@ -11,11 +11,9 @@ __global__
 void dustdens_init (real *dev_dustdens)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
-    	
-    if (idx < N_G)
-    {
-        dev_dustdens[idx] = 0.0;
-    }
+    if (idx >= N_G) return;
+
+    dev_dustdens[idx] = 0.0;
 }
 
 // =========================================================================================================================

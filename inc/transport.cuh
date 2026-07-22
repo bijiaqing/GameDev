@@ -1,10 +1,10 @@
-#ifndef HELPERS_TRANSPORT_CUH
-#define HELPERS_TRANSPORT_CUH
+#ifndef TRANSPORT_CUH
+#define TRANSPORT_CUH
 
 #include <const.cuh>
-#include <helpers_paramgrid.cuh>
-#include <helpers_interpval.cuh>
-#include <helpers_paramphys.cuh>
+#include <paramgrid.cuh>
+#include <interpval.cuh>
+#include <paramphys.cuh>
 
 // =========================================================================================================================
 // particle state access
@@ -59,21 +59,23 @@ void _if_out_of_box (real &x, real &y, real &z, real &lx, real &vy, real &lz)
         while (x <  X_MIN) x += X_MAX - X_MIN;
     }
 
+    if (N_Z == 1)
+    {
+        z = 0.5*M_PI;
+        lz = 0.0;
+    }
+
     #ifdef IMPORTGAS
     if (y < Y_MIN || y >= Y_MAX) // recycle radial exits to the outer injection boundary
     {
         _eject_to_outer(y, z, lx, vy, lz);
     }
-    if (N_Z == 1)
-    {
-        z = 0.5*M_PI;
-    }
-    else if (z < Z_MIN) // recycle polar exits when the imported mesh covers the full disk
+    if (N_Z > 1 && z < Z_MIN) // recycle polar exits when the imported mesh covers the full disk
     {
         _eject_to_outer(y, z, lx, vy, lz);
     }
     #ifndef HALFDISK
-    else if (z >= Z_MAX) // recycle polar exits when the imported mesh covers the full disk
+    else if (N_Z > 1 && z >= Z_MAX) // recycle polar exits when the imported mesh covers the full disk
     {
         _eject_to_outer(y, z, lx, vy, lz);
     }
@@ -81,7 +83,7 @@ void _if_out_of_box (real &x, real &y, real &z, real &lx, real &vy, real &lz)
     #endif // IMPORTGAS
 
     #ifdef HALFDISK
-    if (z > Z_MAX) // mirror across midplane (theta = pi/2)
+    if (N_Z > 1 && z > Z_MAX) // mirror across midplane (theta = pi/2)
     {
         z  = M_PI - z;
         lz = -lz;      // reverse polar angular momentum
@@ -110,7 +112,7 @@ void _get_force_term (real y, real z, real R, real l_x, real l_z, real beta, rea
 {
     F_y  = -(1.0 - beta)*_get_omegaK(y)*_get_omegaK(y)*y;
     Fc_y = l_x*l_x / R / R / y + l_z*l_z / y / y / y;
-    Tc_z = l_x*l_x / R / R / sin(z) * cos(z);
+    Tc_z = (N_Z > 1) ? l_x*l_x / R / R / sin(z) * cos(z) : 0.0;
 }
 
 // integrate drag analytically at the midpoint and complete the velocity and position update
@@ -118,7 +120,7 @@ __device__ __forceinline__
 void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1, 
     real &x_j, real &y_j, real &z_j, real &lx_j, real &vy_j, real &lz_j
     #ifdef IMPORTGAS
-    , const real *dev_gasvelx, const real *dev_gasvely, const real *dev_gasvelz, const real *dev_gasdens
+    , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz, const real *dev_gas_dens
     #endif
 )
 {
@@ -132,16 +134,16 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     real lxg_1, vyg_1, lzg_1;
     
     #ifdef IMPORTGAS
-    if ((dev_gasvelx != nullptr) && (dev_gasvely != nullptr) && (dev_gasvelz != nullptr))
+    if ((dev_gas_velx != nullptr) && (dev_gas_vely != nullptr) && (dev_gas_velz != nullptr))
     {
         // convert imported linear gas velocities to the stored angular-momentum convention
         real loc_x = _get_loc_x(x_1);
         real loc_y = _get_loc_y(y_1);
         real loc_z = _get_loc_z(z_1);
         
-        lxg_1 = _interp_field(dev_gasvelx, loc_x, loc_y, loc_z)*y_1*sin(z_1);
-        vyg_1 = _interp_field(dev_gasvely, loc_x, loc_y, loc_z);
-        lzg_1 = _interp_field(dev_gasvelz, loc_x, loc_y, loc_z)*y_1;
+        lxg_1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*y_1*sin(z_1);
+        vyg_1 = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
+        lzg_1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;
     }
     else
     #endif
@@ -156,7 +158,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     // convert the local Stokes number to stopping time
     real ts_1 = _get_St(R_1, Z_1, size, h_g
         #ifdef IMPORTGAS
-        , x_1, y_1, z_1, dev_gasdens
+        , x_1, y_1, z_1, dev_gas_dens
         #endif
         ) / omega;
     real tau_1 = dt / ts_1;
@@ -187,4 +189,4 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 
 // =========================================================================================================================
 
-#endif // HELPERS_TRANSPORT_CUH
+#endif // TRANSPORT_CUH

@@ -1,13 +1,13 @@
-#ifndef HELPERS_PARAMPHYS_CUH
-#define HELPERS_PARAMPHYS_CUH
+#ifndef PARAMPHYS_CUH
+#define PARAMPHYS_CUH
 
 #if defined(IMPORTGAS) && !defined(CONST_ST)
 #include <cassert>
 #endif // IMPORTGAS and not CONST_ST
 
 #include <const.cuh>
-#include <helpers_paramgrid.cuh>
-#include <helpers_interpval.cuh>
+#include <paramgrid.cuh>
+#include <interpval.cuh>
 
 // =========================================================================================================================
 // grain and disk profiles
@@ -102,7 +102,7 @@ real _get_hd (real R, real St)
     // evaluate h_g at the individual particle radius rather than at the pair midpoint
     
     real h_g = _get_hg(R);
-    real delta_Z = _get_alpha(R, h_g) / SC_Z;
+    real delta_Z = _get_alpha(R, h_g) / SCHMIDT_Z;
     
     return h_g*sqrt(delta_Z / (delta_Z + St));
 }
@@ -116,7 +116,7 @@ real _get_hd (real R, real St)
 __device__ __forceinline__
 real _get_St (real R, real Z, real s, real h_g
     #ifdef IMPORTGAS
-    , real x, real y, real z, const real *dev_gasdens
+    , real x, real y, real z, const real *dev_gas_dens
     #endif
 )
 {
@@ -124,14 +124,14 @@ real _get_St (real R, real Z, real s, real h_g
 
     #ifndef CONST_ST
     #ifdef IMPORTGAS
-    if (dev_gasdens != nullptr)
+    if (dev_gas_dens != nullptr)
     {
         // scale the reference midplane Stokes number by the interpolated gas-density ratio
         real loc_x = _get_loc_x(x);
         real loc_y = _get_loc_y(y);
         real loc_z = _get_loc_z(z);
         
-        real rhog  = _interp_field(dev_gasdens, loc_x, loc_y, loc_z);
+        real rhog  = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
         real rhog0 = SIGMA_0 / (sqrt(2.0*M_PI)*h_g*R);
         
         if (rhog <= 0.0)
@@ -156,4 +156,4 @@ real _get_St (real R, real Z, real s, real h_g
 
 // =========================================================================================================================
 
-#endif // HELPERS_PARAMPHYS_CUH
+#endif // PARAMPHYS_CUH

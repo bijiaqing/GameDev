@@ -1,11 +1,11 @@
 #ifdef COLLISION
 
 #include <graffiti_kern.cuh>
-#include <helpers_paramphys.cuh>
-#include <helpers_collision.cuh>
+#include <paramphys.cuh>
+#include <collision.cuh>
 
 // =========================================================================================================================
-// kernel: col_proc_exec
+// kernel: col_event_run
 // sample and apply at most one frozen-rate Bernoulli collision event per representative particle
 //
 // parallelization: one thread per primary KD-tree node with periodic image nodes skipped
@@ -13,46 +13,47 @@
 // per call:
 //   1 sample whether the representative collides during dt_col
 //   2 rebuild its local KNN list and sample a partner from pair propensities
-//   3 update only the live representative using the read-only particle snapshot
+//   3 update only the live representative using the read-only size and multiplicity snapshot
 // =========================================================================================================================
 
 __global__
-void col_proc_exec (swarm *dev_particle, const swarm *dev_particle_old, curs *dev_rs_swarm, real dt_col,
-    const tree *dev_col_tree, const bbox *dev_boundbox
+void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
+    const real *dev_col_dist, const real *dev_size_old, const real *dev_numr_old,
+    const tree *dev_col_tree, const bbox *dev_boundbox,
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    const real *dev_gas_dens,
     #endif
+    real dt_col
 )
 {
     int idx_tree = threadIdx.x + blockDim.x*blockIdx.x;
-    int tree_size = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P;
-    if (idx_tree >= tree_size || dev_col_tree[idx_tree].image != 0) return;
+    if (idx_tree >= N_T || dev_col_tree[idx_tree].image != 0) return;
 
     int idx_old_i = dev_col_tree[idx_tree].index_old;
-    real col_rate_i = dev_particle_old[idx_old_i].col_rate;
+    real col_rate_i = dev_col_rate[idx_old_i];
     if (col_rate_i <= 0.0) return;
 
     // sample the exact probability of at least one event for the frozen total propensity
-    curs rs_swarm = dev_rs_swarm[idx_old_i];
+    curs rs_swarm = dev_rngstate[idx_old_i];
     real event_prob = -expm1(-col_rate_i*dt_col);
     if (curand_uniform_double(&rs_swarm) > event_prob)
     {
-        dev_rs_swarm[idx_old_i] = rs_swarm;
+        dev_rngstate[idx_old_i] = rs_swarm;
         return;
     }
 
-    real x = dev_particle_old[idx_old_i].position.x;
-    real y = dev_particle_old[idx_old_i].position.y;
-    real z = dev_particle_old[idx_old_i].position.z;
+    real x = dev_particle[idx_old_i].position.x;
+    real y = dev_particle[idx_old_i].position.y;
+    real z = dev_particle[idx_old_i].position.z;
     real R = y*sin(z);
     float max_search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
     // recover the same local neighbor set used to calculate col_rate_i
     candidatelist query_result(max_search_dist);
     cukd::cct::knn <candidatelist, tree, tree_traits> (
-        query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, tree_size);
+        query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T);
 
-    real measure = _get_ball_measure(x, y, z, dev_particle_old[idx_old_i].max_dist);
+    real measure = _get_ball_measure(x, y, z, dev_col_dist[idx_old_i]);
     #ifdef COLLISION_UNIT_VOLUME
     // use the analytic unit-volume normalization only in dimensionless kernel tests
     measure = 1.0;
@@ -73,9 +74,9 @@ void col_proc_exec (swarm *dev_particle, const swarm *dev_particle_old, curs *de
 
         idx_old_j = candidate;
         cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
-            dev_particle_old, idx_old_i, idx_old_j
+            dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
-            , dev_gasdens
+            , dev_gas_dens
             #endif
         ) / measure;
         if (cumulative >= target) break;
@@ -87,22 +88,22 @@ void col_proc_exec (swarm *dev_particle, const swarm *dev_particle_old, curs *de
     real v_rel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
-        v_rel = _get_vrel(dev_particle_old, idx_old_i, idx_old_j
+        v_rel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
-            , dev_gasdens
+            , dev_gas_dens
             #endif
         );
     }
 
-    real s_i = dev_particle_old[idx_old_i].par_size;
-    real s_j = dev_particle_old[idx_old_j].par_size;
+    real s_i = dev_size_old[idx_old_i];
+    real s_j = dev_size_old[idx_old_j];
     real s_k = cbrt(s_i*s_i*s_i + s_j*s_j*s_j);
 
     if (v_rel <= V_FRAG)
     {
         // coagulate both physical grain masses into the updated representative species
         dev_particle[idx_old_i].par_size  = s_k;
-        dev_particle[idx_old_i].par_numr = dev_particle_old[idx_old_i].par_numr*s_i*s_i*s_i/(s_k*s_k*s_k);
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
     }
     else
     {
@@ -110,11 +111,11 @@ void col_proc_exec (swarm *dev_particle, const swarm *dev_particle_old, curs *de
         real sample = curand_uniform_double(&rs_swarm);
         s_k = fmax(INIT_SMIN, s_k*sample*sample);
         dev_particle[idx_old_i].par_size  = s_k;
-        dev_particle[idx_old_i].par_numr = dev_particle_old[idx_old_i].par_numr*s_i*s_i*s_i/(s_k*s_k*s_k);
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
     }
     #endif
 
-    dev_rs_swarm[idx_old_i] = rs_swarm;
+    dev_rngstate[idx_old_i] = rs_swarm;
 }
 
 #endif // COLLISION

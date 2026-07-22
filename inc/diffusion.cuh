@@ -1,16 +1,16 @@
-#ifndef HELPERS_DIFFUSION_CUH
-#define HELPERS_DIFFUSION_CUH
+#ifndef DIFFUSION_CUH
+#define DIFFUSION_CUH
 
-#if defined(TRANSPORT) && defined(DIFFUSION)
+#ifdef DIFFUSION
 
 #ifdef IMPORTGAS
 #include <cassert>
 #endif // IMPORTGAS
 
 #include <const.cuh>
-#include <helpers_paramgrid.cuh>
-#include <helpers_interpval.cuh>
-#include <helpers_paramphys.cuh>
+#include <paramgrid.cuh>
+#include <interpval.cuh>
+#include <paramphys.cuh>
 
 // =========================================================================================================================
 // cylindrical gas-density gradients
@@ -20,7 +20,7 @@
 __device__ __forceinline__
 void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, real &term_Z
     #ifdef IMPORTGAS
-    , const real *dev_gasdens
+    , const real *dev_gas_dens
     #endif // IMPORTGAS
 )
 {   
@@ -30,7 +30,7 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
     real loc_y = _get_loc_y(y);
     real loc_z = _get_loc_z(z);
 
-    real rho = _interp_field(dev_gasdens, loc_x, loc_y, loc_z);
+    real rho = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
 
     if (rho <= 0.0)
     {
@@ -50,8 +50,8 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
         if (x_p >= X_MAX) x_p -= (X_MAX - X_MIN);
         if (x_m <  X_MIN) x_m += (X_MAX - X_MIN);
         
-        real rho_xp = _interp_field(dev_gasdens, _get_loc_x(x_p), loc_y, loc_z);
-        real rho_xm = _interp_field(dev_gasdens, _get_loc_x(x_m), loc_y, loc_z);
+        real rho_xp = _interp_field(dev_gas_dens, _get_loc_x(x_p), loc_y, loc_z);
+        real rho_xm = _interp_field(dev_gas_dens, _get_loc_x(x_m), loc_y, loc_z);
         
         drho_dx = (rho_xp - rho_xm) / (2.0*dx);
     }
@@ -66,20 +66,20 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
         
         if (loc_y < 0.5) // use a one-sided difference next to the inner radial boundary
         {
-            real rho_yp = _interp_field(dev_gasdens, loc_x, _get_loc_y(y + dy), loc_z);
+            real rho_yp = _interp_field(dev_gas_dens, loc_x, _get_loc_y(y + dy), loc_z);
             
             drho_dy = (rho_yp - rho) / dy;
         }
         else if (loc_y > static_cast<real>(N_Y) - 0.5) // use a one-sided difference next to the outer radial boundary
         {
-            real rho_ym = _interp_field(dev_gasdens, loc_x, _get_loc_y(y - dy), loc_z);
+            real rho_ym = _interp_field(dev_gas_dens, loc_x, _get_loc_y(y - dy), loc_z);
             
             drho_dy = (rho - rho_ym) / dy;
         }
         else // use a centred difference in the radial interior
         {
-            real rho_yp = _interp_field(dev_gasdens, loc_x, _get_loc_y(y + dy), loc_z);
-            real rho_ym = _interp_field(dev_gasdens, loc_x, _get_loc_y(y - dy), loc_z);
+            real rho_yp = _interp_field(dev_gas_dens, loc_x, _get_loc_y(y + dy), loc_z);
+            real rho_ym = _interp_field(dev_gas_dens, loc_x, _get_loc_y(y - dy), loc_z);
             
             drho_dy = (rho_yp - rho_ym) / (2.0*dy);
         }
@@ -95,20 +95,20 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
         
         if (loc_z < 0.5) // use a one-sided difference next to the lower polar boundary
         {
-            real rho_zp = _interp_field(dev_gasdens, loc_x, loc_y, _get_loc_z(z + dz));
+            real rho_zp = _interp_field(dev_gas_dens, loc_x, loc_y, _get_loc_z(z + dz));
             
             drho_dz = (rho_zp - rho) / dz;
         }
         else if (loc_z > static_cast<real>(N_Z) - 0.5) // use a one-sided difference next to the upper polar boundary
         {
-            real rho_zm = _interp_field(dev_gasdens, loc_x, loc_y, _get_loc_z(z - dz));
+            real rho_zm = _interp_field(dev_gas_dens, loc_x, loc_y, _get_loc_z(z - dz));
             
             drho_dz = (rho - rho_zm) / dz;
         }
         else // use a centred difference in the polar interior
         {
-            real rho_zp = _interp_field(dev_gasdens, loc_x, loc_y, _get_loc_z(z + dz));
-            real rho_zm = _interp_field(dev_gasdens, loc_x, loc_y, _get_loc_z(z - dz));
+            real rho_zp = _interp_field(dev_gas_dens, loc_x, loc_y, _get_loc_z(z + dz));
+            real rho_zm = _interp_field(dev_gas_dens, loc_x, loc_y, _get_loc_z(z - dz));
             
             drho_dz = (rho_zp - rho_zm) / (2.0*dz);
         }
@@ -120,7 +120,7 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
     
     real sin_z = sin(z);
     real cos_z = cos(z);
-    
+
     // rotate the spherical radial and polar derivatives into cylindrical R and Z derivatives
     real drho_dR = drho_dy*sin_z + drho_dz*cos_z / y;
     real drho_dZ = drho_dy*cos_z - drho_dz*sin_z / y;
@@ -149,6 +149,6 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
     #endif // IMPORTGAS
 }
 
-#endif // TRANSPORT && DIFFUSION
+#endif // DIFFUSION
 
-#endif // HELPERS_DIFFUSION_CUH
+#endif // DIFFUSION_CUH

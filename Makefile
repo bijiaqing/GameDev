@@ -40,26 +40,28 @@ endif
 
 _INC =						\
 	const.cuh				\
-	graffiti_host.cuh		\
 	graffiti_kern.cuh		\
-	helpers_collision.cuh	\
-	helpers_diffusion.cuh	\
-	helpers_interpval.cuh	\
-	helpers_paramgrid.cuh	\
-	helpers_paramphys.cuh	\
-	helpers_scatfield.cuh	\
-	helpers_transport.cuh
+	host_file.cuh			\
+	host_rand.cuh			\
+	collision.cuh			\
+	diffusion.cuh			\
+	interpval.cuh			\
+	paramgrid.cuh			\
+	paramphys.cuh			\
+	scatfield.cuh			\
+	transport.cuh
 
 _OBJ =				\
-	col_proc_exec.o	\
+	col_event_run.o	\
 	col_rate_calc.o	\
+	col_snap_save.o	\
 	col_tree_init.o	\
 	diffusion_pos.o	\
-	dt_rate_calc.o	\
+	dt_rates_calc.o	\
 	dustdens_calc.o	\
 	dustdens_init.o	\
 	dustdens_scat.o	\
-	gas_interp_calc.o	\
+	gas_lerp_calc.o	\
 	graffiti_main.o	\
 	optdepth_calc.o	\
 	optdepth_csum.o	\
@@ -67,7 +69,7 @@ _OBJ =				\
 	optdepth_mean.o	\
 	optdepth_scat.o	\
 	particle_init.o	\
-	rs_swarm_init.o	\
+	rngstate_init.o	\
 	ssa_substep_1.o	\
 	ssa_substep_2.o	\
 	ssa_transport.o

@@ -1,7 +1,7 @@
-#if defined(TRANSPORT) && defined(RADIATION)
+#ifdef RADIATION
 
 #include <graffiti_kern.cuh>
-#include <helpers_scatfield.cuh>
+#include <scatfield.cuh>
 
 // =========================================================================================================================
 // kernel: optdepth_scat
@@ -12,13 +12,11 @@ __global__
 void optdepth_scat (real *dev_optdepth, const swarm *dev_particle)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    if (idx >= N_P) return;
 
-    if (idx < N_P)
-    {
-        _particle_to_grid_core <OPTDEPTH> (dev_optdepth, dev_particle, idx);
-    }
+    _particle_to_grid_core <OPTDEPTH> (dev_optdepth, dev_particle, idx);
 }
 
 // =========================================================================================================================
 
-#endif // TRANSPORT && RADIATION
+#endif // RADIATION

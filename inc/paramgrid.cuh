@@ -1,5 +1,5 @@
-#ifndef HELPERS_PARAMGRID_CUH
-#define HELPERS_PARAMGRID_CUH
+#ifndef PARAMGRID_CUH
+#define PARAMGRID_CUH
 
 #include <const.cuh>
 
@@ -84,4 +84,4 @@ real _get_grid_volume (int idx_cell, real *y0_ptr = nullptr, real *dy_ptr = null
 
 // =========================================================================================================================
 
-#endif // NOT HELPERS_PARAMGRID_CUH
+#endif // NOT PARAMGRID_CUH

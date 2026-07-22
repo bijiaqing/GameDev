@@ -1,10 +1,10 @@
-#ifndef HELPERS_SCATFIELD_CUH
-#define HELPERS_SCATFIELD_CUH
+#ifndef SCATFIELD_CUH
+#define SCATFIELD_CUH
 
 #include <const.cuh>
-#include <helpers_paramgrid.cuh>
-#include <helpers_interpval.cuh>
-#include <helpers_paramphys.cuh>
+#include <paramgrid.cuh>
+#include <interpval.cuh>
+#include <paramphys.cuh>
 
 // =========================================================================================================================
 // particle-to-grid scattering
@@ -15,16 +15,16 @@ enum FieldType
     #ifdef SAVE_DENS
     DUSTDENS,
     #endif // SAVE_DENS
-    #if defined(TRANSPORT) && defined(RADIATION)
+    #ifdef RADIATION
     OPTDEPTH,
-    #endif // TRANSPORT && RADIATION
+    #endif // RADIATION
     
     FIELDTYPE_NONE                          // keep the enum valid when no scattered field is enabled
 };
 
 // scatter one particle's mass or opacity-weighted mass to its trilinear grid stencil
 template <FieldType field_type> __device__ __forceinline__
-void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
+void _particle_to_grid_core (real *dev_grid_out, const swarm *dev_particle, int idx)
 {
     real loc_x = _get_loc_x(dev_particle[idx].position.x);
     real loc_y = _get_loc_y(dev_particle[idx].position.y);
@@ -46,7 +46,7 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
     #endif // MULTISIZE
     real weight = 0.0;
 
-    #if defined(TRANSPORT) && defined(RADIATION)
+    #ifdef RADIATION
     if (field_type == OPTDEPTH)
     {
         weight  = _get_grain_mass(s);
@@ -65,9 +65,9 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
             real H_d = h_g*R;
             #ifdef DIFFUSION
             #ifndef CONST_NU
-            real alpha_z = ALPHA / SC_Z;
+            real alpha_z = ALPHA / SCHMIDT_Z;
             #else
-            real alpha_z = NU/(h_g*h_g*R*R*_get_omegaK(R)*SC_Z);
+            real alpha_z = NU/(h_g*h_g*R*R*_get_omegaK(R)*SCHMIDT_Z);
             #endif
             real stokes_mid = ST_0*(s / S_0);
             #ifndef CONST_ST
@@ -79,7 +79,7 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
         }
     }
     else
-    #endif // TRANSPORT && RADIATION
+    #endif // RADIATION
     #ifdef SAVE_DENS
     if (field_type == DUSTDENS)
     {
@@ -97,16 +97,16 @@ void _particle_to_grid_core (real *dev_grid, const swarm *dev_particle, int idx)
     }
 
     // deposit the conserved particle weight to all corners of the interpolation stencil
-    atomicAdd(&dev_grid[idx_cell                           ], (1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z)*weight);
-    atomicAdd(&dev_grid[idx_cell + next_x                  ],        frac_x *(1.0 - frac_y)*(1.0 - frac_z)*weight);
-    atomicAdd(&dev_grid[idx_cell          + next_y         ], (1.0 - frac_x)*       frac_y *(1.0 - frac_z)*weight);
-    atomicAdd(&dev_grid[idx_cell + next_x + next_y         ],        frac_x *       frac_y *(1.0 - frac_z)*weight);
-    atomicAdd(&dev_grid[idx_cell                   + next_z], (1.0 - frac_x)*(1.0 - frac_y)*       frac_z *weight);
-    atomicAdd(&dev_grid[idx_cell + next_x          + next_z],        frac_x *(1.0 - frac_y)*       frac_z *weight);
-    atomicAdd(&dev_grid[idx_cell          + next_y + next_z], (1.0 - frac_x)*       frac_y *       frac_z *weight);
-    atomicAdd(&dev_grid[idx_cell + next_x + next_y + next_z],        frac_x *       frac_y *       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell                           ], (1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x                  ],        frac_x *(1.0 - frac_y)*(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell          + next_y         ], (1.0 - frac_x)*       frac_y *(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x + next_y         ],        frac_x *       frac_y *(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell                   + next_z], (1.0 - frac_x)*(1.0 - frac_y)*       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x          + next_z],        frac_x *(1.0 - frac_y)*       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell          + next_y + next_z], (1.0 - frac_x)*       frac_y *       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x + next_y + next_z],        frac_x *       frac_y *       frac_z *weight);
 }
 
 // =========================================================================================================================
 
-#endif // HELPERS_SCATFIELD_CUH
+#endif // SCATFIELD_CUH

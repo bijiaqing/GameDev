@@ -1,13 +1,13 @@
 #ifdef TRANSPORT
 
 #include <graffiti_kern.cuh>
-#include <helpers_paramphys.cuh>
+#include <paramphys.cuh>
 #ifdef DIFFUSION
-#include <helpers_diffusion.cuh>
-#endif // TRANSPORT
+#include <diffusion.cuh>
+#endif // DIFFUSION
 
 // =========================================================================================================================
-// kernel: dt_rate_calc
+// kernel: dt_rates_calc
 // calculate one conservative inverse dynamics timestep from all active local motion and diffusion scales
 //
 // parallelization: one thread per representative particle followed by a host-side maximum reduction
@@ -20,12 +20,12 @@
 // =========================================================================================================================
 
 __global__
-void dt_rate_calc (real *dev_dt_rate, const swarm *dev_particle
+void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     #ifdef IMPORTGAS
-    , const real *dev_gasdens, const real *dev_gasvelx,
-      const real *dev_gasvely, const real *dev_gasvelz,
-      const real *dev_gasdens_next, const real *dev_gasvelx_next,
-      const real *dev_gasvely_next, const real *dev_gasvelz_next
+    , const real *dev_gas_dens, const real *dev_gas_velx,
+      const real *dev_gas_vely, const real *dev_gas_velz,
+      const real *dev_gas_dens_next, const real *dev_gas_velx_next,
+      const real *dev_gas_vely_next, const real *dev_gas_velz_next
     #endif
 )
 {
@@ -58,12 +58,12 @@ void dt_rate_calc (real *dev_dt_rate, const swarm *dev_particle
     real loc_x = _get_loc_x(x);
     real loc_y = _get_loc_y(y);
     real loc_z = _get_loc_z(z);
-    real gas_x = _interp_field(dev_gasvelx, loc_x, loc_y, loc_z);
-    real gas_y = _interp_field(dev_gasvely, loc_x, loc_y, loc_z);
-    real gas_z = _interp_field(dev_gasvelz, loc_x, loc_y, loc_z);
-    gas_x = fmax(abs(gas_x), abs(_interp_field(dev_gasvelx_next, loc_x, loc_y, loc_z)));
-    gas_y = fmax(abs(gas_y), abs(_interp_field(dev_gasvely_next, loc_x, loc_y, loc_z)));
-    gas_z = fmax(abs(gas_z), abs(_interp_field(dev_gasvelz_next, loc_x, loc_y, loc_z)));
+    real gas_x = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z);
+    real gas_y = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
+    real gas_z = _interp_field(dev_gas_velz, loc_x, loc_y, loc_z);
+    gas_x = fmax(abs(gas_x), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
+    gas_y = fmax(abs(gas_y), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
+    gas_z = fmax(abs(gas_z), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
     if (N_X > 1) rate = fmax(rate, abs(gas_x)/(R*dx*CFL_DYN));
     rate = fmax(rate, abs(gas_y)/(y*dl*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(gas_z)/(y*dz*CFL_DYN));
@@ -101,25 +101,32 @@ void dt_rate_calc (real *dev_dt_rate, const swarm *dev_particle
     real term_x, term_R, term_Z;
     _get_term_grad_cyl(x, y, z, term_x, term_R, term_Z
         #ifdef IMPORTGAS
-        , dev_gasdens
+        , dev_gas_dens
         #endif
     );
+
+    real next_x = term_x;
+    real next_R = term_R;
+    real next_Z = term_Z;
     #ifdef IMPORTGAS
-    // retain the larger drift magnitude from the two imported temporal endpoints
-    real next_x, next_R, next_Z;
-    _get_term_grad_cyl(x, y, z, next_x, next_R, next_Z, dev_gasdens_next);
-    if (abs(next_x) > abs(term_x)) term_x = next_x;
-    if (abs(next_R) > abs(term_R)) term_R = next_R;
-    if (abs(next_Z) > abs(term_Z)) term_Z = next_Z;
+    // evaluate both imported endpoints before bounding each resulting drift magnitude
+    _get_term_grad_cyl(x, y, z, next_x, next_R, next_Z, dev_gas_dens_next);
     #endif
-    // assemble the cylindrical diffusion coefficients and deterministic drifts
-    real coeff_R = nu / SC_R;
-    real coeff_Z = (N_Z > 1) ? nu / SC_Z : 0.0;
-    real drift_R = coeff_R*(term_R + 1.0/R);
+
+    real idx_nu = 0.0;
     #ifndef CONST_NU
-    drift_R += coeff_R*(IDX_Q + 1.5)/R;
-    #endif
+    idx_nu = IDX_Q + 1.5;
+    #endif // NOT CONST_NU
+
+    // assemble cylindrical diffusion coefficients and deterministic physical drift speeds
+    real coeff_x = nu / SCHMIDT_X;
+    real coeff_R = nu / SCHMIDT_R;
+    real coeff_Z = (N_Z > 1) ? nu / SCHMIDT_Z : 0.0;
+
+    real drift_R = coeff_R*(term_R + (idx_nu + 1.0)/R);
     real drift_Z = coeff_Z*term_Z;
+    real next_drift_R = coeff_R*(next_R + (idx_nu + 1.0)/R);
+    real next_drift_Z = coeff_Z*next_Z;
 
     // project cylindrical diffusion variance and drift onto spherical radial and polar directions
     real sin_z = sin(z);
@@ -127,26 +134,34 @@ void dt_rate_calc (real *dev_dt_rate, const swarm *dev_particle
     real cell_y = y*dl;
     real coeff_y = coeff_R*sin_z*sin_z + coeff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
+    real next_drift_y = next_drift_R*sin_z + next_drift_Z*cos_z;
     rate = fmax(rate, 2.0*coeff_y/(CFL_DYN*CFL_DYN*cell_y*cell_y));
     rate = fmax(rate, abs(drift_y)/(CFL_DYN*cell_y));
+    rate = fmax(rate, abs(next_drift_y)/(CFL_DYN*cell_y));
+
     if (N_X > 1)
     {
         real cell_x = R*dx;
-        rate = fmax(rate, 2.0*(nu / SC_X)/(CFL_DYN*CFL_DYN*cell_x*cell_x));
-        real drift_x = (nu / SC_X)*term_x/R;
+        real drift_x = coeff_x*term_x/R;
+        real next_drift_x = coeff_x*next_x/R;
+        rate = fmax(rate, 2.0*coeff_x/(CFL_DYN*CFL_DYN*cell_x*cell_x));
         rate = fmax(rate, abs(drift_x)/(CFL_DYN*cell_x));
+        rate = fmax(rate, abs(next_drift_x)/(CFL_DYN*cell_x));
     }
+
     if (N_Z > 1)
     {
         real cell_z = y*dz;
         real coeff_z = coeff_R*cos_z*cos_z + coeff_Z*sin_z*sin_z;
         real drift_z = drift_R*cos_z - drift_Z*sin_z;
+        real next_drift_z = next_drift_R*cos_z - next_drift_Z*sin_z;
         rate = fmax(rate, 2.0*coeff_z/(CFL_DYN*CFL_DYN*cell_z*cell_z));
         rate = fmax(rate, abs(drift_z)/(CFL_DYN*cell_z));
+        rate = fmax(rate, abs(next_drift_z)/(CFL_DYN*cell_z));
     }
     #endif
 
-    dev_dt_rate[idx] = rate;
+    dev_dt_rates[idx] = rate;
 }
 
 #endif

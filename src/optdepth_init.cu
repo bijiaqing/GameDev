@@ -1,4 +1,4 @@
-#if defined(TRANSPORT) && defined(RADIATION)
+#ifdef RADIATION
 
 #include <graffiti_kern.cuh>
 
@@ -11,13 +11,11 @@ __global__
 void optdepth_init (real *dev_optdepth)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
-    	
-    if (idx < N_G)
-    {
-        dev_optdepth[idx] = 0.0;
-    }
+    if (idx >= N_G) return;
+
+    dev_optdepth[idx] = 0.0;
 }
 
 // =========================================================================================================================
 
-#endif // TRANSPORT && RADIATION
+#endif // RADIATION
