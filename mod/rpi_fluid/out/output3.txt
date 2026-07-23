@@ -1,0 +1,317 @@
+jiaqing@verag001:~/graffiti/mod/rpi_fluid> python3 mod/verify_y_transport_cyl/run.py --cfl 0.5 --res 32 64 128 256
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_cyl/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_cyl completed at N=32 in 3 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_cyl/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_cyl completed at N=64 in 5 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_cyl/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_cyl completed at N=128 in 43 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_cyl from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_cyl/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_cyl/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_cyl completed at N=256 in 16 step(s).
+
+y_transport_cyl: density convergence
+       N             L1             L2           Linf       mass rel
+      32   4.517430e-03   8.626978e-03   2.443455e-02   0.000000e+00
+      64   1.455195e-03   3.477490e-03   1.747326e-02   1.642672e-16
+     128   2.448482e-04   7.233521e-04   4.497080e-03   1.478405e-15
+     256   3.792091e-05   1.169844e-04   7.188085e-04   8.213359e-16
+L1 orders: 1.6343 2.5713 2.6908
+jiaqing@verag001:~/graffiti/mod/rpi_fluid> python3 mod/verify_y_transport_sph/run.py --cfl 0.5 --res 32 64 128 256
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_sph/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_sph completed at N=32 in 3 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_sph/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_sph completed at N=64 in 5 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_sph/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_sph completed at N=128 in 18 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_y_transport_sph from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_y_transport_sph/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_y_transport_sph/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case y_transport_sph completed at N=256 in 24 step(s).
+
+y_transport_sph: density convergence
+       N             L1             L2           Linf       mass rel
+      32   3.827335e-03   7.851286e-03   2.418329e-02   0.000000e+00
+      64   1.278000e-03   3.189690e-03   1.608916e-02   2.466296e-16
+     128   2.259953e-04   6.764638e-04   4.085926e-03   9.865183e-16
+     256   3.440294e-05   1.107548e-04   6.734498e-04   1.233148e-16
+L1 orders: 1.5825 2.4995 2.7157
+jiaqing@verag001:~/graffiti/mod/rpi_fluid> python3 mod/verify_z_transport_3d/run.py --cfl 0.5 --res 32 64 128 256
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_z_transport_3d/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case z_transport completed at N=32 in 4 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_z_transport_3d/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case z_transport completed at N=64 in 7 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_z_transport_3d/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case z_transport completed at N=128 in 13 step(s).
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Cleaning     /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti
+Cleaning     object files
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+make: Entering directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Using model setup: verify_z_transport_3d from /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d
+Compiling                        src/cfl_rate_calc.cu -> cfl_rate_calc.o
+Compiling                        src/f_advection_x.cu -> f_advection_x.o
+Compiling                        src/f_advection_y.cu -> f_advection_y.o
+Compiling                        src/f_advection_z.cu -> f_advection_z.o
+Compiling                        src/f_diffusion_x.cu -> f_diffusion_x.o
+Compiling                        src/f_diffusion_y.cu -> f_diffusion_y.o
+Compiling                        src/f_diffusion_z.cu -> f_diffusion_z.o
+Compiling                        src/f_rhovel_init.cu -> f_rhovel_init.o
+Compiling                        src/f_moment_getv.cu -> f_moment_getv.o
+Compiling                        src/f_moment_setv.cu -> f_moment_setv.o
+Compiling                        src/f_source_step.cu -> f_source_step.o
+Compiling    mod/verify_z_transport_3d/graffiti_main.cu -> graffiti_main.o
+Compiling                        src/optdepth_csum.cu -> optdepth_csum.o
+Compiling                        src/optdepth_calc.cu -> optdepth_calc.o
+Linking      /vera/u/jibi/graffiti/mod/rpi_fluid/mod/verify_z_transport_3d/graffiti from 14 objects
+make: Leaving directory '/vera/u/jibi/graffiti/mod/rpi_fluid'
+Verification case z_transport completed at N=256 in 26 step(s).
+
+z_transport: density convergence
+       N             L1             L2           Linf       mass rel
+      32   3.283340e-03   7.518355e-03   6.039405e-02   2.848717e-16
+      64   1.025096e-03   3.046557e-03   3.889079e-02   1.424355e-16
+     128   1.996257e-04   7.875114e-04   1.205615e-02   7.121777e-16
+     256   3.538096e-05   1.630882e-04   3.956743e-03   1.281920e-15
+L1 orders: 1.6794 2.3604 2.4963
+jiaqing@verag001:~/graffiti/mod/rpi_fluid>

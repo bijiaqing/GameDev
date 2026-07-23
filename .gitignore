@@ -7,9 +7,3 @@ obj/*
 
 !out/.gitkeep
 out/*
-
-!mod/test*
-mod/*
-
-!mod/rpi_fluid/inc
-!mod/rpi_fluid/src
