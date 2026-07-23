@@ -22,7 +22,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
-    #endif
+    #endif // IMPORTGAS
 )
 {
     int idx_tree = threadIdx.x+blockDim.x*blockIdx.x;
@@ -72,7 +72,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
                 dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
                 #ifdef IMPORTGAS
                 , dev_gas_dens
-                #endif
+                #endif // IMPORTGAS
             );
         }
 

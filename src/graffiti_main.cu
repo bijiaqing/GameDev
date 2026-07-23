@@ -6,7 +6,7 @@
 #if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // thrust::device_ptr
 #include <thrust/extrema.h>     // thrust::max_element
-#endif
+#endif // TRANSPORT || COLLISION
 
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
@@ -145,7 +145,7 @@ int main (int argc, char **argv)
         #endif // RADIATION
         #ifdef COLLISION_LINEAR_TEST
         rand_gamma_k2(random_s, N_P);
-        #else
+        #else  // STANDARD_INITIALIZATION
         rand_powerlaw(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
         #endif // COLLISION_LINEAR_TEST
         #endif // MULTISIZE
@@ -166,12 +166,12 @@ int main (int argc, char **argv)
         rand_from_file(random_x, random_y, random_z, N_P, gas_dens, epsilon);
         
         CUDA_CHECK(cudaFreeHost(epsilon));
-        #else // NOT IMPORTGAS
+        #else  // NO IMPORTGAS
         #if defined(MULTISIZE) && defined(DIFFUSION)
         rand_disk_poly(random_x, random_y, random_z, random_s, N_P);
-        #else // NOT MULTISIZE or NO DIFFUSION
+        #else  // !(MULTISIZE && DIFFUSION)
         rand_disk_mono(random_x, random_y, random_z, S_0,      N_P);
-        #endif // MULTISIZE and DIFFUSION
+        #endif // MULTISIZE && DIFFUSION
         #endif // IMPORTGAS
 
         CUDA_CHECK(cudaMemcpy(dev_random_x, random_x, sizeof(real)*N_P, cudaMemcpyHostToDevice));
@@ -274,7 +274,7 @@ int main (int argc, char **argv)
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox
                 #ifdef IMPORTGAS
                 , dev_gas_dens
-                #endif
+                #endif // IMPORTGAS
             );
             CUDA_KERNEL_CHECK("col_rate_calc");
 
@@ -297,7 +297,7 @@ int main (int argc, char **argv)
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
-                #endif
+                #endif // IMPORTGAS
                 dt_col
             );
             CUDA_KERNEL_CHECK("col_event_run");
@@ -308,7 +308,7 @@ int main (int argc, char **argv)
             count_col++;
         }
     };
-    #endif
+    #endif // COLLISION
 
     for (int idx_file = idx_from + 1; idx_file <= SAVE_MAX; idx_file++)
     {
@@ -318,7 +318,7 @@ int main (int argc, char **argv)
         #ifdef IMPORTGAS
         LOAD_GAS_NEXT_TO_VRAM(idx_file);
         real gas_frac = 0.0;
-        #endif
+        #endif // IMPORTGAS
         
         clock_out = 0.0;
         
@@ -338,7 +338,7 @@ int main (int argc, char **argv)
                 , dev_gas_vely, dev_gas_velz
                 , dev_gas_dens_next, dev_gas_velx_next
                 , dev_gas_vely_next, dev_gas_velz_next
-                #endif
+                #endif // IMPORTGAS
             );
             CUDA_KERNEL_CHECK("dt_rates_calc");
             thrust::device_ptr <const real> dt_rates_ptr(dev_dt_rates);
@@ -355,25 +355,25 @@ int main (int argc, char **argv)
             );
             CUDA_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
-            #endif
+            #endif // IMPORTGAS
 
             #ifdef COLLISION
             // begin the symmetric composition with half a collision interval
             count_col = 0;
             clock_dyn = 0.0;
             evolve_collisions(0.5*dt_dyn);
-            #endif
+            #endif // COLLISION
 
             #ifdef DIFFUSION
             // apply the first half of the spatial diffusion operator
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
-                #endif
+                #endif // IMPORTGAS
                 0.5*dt_dyn
             );
             CUDA_KERNEL_CHECK("diffusion_pos");
-            #endif
+            #endif // DIFFUSION
 
             #ifdef RADIATION
             // drift to midpoint positions and reconstruct the optical depth used by the force solve
@@ -390,43 +390,43 @@ int main (int argc, char **argv)
             ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth,
                 #ifdef IMPORTGAS
                 dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
-                #endif
+                #endif // IMPORTGAS
                 dt_dyn
             );
             CUDA_KERNEL_CHECK("ssa_substep_2");
-            #else
+            #else  // NO RADIATION
             // complete transport in one launch when no midpoint radiation field is required
             ssa_transport <<< NB_P, TPB >>> (dev_particle,
                 #ifdef IMPORTGAS
                 dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
-                #endif
+                #endif // IMPORTGAS
                 dt_dyn
             );
             CUDA_KERNEL_CHECK("ssa_transport");
-            #endif
+            #endif // RADIATION
 
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
-                #endif
+                #endif // IMPORTGAS
                 0.5*dt_dyn
             );
             CUDA_KERNEL_CHECK("diffusion_pos");
-            #endif
+            #endif // DIFFUSION
 
             #ifdef COLLISION
             // close the symmetric composition with half a collision interval
             evolve_collisions(0.5*dt_dyn);
-            #endif
+            #endif // COLLISION
 
             CUDA_CHECK(cudaDeviceSynchronize());
             clock_sim += dt_dyn;
             clock_out += dt_dyn;
             count_dyn++;
             PRINT_VALUE_TO_SCREEN();
-            #endif
+            #endif // TRANSPORT
 
             #if defined(COLLISION) && !defined(TRANSPORT)
             // collision-only runs evolve directly across the complete output interval
@@ -449,7 +449,7 @@ int main (int argc, char **argv)
             clock_out += duration;
             clock_sim += duration;
             PRINT_VALUE_TO_SCREEN();
-            #endif // COLLISION and no TRANSPORT
+            #endif // COLLISION && !TRANSPORT
         } while (clock_out < dt_out);
 
         #ifdef IMPORTGAS
@@ -478,7 +478,7 @@ int main (int argc, char **argv)
         {
             SAVE_PARTICLE_TO_FILE(idx_file);
         }
-        #else
+        #else  // LINEAR_OUTPUT
         if (idx_file % LIN_BASE == 0)
         {
             SAVE_PARTICLE_TO_FILE(idx_file);

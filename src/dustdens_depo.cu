@@ -18,7 +18,7 @@ void dustdens_depo (real *dev_dustdens, const swarm *dev_particle)
     #ifdef MULTISIZE
     real size = dev_particle[idx].par_size;
     real weight = _get_grain_mass(size)*dev_particle[idx].par_numr;
-    #else
+    #else  // MONOSIZE
     real weight = M_D / N_P;
     #endif // MULTISIZE
 

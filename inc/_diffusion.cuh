@@ -129,7 +129,7 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
     term_R = drho_dR / rho;
     term_Z = drho_dZ / rho;
 
-    #else  // analytic gas
+    #else  // ANALYTIC_GAS
     
     // the analytic disk is axisymmetric
     term_x = 0.0;

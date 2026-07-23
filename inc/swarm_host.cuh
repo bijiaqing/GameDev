@@ -213,12 +213,12 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
                 real H_d = H_g;
 
                 #ifdef DIFFUSION
-                #ifndef CONST_NU
-                real alpha_z = ALPHA / SCHMIDT_Z;
-                #else  // CONST_NU
+                #ifdef CONST_NU
                 real omega = std::sqrt(G*M_S / (R*R*R));
                 real alpha_z = NU / (h_g*h_g*R*R*omega*SCHMIDT_Z);
-                #endif // NOT CONST_NU
+                #else  // CONST_ALPHA
+                real alpha_z = ALPHA / SCHMIDT_Z;
+                #endif // CONST_NU
 
                 real stokes_mid = ST_0*(size / S_0);
                 #ifndef CONST_ST
@@ -308,12 +308,12 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
                 real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
                 real H_g = h_g*R;
 
-                #ifndef CONST_NU
-                real alpha_z = ALPHA / SCHMIDT_Z;
-                #else  // CONST_NU
+                #ifdef CONST_NU
                 real omega = std::sqrt(G*M_S / (R*R*R));
                 real alpha_z = NU / (h_g*h_g*R*R*omega*SCHMIDT_Z);
-                #endif // NOT CONST_NU
+                #else  // CONST_ALPHA
+                real alpha_z = ALPHA / SCHMIDT_Z;
+                #endif // CONST_NU
 
                 real stokes_mid = ST_0*(size / S_0);
                 #ifndef CONST_ST
@@ -418,8 +418,8 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         pos_z[i] = std::acos(cos_z);
     }
 }
-#endif // MULTISIZE and DIFFUSION
-#endif // NOT IMPORTGAS
+#endif // MULTISIZE && DIFFUSION
+#endif // !IMPORTGAS
 
 // =========================================================================================================================
 // collision-test random profiles
@@ -756,19 +756,19 @@ bool save_variable (const std::string &file_name)
     file << "IDX_P       = " << std::defaultfloat   << std::setprecision(8) << IDX_P        << std::endl;
     file << "IDX_Q       = " << std::defaultfloat   << std::setprecision(8) << IDX_Q        << std::endl;
     #if defined(DIFFUSION) || defined(COLLISION)
-    #ifndef CONST_NU
-    file << "ALPHA       = " << std::scientific     << std::setprecision(8) << ALPHA        << std::endl;
-    #else  // CONST_NU
+    #ifdef CONST_NU
     file << "NU          = " << std::scientific     << std::setprecision(8) << NU           << std::endl;
-    #endif // NOT CONST_NU
+    #else  // CONST_ALPHA
+    file << "ALPHA       = " << std::scientific     << std::setprecision(8) << ALPHA        << std::endl;
+    #endif // CONST_NU
     #endif // DIFFUSION || COLLISION
     #ifdef COLLISION
-    #ifndef CODE_UNIT
+    #ifdef CODE_UNIT
+    file << "RE_0        = " << std::scientific     << std::setprecision(8) << RE_0         << std::endl;
+    #else  // PHYSICAL_UNIT
     file << "M_MOL       = " << std::scientific     << std::setprecision(8) << M_MOL        << std::endl;
     file << "X_SEC       = " << std::scientific     << std::setprecision(8) << X_SEC        << std::endl;
-    #else  // CODE_UNIT
-    file << "RE_0        = " << std::scientific     << std::setprecision(8) << RE_0         << std::endl;
-    #endif // NOT CODE_UNIT
+    #endif // CODE_UNIT
     #endif // COLLISION
     file                                                                                    << std::endl;
     
@@ -962,7 +962,7 @@ std::cout                                   \
 << std::setw(10) << count_dyn   << " "      \
 << std::scientific << std::setprecision(3)  \
 << std::setw(10) << dt_dyn      << " ";
-#else // NO TRANSPORT
+#else  // NO TRANSPORT
 #define PRINT_TITLE_TRANSPORT()
 #define PRINT_VALUE_TRANSPORT()
 #endif // TRANSPORT

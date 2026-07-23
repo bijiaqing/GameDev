@@ -3,7 +3,7 @@
 
 #if defined(IMPORTGAS) && !defined(CONST_ST)
 #include <cassert>      // assert
-#endif // IMPORTGAS and not CONST_ST
+#endif // IMPORTGAS && !CONST_ST
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
@@ -99,7 +99,7 @@ __device__ __forceinline__
 real _get_St (real R, real Z, real s, real h_g
     #ifdef IMPORTGAS
     , real x, real y, real z, const real *dev_gas_dens
-    #endif
+    #endif // IMPORTGAS
 )
 {
     real St = ST_0*(s / S_0);

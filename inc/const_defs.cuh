@@ -65,20 +65,20 @@ const real  IDX_P       = -1.0;             // the radial power-law index of the
 const real  IDX_Q       = -0.4;             // the radial power-law index of the gas temperature profile (vertically isothermal)
 
 #if defined(COLLISION) || defined(DIFFUSION)
-#ifndef CONST_NU
-const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity parameter of the gas
-#else  // CONST_NU
+#ifdef CONST_NU
 const real  NU          = 1.0e-05;          // the kinematic viscosity parameter of the gas
-#endif // NOT CONST_NU
+#else  // CONST_ALPHA
+const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity parameter of the gas
+#endif // CONST_NU
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION
-#ifndef CODE_UNIT
+#ifdef CODE_UNIT
+const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
+#else  // PHYSICAL_UNIT
 const real  M_MOL       = 2.3*1.66054e-24;  // mean molecular weight of the gas in grams
 const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm^2
-#else  // CODE_UNIT
-const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
-#endif // NOT CODE_UNIT
+#endif // CODE_UNIT
 #endif // COLLISION
 
 // =========================================================================================================================

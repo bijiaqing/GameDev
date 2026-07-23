@@ -121,7 +121,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     real &x_j, real &y_j, real &z_j, real &lx_j, real &vy_j, real &lz_j
     #ifdef IMPORTGAS
     , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz, const real *dev_gas_dens
-    #endif
+    #endif // IMPORTGAS
 )
 {
     real R_1 = y_1*sin(z_1);
@@ -146,7 +146,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         lzg_1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;
     }
     else
-    #endif
+    #endif // IMPORTGAS
     {
         real eta = _get_eta(R_1, Z_1, h_g);
         
@@ -159,7 +159,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     real ts_1 = _get_St(R_1, Z_1, size, h_g
         #ifdef IMPORTGAS
         , x_1, y_1, z_1, dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     ) / omega;
     real tau_1 = dt / ts_1;
 

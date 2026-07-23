@@ -27,7 +27,7 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     , const real *dev_gas_vely, const real *dev_gas_velz
     , const real *dev_gas_dens_next, const real *dev_gas_velx_next
     , const real *dev_gas_vely_next, const real *dev_gas_velz_next
-    #endif
+    #endif // IMPORTGAS
 )
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
@@ -72,21 +72,21 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     if (N_X > 1) rate = fmax(rate, abs(gas_x) / (R*dx*CFL_DYN));
     if (N_Y > 1) rate = fmax(rate, abs(gas_y) / (y*log(dy)*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(gas_z) / (y*dz*CFL_DYN));
-    #endif
+    #endif // IMPORTGAS
 
     real beta = 0.0;
     #ifdef RADIATION
     #ifdef MULTISIZE
     real size = dev_particle[idx].par_size;
-    #else
+    #else  // MONOSIZE
     real size = S_0;
-    #endif
+    #endif // MULTISIZE
     #if defined(COLLISION) && defined(MULTISIZE)
     // include the strongest permitted radiation force after fragmentation
     size = fmin(size, INIT_SMIN);
-    #endif
+    #endif // COLLISION && MULTISIZE
     beta = BETA_0 / (size / S_0);
-    #endif
+    #endif // RADIATION
 
     // require constant-acceleration displacement to remain below a local mesh fraction
     real force_y = -(1.0 - beta)*G*M_S / (y*y);
@@ -108,7 +108,7 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     _get_term_grad_cyl(x, y, z, term_x, term_R, term_Z
         #ifdef IMPORTGAS
         , dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
 
     real next_x = term_x;
@@ -117,12 +117,13 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     #ifdef IMPORTGAS
     // evaluate both imported endpoints before bounding each resulting drift magnitude
     _get_term_grad_cyl(x, y, z, next_x, next_R, next_Z, dev_gas_dens_next);
-    #endif
+    #endif // IMPORTGAS
 
+    #ifdef CONST_NU
     real idx_nu = 0.0;
-    #ifndef CONST_NU
-    idx_nu = IDX_Q + 1.5;
-    #endif // NOT CONST_NU
+    #else  // CONST_ALPHA
+    real idx_nu = IDX_Q + 1.5;
+    #endif // CONST_NU
 
     // assemble cylindrical diffusion coefficients and deterministic physical drift speeds
     real coeff_x = nu / SCHMIDT_X;
@@ -168,9 +169,9 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
         rate = fmax(rate, abs(drift_z) / (CFL_DYN*cell_z));
         rate = fmax(rate, abs(next_drift_z) / (CFL_DYN*cell_z));
     }
-    #endif
+    #endif // DIFFUSION
 
     dev_dt_rates[idx] = rate;
 }
 
-#endif
+#endif // TRANSPORT

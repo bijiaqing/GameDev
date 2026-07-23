@@ -14,7 +14,7 @@ __global__
 void ssa_transport (swarm *dev_particle,
     #ifdef IMPORTGAS
     const real *dev_gas_dens, const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz,
-    #endif
+    #endif // IMPORTGAS
     real dt
 )
 {
@@ -34,7 +34,7 @@ void ssa_transport (swarm *dev_particle,
 
     #ifdef MULTISIZE
     real size = dev_particle[idx].par_size;
-    #else
+    #else  // MONOSIZE
     real size = S_0;
     #endif // MULTISIZE
 
@@ -43,7 +43,7 @@ void ssa_transport (swarm *dev_particle,
     _ssa_substep_2(dt, size, beta, lx_i, vy_i, lz_i, x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j
         #ifdef IMPORTGAS
         , dev_gas_velx, dev_gas_vely, dev_gas_velz, dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
 
     // enforce boundaries after the completed transport update

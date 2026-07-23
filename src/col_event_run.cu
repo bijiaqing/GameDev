@@ -21,7 +21,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
-    #endif
+    #endif // IMPORTGAS
     real dt_col
 )
 {
@@ -58,7 +58,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     #ifdef COLLISION_UNIT_VOLUME
     // use the analytic unit-volume normalization only in dimensionless kernel tests
     measure = 1.0;
-    #endif
+    #endif // COLLISION_UNIT_VOLUME
     if (measure <= 0.0) return;
 
     // select one partner by inverse sampling of the pair-propensity sum
@@ -78,7 +78,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
             dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif
+            #endif // IMPORTGAS
         ) / measure;
         if (cumulative >= target) break;
     }
@@ -92,7 +92,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         v_rel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif
+            #endif // IMPORTGAS
         );
     }
 
@@ -114,7 +114,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         dev_particle[idx_old_i].par_size = s_k;
         dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
     }
-    #endif
+    #endif // MULTISIZE
 
     dev_rngstate[idx_old_i] = rngstate;
 }

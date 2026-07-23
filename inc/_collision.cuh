@@ -113,12 +113,12 @@ real _get_ReInvSqrt (real R, real alpha)
     real Re = 1.0;
     real sigma = _get_sigma_g(R);
     
-    #ifndef CODE_UNIT
-    Re = 0.5*alpha*sigma*X_SEC / M_MOL;
-    #else  // CODE_UNIT
+    #ifdef CODE_UNIT
     real alpha_0 = _get_alpha(R_0, ASPR_0);
     Re = RE_0*(alpha / alpha_0)*(sigma / SIGMA_0);
-    #endif // NOT CODE_UNIT
+    #else  // PHYSICAL_UNIT
+    Re = 0.5*alpha*sigma*X_SEC / M_MOL;
+    #endif // CODE_UNIT
 
     return 1.0 / sqrt(Re);
 }
@@ -250,7 +250,7 @@ __device__ __forceinline__
 real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
-    #endif
+    #endif // IMPORTGAS
 )
 {
     real x_i = dev_particle[idx_old_i].position.x;
@@ -280,12 +280,12 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     real St_i = _get_St(R_i, Z_i, s_i, h_i
         #ifdef IMPORTGAS
         , x_i, y_i, z_i, dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
     real St_j = _get_St(R_j, Z_j, s_j, h_j
         #ifdef IMPORTGAS
         , x_j, y_j, z_j, dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
 
     real3 vel_i = _get_cart_vel(dev_particle[idx_old_i]);
@@ -320,7 +320,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
-    #endif
+    #endif // IMPORTGAS
 )
 {
     // text mainly from Drazkowska et al. 2013:
@@ -362,7 +362,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         real v_rel_ij = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif
+            #endif // IMPORTGAS
         );
         real sigma_ij = M_PI*(s_i + s_j)*(s_i + s_j) / 4.0;
         
@@ -381,7 +381,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
                 , dev_particle[idx_old_i].position.y
                 , dev_particle[idx_old_i].position.z
                 , dev_gas_dens
-                #endif
+                #endif // IMPORTGAS
             );
             real St_j = _get_St(R_j, Z_j, s_j, _get_hg(R_j)
                 #ifdef IMPORTGAS
@@ -389,7 +389,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
                 , dev_particle[idx_old_j].position.y
                 , dev_particle[idx_old_j].position.z
                 , dev_gas_dens
-                #endif
+                #endif // IMPORTGAS
             );
 
             real H_i = R_i*_get_hd(R_i, St_i);

@@ -18,7 +18,7 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle)
     #ifdef MULTISIZE
     real size = dev_particle[idx].par_size;
     real weight = _get_grain_mass(size)*dev_particle[idx].par_numr;
-    #else
+    #else  // MONOSIZE
     real size = S_0;
     real weight = M_D / N_P;
     #endif // MULTISIZE
@@ -31,17 +31,17 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle)
         real h_g = _get_hg(R);
         real H_d = h_g*R;
         #ifdef DIFFUSION
-        #ifndef CONST_NU
-        real alpha_z = ALPHA / SCHMIDT_Z;
-        #else
+        #ifdef CONST_NU
         real alpha_z = NU/(h_g*h_g*R*R*_get_omegaK(R)*SCHMIDT_Z);
-        #endif
+        #else  // CONST_ALPHA
+        real alpha_z = ALPHA / SCHMIDT_Z;
+        #endif // CONST_NU
         real stokes_mid = ST_0*(size / S_0);
         #ifndef CONST_ST
         stokes_mid /= pow(R / R_0, IDX_P);
-        #endif
+        #endif // NOT CONST_ST
         H_d *= sqrt(alpha_z/(alpha_z + stokes_mid));
-        #endif
+        #endif // DIFFUSION
         weight /= sqrt(2.0*M_PI)*H_d;
     }
 
