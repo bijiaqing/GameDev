@@ -34,30 +34,51 @@ void _save_particle (swarm *dev_particle, int idx, real x, real y, real z, real 
     dev_particle[idx].velocity.z = lz;
 }
 
-// recycle one imported-gas particle to the outer midplane boundary with Keplerian rotation
+// test whether a particle remains inside the active radial and polar transport domain
 __device__ __forceinline__
-void _eject_to_outer (real &y, real &z, real &lx, real &vy, real &lz)
+bool _is_particle_active (real y, real z)
 {
-    y  = Y_MAX - 1e-6*Y_MAX;
-    z  = 0.5*M_PI;
-    lx = _get_omegaK(y)*y*y;
-    vy = 0.0;
-    lz = 0.0;
+    if (y < Y_MIN || y >= Y_MAX) return false;
+    #ifdef HALFDISK
+    if (N_Z > 1 && (z < Z_MIN || z > Z_MAX)) return false;
+    #else
+    if (N_Z > 1 && (z < Z_MIN || z >= Z_MAX)) return false;
+    #endif // HALFDISK
+
+    return true;
 }
 
-// apply periodic azimuth, imported-gas recycling, and optional midplane reflection
+// wrap the active azimuthal coordinate and lock an inactive azimuthal dimension
 __device__ __forceinline__
-void _if_out_of_box (real &x, real &y, real &z, real &lx, real &vy, real &lz)
+void _apply_periodic_x (real &x)
 {
-    if (N_X == 1) 
+    if (N_X == 1)
     {
         x = 0.5*(X_MIN + X_MAX);
     }
-    else // wrap azimuth into [X_MIN, X_MAX)
+    else
     {
         while (x >= X_MAX) x -= X_MAX - X_MIN;
         while (x <  X_MIN) x += X_MAX - X_MIN;
     }
+}
+
+// park one absorbed representative outside the active radial domain
+__device__ __forceinline__
+void _absorb_particle (real &y, real &z, real &lx, real &vy, real &lz)
+{
+    y = 0.0;
+    z = 0.5*M_PI;
+    lx = 0.0;
+    vy = 0.0;
+    lz = 0.0;
+}
+
+// apply periodic azimuth, transport outflow, and the optional reflecting midplane
+__device__ __forceinline__
+void _apply_transport_boundary (real &x, real &y, real &z, real &lx, real &vy, real &lz)
+{
+    _apply_periodic_x(x);
 
     if (N_Z == 1)
     {
@@ -65,30 +86,57 @@ void _if_out_of_box (real &x, real &y, real &z, real &lx, real &vy, real &lz)
         lz = 0.0;
     }
 
-    #ifdef IMPORTGAS
-    if (y < Y_MIN || y >= Y_MAX) // recycle radial exits to the outer injection boundary
+    if (y < Y_MIN || y >= Y_MAX)
     {
-        _eject_to_outer(y, z, lx, vy, lz);
+        _absorb_particle(y, z, lx, vy, lz);
+        return;
     }
-    if (N_Z > 1 && z < Z_MIN) // recycle polar exits when the imported mesh covers the full disk
-    {
-        _eject_to_outer(y, z, lx, vy, lz);
-    }
-    #ifndef HALFDISK
-    else if (N_Z > 1 && z >= Z_MAX) // recycle polar exits when the imported mesh covers the full disk
-    {
-        _eject_to_outer(y, z, lx, vy, lz);
-    }
-    #endif // NOT HALFDISK
-    #endif // IMPORTGAS
 
     #ifdef HALFDISK
-    if (N_Z > 1 && z > Z_MAX) // mirror across midplane (theta = pi/2)
+    if (N_Z > 1 && z > Z_MAX)
     {
-        z  = M_PI - z;
-        lz = -lz;      // reverse polar angular momentum
+        z = M_PI - z;
+        lz = -lz;
     }
     #endif // HALFDISK
+
+    #ifdef HALFDISK
+    bool polar_exit = N_Z > 1 && (z < Z_MIN || z > Z_MAX);
+    #else
+    bool polar_exit = N_Z > 1 && (z < Z_MIN || z >= Z_MAX);
+    #endif // HALFDISK
+
+    if (polar_exit)
+    {
+        _absorb_particle(y, z, lx, vy, lz);
+    }
+}
+
+// reflect stochastic boundary crossings to impose zero radial and polar diffusive flux
+__device__ __forceinline__
+void _apply_diffusion_boundary (real &x, real &y, real &z)
+{
+    _apply_periodic_x(x);
+
+    while (y < Y_MIN || y > Y_MAX)
+    {
+        if (y < Y_MIN) y = 2.0*Y_MIN - y;
+        if (y > Y_MAX) y = 2.0*Y_MAX - y;
+    }
+    if (y >= Y_MAX) y = Y_MAX - 1.0e-12*(Y_MAX - Y_MIN);
+
+    if (N_Z == 1)
+    {
+        z = 0.5*M_PI;
+        return;
+    }
+
+    while (z < Z_MIN || z > Z_MAX)
+    {
+        if (z < Z_MIN) z = 2.0*Z_MIN - z;
+        if (z > Z_MAX) z = 2.0*Z_MAX - z;
+    }
+    if (z >= Z_MAX) z = Z_MAX - 1.0e-12*(Z_MAX - Z_MIN);
 }
 
 // =========================================================================================================================
@@ -150,9 +198,16 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     {
         real eta = _get_eta(R_1, Z_1, h_g);
         
-        lxg_1 = sqrt(1.0 - 2.0*eta)*omega*R_1*R_1;
+        lxg_1 = sqrt(fmax(1.0 - 2.0*eta, 0.0))*omega*R_1*R_1;
+
+        #ifdef VISC_ACCRETION
+        real vgas_R = _get_visc_vel(R_1, Z_1, h_g);
+        vyg_1 = vgas_R*sin(z_1);
+        lzg_1 = (N_Z > 1) ? y_1*vgas_R*cos(z_1) : 0.0;
+        #else  // PURE_ROTATION
         vyg_1 = 0.0;
         lzg_1 = 0.0;
+        #endif // VISC_ACCRETION
     }
 
     // convert the local Stokes number to stopping time

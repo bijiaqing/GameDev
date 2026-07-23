@@ -496,13 +496,16 @@ bool save_variable (const std::string &fname)
     file << "ASPR_0      = " << std::defaultfloat << std::setprecision(8) << ASPR_0    << "\n";
     file << "IDX_P       = " << std::defaultfloat << std::setprecision(8) << IDX_P     << "\n";
     file << "IDX_Q       = " << std::defaultfloat << std::setprecision(8) << IDX_Q     << "\n";
-    #ifdef DIFFUSION
-    #ifndef CONST_NU
+    #if defined(DIFFUSION) || defined(VISC_ACCRETION)
+    #ifndef CONST_NU  // CONST_ALPHA
     file << "ALPHA       = " << std::scientific   << std::setprecision(8) << ALPHA     << "\n";
-    #else
+    #else             // CONST_NU
     file << "NU          = " << std::scientific   << std::setprecision(8) << NU        << "\n";
-    #endif
-    #endif
+    #endif // CONST_NU
+    #endif // DIFFUSION || VISC_ACCRETION
+    #ifdef VISC_ACCRETION
+    file << "VISC_ACCRETION = " << std::defaultfloat << 1                            << "\n";
+    #endif // VISC_ACCRETION
     file                                                                               << "\n";
 
     file << "STOKES_0    = " << std::scientific   << std::setprecision(8) << STOKES_0  << "\n";

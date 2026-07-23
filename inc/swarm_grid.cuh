@@ -195,6 +195,10 @@ interp _3d_interp (real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 __device__ __forceinline__
 real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z, bool outer_edge = false)
 {
+    #ifdef HALFDISK
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-6);
+    #endif // HALFDISK
+
     if (outer_edge) // optical depth is defined on radial outer faces
     {
         if (loc_y < 0) return 0.0;

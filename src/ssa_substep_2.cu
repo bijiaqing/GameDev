@@ -17,6 +17,7 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     #ifdef IMPORTGAS
     const real *dev_gas_dens, const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz,
     #endif // IMPORTGAS
+    real beta_taper,
     real dt
 )
 {
@@ -30,6 +31,7 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     real lx_j, vy_j, lz_j;
 
     _load_particle(dev_particle, idx, x_1, y_1, z_1, lx_i, vy_i, lz_i);
+    if (!_is_particle_active(y_1, z_1)) return;
 
     // interpolate optical depth from radial outer faces at the midpoint particle position
     real loc_x = _get_loc_x(x_1);
@@ -45,7 +47,7 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     #endif // MULTISIZE
 
     // attenuate the size-dependent radiation-to-gravity ratio along the radial ray
-    real beta = BETA_0*exp(-optdepth) / (size / S_0);
+    real beta = beta_taper*BETA_0*exp(-optdepth) / (size / S_0);
 
     _ssa_substep_2(dt, size, beta, lx_i, vy_i, lz_i, x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j
         #ifdef IMPORTGAS
@@ -54,7 +56,7 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     );
 
     // apply boundary rules only after completing the full transport state
-    _if_out_of_box(x_j, y_j, z_j, lx_j, vy_j, lz_j);
+    _apply_transport_boundary(x_j, y_j, z_j, lx_j, vy_j, lz_j);
     _save_particle(dev_particle, idx, x_j, y_j, z_j, lx_j, vy_j, lz_j);
 }
 

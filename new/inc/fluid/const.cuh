@@ -35,13 +35,13 @@ const real  ASPR_0      = 0.05;
 const real  IDX_P       = -1.0;         // radial power-law index of the gas surface density
 const real  IDX_Q       = -0.4;         // radial power-law index of the gas temperature
 
-#ifdef DIFFUSION
-#ifndef CONST_NU
+#if defined(DIFFUSION) || defined(VISC_ACCRETION)
+#ifndef CONST_NU  // CONST_ALPHA
 const real  ALPHA       = 1.0e-03;
-#else
+#else             // CONST_NU
 const real  NU          = 1.0e-05;
-#endif
-#endif
+#endif // CONST_NU
+#endif // DIFFUSION || VISC_ACCRETION
 
 // =========================================================================================================================
 // dust parameters
@@ -56,9 +56,9 @@ const real  T_BETA      = 2.0*M_PI;     // smoothly turn radiation on over time
 #endif
 
 #ifdef DIFFUSION
-const real  SC_X        = 1.0e+20;      // Schmidt numbers for diffusion in X, Y, Z directions
-const real  SC_Y        = 1.0e+20;
-const real  SC_Z        = 1.0;          
+const real  SC_X        = 1.0e+20;      // azimuthal Schmidt number in spherical X
+const real  SC_Y        = 1.0e+20;      // radial Schmidt number in spherical Y
+const real  SC_Z        = 1.0;          // polar Schmidt number in spherical Z
 const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity limiter
 #endif
 

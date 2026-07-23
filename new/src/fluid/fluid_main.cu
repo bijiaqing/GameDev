@@ -326,7 +326,7 @@ int main (int argc, char **argv)
 
         // ramp radiation pressure smoothly during the configured startup interval
         #ifdef RADIATION
-        real taper = (clock_sim + 0.5*dt) / T_BETA;
+        real taper = (T_BETA > 0.0) ? (clock_sim + 0.5*dt) / T_BETA : 1.0;
         taper = std::fmin(std::fmax(taper, 0.0), 1.0);
         real beta_taper = taper*taper*(3.0 - 2.0*taper);
         #endif

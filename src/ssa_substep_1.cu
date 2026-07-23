@@ -23,8 +23,10 @@ void ssa_substep_1 (swarm *dev_particle, real dt)
 
     // retain the initial velocity while replacing the stored position by its midpoint value
     _load_particle(dev_particle, idx, x_i, y_i, z_i, lx_i, vy_i, lz_i);
+    if (!_is_particle_active(y_i, z_i)) return;
+
     _ssa_substep_1(dt, x_i, y_i, z_i, lx_i, vy_i, lz_i, x_1, y_1, z_1);
-    _if_out_of_box(x_1, y_1, z_1, lx_i, vy_i, lz_i);
+    _apply_transport_boundary(x_1, y_1, z_1, lx_i, vy_i, lz_i);
     _save_particle(dev_particle, idx, x_1, y_1, z_1, lx_i, vy_i, lz_i);
 }
 

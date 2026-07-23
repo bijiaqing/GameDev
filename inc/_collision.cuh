@@ -317,7 +317,7 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
 // calculate the pair propensity numerator N_j K_ij before division by the local KNN measure
 template <KernelType kernel> __device__ __forceinline__
 real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
-    int idx_old_i, int idx_old_j
+    int idx_old_i, int idx_old_j, real lambda_0
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
     #endif // IMPORTGAS
@@ -334,7 +334,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
 
     if constexpr (kernel == CONSTANT_KERNEL)
     {
-        return LAMBDA_0*numr_j;
+        return lambda_0*numr_j;
     }
     else if constexpr (kernel == LINEAR_KERNEL)
     {
@@ -342,7 +342,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         real s_j = dev_size_old[idx_old_j];
 
         // m_i + m_j
-        return LAMBDA_0*numr_j*0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
+        return lambda_0*numr_j*0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
     }
     else if constexpr (kernel == PRODUCT_KERNEL)
     {
@@ -350,7 +350,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         real s_j = dev_size_old[idx_old_j];
         
         // m_i * m_j
-        return LAMBDA_0*numr_j*_get_grain_mass(s_i)*_get_grain_mass(s_j);
+        return lambda_0*numr_j*_get_grain_mass(s_i)*_get_grain_mass(s_j);
     }
     else if constexpr (kernel == CUSTOM_KERNEL)
     {

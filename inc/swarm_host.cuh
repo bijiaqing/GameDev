@@ -18,6 +18,7 @@
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
+#include <param_phys.cuh>
 
 // =========================================================================================================================
 // elementary random profiles
@@ -25,6 +26,24 @@
 
 // share one deterministic host generator across all initialization samplers
 extern std::mt19937 rand_generator;
+
+#ifdef MULTISIZE
+// calculate the mass scale that makes the sampled representative masses sum to the target dust mass
+inline __host__
+real get_mass_norm (const real *grain_size, real dust_mass)
+{
+    long double weight_sum = 0.0;
+
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        weight_sum += static_cast<long double>(_get_mass_weight(grain_size[idx]));
+    }
+
+    return static_cast<real>(
+        static_cast<long double>(dust_mass)*static_cast<long double>(N_P) / weight_sum
+    );
+}
+#endif // MULTISIZE
 
 // sample a Gaussian distribution truncated to the parameter interval by rejection
 inline __host__
@@ -111,6 +130,41 @@ void _get_convpow_profile (std::vector <real> &x_axis, std::vector <real> &y_axi
     }
 }
 
+// calculate the same physical convolved dust surface-density profile used by the fluid initializer
+inline static __host__
+void _get_initdens_profile (std::vector <real> &radial_axis, std::vector <real> &sigma_profile)
+{
+    const real smooth = 0.05*R_0;
+    const real src_min = Y_MIN + 2.0*smooth;
+    const real src_max = Y_MAX - 2.0*smooth;
+    const real sigma_kernel = 0.5*smooth;
+    const real du = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
+    const real norm = 1.0 / (std::sqrt(2.0*M_PI)*sigma_kernel);
+
+    radial_axis.resize(N_Y + 1);
+    sigma_profile.assign(N_Y + 1, 0.0);
+
+    for (int iu = 0; iu <= N_Y; iu++)
+    {
+        radial_axis[iu] = Y_MIN + static_cast<real>(iu)*du;
+    }
+
+    for (int is = 0; is <= N_Y; is++)
+    {
+        real R_src = radial_axis[is];
+        if (R_src < src_min || R_src > src_max) continue;
+
+        real sigma_d = METAL_Z*SIGMA_0*std::pow(R_src / R_0, IDX_P);
+
+        for (int iu = 0; iu <= N_Y; iu++)
+        {
+            real delta_R = radial_axis[iu] - R_src;
+            real kernel = norm*std::exp(-0.5*delta_R*delta_R/(sigma_kernel*sigma_kernel));
+            sigma_profile[iu] += sigma_d*kernel*du;
+        }
+    }
+}
+
 // sample the numerically convolved power law by inverse-CDF interpolation
 inline __host__
 void rand_convpow (real *profile, int number, real x_min, real x_max, real idx_pow, real smooth, int bins)
@@ -163,6 +217,72 @@ real _interp_convpow_profile (real x, const std::vector <real> &profile, real x_
     return (1.0 - frac)*profile[idx] + frac*profile[idx + 1];
 }
 
+// evaluate the physical initialized dust density for one cylindrical position and grain size
+inline static __host__
+real _get_init_density (real sigma, real R, real Z, real size)
+{
+    if (N_Z == 1 || sigma <= 0.0) return sigma;
+
+    real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
+    real H_d = h_g*R;
+
+    #ifdef DIFFUSION
+    #ifdef CONST_NU
+    real omega = std::sqrt(G*M_S / (R*R*R));
+    real alpha_z = NU / (h_g*h_g*R*R*omega*SCHMIDT_Z);
+    #else  // CONST_ALPHA
+    real alpha_z = ALPHA / SCHMIDT_Z;
+    #endif // CONST_NU
+
+    real stokes_mid = ST_0*(size / S_0);
+    #ifndef CONST_ST
+    stokes_mid /= std::pow(R / R_0, IDX_P);
+    #endif // NOT CONST_ST
+    H_d *= std::sqrt(alpha_z / stokes_mid);
+    #endif // DIFFUSION
+
+    return sigma*std::exp(-0.5*Z*Z/(H_d*H_d)) / (std::sqrt(2.0*M_PI)*H_d);
+}
+
+// integrate the initialized reference-size profile over the represented spherical mesh
+inline __host__
+real get_dust_mass ()
+{
+    std::vector <real> radial_axis;
+    std::vector <real> sigma_profile;
+    _get_initdens_profile(radial_axis, sigma_profile);
+
+    real dy = _get_dy();
+    real dz = _get_dz();
+    real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
+    real dy_pow = std::pow(dy, pow_y);
+    real vol_x = (N_X > 1) ? X_MAX - X_MIN : 1.0;
+    real dust_mass = 0.0;
+
+    for (int iz = 0; iz < N_Z; iz++)
+    {
+        real z0 = (N_Z > 1) ? Z_MIN + static_cast<real>(iz)*dz : 0.5*(Z_MIN + Z_MAX);
+        real z1 = (N_Z > 1) ? z0 + dz : z0;
+        real zc = (N_Z > 1) ? 0.5*(z0 + z1) : z0;
+        real vol_z = (N_Z > 1) ? std::cos(z0) - std::cos(z1) : 1.0;
+
+        for (int iy = 0; iy < N_Y; iy++)
+        {
+            real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
+            real yc = y0*std::sqrt(dy);
+            real R = yc*std::sin(zc);
+            real Z = yc*std::cos(zc);
+            real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
+            real density = _get_init_density(sigma, R, Z, S_0);
+            real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
+
+            dust_mass += density*vol_x*vol_y*vol_z;
+        }
+    }
+
+    return dust_mass;
+}
+
 // =========================================================================================================================
 // disk position sampling
 // =========================================================================================================================
@@ -178,7 +298,7 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
 
     std::vector <real> radial_axis;
     std::vector <real> sigma_profile;
-    _get_convpow_profile(radial_axis, sigma_profile, Y_MIN, Y_MAX, IDX_P, 0.05*R_0, N_Y);
+    _get_initdens_profile(radial_axis, sigma_profile);
 
     real dy = _get_dy();
     real dz = _get_dz();
@@ -204,32 +324,7 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
             real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
-            real density = sigma;
-
-            if (N_Z > 1 && sigma > 0.0)
-            {
-                real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
-                real H_g = h_g*R;
-                real H_d = H_g;
-
-                #ifdef DIFFUSION
-                #ifdef CONST_NU
-                real omega = std::sqrt(G*M_S / (R*R*R));
-                real alpha_z = NU / (h_g*h_g*R*R*omega*SCHMIDT_Z);
-                #else  // CONST_ALPHA
-                real alpha_z = ALPHA / SCHMIDT_Z;
-                #endif // CONST_NU
-
-                real stokes_mid = ST_0*(size / S_0);
-                #ifndef CONST_ST
-                stokes_mid /= std::pow(R / R_0, IDX_P);
-                #endif // NOT CONST_ST
-
-                H_d *= std::sqrt(alpha_z / stokes_mid);
-                #endif // DIFFUSION
-
-                density = sigma*std::exp(-0.5*Z*Z/(H_d*H_d)) / H_d;
-            }
+            real density = _get_init_density(sigma, R, Z, size);
 
             real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
             int idx = iy + iz*N_Y;
@@ -364,7 +459,7 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
 
     std::vector <real> radial_axis;
     std::vector <real> sigma_profile;
-    _get_convpow_profile(radial_axis, sigma_profile, Y_MIN, Y_MAX, IDX_P, 0.05*R_0, N_Y);
+    _get_initdens_profile(radial_axis, sigma_profile);
 
     std::vector <real> cdf;
     std::vector <real> cdf_bank(static_cast<size_t>(size_bins)*static_cast<size_t>(cells + 1));
@@ -649,6 +744,36 @@ bool load_binary (const std::string &file_name, DataType *data, int number)
     return file.good();
 }
 
+// convert internal angular variables to linear azimuthal and polar velocities before file output
+inline __host__
+void save_sam_as_velocity (swarm *particle)
+{
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        real y = particle[idx].position.y;
+        real z = particle[idx].position.z;
+        real R = y*std::sin(z);
+
+        particle[idx].velocity.x = (R > 0.0) ? particle[idx].velocity.x / R : 0.0;
+        particle[idx].velocity.z = (y > 0.0) ? particle[idx].velocity.z / y : 0.0;
+    }
+}
+
+// convert linear azimuthal and polar file velocities to the internal angular variables
+inline __host__
+void load_velocity_as_sam (swarm *particle)
+{
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        real y = particle[idx].position.y;
+        real z = particle[idx].position.z;
+        real R = y*std::sin(z);
+
+        particle[idx].velocity.x *= R;
+        particle[idx].velocity.z *= y;
+    }
+}
+
 // =========================================================================================================================
 // file naming, loading, and metadata
 // =========================================================================================================================
@@ -739,7 +864,7 @@ bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real 
 
 // write the active physical, numerical, grid, and binary-layout configuration
 inline __host__
-bool save_variable (const std::string &file_name)
+bool save_variable (const std::string &file_name, real dust_mass)
 {
     std::ofstream file(file_name);
     if (!file) return false;
@@ -749,16 +874,20 @@ bool save_variable (const std::string &file_name)
 
     // gas parameters
     file << "SIGMA_0     = " << std::scientific     << std::setprecision(8) << SIGMA_0      << std::endl;
+    file << "METAL_Z     = " << std::scientific     << std::setprecision(8) << METAL_Z      << std::endl;
     file << "ASPR_0      = " << std::defaultfloat   << std::setprecision(8) << ASPR_0       << std::endl;
     file << "IDX_P       = " << std::defaultfloat   << std::setprecision(8) << IDX_P        << std::endl;
     file << "IDX_Q       = " << std::defaultfloat   << std::setprecision(8) << IDX_Q        << std::endl;
-    #if defined(DIFFUSION) || defined(COLLISION)
+    #if defined(DIFFUSION) || defined(COLLISION) || defined(VISC_ACCRETION)
     #ifdef CONST_NU
     file << "NU          = " << std::scientific     << std::setprecision(8) << NU           << std::endl;
     #else  // CONST_ALPHA
     file << "ALPHA       = " << std::scientific     << std::setprecision(8) << ALPHA        << std::endl;
     #endif // CONST_NU
-    #endif // DIFFUSION || COLLISION
+    #endif // DIFFUSION || COLLISION || VISC_ACCRETION
+    #ifdef VISC_ACCRETION
+    file << "VISC_ACCRETION = " << std::defaultfloat << 1                                << std::endl;
+    #endif // VISC_ACCRETION
     #ifdef COLLISION
     #ifdef CODE_UNIT
     file << "RE_0        = " << std::scientific     << std::setprecision(8) << RE_0         << std::endl;
@@ -771,11 +900,12 @@ bool save_variable (const std::string &file_name)
     
     // dust parameters
     file << "ST_0        = " << std::scientific     << std::setprecision(8) << ST_0         << std::endl;
-    file << "M_D         = " << std::scientific     << std::setprecision(8) << M_D          << std::endl;
+    file << "DUST_MASS   = " << std::scientific     << std::setprecision(8) << dust_mass    << std::endl;
     file << "RHO_0       = " << std::scientific     << std::setprecision(8) << RHO_0        << std::endl;
     #ifdef RADIATION
     file << "BETA_0      = " << std::scientific     << std::setprecision(8) << BETA_0       << std::endl;
     file << "KAPPA_0     = " << std::scientific     << std::setprecision(8) << KAPPA_0      << std::endl;
+    file << "T_BETA      = " << std::scientific     << std::setprecision(8) << T_BETA       << std::endl;
     #endif // RADIATION
     #ifdef DIFFUSION
     file << "SCHMIDT_X   = " << std::scientific     << std::setprecision(8) << SCHMIDT_X    << std::endl;
@@ -786,7 +916,8 @@ bool save_variable (const std::string &file_name)
     #endif // DIFFUSION || COLLISION
 
     #ifdef COLLISION
-    file << "LAMBDA_0    = " << std::scientific     << std::setprecision(8) << LAMBDA_0     << std::endl;
+    file << "LAMBDA_0    = " << std::scientific     << std::setprecision(8)
+         << N_P / (N_K - 1.0) / dust_mass << std::endl;
     file << "V_FRAG      = " << std::scientific     << std::setprecision(8) << V_FRAG       << std::endl;
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
@@ -814,8 +945,10 @@ bool save_variable (const std::string &file_name)
     file                                                                                    << std::endl;
 
     // initialization parameters
+    #ifdef MULTISIZE
     file << "INIT_SMIN   = " << std::scientific     << std::setprecision(8) << INIT_SMIN    << std::endl;
     file << "INIT_SMAX   = " << std::scientific     << std::setprecision(8) << INIT_SMAX    << std::endl;
+    #endif // MULTISIZE
     file                                                                                    << std::endl;
 
     // timestep and output parameters
@@ -832,7 +965,7 @@ bool save_variable (const std::string &file_name)
     #endif // TRANSPORT
     file                                                                                    << std::endl;
 
-    // swarm structure as a configparser-compatible NumPy dtype, in Python write as:
+    // swarm structure with linear physical velocities as a configparser-compatible NumPy dtype, in Python write as:
     // dtype = np.dtype([(name, dtype) for name, dtype in config['SWARM_DTYPE'].items()])
     file << "[SWARM_DTYPE]"                                                                 << std::endl;
     file << "position_x = f8"                                                               << std::endl;
@@ -856,6 +989,7 @@ bool save_variable (const std::string &file_name)
 #define SAVE_PARTICLE_TO_FILE(idx)                                                          \
 do {                                                                                        \
     CUDA_CHECK(cudaMemcpy(particle, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost));          \
+    save_sam_as_velocity(particle);                                                         \
     std::string fname = PATH + "particle_" + frame_num(idx) + ".dat";                       \
     save_binary(fname, particle, N_P);                                                      \
 } while(0)
@@ -868,6 +1002,7 @@ do {                                                                            
         std::cerr << "Error: Failed to load file: " << fname << std::endl;                  \
         return 1;                                                                           \
     }                                                                                       \
+    load_velocity_as_sam(particle);                                                         \
     if (N_Z == 1)                                                                           \
     {                                                                                       \
         for (int idx_particle = 0; idx_particle < N_P; idx_particle++)                     \
@@ -912,7 +1047,7 @@ do {                                                                            
 do {                                                                                        \
     dustdens_init <<< NB_G, TPB >>> (dev_dustdens);                                         \
     CUDA_KERNEL_CHECK("dustdens_init");                                                     \
-    dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle);                           \
+    dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, dust_mass);                \
     CUDA_KERNEL_CHECK("dustdens_depo");                                                     \
     dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);                                         \
     CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
@@ -927,7 +1062,7 @@ do {                                                                            
 do {                                                                                        \
     optdepth_init <<< NB_G, TPB >>> (dev_optdepth);                                         \
     CUDA_KERNEL_CHECK("optdepth_init");                                                     \
-    optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle);                           \
+    optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, dust_mass);                \
     CUDA_KERNEL_CHECK("optdepth_depo");                                                     \
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);                                         \
     CUDA_KERNEL_CHECK("optdepth_calc");                                                     \

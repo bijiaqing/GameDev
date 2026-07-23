@@ -17,6 +17,26 @@ __device__ __forceinline__
 real _get_grain_mass (real s)
 { return M_PI*RHO_0*s*s*s / 6.0; }
 
+#ifdef MULTISIZE
+// calculate the represented-mass weight implied by the sampled swarm-size distribution
+__host__ __device__ __forceinline__
+real _get_mass_weight (real size)
+{
+    real weight = 1.0;
+
+    #ifdef RADIATION
+    if (INIT_SMIN != INIT_SMAX)
+    {
+        weight *= size;
+        weight *= pow(INIT_SMIN, -0.5) - pow(INIT_SMAX, -0.5);
+        weight /= pow(INIT_SMAX,  0.5) - pow(INIT_SMIN,  0.5);
+    }
+    #endif // RADIATION
+
+    return weight;
+}
+#endif // MULTISIZE
+
 __device__ __forceinline__
 real _get_omegaK (real R)
 { return sqrt(G*M_S / R / R / R); }
@@ -50,7 +70,7 @@ __device__ __forceinline__
 real _get_cs (real R, real h_g)
 { return h_g*_get_omegaK(R)*R; }
 
-#if defined(DIFFUSION) || defined(COLLISION)
+#if defined(DIFFUSION) || defined(COLLISION) || defined(VISC_ACCRETION)
 // calculate the kinematic viscosity from the configured constant-nu or alpha prescription
 __device__ __forceinline__
 real _get_nu (real R, real h_g)
@@ -62,7 +82,41 @@ real _get_nu (real R, real h_g)
     return nu;
     #endif // CONST_NU
 }
-#endif // DIFFUSION || COLLISION
+#endif // DIFFUSION || COLLISION || VISC_ACCRETION
+
+#ifdef VISC_ACCRETION
+// calculate the cylindrical radial gas velocity from equation 41 of Kanagawa et al. 2017
+__device__ __forceinline__
+real _get_visc_vel (real R, real Z, real h_g)
+{
+    real nu = _get_nu(R, h_g);
+
+    #ifdef CONST_NU
+    real grad_nu_R = 0.0;
+    #else  // CONST_ALPHA
+    real grad_nu_R = IDX_Q + 1.5;
+    #endif // CONST_NU
+
+    // use the vertically integrated equation 9 in the vertically integrated 2D model
+    if (N_Z == 1) return -3.0*nu*(grad_nu_R + IDX_P + 0.5) / R;
+
+    real y_sph = sqrt(R*R + Z*Z);
+    real cyl_frac = R / y_sph;
+    real strat = (cyl_frac - 1.0) / (h_g*h_g);
+
+    real grad_strat_R = cyl_frac*(1.0 - cyl_frac*cyl_frac) / (h_g*h_g);
+    grad_strat_R -= (IDX_Q + 1.0)*strat;
+    real grad_strat_Z = -cyl_frac*(1.0 - cyl_frac*cyl_frac) / (h_g*h_g);
+
+    real grad_rhog_R = IDX_P - 0.5*(IDX_Q + 3.0) + grad_strat_R;
+    real grad_rhog_Z = grad_strat_Z;
+
+    real stress_R = 3.0*nu*(grad_nu_R + grad_rhog_R + 0.5);
+    real stress_Z = IDX_Q*nu*(1.0 + grad_rhog_Z);
+
+    return -(stress_R - stress_Z) / R;
+}
+#endif // VISC_ACCRETION
 
 #ifdef COLLISION
 // calculate the local dimensionless turbulence strength from the configured viscosity prescription

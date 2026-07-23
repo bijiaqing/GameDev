@@ -30,7 +30,15 @@ void ssa_transport (swarm *dev_particle,
 
     // construct the staggered midpoint position from the initial state
     _load_particle(dev_particle, idx, x_i, y_i, z_i, lx_i, vy_i, lz_i);
+    if (!_is_particle_active(y_i, z_i)) return;
+
     _ssa_substep_1(dt, x_i, y_i, z_i, lx_i, vy_i, lz_i, x_1, y_1, z_1);
+    _apply_transport_boundary(x_1, y_1, z_1, lx_i, vy_i, lz_i);
+    if (!_is_particle_active(y_1, z_1))
+    {
+        _save_particle(dev_particle, idx, x_1, y_1, z_1, lx_i, vy_i, lz_i);
+        return;
+    }
 
     #ifdef MULTISIZE
     real size = dev_particle[idx].par_size;
@@ -47,7 +55,7 @@ void ssa_transport (swarm *dev_particle,
     );
 
     // enforce boundaries after the completed transport update
-    _if_out_of_box(x_j, y_j, z_j, lx_j, vy_j, lz_j);
+    _apply_transport_boundary(x_j, y_j, z_j, lx_j, vy_j, lz_j);
     _save_particle(dev_particle, idx, x_j, y_j, z_j, lx_j, vy_j, lz_j);
 }
 

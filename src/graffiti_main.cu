@@ -29,7 +29,8 @@ const std::string PATH = PATH_OUT; // convert the Makefile string literal to the
 
 int main (int argc, char **argv)
 {
-    
+    const real dust_mass = get_dust_mass();
+
     int idx_from;
     real clock_sim;   // total simulated time
     real clock_out;   // elapsed time in the current output interval
@@ -148,6 +149,9 @@ int main (int argc, char **argv)
         #else  // STANDARD_INITIALIZATION
         rand_powerlaw(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
         #endif // COLLISION_LINEAR_TEST
+
+        // correct finite-sample size fluctuations so represented masses sum exactly to dust_mass
+        real mass_norm = get_mass_norm(random_s, dust_mass);
         #endif // MULTISIZE
 
         #ifdef IMPORTGAS
@@ -185,7 +189,7 @@ int main (int argc, char **argv)
         // convert sampled coordinates and sizes into the device particle state
         particle_init <<< NB_P, TPB >>> (dev_particle, dev_random_x, dev_random_y, dev_random_z
             #ifdef MULTISIZE
-            , dev_random_s
+            , dev_random_s, mass_norm
             #endif // MULTISIZE
         );
         CUDA_KERNEL_CHECK("particle_init");
@@ -209,7 +213,7 @@ int main (int argc, char **argv)
         
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
-        save_variable(PATH + "variables.txt");
+        save_variable(PATH + "variables.txt", dust_mass);
 
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from, false);
@@ -271,10 +275,11 @@ int main (int argc, char **argv)
             col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
             CUDA_KERNEL_CHECK("col_snap_save");
             col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
-                dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox
+                dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
-                , dev_gas_dens
+                dev_gas_dens,
                 #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / dust_mass
             );
             CUDA_KERNEL_CHECK("col_rate_calc");
 
@@ -298,6 +303,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / dust_mass,
                 dt_col
             );
             CUDA_KERNEL_CHECK("col_event_run");
@@ -374,16 +380,22 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("ssa_substep_1");
             optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_init");
-            optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle);
+            optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, dust_mass);
             CUDA_KERNEL_CHECK("optdepth_depo");
             optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_calc");
             optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_csum");
+
+            real taper = (T_BETA > 0.0) ? (clock_sim + 0.5*dt_dyn) / T_BETA : 1.0;
+            taper = fmin(fmax(taper, 0.0), 1.0);
+            real beta_taper = taper*taper*(3.0 - 2.0*taper);
+
             ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth,
                 #ifdef IMPORTGAS
                 dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
                 #endif // IMPORTGAS
+                beta_taper,
                 dt_dyn
             );
             CUDA_KERNEL_CHECK("ssa_substep_2");

@@ -21,7 +21,7 @@ void _get_force_term (real yc, real zc, real Rc, real velx, real velz, real beta
 {
     Fy  = -(1.0 - beta)*_get_omegaK(yc)*_get_omegaK(yc)*yc;
     Fcy = velx*velx / Rc / Rc / yc + velz*velz / yc / yc / yc;
-    Tcz = velx*velx / Rc / Rc / sin(zc)*cos(zc);
+    Tcz = (N_Z > 1) ? velx*velx / Rc / Rc / sin(zc)*cos(zc) : 0.0;
 }
 
 __global__
@@ -97,12 +97,19 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     // load dust primitives and construct the local gas equilibrium state
     real velx = dev_dustvelx[idx];
     real vely = dev_dustvely[idx];
-    real velz = dev_dustvelz[idx];
+    real velz = (N_Z > 1) ? dev_dustvelz[idx] : 0.0;
 
     real eta = _get_eta(Rc, Zc, h_g);
     real velx_g = Rc*Rc*omega*sqrt(fmax(1.0 - 2.0*eta, 0.0));
+
+    #ifdef VISC_ACCRETION
+    real vgas_R = _get_visc_vel(Rc, Zc, h_g);
+    real vely_g = vgas_R*sin(zc);
+    real velz_g = (N_Z > 1) ? yc*vgas_R*cos(zc) : 0.0;
+    #else  // PURE_ROTATION
     real vely_g = 0.0;
     real velz_g = 0.0;
+    #endif // VISC_ACCRETION
 
     // evaluate forces at the old state and relax azimuthal specific angular momentum
     real Fy_n, Fcy_n, Tcz_n, velx_new;
@@ -119,6 +126,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     velz_new += drag_relax*velz_g;
     velz_new += force_weight_n*Tcz_n;
     velz_new += force_weight_new*Tcz_new;
+    if (N_Z == 1) velz_new = 0.0;
 
     // re-evaluate radial forces and update radial velocity
     real Fy_new, Fcy_new, vely_new;

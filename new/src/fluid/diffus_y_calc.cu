@@ -58,13 +58,13 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real dy_len_i = yc*(dy - 1.0) / dy;
         real dy_len_o = yc*(dy - 1.0);
 
-        real R_i = y0*sin(zc);
-        real h_i = _get_hg(R_i);
-        real Dy_i = _get_nu(R_i, h_i) / SC_Y;
+        real Rc_i = y0*sin(zc);
+        real h_i = _get_hg(Rc_i);
+        real Dy_i = _get_nu(Rc_i, h_i) / SC_Y;
 
-        real R_o = y1*sin(zc);
-        real h_o = _get_hg(R_o);
-        real Dy_o = _get_nu(R_o, h_o) / SC_Y;
+        real Rc_o = y1*sin(zc);
+        real h_o = _get_hg(Rc_o);
+        real Dy_o = _get_nu(Rc_o, h_o) / SC_Y;
 
         real area_i = pow(y0, pow_y - 1.0);
         real area_o = pow(y1, pow_y - 1.0);
@@ -152,11 +152,11 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             if (iy == N_Y - 1) iy_up = iy;
 
             real y_up = Y_MIN*pow(dy, iy_up + 0.5);
-            real R_up = y_up*sin(zc);
+            real Rc_up = y_up*sin(zc);
             real dens_up = dens[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
-            real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(R_up, 0.0));
+            real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc_up, 0.0));
 
             dens_rhs[iy] = upper_work[iy]*velx_up;
         }

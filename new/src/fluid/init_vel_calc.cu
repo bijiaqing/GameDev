@@ -32,14 +32,19 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     real vg_x = v_K*sqrt(fmax(1.0 - 2.0*eta, 0.0));
     real stokes = _get_stokes(Rc, Zc, h_g);
 
-    real v_R = 2.0*stokes*(vg_x - v_K) / (1.0 + stokes*stokes);
+    real vgas_R = 0.0;
+    #ifdef VISC_ACCRETION
+    vgas_R = _get_visc_vel(Rc, Zc, h_g);
+    #endif // VISC_ACCRETION
+
+    real v_R = (vgas_R + 2.0*stokes*(vg_x - v_K)) / (1.0 + stokes*stokes);
     real v_x = vg_x - 0.5*stokes*v_R;
 
     real speed_z_diff = 0.0;
     #ifdef DIFFUSION
     if (N_Z > 1)
     {
-        // add the polar settling velocity that balances the initialized density-diffusion flux
+        // balance the initialized density gradient with spherical polar diffusion
         real Dz = _get_nu(Rc, h_g) / SC_Z;
         real dens = dev_dustdens[idx];
         real grad_dens;
@@ -70,9 +75,9 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     }
     #endif
 
-    // project cylindrical radial drift into spherical components and store angular primitives
+    // project cylindrical radial drift and add the spherical polar diffusion balance
     real v_y = v_R*sin(zc);
-    real v_z = v_R*cos(zc) + speed_z_diff;
+    real v_z = (N_Z > 1) ? v_R*cos(zc) + speed_z_diff : 0.0;
 
     dev_dustvelx[idx] = Rc*v_x;
     dev_dustvely[idx] = v_y;

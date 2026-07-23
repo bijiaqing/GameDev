@@ -60,17 +60,18 @@ static_assert(N_Z == 1, "N_Z > 1 requires DIFFUSION");
 // =========================================================================================================================
 
 const real  SIGMA_0     = 1.0e-02;          // reference gas surface density at R_0
+const real  METAL_Z     = 1.0e-02;          // total dust-to-gas surface-density ratio for initialization
 const real  ASPR_0      = 0.05;             // the reference aspect ratio of the gas disk
 const real  IDX_P       = -1.0;             // the radial power-law index of the gas surface density profile
 const real  IDX_Q       = -0.4;             // the radial power-law index of the gas temperature profile (vertically isothermal)
 
-#if defined(COLLISION) || defined(DIFFUSION)
+#if defined(COLLISION) || defined(DIFFUSION) || defined(VISC_ACCRETION)
 #ifdef CONST_NU
 const real  NU          = 1.0e-05;          // the kinematic viscosity parameter of the gas
 #else  // CONST_ALPHA
 const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity parameter of the gas
 #endif // CONST_NU
-#endif // COLLISION || DIFFUSION
+#endif // COLLISION || DIFFUSION || VISC_ACCRETION
 
 #ifdef COLLISION
 #ifdef CODE_UNIT
@@ -87,21 +88,21 @@ const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm
 
 const real  ST_0        = 1.0e-03;          // the reference Stokes number of dust with the reference size
 
-const real  M_D         = 1.0e30;           // total dust mass represented inside the computational domain
 const real  RHO_0       = 1.0;              // compact-grain internal density
 
 #ifdef RADIATION
 const real  BETA_0      = 1.0e+01;          // the reference ratio between the radiation pressure and the gravity
 const real  KAPPA_0     = 1.0;              // the reference gray opacity of the dust
+const real  T_BETA      = 2.0*M_PI;         // duration of the smooth radiation startup
 #endif // RADIATION
 
 #ifdef DIFFUSION
-const real  SCHMIDT_X   = 1.0;              // the Schmidt number for azimuthal  diffusion
-const real  SCHMIDT_R   = 1.0;              // the Schmidt number for radial     diffusion
+const real  SCHMIDT_X   = 1.0;              // the Schmidt number for cylindrical azimuthal diffusion
+const real  SCHMIDT_R   = 1.0;              // the Schmidt number for cylindrical radial diffusion
 #endif // DIFFUSION
 
 #if defined(DIFFUSION) || defined(COLLISION)
-const real  SCHMIDT_Z   = 1.0;              // the Schmidt number for vertical   diffusion
+const real  SCHMIDT_Z   = 1.0;              // the Schmidt number for cylindrical vertical diffusion
 #endif // DIFFUSION || COLLISION
 
 #ifdef COLLISION
@@ -109,7 +110,6 @@ const int   COAG_KERNEL = 0;                // coagulation kernels: 0 = constant
 const int   N_K         = 200;              // number of candidate slots returned by each KNN query
 
 const real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
-const real  LAMBDA_0    = N_P / (N_K - 1.0) / M_D;  // normalization for dimensionless test kernels excluding self
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
 const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
 #endif // COLLISION

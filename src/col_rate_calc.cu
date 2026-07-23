@@ -1,6 +1,7 @@
 #ifdef COLLISION
 
 #include <_collision.cuh>
+#include <_transport.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
@@ -19,10 +20,11 @@
 
 __global__
 void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
-    const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox
+    const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox,
     #ifdef IMPORTGAS
-    , const real *dev_gas_dens
+    const real *dev_gas_dens,
     #endif // IMPORTGAS
+    real lambda_0
 )
 {
     int idx_tree = threadIdx.x+blockDim.x*blockIdx.x;
@@ -36,6 +38,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     real x = dev_particle[idx_old_i].position.x;
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
+    if (!_is_particle_active(y, z)) return;
 
     real loc_x = _get_loc_x(x);
     real loc_y = _get_loc_y(y);
@@ -64,12 +67,15 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
         {
             int idx_old_j = dev_col_tree[idx_query].index_old;
             if (idx_old_j == idx_old_i) continue; // skip self-collision
+            if (!_is_particle_active(
+                dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
+            )) continue;
 
             float dist2 = query_result.returnDist2(j);
             max_dist2 = fmaxf(max_dist2, dist2);
 
             col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
-                dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
+                dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j, lambda_0
                 #ifdef IMPORTGAS
                 , dev_gas_dens
                 #endif // IMPORTGAS

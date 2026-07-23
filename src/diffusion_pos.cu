@@ -27,6 +27,8 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     real y = dev_particle[idx].position.y;
     real z = dev_particle[idx].position.z;
 
+    if (!_is_particle_active(y, z)) return;
+
     real R = y*sin(z);
 
     real lx = dev_particle[idx].velocity.x;
@@ -101,6 +103,10 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     real y_new = sqrt(R_new*R_new + Z_new*Z_new);
     real z_new = atan2(R_new, Z_new);
 
+    _apply_diffusion_boundary(x_new, y_new, z_new);
+    R_new = y_new*sin(z_new);
+    Z_new = y_new*cos(z_new);
+
     // project the unchanged Cartesian velocity into the new local spherical basis
     real sin_znew = R_new / y_new;
     real cos_znew = Z_new / y_new;
@@ -110,8 +116,6 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     lx = vphi_new*R_new;
     vy = vel_Rnew*sin_znew + vel_Z*cos_znew;
     lz = (vel_Rnew*cos_znew - vel_Z*sin_znew)*y_new;
-
-    _if_out_of_box(x_new, y_new, z_new, lx, vy, lz);
 
     dev_particle[idx].position.x = x_new;
     dev_particle[idx].position.y = y_new;

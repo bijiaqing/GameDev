@@ -1,6 +1,7 @@
 #ifdef COLLISION
 
 #include <_collision.cuh>
+#include <_transport.cuh>
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
@@ -22,6 +23,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
+    real lambda_0,
     real dt_col
 )
 {
@@ -72,10 +74,13 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
         int candidate = dev_col_tree[idx_query].index_old;
         if (candidate == idx_old_i) continue;
+        if (!_is_particle_active(
+            dev_particle[candidate].position.y, dev_particle[candidate].position.z
+        )) continue;
 
         idx_old_j = candidate;
         cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
-            dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
+            dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j, lambda_0
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS

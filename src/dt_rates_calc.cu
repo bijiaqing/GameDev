@@ -3,6 +3,7 @@
 #ifdef DIFFUSION
 #include <_diffusion.cuh>
 #endif // DIFFUSION
+#include <_transport.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
@@ -34,6 +35,12 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real x  = dev_particle[idx].position.x;
     real y  = dev_particle[idx].position.y;
     real z  = dev_particle[idx].position.z;
+
+    if (!_is_particle_active(y, z))
+    {
+        dev_dt_rates[idx] = 0.0;
+        return;
+    }
 
     real lx = dev_particle[idx].velocity.x;
     real vy = dev_particle[idx].velocity.y;
@@ -97,6 +104,17 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
         real accel_z = abs(lx*lx / (R*R)*cos(z) / sin(z)) / y;
         rate = fmax(rate, sqrt(accel_z / (2.0*CFL_DYN*y*dz)));
     }
+
+    #ifdef VISC_ACCRETION
+    {
+        // include the analytic gas target velocity before drag can transfer it to the dust
+        real h_g_acc = _get_hg(R);
+        real vgas_R = _get_visc_vel(R, y*cos(z), h_g_acc);
+
+        if (N_Y > 1) rate = fmax(rate, abs(vgas_R*sin(z)) / (y*log(dy)*CFL_DYN));
+        if (N_Z > 1) rate = fmax(rate, abs(vgas_R*cos(z)) / (y*dz*CFL_DYN));
+    }
+    #endif // VISC_ACCRETION
 
     #ifdef DIFFUSION
     real h_g = _get_hg(R);
