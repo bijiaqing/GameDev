@@ -1,8 +1,8 @@
 #ifdef COLLISION
 
-#include <graffiti_kern.cuh>
-#include <paramphys.cuh>
-#include <collision.cuh>
+#include <_collision.cuh>
+#include <param_phys.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: col_event_run

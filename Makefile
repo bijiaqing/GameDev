@@ -39,17 +39,15 @@ EXEC = $(MOD_DIR)/graffiti
 endif
 
 _INC =						\
-	const.cuh				\
-	graffiti_kern.cuh		\
-	host_file.cuh			\
-	host_rand.cuh			\
-	collision.cuh			\
-	diffusion.cuh			\
-	interpval.cuh			\
-	paramgrid.cuh			\
-	paramphys.cuh			\
-	scatfield.cuh			\
-	transport.cuh
+	_collision.cuh			\
+	_diffusion.cuh			\
+	_transport.cuh			\
+	const_defs.cuh			\
+	param_grid.cuh			\
+	param_phys.cuh			\
+	swarm_grid.cuh			\
+	swarm_host.cuh			\
+	swarm_kern.cuh
 
 _OBJ =				\
 	col_event_run.o	\
@@ -60,14 +58,14 @@ _OBJ =				\
 	dt_rates_calc.o	\
 	dustdens_calc.o	\
 	dustdens_init.o	\
-	dustdens_scat.o	\
+	dustdens_depo.o	\
 	gas_lerp_calc.o	\
 	graffiti_main.o	\
 	optdepth_calc.o	\
 	optdepth_csum.o	\
 	optdepth_init.o	\
 	optdepth_mean.o	\
-	optdepth_scat.o	\
+	optdepth_depo.o	\
 	particle_init.o	\
 	rngstate_init.o	\
 	ssa_substep_1.o	\

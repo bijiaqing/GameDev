@@ -1,16 +1,16 @@
-#ifndef COLLISION_CUH
-#define COLLISION_CUH
+#ifndef SWARM_COLLISION_CUH
+#define SWARM_COLLISION_CUH
 
 #ifdef COLLISION
 
-#include <cassert>      // for assert
+#include <cassert>      // assert
 
-#include <const.cuh>
-#include <paramgrid.cuh>
-#include <interpval.cuh>
-#include <paramphys.cuh>
+#include <const_defs.cuh>
+#include <param_grid.cuh>
+#include <param_phys.cuh>
+#include <swarm_grid.cuh>
 
-#include "cukd/knn.h"   // for cukd::cct::knn, cukd::HeapCandidateList
+#include "cukd/knn.h"   // cukd::cct::knn, cukd::HeapCandidateList
 
 using candidatelist = cukd::HeapCandidateList<N_K>;
 
@@ -416,4 +416,4 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
 
 // =========================================================================================================================
 
-#endif // NOT COLLISION_CUH
+#endif // SWARM_COLLISION_CUH

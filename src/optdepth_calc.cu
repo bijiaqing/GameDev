@@ -1,7 +1,7 @@
 #ifdef RADIATION
 
-#include <graffiti_kern.cuh>
-#include <paramgrid.cuh>  // for _get_grid_volume
+#include <param_grid.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: optdepth_calc

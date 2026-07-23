@@ -1,7 +1,7 @@
 #if defined(TRANSPORT) && !defined(RADIATION)
 
-#include <graffiti_kern.cuh>
-#include <transport.cuh>
+#include <_transport.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: ssa_transport

@@ -1,9 +1,9 @@
 #ifdef DIFFUSION
 
-#include <graffiti_kern.cuh>
-#include <paramphys.cuh>  // for _get_hg, _get_nu
-#include <diffusion.cuh>  // for _get_term_grad_cyl
-#include <transport.cuh>  // for _if_out_of_box
+#include <_diffusion.cuh>
+#include <_transport.cuh>
+#include <param_phys.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: diffusion_pos

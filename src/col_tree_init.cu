@@ -1,6 +1,6 @@
 #ifdef COLLISION
 
-#include <graffiti_kern.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: col_tree_init

@@ -1,6 +1,6 @@
 #ifdef SAVE_DENS
 
-#include <graffiti_kern.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: dustdens_init

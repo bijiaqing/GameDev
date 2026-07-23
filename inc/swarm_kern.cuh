@@ -1,5 +1,5 @@
-#ifndef GRAFFITI_KERN_CUH 
-#define GRAFFITI_KERN_CUH
+#ifndef SWARM_KERN_CUH
+#define SWARM_KERN_CUH
 
 #if defined(DIFFUSION) && !defined(TRANSPORT)
 #error "DIFFUSION requires TRANSPORT"
@@ -29,10 +29,11 @@
 #error "LOGTIMING is not compatible with SAVE_DENS"
 #endif
 
-#include <const.cuh>
+#include <const_defs.cuh>
 
 // =========================================================================================================================
 // particle initialization
+// =========================================================================================================================
 
 __global__ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *dev_random_y, const real *dev_random_z
     #ifdef MULTISIZE
@@ -42,6 +43,7 @@ __global__ void particle_init (swarm *dev_particle, const real *dev_random_x, co
 
 // =========================================================================================================================
 // imported gas interpolation
+// =========================================================================================================================
 
 #ifdef IMPORTGAS
 __global__ void gas_lerp_calc (real *dev_gas_dens, real *dev_gas_velx, real *dev_gas_vely, real *dev_gas_velz,
@@ -51,15 +53,17 @@ __global__ void gas_lerp_calc (real *dev_gas_dens, real *dev_gas_velx, real *dev
 
 // =========================================================================================================================
 // particle-to-grid dust density
+// =========================================================================================================================
 
 #ifdef SAVE_DENS
 __global__ void dustdens_init (real *dev_dustdens);
-__global__ void dustdens_scat (real *dev_dustdens, const swarm *dev_particle);
+__global__ void dustdens_depo (real *dev_dustdens, const swarm *dev_particle);
 __global__ void dustdens_calc (real *dev_dustdens);
 #endif // SAVE_DENS
 
 // =========================================================================================================================
 // representative-particle collisions and random states
+// =========================================================================================================================
 
 #ifdef COLLISION
 __global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
@@ -86,6 +90,7 @@ __global__ void rngstate_init (curs *dev_rngstate, int seed = 1);
 
 // =========================================================================================================================
 // particle transport and runtime timestep
+// =========================================================================================================================
 
 #ifdef TRANSPORT
 __global__ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
@@ -99,7 +104,7 @@ __global__ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
 
 #ifdef RADIATION
 __global__ void optdepth_init (real *dev_optdepth);
-__global__ void optdepth_scat (real *dev_optdepth, const swarm *dev_particle);
+__global__ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle);
 __global__ void optdepth_calc (real *dev_optdepth);
 __global__ void optdepth_csum (real *dev_optdepth);
 __global__ void optdepth_mean (real *dev_optdepth);
@@ -122,6 +127,7 @@ __global__ void ssa_transport (swarm *dev_particle,
 
 // =========================================================================================================================
 // turbulent spatial diffusion
+// =========================================================================================================================
 
 #ifdef DIFFUSION
 __global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
@@ -134,4 +140,4 @@ __global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
 
 // =========================================================================================================================
 
-#endif // NOT GRAFFITI_KERN_CUH
+#endif // SWARM_KERN_CUH

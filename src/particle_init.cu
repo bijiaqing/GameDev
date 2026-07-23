@@ -1,7 +1,5 @@
-
-
-#include <graffiti_kern.cuh>
-#include <paramphys.cuh>  // for _get_grain_mass
+#include <param_phys.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // represented grain-number normalization

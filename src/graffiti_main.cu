@@ -1,17 +1,15 @@
-#include <chrono>           // for std::chrono::system_clock
-#include <filesystem>       // for std::filesystem::create_directories
-#include <iomanip>          // for std::setw, std::setfill
-#include <iostream>         // for std::cout, std::endl
-#include <sstream>          // for std::stringstream
-
+#include <chrono>           // std::chrono::system_clock
+#include <filesystem>       // std::filesystem::create_directories
+#include <iomanip>          // std::setw, std::setfill
+#include <iostream>         // std::cout, std::endl
+#include <sstream>          // std::stringstream
 #if defined(TRANSPORT) || defined(COLLISION)
-#include <thrust/device_ptr.h>  // for thrust::device_ptr
-#include <thrust/extrema.h>     // for thrust::max_element
+#include <thrust/device_ptr.h>  // thrust::device_ptr
+#include <thrust/extrema.h>     // thrust::max_element
 #endif
 
-#include <graffiti_kern.cuh>
-#include <host_rand.cuh>
-#include <host_file.cuh>
+#include <swarm_host.cuh>
+#include <swarm_kern.cuh>
 
 std::mt19937 rand_generator;
 
@@ -383,8 +381,8 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("ssa_substep_1");
             optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_init");
-            optdepth_scat <<< NB_P, TPB >>> (dev_optdepth, dev_particle);
-            CUDA_KERNEL_CHECK("optdepth_scat");
+            optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle);
+            CUDA_KERNEL_CHECK("optdepth_depo");
             optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_calc");
             optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);

@@ -1,9 +1,9 @@
 #ifdef COLLISION
 
-#include <graffiti_kern.cuh>
-#include <paramgrid.cuh>  // for _get_loc_x/y/z, _is_in_bounds, _get_cell_index
-#include <paramphys.cuh>  // for _get_hg
-#include <collision.cuh>  // for candidatelist, KernelType, _get_col_rate_ij
+#include <_collision.cuh>
+#include <param_grid.cuh>
+#include <param_phys.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: col_rate_calc

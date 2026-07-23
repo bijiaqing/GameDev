@@ -1,11 +1,11 @@
 #ifdef TRANSPORT
 
-#include <graffiti_kern.cuh>
-#include <paramgrid.cuh>
-#include <paramphys.cuh>
 #ifdef DIFFUSION
-#include <diffusion.cuh>
+#include <_diffusion.cuh>
 #endif // DIFFUSION
+#include <param_grid.cuh>
+#include <param_phys.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: dt_rates_calc

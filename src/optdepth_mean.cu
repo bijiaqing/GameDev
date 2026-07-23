@@ -1,6 +1,6 @@
 #ifdef RADIATION
 
-#include <graffiti_kern.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: optdepth_mean

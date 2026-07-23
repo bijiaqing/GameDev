@@ -1,6 +1,6 @@
 #ifdef IMPORTGAS
 
-#include <graffiti_kern.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: gas_lerp_calc

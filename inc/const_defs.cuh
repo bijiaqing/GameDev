@@ -1,16 +1,21 @@
-#ifndef CONST_CUH
-#define CONST_CUH
+#ifndef CONST_DEFS_CUH
+#define CONST_DEFS_CUH
 
-#include <cmath>                            // for M_PI
-#include <string>                           // for std::string
+#include <cmath>                            // M_PI
+#include <string>                           // std::string
+#if defined(COLLISION) || defined(DIFFUSION)
+#include <curand_kernel.h>                  // curandState
+#endif // COLLISION || DIFFUSION
+
+#ifdef COLLISION
+#include "cukd/builder.h"                   // cukd::get_coord, cukd::box_t
+#endif // COLLISION
 
 #if defined(COLLISION) || defined(DIFFUSION)
-#include "curand_kernel.h"                  // for curandState
 using curs = curandState;
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION
-#include "cukd/builder.h"                   // for cukd::get_coord, cukd::box_t
 using bbox = cukd::box_t<float3>;           // axis-aligned bounding box type for KD-tree
 #endif // COLLISION
 
@@ -19,6 +24,7 @@ using real3 = double3;                      // double3 is a built-in CUDA type
 
 // =========================================================================================================================
 // code units
+// =========================================================================================================================
 
 const real  G           = 1.0;              // gravitational constant
 const real  M_S         = 1.0;              // mass of the central star
@@ -27,6 +33,7 @@ const real  S_0         = 1.0;              // reference grain diameter, indepen
 
 // =========================================================================================================================
 // mesh domain size and resolution
+// =========================================================================================================================
 
 const int   N_P         = 1e+07;            // total number of representative particles
 
@@ -50,6 +57,7 @@ static_assert(N_Z == 1, "N_Z > 1 requires DIFFUSION");
 
 // =========================================================================================================================
 // gas parameters
+// =========================================================================================================================
 
 const real  SIGMA_0     = 1.0e-02;          // reference gas surface density at R_0
 const real  ASPR_0      = 0.05;             // the reference aspect ratio of the gas disk
@@ -75,6 +83,7 @@ const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
 
 // =========================================================================================================================
 // dust parameters for dynamics
+// =========================================================================================================================
 
 const real  ST_0        = 1.0e-03;          // the reference Stokes number of dust with the reference size
 
@@ -107,6 +116,7 @@ const real  CFL_COL     = 0.01;             // maximum collision propensity per 
 
 // =========================================================================================================================
 // dust initialization parameters
+// =========================================================================================================================
 
 #ifdef MULTISIZE
 const real INIT_SMIN    = 1.0e+00;          // minimum grain size for particle initialization
@@ -115,6 +125,7 @@ const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle i
 
 // =========================================================================================================================
 // time step and output parameters
+// =========================================================================================================================
 
 const int  SAVE_MAX     = 100;                // total number of outputs for mesh fields
 
@@ -133,6 +144,7 @@ const int  LIN_BASE     = 1;                // save particle data every LIN_BASE
 
 // =========================================================================================================================
 // structures
+// =========================================================================================================================
 
 struct swarm                                // representative-particle state
 {
@@ -169,6 +181,7 @@ struct tree_traits                          // traits for cukd::builder
 
 // =========================================================================================================================
 // cuda numerical parameters
+// =========================================================================================================================
 
 const int TPB = 32; // number of threads per block
 
@@ -184,4 +197,4 @@ const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level p
 
 // =========================================================================================================================
 
-#endif // NOT CONST_CUH
+#endif // CONST_DEFS_CUH

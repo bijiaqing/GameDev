@@ -1,9 +1,9 @@
-#ifndef PARAMGRID_CUH
-#define PARAMGRID_CUH
+#ifndef PARAM_GRID_CUH
+#define PARAM_GRID_CUH
 
-#include <cmath>  // for pow
+#include <cmath>  // pow
 
-#include <const.cuh>
+#include <const_defs.cuh>
 
 // =========================================================================================================================
 // grid spacing
@@ -93,4 +93,4 @@ real _get_grid_volume (int idx_cell, real *y0_ptr = nullptr, real *dy_ptr = null
 
 // =========================================================================================================================
 
-#endif // NOT PARAMGRID_CUH
+#endif // PARAM_GRID_CUH

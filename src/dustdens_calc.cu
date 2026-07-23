@@ -1,7 +1,7 @@
 #ifdef SAVE_DENS
 
-#include <graffiti_kern.cuh>
-#include <paramgrid.cuh>  // for _get_grid_volume
+#include <param_grid.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: dustdens_calc

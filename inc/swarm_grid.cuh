@@ -1,10 +1,10 @@
-#ifndef INTERPVAL_CUH
-#define INTERPVAL_CUH
+#ifndef SWARM_GRID_CUH
+#define SWARM_GRID_CUH
 
-#include <cfloat>                   // for DBL_MAX
+#include <cfloat>                   // DBL_MAX
 
-#include <const.cuh>
-#include <paramgrid.cuh>
+#include <const_defs.cuh>
+#include <param_grid.cuh>
 
 // =========================================================================================================================
 // interpolation stencil
@@ -225,5 +225,36 @@ real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z
 }
 
 // =========================================================================================================================
+// particle-to-grid deposition
+// =========================================================================================================================
 
-#endif // INTERPVAL_CUH
+// deposit one particle weight to its cell-centred trilinear grid stencil
+__device__ __forceinline__
+void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, real weight)
+{
+    real loc_x = _get_loc_x(dev_particle[idx].position.x);
+    real loc_y = _get_loc_y(dev_particle[idx].position.y);
+    real loc_z = _get_loc_z(dev_particle[idx].position.z);
+
+    #ifdef HALFDISK
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1e-6);
+    #endif // HALFDISK
+
+    if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
+
+    int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
+    auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z);
+
+    atomicAdd(&dev_grid_out[idx_cell                           ], (1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x                  ],        frac_x *(1.0 - frac_y)*(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell          + next_y         ], (1.0 - frac_x)*       frac_y *(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x + next_y         ],        frac_x *       frac_y *(1.0 - frac_z)*weight);
+    atomicAdd(&dev_grid_out[idx_cell                   + next_z], (1.0 - frac_x)*(1.0 - frac_y)*       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x          + next_z],        frac_x *(1.0 - frac_y)*       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell          + next_y + next_z], (1.0 - frac_x)*       frac_y *       frac_z *weight);
+    atomicAdd(&dev_grid_out[idx_cell + next_x + next_y + next_z],        frac_x *       frac_y *       frac_z *weight);
+}
+
+// =========================================================================================================================
+
+#endif // SWARM_GRID_CUH

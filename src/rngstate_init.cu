@@ -1,6 +1,6 @@
 #if defined(COLLISION) || defined(DIFFUSION)
 
-#include <graffiti_kern.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: rngstate_init

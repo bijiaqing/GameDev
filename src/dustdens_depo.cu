@@ -1,20 +1,28 @@
 #ifdef SAVE_DENS
 
-#include <graffiti_kern.cuh>
-#include <scatfield.cuh>
+#include <param_phys.cuh>
+#include <swarm_grid.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
-// kernel: dustdens_scat
-// scatter each representative particle's dust mass to the cell-centred grid
+// kernel: dustdens_depo
+// deposit each representative particle's dust mass to the cell-centred grid
 // =========================================================================================================================
 
 __global__
-void dustdens_scat (real *dev_dustdens, const swarm *dev_particle)
+void dustdens_depo (real *dev_dustdens, const swarm *dev_particle)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
-    _particle_to_grid_core <DUSTDENS> (dev_dustdens, dev_particle, idx);
+    #ifdef MULTISIZE
+    real size = dev_particle[idx].par_size;
+    real weight = _get_grain_mass(size)*dev_particle[idx].par_numr;
+    #else
+    real weight = M_D / N_P;
+    #endif // MULTISIZE
+
+    _deposit_field(dev_dustdens, dev_particle, idx, weight);
 }
 
 // =========================================================================================================================

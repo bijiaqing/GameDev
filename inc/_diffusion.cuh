@@ -1,16 +1,16 @@
-#ifndef DIFFUSION_CUH
-#define DIFFUSION_CUH
+#ifndef SWARM_DIFFUSION_CUH
+#define SWARM_DIFFUSION_CUH
 
 #ifdef DIFFUSION
 
 #ifdef IMPORTGAS
-#include <cassert>
+#include <cassert>      // assert
 #endif // IMPORTGAS
 
-#include <const.cuh>
-#include <paramgrid.cuh>
-#include <interpval.cuh>
-#include <paramphys.cuh>
+#include <const_defs.cuh>
+#include <param_grid.cuh>
+#include <param_phys.cuh>
+#include <swarm_grid.cuh>
 
 // =========================================================================================================================
 // cylindrical gas-density gradients
@@ -151,4 +151,6 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
 
 #endif // DIFFUSION
 
-#endif // DIFFUSION_CUH
+// =========================================================================================================================
+
+#endif // SWARM_DIFFUSION_CUH

@@ -1,10 +1,10 @@
-#ifndef TRANSPORT_CUH
-#define TRANSPORT_CUH
+#ifndef SWARM_TRANSPORT_CUH
+#define SWARM_TRANSPORT_CUH
 
-#include <const.cuh>
-#include <paramgrid.cuh>
-#include <interpval.cuh>
-#include <paramphys.cuh>
+#include <const_defs.cuh>
+#include <param_grid.cuh>
+#include <param_phys.cuh>
+#include <swarm_grid.cuh>
 
 // =========================================================================================================================
 // particle state access
@@ -160,7 +160,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         #ifdef IMPORTGAS
         , x_1, y_1, z_1, dev_gas_dens
         #endif
-        ) / omega;
+    ) / omega;
     real tau_1 = dt / ts_1;
 
     // evaluate midpoint forces with the initial angular momenta
@@ -189,4 +189,4 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 
 // =========================================================================================================================
 
-#endif // TRANSPORT_CUH
+#endif // SWARM_TRANSPORT_CUH

@@ -1,9 +1,9 @@
 #ifdef RADIATION
 
-#include <graffiti_kern.cuh>
-#include <transport.cuh>  // for _load_particle, _save_particle, _if_out_of_box, _ssa_substep_2
-#include <paramgrid.cuh>  // for _get_loc_x/y/z
-#include <interpval.cuh>  // for _interp_field
+#include <_transport.cuh>
+#include <param_grid.cuh>
+#include <swarm_grid.cuh>
+#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // kernel: ssa_substep_2
