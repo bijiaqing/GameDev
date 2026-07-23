@@ -23,10 +23,8 @@
 __global__
 void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     #ifdef IMPORTGAS
-    , const real *dev_gas_dens, const real *dev_gas_velx
-    , const real *dev_gas_vely, const real *dev_gas_velz
-    , const real *dev_gas_dens_next, const real *dev_gas_velx_next
-    , const real *dev_gas_vely_next, const real *dev_gas_velz_next
+    , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz
+    , const real *dev_gas_velx_next, const real *dev_gas_vely_next, const real *dev_gas_velz_next
     #endif // IMPORTGAS
 )
 {
@@ -101,39 +99,20 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     }
 
     #ifdef DIFFUSION
-    // evaluate the logarithmic gas-density gradients entering diffusion drift
     real h_g = _get_hg(R);
     real nu = _get_nu(R, h_g);
-    real term_x, term_R, term_Z;
-    _get_term_grad_cyl(x, y, z, term_x, term_R, term_Z
-        #ifdef IMPORTGAS
-        , dev_gas_dens
-        #endif // IMPORTGAS
-    );
-
-    real next_x = term_x;
-    real next_R = term_R;
-    real next_Z = term_Z;
-    #ifdef IMPORTGAS
-    // evaluate both imported endpoints before bounding each resulting drift magnitude
-    _get_term_grad_cyl(x, y, z, next_x, next_R, next_Z, dev_gas_dens_next);
-    #endif // IMPORTGAS
-
-    #ifdef CONST_NU
-    real idx_nu = 0.0;
-    #else  // CONST_ALPHA
-    real idx_nu = IDX_Q + 1.5;
-    #endif // CONST_NU
 
     // assemble cylindrical diffusion coefficients and deterministic physical drift speeds
     real coeff_x = nu / SCHMIDT_X;
     real coeff_R = nu / SCHMIDT_R;
     real coeff_Z = (N_Z > 1) ? nu / SCHMIDT_Z : 0.0;
 
-    real drift_R = coeff_R*(term_R + (idx_nu + 1.0) / R);
-    real drift_Z = coeff_Z*term_Z;
-    real next_drift_R = coeff_R*(next_R + (idx_nu + 1.0) / R);
-    real next_drift_Z = coeff_Z*next_Z;
+    // retain zero placeholders for future azimuthal and vertical diffusivity gradients
+    real grad_x = 0.0; // partial derivative of coeff_x with respect to x
+    real grad_Z = 0.0; // partial derivative of coeff_Z with respect to Z
+    real drift_x = grad_x / (R*R);
+    real drift_R = _get_diff_drift_R(R, coeff_R);
+    real drift_Z = grad_Z;
 
     // project cylindrical diffusion variance and drift onto spherical radial and polar directions
     real sin_z = sin(z);
@@ -141,21 +120,16 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real cell_y = y*log(dy);
     real coeff_y = coeff_R*sin_z*sin_z + coeff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
-    real next_drift_y = next_drift_R*sin_z + next_drift_Z*cos_z;
     
     rate = fmax(rate, 2.0*coeff_y / (CFL_DYN*CFL_DYN*cell_y*cell_y));
     rate = fmax(rate, abs(drift_y) / (CFL_DYN*cell_y));
-    rate = fmax(rate, abs(next_drift_y) / (CFL_DYN*cell_y));
 
     if (N_X > 1)
     {
         real cell_x = R*dx;
-        real drift_x = coeff_x*term_x/R;
-        real next_drift_x = coeff_x*next_x/R;
         
         rate = fmax(rate, 2.0*coeff_x / (CFL_DYN*CFL_DYN*cell_x*cell_x));
-        rate = fmax(rate, abs(drift_x) / (CFL_DYN*cell_x));
-        rate = fmax(rate, abs(next_drift_x) / (CFL_DYN*cell_x));
+        rate = fmax(rate, abs(drift_x) / (CFL_DYN*dx));
     }
 
     if (N_Z > 1)
@@ -163,11 +137,9 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
         real cell_z = y*dz;
         real coeff_z = coeff_R*cos_z*cos_z + coeff_Z*sin_z*sin_z;
         real drift_z = drift_R*cos_z - drift_Z*sin_z;
-        real next_drift_z = next_drift_R*cos_z - next_drift_Z*sin_z;
         
         rate = fmax(rate, 2.0*coeff_z / (CFL_DYN*CFL_DYN*cell_z*cell_z));
         rate = fmax(rate, abs(drift_z) / (CFL_DYN*cell_z));
-        rate = fmax(rate, abs(next_drift_z) / (CFL_DYN*cell_z));
     }
     #endif // DIFFUSION
 

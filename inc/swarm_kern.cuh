@@ -95,10 +95,8 @@ __global__ void rngstate_init (curs *dev_rngstate, int seed = 1);
 #ifdef TRANSPORT
 __global__ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     #ifdef IMPORTGAS
-    , const real *dev_gas_dens, const real *dev_gas_velx,
-      const real *dev_gas_vely, const real *dev_gas_velz,
-      const real *dev_gas_dens_next, const real *dev_gas_velx_next,
-      const real *dev_gas_vely_next, const real *dev_gas_velz_next
+    , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz
+    , const real *dev_gas_velx_next, const real *dev_gas_vely_next, const real *dev_gas_velz_next
     #endif // IMPORTGAS
 );
 
@@ -130,12 +128,7 @@ __global__ void ssa_transport (swarm *dev_particle,
 // =========================================================================================================================
 
 #ifdef DIFFUSION
-__global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    real dt
-);
+__global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt);
 #endif // DIFFUSION
 
 // =========================================================================================================================

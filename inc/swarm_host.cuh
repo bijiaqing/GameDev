@@ -169,7 +169,7 @@ real _interp_convpow_profile (real x, const std::vector <real> &profile, real x_
 
 #ifndef IMPORTGAS
 // sample one-size dust from the joint spherical disk distribution with the exact cell measure
-// draw y and z together because R = y sin(z) and Z = y cos(z) jointly determine surface density and stratification
+// draw y and z together because R = y sin(z) and Z = y cos(z) jointly determine radial and vertical dust density
 // when diffusion is enabled use size to calculate the Stokes-dependent scale height before drawing the shared cell
 inline __host__
 void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int number)
@@ -225,12 +225,10 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
                 stokes_mid /= std::pow(R / R_0, IDX_P);
                 #endif // NOT CONST_ST
 
-                H_d *= std::sqrt(alpha_z / (alpha_z + stokes_mid));
+                H_d *= std::sqrt(alpha_z / stokes_mid);
                 #endif // DIFFUSION
 
-                real gas_strat = std::exp((R / yc - 1.0) / (h_g*h_g));
-                real settle_exp = std::exp(-0.5*Z*Z*(1.0/(H_d*H_d) - 1.0/(H_g*H_g)));
-                density = sigma*gas_strat*settle_exp / H_d;
+                density = sigma*std::exp(-0.5*Z*Z/(H_d*H_d)) / H_d;
             }
 
             real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
@@ -320,9 +318,8 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
                 stokes_mid /= std::pow(R / R_0, IDX_P);
                 #endif // NOT CONST_ST
 
-                real H_d = H_g*std::sqrt(alpha_z / (alpha_z + stokes_mid));
-                log_density += (R / yc - 1.0) / (h_g*h_g);
-                log_density -= 0.5*Z*Z*(1.0/(H_d*H_d) - 1.0/(H_g*H_g));
+                real H_d = H_g*std::sqrt(alpha_z / stokes_mid);
+                log_density -= 0.5*Z*Z/(H_d*H_d);
                 log_density -= std::log(H_d);
             }
 

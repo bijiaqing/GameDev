@@ -2,20 +2,6 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-#ifdef DIFFUSION
-// evaluate the local dust-to-gas ratio for the initial diffusion velocity
-static __device__ __forceinline__
-real _get_init_ratio (const real *dev_dustdens, int idx, real yc, real zc)
-{
-    real Rc = yc*sin(zc);
-    real Zc = yc*cos(zc);
-    real h_g = _get_hg(Rc);
-    real gasdens = _get_gasdens(Rc, Zc, h_g);
-
-    return dev_dustdens[idx] / gasdens;
-}
-#endif
-
 __global__
 void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     #ifdef DIFFUSION
@@ -53,34 +39,34 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     #ifdef DIFFUSION
     if (N_Z > 1)
     {
-        // add the polar diffusion velocity that balances the initialized ratio gradient
+        // add the polar settling velocity that balances the initialized density-diffusion flux
         real Dz = _get_nu(Rc, h_g) / SC_Z;
-        real ratio = _get_init_ratio(dev_dustdens, idx, yc, zc);
-        real grad_ratio;
+        real dens = dev_dustdens[idx];
+        real grad_dens;
 
-        // differentiate the ratio with one-sided boundary and centred interior stencils
+        // differentiate density with one-sided boundary and centred interior stencils
         if (iz == 0)
         {
             int idx_next = idx + N_X*N_Y;
-            real ratio_next = _get_init_ratio(dev_dustdens, idx_next, yc, zc + dz);
-            grad_ratio = (ratio_next - ratio) / dz;
+            real dens_next = dev_dustdens[idx_next];
+            grad_dens = (dens_next - dens) / dz;
         }
         else if (iz == N_Z - 1)
         {
             int idx_prev = idx - N_X*N_Y;
-            real ratio_prev = _get_init_ratio(dev_dustdens, idx_prev, yc, zc - dz);
-            grad_ratio = (ratio - ratio_prev) / dz;
+            real dens_prev = dev_dustdens[idx_prev];
+            grad_dens = (dens - dens_prev) / dz;
         }
         else
         {
             int idx_prev = idx - N_X*N_Y;
             int idx_next = idx + N_X*N_Y;
-            real ratio_prev = _get_init_ratio(dev_dustdens, idx_prev, yc, zc - dz);
-            real ratio_next = _get_init_ratio(dev_dustdens, idx_next, yc, zc + dz);
-            grad_ratio = (ratio_next - ratio_prev) / (2.0*dz);
+            real dens_prev = dev_dustdens[idx_prev];
+            real dens_next = dev_dustdens[idx_next];
+            grad_dens = (dens_next - dens_prev) / (2.0*dz);
         }
 
-        if (ratio > 0.0) speed_z_diff = Dz*grad_ratio / (yc*ratio);
+        if (dens > 0.0) speed_z_diff = Dz*grad_dens / (yc*dens);
     }
     #endif
 

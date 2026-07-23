@@ -323,8 +323,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_momz[:] = vz[None, None, :]
     elif case.startswith("ring_"):
         # Combined ring tests rotate each radial shell at its radiation-modified
-        # Keplerian omega.  Optional azimuthal diffusion damps the Fourier mode,
-        # while the gas density profile converts dust-to-gas ratio into density.
+        # Keplerian omega.  Optional azimuthal density diffusion damps the
+        # Fourier mode on top of the prescribed radial density profile.
         beta = 0.2 if case in {"ring_radiation_2d", "ring_all_2d"} else 0.0
         has_diffusion = case in {"ring_diffusion_2d", "ring_all_2d"}
         mode_values = np.empty((ny, nx))
@@ -371,18 +371,6 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         ("velz", velz, exact_velz),
     ):
         results["errors"][name] = norm_set(np.where(active, numerical - exact, 0.0), active_volume)
-
-    if "diffusion" in case or case.startswith("ring_"):
-        # Diffusion acts on dust-to-gas ratio, so report that error explicitly in
-        # addition to density.  Uniform-gas tests reduce this to the density error.
-        if case.startswith("ring_"):
-            beta = 0.2 if case in {"ring_radiation_2d", "ring_all_2d"} else 0.0
-            rho_g = gas_density(yc, beta)[None, :, None]
-        else:
-            rho_g = 1.0
-        results["errors"]["ratio"] = norm_set(
-            dens/rho_g - exact_dens/rho_g, volume
-        )
 
     if case in {"ring_radiation_2d", "ring_all_2d"}:
         # Ring radiation tests set KAPPA_0=0 to isolate radiation acceleration

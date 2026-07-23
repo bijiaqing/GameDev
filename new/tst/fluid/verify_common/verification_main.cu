@@ -110,19 +110,13 @@ real radial_mode (real y, int dimension)
 
 real host_gasdens (real R, real Z)
 {
-    // Reproduce the gas measure used by the device helpers so ring initial conditions specify a known dust-to-gas ratio
-#ifdef VERIFY_UNIFORM_GAS
-    (void)R;
-    (void)Z;
-    return 1.0;
-#else
+    // Reproduce the gas profile used as the radial baseline of the ring density
     real sigma_g = SIGMA_0*pow(R/R_0, IDX_P);
     if (N_Z == 1) return sigma_g;
 
     real h_g = ASPR_0*pow(R/R_0, 0.5*(IDX_Q + 1.0));
     real rho_mid = sigma_g / (sqrt(2.0*M_PI)*h_g*R);
     return rho_mid*exp((R/sqrt(R*R + Z*Z) - 1.0)/(h_g*h_g));
-#endif
 }
 
 const char *case_name ()
@@ -237,11 +231,11 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
 #elif defined(VERIFY_X_DIFFUSION)
                 // A periodic Fourier mode is an exact azimuthal diffusion eigenfunction.  Constant primitive momentum ratios
                 // also test whether diffusing mass transports all three conserved momentum components consistently.
-                real q = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
-                dens[idx] = q;
-                momx[idx] = 0.7*q;
-                momy[idx] = -0.15*q;
-                momz[idx] = 0.11*q;
+                real dens_init = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
+                dens[idx] = dens_init;
+                momx[idx] = 0.7*dens_init;
+                momy[idx] = -0.15*dens_init;
+                momz[idx] = 0.11*dens_init;
 #elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
                 // Average the zero-flux radial eigenmode with the correct dimension-dependent volume measure.
                 int dimension = (N_Z > 1) ? 3 : 2;
@@ -250,11 +244,11 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
                 {
                     return radial_mode(y, dimension)*pow(y, dimension - 1);
                 }, y0, y1) / volume;
-                real q = VERIFY_Q0 + VERIFY_EPS*mode_avg;
-                dens[idx] = q;
-                momx[idx] = 0.7*q;
-                momy[idx] = -0.15*q;
-                momz[idx] = 0.11*q;
+                real dens_init = VERIFY_Q0 + VERIFY_EPS*mode_avg;
+                dens[idx] = dens_init;
+                momx[idx] = 0.7*dens_init;
+                momy[idx] = -0.15*dens_init;
+                momz[idx] = 0.11*dens_init;
 #elif defined(VERIFY_Z_DIFFUSION)
                 // P2(cos z) is an angular Laplacian eigenmode.  Multiplication by sin(z) supplies the spherical volume
                 // measure before division by the exact polar cell volume.
@@ -264,11 +258,11 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
                     real mu = cos(z);
                     return 0.5*(3.0*mu*mu - 1.0)*sin(z);
                 }, z0, z1) / volume;
-                real q = VERIFY_Q0 + VERIFY_EPS*mode_avg;
-                dens[idx] = q;
-                momx[idx] = 0.7*q;
-                momy[idx] = -0.15*q;
-                momz[idx] = 0.11*q;
+                real dens_init = VERIFY_Q0 + VERIFY_EPS*mode_avg;
+                dens[idx] = dens_init;
+                momx[idx] = 0.7*dens_init;
+                momy[idx] = -0.15*dens_init;
+                momz[idx] = 0.11*dens_init;
 #elif defined(VERIFY_SOURCE_DRAG)
                 // Eight x cells encode eight drag stiffnesses through the test parameter helpers; spatial variation is not
                 // involved.  One source update can then be checked from the non-stiff through the very stiff limit.
@@ -282,16 +276,16 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
                 dens[idx] = sqrt(2.0*M_PI)*h_g*Rc*pow(yc, static_cast<real>(VERIFY_POWER));
                 momx[idx] = momy[idx] = momz[idx] = 0.0;
 #elif defined(VERIFY_RING)
-                // Initialize a Fourier perturbation in dust-to-gas ratio on circular equilibrium rings.  Radiation modifies
+                // Initialize a relative Fourier density perturbation on circular equilibrium rings.  Radiation modifies
                 // the equilibrium angular momentum, while optional diffusion supplies the known Fourier-mode damping.
-                real q = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
+                real dens_mode = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
 #ifdef VERIFY_RING_RADIATION
                 const real beta = BETA_0;
 #else
                 const real beta = 0.0;
 #endif
                 real ell = sqrt((1.0 - beta)*G*M_S*Rc);
-                dens[idx] = host_gasdens(Rc, Zc)*q;
+                dens[idx] = host_gasdens(Rc, Zc)*dens_mode;
                 momx[idx] = dens[idx]*ell;
                 momy[idx] = 0.0;
                 momz[idx] = 0.0;

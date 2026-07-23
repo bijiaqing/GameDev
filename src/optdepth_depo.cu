@@ -40,7 +40,7 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle)
         #ifndef CONST_ST
         stokes_mid /= pow(R / R_0, IDX_P);
         #endif // NOT CONST_ST
-        H_d *= sqrt(alpha_z/(alpha_z + stokes_mid));
+        H_d *= sqrt(alpha_z/stokes_mid);
         #endif // DIFFUSION
         weight /= sqrt(2.0*M_PI)*H_d;
     }

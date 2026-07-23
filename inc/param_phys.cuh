@@ -77,7 +77,7 @@ real _get_alpha (real R, real h_g)
     #endif // CONST_NU
 }
 
-// calculate the settled dust aspect ratio used by vertically integrated collision rates
+// calculate the density-diffusion dust aspect ratio used by vertically integrated collision rates
 __device__ __forceinline__
 real _get_hd (real R, real St)
 {
@@ -86,7 +86,7 @@ real _get_hd (real R, real St)
     real h_g = _get_hg(R);
     real alpha_Z = _get_alpha(R, h_g) / SCHMIDT_Z;
     
-    return h_g*sqrt(alpha_Z / (alpha_Z + St));
+    return h_g*sqrt(alpha_Z / St);
 }
 #endif // COLLISION
 

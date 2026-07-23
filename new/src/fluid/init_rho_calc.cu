@@ -25,7 +25,6 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 
     real h_g = _get_hg(Rc);
 
-    real H_g = h_g*Rc;
     real H_d = _get_hd(Rc, h_g);
 
     // interpolate the convolved dust surface density at cylindrical radius
@@ -48,12 +47,8 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
     }
     else
     {
-        // embed the surface profile with the settled dust-to-gas vertical stratification
-        real sigma_g = _get_sigma_g(Rc);
-        real rhog = _get_rhog(Rc, Zc, h_g);
-        real ratio_mid = sigma_d*H_g / (sigma_g*H_d);
-        real settle_exp = exp(-0.5*Zc*Zc*(1.0/(H_d*H_d) - 1.0/(H_g*H_g)));
-        dens = rhog*ratio_mid*settle_exp;
+        // embed the surface profile with the density-diffusion equilibrium
+        dens = sigma_d*exp(-0.5*Zc*Zc/(H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
     }
 
     // apply azimuthal density noise shared across radius and polar angle

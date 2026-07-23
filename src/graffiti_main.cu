@@ -334,10 +334,8 @@ int main (int argc, char **argv)
             // reduce all local inverse rates to a globally valid dynamics timestep
             dt_rates_calc <<< NB_P, TPB >>> (dev_dt_rates, dev_particle
                 #ifdef IMPORTGAS
-                , dev_gas_dens, dev_gas_velx
-                , dev_gas_vely, dev_gas_velz
-                , dev_gas_dens_next, dev_gas_velx_next
-                , dev_gas_vely_next, dev_gas_velz_next
+                , dev_gas_velx, dev_gas_vely, dev_gas_velz
+                , dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
                 #endif // IMPORTGAS
             );
             CUDA_KERNEL_CHECK("dt_rates_calc");
@@ -366,12 +364,7 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the first half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                0.5*dt_dyn
-            );
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
             CUDA_KERNEL_CHECK("diffusion_pos");
             #endif // DIFFUSION
 
@@ -407,12 +400,7 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                0.5*dt_dyn
-            );
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
             CUDA_KERNEL_CHECK("diffusion_pos");
             #endif // DIFFUSION
 

@@ -18,12 +18,7 @@
 // =========================================================================================================================
 
 __global__
-void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    real dt
-)
+void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
@@ -33,7 +28,6 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     real z = dev_particle[idx].position.z;
 
     real R = y*sin(z);
-    real Z = y*cos(z);
 
     real lx = dev_particle[idx].velocity.x;
     real vy = dev_particle[idx].velocity.y;
@@ -56,21 +50,14 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     real delta_R = 0.0;
     real delta_Z = 0.0;
 
-    real term_x, term_R, term_Z;
-
-    // evaluate the logarithmic gas-density gradients driving concentration diffusion
-    _get_term_grad_cyl(x, y, z, term_x, term_R, term_Z
-        #ifdef IMPORTGAS
-        , dev_gas_dens
-        #endif // IMPORTGAS
-    );
-
     if (N_X > 1)
     {
-        // convert physical azimuthal diffusion length to angular drift and noise
+        // convert physical azimuthal diffusion length to angular noise
         real coeff_x = nu / SCHMIDT_X;
 
-        real avg_x = dt*coeff_x*term_x / (R*R);
+        // retain the density-diffusion drift placeholder for a future azimuthally varying diffusivity
+        real grad_x = 0.0; // replace with the partial derivative of coeff_x with respect to x
+        real avg_x = dt*grad_x / (R*R);
         real std_x = sqrt(2.0*dt*coeff_x) / R;
 
         delta_x = avg_x + std_x*curand_normal_double(&rngstate);
@@ -78,16 +65,12 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
 
     if (N_Y > 1)
     {
-        // include gas-density drift, cylindrical Ito drift, and variable-diffusivity drift
+        // include the cylindrical Ito drift and variable-diffusivity drift
         real coeff_R = nu / SCHMIDT_R;
-        real avg_R = dt*coeff_R*(term_R + 1.0/R);
-
-        #ifndef CONST_NU
-        // use nu proportional to R^(IDX_Q + 1.5) for the radial diffusivity derivative
-        avg_R += dt*coeff_R*(IDX_Q + 1.5)/R;
-        #endif // NOT CONST_NU
-
+        
+        real avg_R = dt*_get_diff_drift_R(R, coeff_R);
         real std_R = sqrt(2.0*dt*coeff_R);
+
         delta_R = avg_R + std_R*curand_normal_double(&rngstate);
     }
 
@@ -95,7 +78,10 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     {
         // apply physical vertical diffusion at fixed cylindrical radius
         real coeff_Z = nu / SCHMIDT_Z;
-        real avg_Z = dt*coeff_Z*term_Z;
+
+        // retain the density-diffusion drift placeholder for a future vertically varying diffusivity
+        real grad_Z = 0.0; // replace with the partial derivative of coeff_Z with respect to Z
+        real avg_Z = dt*grad_Z;
         real std_Z = sqrt(2.0*dt*coeff_Z);
 
         delta_Z = avg_Z + std_Z*curand_normal_double(&rngstate);

@@ -2,8 +2,7 @@
 
 This document defines exactly what each runnable `verify_*` model computes. All evolved fields are
 initialized as finite-volume averages. The validator compares density, stored momenta, and physical
-linear velocities; it also compares dust-to-gas ratio for diffusion/ring cases and optical depth
-for radiation cases.
+linear velocities, together with optical depth for radiation cases.
 
 The suffixes `cyl` and `sph` refer specifically to the radial Jacobian:
 
@@ -148,33 +147,34 @@ unchanged from SSPRK2, so the N7 CFL collapse was not observed in this polar pro
 
 ## `verify_x_diffusion_2d`
 
-Purpose: test the production cyclic Sherman–Morrison CN solve, ratio diffusion, positivity
+Purpose: test the production cyclic Sherman–Morrison CN solve, density diffusion, positivity
 subcycling, and conservative momentum carried by the diffusive mass flux.
 
-The test-only helper supplies $\rho_g=1$ and constant $D=0.05$. On each ring,
+The test-only helper supplies constant $D=0.05$. On each ring,
 
 $$
-q(x,0)=1+0.1\cos(2x),
+\rho_d(x,0)=1+0.1\cos(2x),
 $$
 
 $$
-q(x,t)=1+0.1\exp\!\left(-\frac{4Dt}{R^2}\right)\cos(2x).
+\rho_d(x,t)=1+0.1\exp\!\left(-\frac{4Dt}{R^2}\right)\cos(2x).
 $$
 
 All three stored specific momentum variables are initially uniform: $(0.7,-0.15,0.11)$.
 
 Expected: second-order convergence, ring mass conservation near roundoff, and retention of all
-three uniform specific momenta. Density and ratio errors are identical because $\rho_g=1$.
+three uniform specific momenta.
 
 ## `verify_y_diffusion_cyl` and `verify_y_diffusion_sph`
 
 Purpose: test the production radial CN operator with the correct radial Jacobian, zero-flux
-boundaries, ratio diffusion, and momentum coupling.
+boundaries, density diffusion, and momentum coupling.
 
-The test-only helper supplies $\rho_g=1$ and $D=0.05$. Initialize
+The test-only helper supplies $D=0.05$ while retaining the nonuniform production gas profile, so
+the case distinguishes density diffusion from concentration diffusion. Initialize
 
 $$
-q(y,0)=1+0.1Q_k(y),
+\rho_d(y,0)=1+0.1Q_k(y),
 $$
 
 where
@@ -195,7 +195,7 @@ $$
 The exact decay is
 
 $$
-q(y,t)=1+0.1Q_k(y)e^{-Dk^2t}.
+\rho_d(y,t)=1+0.1Q_k(y)e^{-Dk^2t}.
 $$
 
 The CUDA initializer evaluates the equivalent Bessel representation. Independently, the Python
@@ -210,15 +210,16 @@ specific momentum retained.
 Purpose: test the production polar CN operator and its $1/y^2$, $\sin z$, and $d(-\cos z)$ metric
 factors.
 
-The domain is the upper hemisphere $0\le z\le\pi/2$ with the production `HALFDISK` flag. With
-$\rho_g=1$, $D=0.05$, and $P_2(\mu)=(3\mu^2-1)/2$,
+The domain is the upper hemisphere $0\le z\le\pi/2$ with the production `HALFDISK` flag. The
+nonuniform production gas profile is retained deliberately. With $D=0.05$ and
+$P_2(\mu)=(3\mu^2-1)/2$,
 
 $$
-q(z,0)=1+0.1P_2(\cos z),
+\rho_d(z,0)=1+0.1P_2(\cos z),
 $$
 
 $$
-q(z,t)=1+0.1P_2(\cos z)
+\rho_d(z,t)=1+0.1P_2(\cos z)
 \exp\!\left(-\frac{6Dt}{y^2}\right).
 $$
 
@@ -298,7 +299,7 @@ They exercise the symmetric production composition rather than one isolated kern
 midplane radius,
 
 $$
-q(R,x,0)=1+0.1\cos(2x),
+\frac{\rho_d(R,x,0)}{\rho_0(R)}=1+0.1\cos(2x),
 $$
 
 $$
@@ -322,14 +323,14 @@ cross-direction diffusivities. Because $D_x$ is constant rather than proportiona
 exact damping rate differs by ring:
 
 $$
-q(R,x,t)=1+0.1
+\frac{\rho_d(R,x,t)}{\rho_0(R)}=1+0.1
 \exp\!\left(-\frac{4D_xt}{R^2}\right)
 \cos\!\left(2[x-\Omega_\beta(R)t]\right).
 $$
 
 Setting either $\beta$ or $D_x$ to zero yields the other three cases. The final time is $T=1$.
 
-Expected: approximately second-order convergence of density, ratio, momenta, and velocities for
+Expected: approximately second-order convergence of density, momenta, and velocities for
 this smooth equilibrium family. Periodic total mass should remain near roundoff. Radiation-model
 optical depth must be exactly zero apart from floating-point zeros because $\kappa=0$. Any growing
 radial velocity indicates a force/drag imbalance; any change of uniform ring-specific angular
