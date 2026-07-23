@@ -8,23 +8,23 @@
 
 // recover primitive velocities from conserved momenta, with a Keplerian fallback in near-vacuum cells
 __device__ __forceinline__
-void _recover_dust_state (real dens, real R, real &momx, real &momy, real &momz, real &velx, real &vely, real &velz)
+void _recover_dust_state (real dens, real R, real &mx, real &my, real &mz, real &lx, real &vy, real &lz)
 {
     if (dens < RHO_VAC)
     {
-        velx = sqrt(G*M_S*fmax(R, 0.0));
-        vely = 0.0;
-        velz = 0.0;
+        lx = sqrt(G*M_S*fmax(R, 0.0));
+        vy = 0.0;
+        lz = 0.0;
 
-        momx = dens*velx;
-        momy = 0.0;
-        momz = 0.0;
+        mx = dens*lx;
+        my = 0.0;
+        mz = 0.0;
     }
     else
     {
-        velx = momx / dens;
-        vely = momy / dens;
-        velz = momz / dens;
+        lx = mx / dens;
+        vy = my / dens;
+        lz = mz / dens;
     }
 }
 
@@ -176,21 +176,21 @@ static void _restrict_scale (real available, real change, real &scale)
 // find one correction scale that preserves positive density and locally bounded velocities
 __device__ __forceinline__
 static real _invariant_scale (
-    real dens, real momx, real momy, real momz,
-    real corr_dens, real corr_momx, real corr_momy, real corr_momz,
-    real velx_min, real velx_max,
-    real vely_min, real vely_max,
-    real velz_min, real velz_max)
+    real dens, real mx, real my, real mz,
+    real corr_dens, real corr_mx, real corr_my, real corr_mz,
+    real lx_min, real lx_max,
+    real vy_min, real vy_max,
+    real lz_min, real lz_max)
 {
     real scale = 1.0;
 
     _restrict_scale(dens,                 corr_dens,                      scale);
-    _restrict_scale(momx - velx_min*dens, corr_momx - velx_min*corr_dens, scale);
-    _restrict_scale(velx_max*dens - momx, velx_max*corr_dens - corr_momx, scale);
-    _restrict_scale(momy - vely_min*dens, corr_momy - vely_min*corr_dens, scale);
-    _restrict_scale(vely_max*dens - momy, vely_max*corr_dens - corr_momy, scale);
-    _restrict_scale(momz - velz_min*dens, corr_momz - velz_min*corr_dens, scale);
-    _restrict_scale(velz_max*dens - momz, velz_max*corr_dens - corr_momz, scale);
+    _restrict_scale(mx - lx_min*dens, corr_mx - lx_min*corr_dens, scale);
+    _restrict_scale(lx_max*dens - mx, lx_max*corr_dens - corr_mx, scale);
+    _restrict_scale(my - vy_min*dens, corr_my - vy_min*corr_dens, scale);
+    _restrict_scale(vy_max*dens - my, vy_max*corr_dens - corr_my, scale);
+    _restrict_scale(mz - lz_min*dens, corr_mz - lz_min*corr_dens, scale);
+    _restrict_scale(lz_max*dens - mz, lz_max*corr_dens - corr_mz, scale);
 
     return fmax(0.0, fmin(1.0, scale));
 }
@@ -202,32 +202,32 @@ static real _invariant_scale (
 __device__ __forceinline__
 static void _pressureless_hll_flux (
     real speed_L, real speed_R,
-    real dens_L, real velx_L, real vely_L, real velz_L,
-    real dens_R, real velx_R, real vely_R, real velz_R,
-    real &flux_dens, real &flux_momx, real &flux_momy, real &flux_momz)
+    real dens_L, real lx_L, real vy_L, real lz_L,
+    real dens_R, real lx_R, real vy_R, real lz_R,
+    real &flux_dens, real &flux_mx, real &flux_my, real &flux_mz)
 {
-    real momx_L = dens_L*velx_L;
-    real momy_L = dens_L*vely_L;
-    real momz_L = dens_L*velz_L;
-    real momx_R = dens_R*velx_R;
-    real momy_R = dens_R*vely_R;
-    real momz_R = dens_R*velz_R;
+    real mx_L = dens_L*lx_L;
+    real my_L = dens_L*vy_L;
+    real mz_L = dens_L*lz_L;
+    real mx_R = dens_R*lx_R;
+    real my_R = dens_R*vy_R;
+    real mz_R = dens_R*lz_R;
 
     if (speed_L >= 0.0 && speed_R >= 0.0)
     {
         flux_dens = speed_L*dens_L;
-        flux_momx = speed_L*momx_L;
-        flux_momy = speed_L*momy_L;
-        flux_momz = speed_L*momz_L;
+        flux_mx = speed_L*mx_L;
+        flux_my = speed_L*my_L;
+        flux_mz = speed_L*mz_L;
         return;
     }
 
     if (speed_L <= 0.0 && speed_R <= 0.0)
     {
         flux_dens = speed_R*dens_R;
-        flux_momx = speed_R*momx_R;
-        flux_momy = speed_R*momy_R;
-        flux_momz = speed_R*momz_R;
+        flux_mx = speed_R*mx_R;
+        flux_my = speed_R*my_R;
+        flux_mz = speed_R*mz_R;
         return;
     }
 
@@ -236,9 +236,9 @@ static void _pressureless_hll_flux (
     real inv_span = 1.0 / (wave_R - wave_L);
 
     flux_dens = (wave_R*speed_L*dens_L - wave_L*speed_R*dens_R + wave_L*wave_R*(dens_R - dens_L))*inv_span;
-    flux_momx = (wave_R*speed_L*momx_L - wave_L*speed_R*momx_R + wave_L*wave_R*(momx_R - momx_L))*inv_span;
-    flux_momy = (wave_R*speed_L*momy_L - wave_L*speed_R*momy_R + wave_L*wave_R*(momy_R - momy_L))*inv_span;
-    flux_momz = (wave_R*speed_L*momz_L - wave_L*speed_R*momz_R + wave_L*wave_R*(momz_R - momz_L))*inv_span;
+    flux_mx = (wave_R*speed_L*mx_L - wave_L*speed_R*mx_R + wave_L*wave_R*(mx_R - mx_L))*inv_span;
+    flux_my = (wave_R*speed_L*my_L - wave_L*speed_R*my_R + wave_L*wave_R*(my_R - my_L))*inv_span;
+    flux_mz = (wave_R*speed_L*mz_L - wave_L*speed_R*mz_R + wave_L*wave_R*(mz_R - mz_L))*inv_span;
 }
 
 // =========================================================================================================================

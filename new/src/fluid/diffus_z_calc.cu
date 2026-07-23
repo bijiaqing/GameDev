@@ -29,10 +29,9 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     int ix = idx % N_X;
     int iy = idx / N_X;
 
-    real dy = _get_dy();
     real dz = _get_dz();
 
-    real yc = Y_MIN*pow(dy, iy + 0.5);
+    real yc = _get_ycent(iy);
 
     // load dust density along one polar column
     real dens[N_Z];
@@ -48,10 +47,10 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real z0 = Z_MIN + static_cast<real>(iz)*dz;
-        real z1 = z0 + dz;
+        real z0 = _get_zedge(iz);
+        real z1 = _get_zedge(iz + 1);
 
-        real vol_z  = cos(z0) - cos(z1);
+        real vol_z  = _get_vol_z(iz);
         real dz_len = yc*dz;
 
         real Dz_i = 0.0;
@@ -60,7 +59,7 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real Rc_i = yc*sin(z0);
 
             real h_i = _get_hg(Rc_i);
-            Dz_i = _get_nu(Rc_i, h_i) / SC_Z;
+            Dz_i = _get_nu(Rc_i, h_i) / SCHMIDT_Z;
         }
 
         real Dz_o = 0.0;
@@ -69,7 +68,7 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real Rc_o = yc*sin(z1);
 
             real h_o = _get_hg(Rc_o);
-            Dz_o = _get_nu(Rc_o, h_o) / SC_Z;
+            Dz_o = _get_nu(Rc_o, h_o) / SCHMIDT_Z;
         }
 
         real cn_i = (iz > 0)       ? (0.5*dt*sin(z0)*Dz_i / (yc*dz_len*vol_z)) : 0.0;
@@ -138,9 +137,7 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 continue;
             }
 
-            real z0 = Z_MIN + static_cast<real>(iz)*dz;
-            real z1 = z0 + dz;
-            real vol_z = cos(z0) - cos(z1);
+            real vol_z = _get_vol_z(iz);
 
             real cn_o = -cn_upper[iz];
 
@@ -154,22 +151,20 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             int iz_up = (upper_work[iz] >= 0.0) ? iz : iz + 1;
             if (iz == N_Z - 1) iz_up = iz;
 
-            real z_up = Z_MIN + (iz_up + 0.5)*dz;
+            real z_up = _get_zcent(iz_up);
             real Rc_up = yc*sin(z_up);
             real dens_up = dens[iz_up];
 
             int ic_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc_up, 0.0));
+            real lx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc_up, 0.0));
 
-            dens_rhs[iz] = upper_work[iz]*velx_up;
+            dens_rhs[iz] = upper_work[iz]*lx_up;
         }
 
         // update azimuthal momentum from the spherical conservative flux divergence
         for (int iz = 0; iz < N_Z; iz++)
         {
-            real z0 = Z_MIN + static_cast<real>(iz)*dz;
-            real z1 = z0 + dz;
-            real vol_z = cos(z0) - cos(z1);
+            real vol_z = _get_vol_z(iz);
             real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
 
             int ic = ix + iy*N_X + iz*N_X*N_Y;
@@ -185,17 +180,15 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[iz_up];
 
             int ic_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real vely_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
+            real vy_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
 
-            dens_rhs[iz] = upper_work[iz]*vely_up;
+            dens_rhs[iz] = upper_work[iz]*vy_up;
         }
 
         // update radial momentum from the spherical conservative flux divergence
         for (int iz = 0; iz < N_Z; iz++)
         {
-            real z0 = Z_MIN + static_cast<real>(iz)*dz;
-            real z1 = z0 + dz;
-            real vol_z = cos(z0) - cos(z1);
+            real vol_z = _get_vol_z(iz);
             real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
 
             int ic = ix + iy*N_X + iz*N_X*N_Y;
@@ -211,17 +204,15 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[iz_up];
 
             int ic_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real velz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
+            real lz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
 
-            dens_rhs[iz] = upper_work[iz]*velz_up;
+            dens_rhs[iz] = upper_work[iz]*lz_up;
         }
 
         // update polar momentum and accept the density solution for this substep
         for (int iz = 0; iz < N_Z; iz++)
         {
-            real z0 = Z_MIN + static_cast<real>(iz)*dz;
-            real z1 = z0 + dz;
-            real vol_z = cos(z0) - cos(z1);
+            real vol_z = _get_vol_z(iz);
             real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
 
             int ic = ix + iy*N_X + iz*N_X*N_Y;

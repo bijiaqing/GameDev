@@ -211,7 +211,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     }
 
     // convert the local Stokes number to stopping time
-    real ts_1 = _get_St(R_1, Z_1, size, h_g
+    real ts_1 = _get_stokes(R_1, Z_1, size, h_g
         #ifdef IMPORTGAS
         , x_1, y_1, z_1, dev_gas_dens
         #endif // IMPORTGAS

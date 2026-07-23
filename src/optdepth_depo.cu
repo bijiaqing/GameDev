@@ -38,7 +38,7 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real dust_mas
         #else  // CONST_ALPHA
         real alpha_z = ALPHA / SCHMIDT_Z;
         #endif // CONST_NU
-        real stokes_mid = ST_0*(size / S_0);
+        real stokes_mid = STOKES_0*(size / S_0);
         #ifndef CONST_ST
         stokes_mid /= pow(R / R_0, IDX_P);
         #endif // NOT CONST_ST

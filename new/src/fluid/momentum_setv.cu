@@ -8,10 +8,10 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_G) return;
 
-    real dens  = dev_dustdens[idx];
-    real velx = dev_dustvelx[idx];
-    real vely = dev_dustvely[idx];
-    real velz = dev_dustvelz[idx];
+    real dens = dev_dustdens[idx];
+    real lx = dev_dustvelx[idx];
+    real vy = dev_dustvely[idx];
+    real lz = dev_dustvelz[idx];
 
     // reset near-vacuum primitives to the fallback state
     if (dens < RHO_VAC)
@@ -19,24 +19,21 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
         int iy = (idx / N_X) % N_Y;
         int iz = idx / (N_X*N_Y);
 
-        real dy = _get_dy();
-        real dz = _get_dz();
-
-        real yc = Y_MIN*pow(dy, iy + 0.5);
-        real zc = Z_MIN + (iz + 0.5)*dz;
+        real yc = _get_ycent(iy);
+        real zc = _get_zcent(iz);
         real Rc = yc*sin(zc);
 
-        velx = sqrt(G*M_S*fmax(Rc, 0.0));
-        vely = 0.0;
-        velz = 0.0;
+        lx = sqrt(G*M_S*fmax(Rc, 0.0));
+        vy = 0.0;
+        lz = 0.0;
 
-        dev_dustvelx[idx] = velx;
-        dev_dustvely[idx] = vely;
-        dev_dustvelz[idx] = velz;
+        dev_dustvelx[idx] = lx;
+        dev_dustvely[idx] = vy;
+        dev_dustvelz[idx] = lz;
     }
 
     // rebuild conserved momentum from density and synchronized primitives
-    dev_dustmomx[idx] = dens*velx;
-    dev_dustmomy[idx] = dens*vely;
-    dev_dustmomz[idx] = dens*velz;
+    dev_dustmomx[idx] = dens*lx;
+    dev_dustmomy[idx] = dens*vy;
+    dev_dustmomz[idx] = dens*lz;
 }

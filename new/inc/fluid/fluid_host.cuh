@@ -21,6 +21,15 @@
 #include <param_grid.cuh>
 
 // =========================================================================================================================
+// host-only finite-volume coordinates
+
+inline __host__
+real _get_s_y (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
+
+inline __host__
+real _get_s_z (real z) { return -std::cos(z); }
+
+// =========================================================================================================================
 // cuda error handling
 
 inline __host__
@@ -156,26 +165,22 @@ void _ppm_nonuniform_weights (const std::vector<real> &face_s, real *weight)
 inline __host__
 void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
 {
-    real pow_y = _get_powy();
-    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     std::vector<real> y_face_s(N_Y + 1);
 
     // map radial faces to the volume coordinate used by the radial finite-volume operator
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
-        y_face_s[iy] = std::pow(y0, pow_y) / pow_y;
+        y_face_s[iy] = _get_s_y(_get_yedge(iy));
     }
 
     _ppm_nonuniform_weights(y_face_s, weight_y);
 
-    real dz = _get_dz();
     std::vector<real> z_face_s(N_Z + 1);
 
     // map polar faces to the spherical volume coordinate minus cosine theta
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = -std::cos(Z_MIN + static_cast<real>(iz)*dz);
+        z_face_s[iz] = _get_s_z(_get_zedge(iz));
     }
 
     _ppm_nonuniform_weights(z_face_s, weight_z);
@@ -255,7 +260,7 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
 
     if (max_rate <= 0.0) return DT_MAX;
 
-    real dt_cfl = std::fmin(CFL_NUM / max_rate, DT_MAX);
+    real dt_cfl = std::fmin(CFL_DYN / max_rate, DT_MAX);
     if (!verbose) return dt_cfl;
 
     // print the cell with the maximum CFL rate and its corresponding velocity components
@@ -264,23 +269,20 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     int iy = (idx_max / N_X) % N_Y;
     int iz = idx_max / (N_X*N_Y);
 
-    real velx, vely, velz;
-    CUDA_CHECK(cudaMemcpy(&velx, dev_dustvelx + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(&vely, dev_dustvely + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(&velz, dev_dustvelz + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
+    real lx, vy, lz;
+    CUDA_CHECK(cudaMemcpy(&lx, dev_dustvelx + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&vy, dev_dustvely + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&lz, dev_dustvelz + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
 
-    real dy = _get_dy();
-    real dz = _get_dz();
-
-    real yc = Y_MIN*std::pow(dy, iy + 0.5);
-    real zc = Z_MIN + (iz + 0.5)*dz;
+    real yc = _get_ycent(iy);
+    real zc = _get_zcent(iz);
     real Rc = yc*std::sin(zc);
 
     int idx_base = iy*N_X + iz*N_X*N_Y;
-    thrust::device_ptr <const real> ptr_velx(dev_dustvelx + idx_base);
-    real velx_avg = thrust::reduce(ptr_velx, ptr_velx + N_X, 0.0) / static_cast<real>(N_X);
-    real vx_res = (velx - velx_avg) / std::fmax(Rc, 1.0e-30);
-    real speed_z = velz / yc;
+    thrust::device_ptr <const real> ptr_lx(dev_dustvelx + idx_base);
+    real lx_avg = thrust::reduce(ptr_lx, ptr_lx + N_X, 0.0) / static_cast<real>(N_X);
+    real vx_res = (lx - lx_avg) / std::fmax(Rc, 1.0e-30);
+    real vz = lz / yc;
 
     std::cout
     << std::setfill(' ')
@@ -290,10 +292,10 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     << std::setw(4) << iz << ")"
     << "  Rc="   << std::scientific << std::setprecision(3) << Rc
     << "  dvx="  << std::setw(8) << vx_res
-    << "  vely=" << std::setw(8) << vely
-    << "  velz=" << std::setw(8) << speed_z
+    << "  vy="   << std::setw(8) << vy
+    << "  vz="   << std::setw(8) << vz
     << "  rate=" << std::setw(8) << max_rate
-    << "  dt="   << std::setw(8) << CFL_NUM / max_rate
+    << "  dt="   << std::setw(8) << CFL_DYN / max_rate
     << std::endl;
 
     return dt_cfl;
@@ -382,17 +384,14 @@ bool load_binary (const std::string &fname, T *data, int number)
 inline __host__
 void save_sam_as_velocity (real *dustvelx, real *dustvelz)
 {
-    const real dy = _get_dy();
-    const real dz = _get_dz();
-
     for (int iz = 0; iz < N_Z; iz++)
     {
-        const real zc = Z_MIN + (static_cast<real>(iz) + 0.5)*dz;
+        const real zc = _get_zcent(iz);
         const real sin_zc = std::sin(zc);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            const real yc = Y_MIN*std::pow(dy, static_cast<real>(iy) + 0.5);
+            const real yc = _get_ycent(iy);
             const real Rc = yc*sin_zc;
             const int idx_base = iy*N_X + iz*N_X*N_Y;
 
@@ -409,17 +408,14 @@ void save_sam_as_velocity (real *dustvelx, real *dustvelz)
 inline __host__
 void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 {
-    const real dy = _get_dy();
-    const real dz = _get_dz();
-
     for (int iz = 0; iz < N_Z; iz++)
     {
-        const real zc = Z_MIN + (static_cast<real>(iz) + 0.5)*dz;
+        const real zc = _get_zcent(iz);
         const real sin_zc = std::sin(zc);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            const real yc = Y_MIN*std::pow(dy, static_cast<real>(iy) + 0.5);
+            const real yc = _get_ycent(iy);
             const real Rc = yc*sin_zc;
             const int idx_base = iy*N_X + iz*N_X*N_Y;
 
@@ -496,13 +492,13 @@ bool save_variable (const std::string &fname)
     file << "ASPR_0      = " << std::defaultfloat << std::setprecision(8) << ASPR_0    << "\n";
     file << "IDX_P       = " << std::defaultfloat << std::setprecision(8) << IDX_P     << "\n";
     file << "IDX_Q       = " << std::defaultfloat << std::setprecision(8) << IDX_Q     << "\n";
-    #if defined(DIFFUSION) || defined(VISC_ACCRETION)
+    #ifdef DIFFUSION
     #ifndef CONST_NU  // CONST_ALPHA
     file << "ALPHA       = " << std::scientific   << std::setprecision(8) << ALPHA     << "\n";
     #else             // CONST_NU
     file << "NU          = " << std::scientific   << std::setprecision(8) << NU        << "\n";
     #endif // CONST_NU
-    #endif // DIFFUSION || VISC_ACCRETION
+    #endif // DIFFUSION
     #ifdef VISC_ACCRETION
     file << "VISC_ACCRETION = " << std::defaultfloat << 1                            << "\n";
     #endif // VISC_ACCRETION
@@ -517,9 +513,9 @@ bool save_variable (const std::string &fname)
     file << "T_BETA      = " << std::scientific   << std::setprecision(8) << T_BETA    << "\n";
     #endif
     #ifdef DIFFUSION
-    file << "SC_Y        = " << std::scientific   << std::setprecision(8) << SC_Y      << "\n";
-    file << "SC_X        = " << std::scientific   << std::setprecision(8) << SC_X      << "\n";
-    file << "SC_Z        = " << std::scientific   << std::setprecision(8) << SC_Z      << "\n";
+    file << "SCHMIDT_Y   = " << std::scientific   << std::setprecision(8) << SCHMIDT_Y << "\n";
+    file << "SCHMIDT_X   = " << std::scientific   << std::setprecision(8) << SCHMIDT_X << "\n";
+    file << "SCHMIDT_Z   = " << std::scientific   << std::setprecision(8) << SCHMIDT_Z << "\n";
     file << "POS_LIMIT   = " << std::scientific   << std::setprecision(8) << POS_LIMIT << "\n";
     #endif
     file                                                                               << "\n";
@@ -540,7 +536,7 @@ bool save_variable (const std::string &fname)
     file << "SAVE_MAX    = " << std::defaultfloat << std::setprecision(8) << SAVE_MAX  << "\n";
     file << "DT_OUT      = " << std::scientific   << std::setprecision(8) << DT_OUT    << "\n";
     file << "DT_MAX      = " << std::scientific   << std::setprecision(8) << DT_MAX    << "\n";
-    file << "CFL_NUM     = " << std::scientific   << std::setprecision(8) << CFL_NUM   << "\n";
+    file << "CFL_DYN     = " << std::scientific   << std::setprecision(8) << CFL_DYN   << "\n";
     file                                                                               << "\n";
 
     return file.good();

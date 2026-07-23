@@ -12,14 +12,12 @@ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens)
 
     int iy = (idx / N_X) % N_Y;
 
-    real dy = _get_dy();
-    real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-    real dy_len = y0*(dy - 1.0);
+    real dr = _get_yedge(iy)*(_get_dy() - 1.0);
 
     real extinction_dens = dev_dustdens[idx];
     if (N_Z == 1)
     {
-        real yc = Y_MIN*pow(dy, iy + 0.5);
+        real yc = _get_ycent(iy);
         real h_g = _get_hg(yc);
         real H_d = _get_hd(yc, h_g);
 
@@ -28,7 +26,7 @@ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens)
     }
 
     // store the local radial optical-depth contribution of one cell
-    dev_optdepth[idx] = KAPPA_0*extinction_dens*dy_len;
+    dev_optdepth[idx] = KAPPA_0*extinction_dens*dr;
 }
 
 #endif

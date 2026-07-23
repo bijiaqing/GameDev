@@ -650,6 +650,40 @@ def test_optdepth():
            np.all(orders > 1.7) and errs_c[-1] > 1e-14,
            f"rel errs={np.array2string(np.array(errs_c), precision=3)}, orders={np.round(orders,3)}")
 
+    # T6c: the C9 logarithmic-center rule tau_c = tau_i + f_c*(tau_o - tau_i), f_c = 1/(sqrt(r)+1),
+    # is roundoff-exact for constant extinction (piecewise-constant cells are then exact) and
+    # keeps the underlying second-order cell quadrature otherwise
+    kappa_c = 1.0e5
+    exact_const = []
+    for n in (32, 64, 128, 256):
+        r = (Y_MAX/Y_MIN)**(1.0/n)
+        yf = Y_MIN*r**np.arange(n+1)
+        yc = np.sqrt(yf[:-1]*yf[1:])
+        fc = 1.0/(np.sqrt(r) + 1.0)
+        tau_cell = kappa_c*1.0*(yf[1:] - yf[:-1])
+        tau_face = np.concatenate([[0.0], np.cumsum(tau_cell)])
+        tau_c = tau_face[:-1] + fc*(tau_face[1:] - tau_face[:-1])
+        exact_const.append(np.max(np.abs(tau_c - kappa_c*(yc - Y_MIN))))
+    report("T6c1 logarithmic-center optical depth roundoff-exact for constant extinction",
+           max(exact_const) < 1e-9, f"max abs err={max(exact_const):.2e}")
+
+    errs_c2 = []
+    for n in (32, 64, 128, 256):
+        r = (Y_MAX/Y_MIN)**(1.0/n)
+        yf = Y_MIN*r**np.arange(n+1)
+        yc = np.sqrt(yf[:-1]*yf[1:])
+        fc = 1.0/(np.sqrt(r) + 1.0)
+        rho = yc**1.0
+        tau_cell = kappa_c*rho*(yf[1:] - yf[:-1])
+        tau_face = np.concatenate([[0.0], np.cumsum(tau_cell)])
+        tau_c = tau_face[:-1] + fc*(tau_face[1:] - tau_face[:-1])
+        exact_c2 = kappa_c*(yc**2 - Y_MIN**2)/2.0
+        errs_c2.append(np.max(np.abs(tau_c - exact_c2))/np.max(np.abs(exact_c2)))
+    orders = np.log(np.array(errs_c2[:-1])/np.array(errs_c2[1:]))/np.log(2.0)
+    report("T6c2 logarithmic-center optical depth 2nd order for a power-law profile",
+           np.all(orders > 1.7),
+           f"rel errs={np.array2string(np.array(errs_c2), precision=3)}, orders={np.round(orders,3)}")
+
 
 
 
@@ -931,6 +965,46 @@ def test_idl_fix():
 
 
 
+# =============================================================================
+# T10: exact mesh primitives (C12 batch A)
+# =============================================================================
+
+def test_mesh_primitives():
+    dy = (Y_MAX/Y_MIN)**(1.0/64.0)
+    yface = lambda iy: Y_MIN*dy**iy
+    ycent = lambda iy: Y_MIN*dy**(iy + 0.5)
+    dy_len = lambda iy: yface(iy)*(dy - 1.0)
+    for d in (2, 3):
+        vol_y = lambda iy: yface(iy)**d*(dy**d - 1.0)/d
+        # measure telescopes to the domain measure; faces/logarithmic center are ordered
+        ok = abs(sum(vol_y(i) for i in range(64)) - (Y_MAX**d - Y_MIN**d)/d) < 1e-10
+        ok = ok and all(yface(i) < ycent(i) < yface(i+1) for i in range(64))
+        # cell width and center-to-center distances are exact
+        ok = ok and all(abs(dy_len(i) - (yface(i+1) - yface(i))) < 1e-15 for i in range(64))
+        ok = ok and all(abs(ycent(i)*(dy - 1.0)/dy - (ycent(i) - ycent(i-1))) < 1e-15 for i in range(1, 64))
+        ok = ok and all(abs(ycent(i)*(dy - 1.0) - (ycent(i+1) - ycent(i))) < 1e-15 for i in range(63))
+        report(f"T10 d={d} exact radial mesh primitives", ok, "telescoping, ordering, exact widths/distances")
+
+    # exact dr vs the former y*log(dy): exact at faces/logarithmic centers, small documented deviation
+    for n, tol in ((32, 0.031), (256, 0.004)):
+        r = (Y_MAX/Y_MIN)**(1.0/n)
+        yf = Y_MIN*r**np.arange(n+1)
+        yy = np.sqrt(yf[:-1]*yf[1:])
+        exact = yf[1:] - yf[:-1]
+        former = yy*np.log(r)
+        rel = np.abs(exact/former - 1.0)
+        report(f"T10 dr exact; deviation from y*log(dy) below {tol:.1%} at N_Y={n}",
+               rel.max() < tol, f"max relative deviation={rel.max():.3e}")
+
+    # polar measure telescopes to the hemisphere
+    Nz = 32
+    dz = (np.pi/2.0)/Nz
+    vol_z_sum = sum(np.cos(i*dz) - np.cos((i+1)*dz) for i in range(Nz))
+    report("T10 polar measure telescopes to the hemisphere", abs(vol_z_sum - 1.0) < 1e-15,
+           f"sum={vol_z_sum:.16f}")
+
+# =============================================================================
+
 if __name__ == "__main__":
     np.set_printoptions(suppress=True)
     print("=== rpi_fluid algorithmic mock verification ===")
@@ -943,6 +1017,7 @@ if __name__ == "__main__":
     test_y_advection()
     test_ssprk3_fix()
     test_idl_fix()
+    test_mesh_primitives()
     n_pass = sum(1 for _, ok in RESULTS if ok)
     print(f"\n{n_pass}/{len(RESULTS)} checks passed")
     if n_pass != len(RESULTS):

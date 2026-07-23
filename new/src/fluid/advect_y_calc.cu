@@ -25,62 +25,56 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     int ix = idx % N_X;
     int iz = idx / N_X;
 
-    real dy = _get_dy();
-    real dz = _get_dz();
-
-    real zc = Z_MIN + (iz + 0.5)*dz;
-
-    // select cylindrical radial geometry in 2D and spherical radial geometry in 3D
-    real pow_y = _get_powy();
+    real zc = _get_zcent(iz);
 
     // load one radial column from global memory
-    real dens[N_Y], momx[N_Y], momy[N_Y], momz[N_Y];
+    real dens[N_Y], mx[N_Y], my[N_Y], mz[N_Y];
     for (int iy = 0; iy < N_Y; iy++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;
 
         dens[iy] = dev_dustdens[ic];
-        momx[iy] = dev_dustmomx[ic];
-        momy[iy] = dev_dustmomy[ic];
-        momz[iy] = dev_dustmomz[ic];
+        mx[iy] = dev_dustmomx[ic];
+        my[iy] = dev_dustmomy[ic];
+        mz[iy] = dev_dustmomz[ic];
     }
 
     // advance three forward-Euler operator evaluations for SSPRK(3,3)
     for (int stage = 0; stage < 3; stage++)
     {
         // recover primitive quantities from the current stage state
-        real velx[N_Y], vely[N_Y], velz[N_Y];
+        real lx[N_Y], vy[N_Y], lz[N_Y];
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real yc = Y_MIN*pow(dy, iy + 0.5);
+            real yc = _get_ycent(iy);
             real Rc = yc*sin(zc);
 
-            _recover_dust_state(dens[iy], Rc, momx[iy], momy[iy], momz[iy], velx[iy], vely[iy], velz[iy]);
+            _recover_dust_state(dens[iy], Rc, mx[iy], my[iy], mz[iy], lx[iy], vy[iy], lz[iy]);
         }
 
         // reconstruct PPM face values in the radial finite-volume coordinate
-        real edge_dens[N_Y + 1], edge_velx[N_Y + 1], edge_vely[N_Y + 1], edge_velz[N_Y + 1];
+        real edge_dens[N_Y + 1], edge_lx[N_Y + 1], edge_vy[N_Y + 1], edge_lz[N_Y + 1];
 
         _ppm_edges_nonuniform(dens, dev_weight_y, edge_dens, N_Y);
-        _ppm_edges_nonuniform(velx, dev_weight_y, edge_velx, N_Y);
-        _ppm_edges_nonuniform(vely, dev_weight_y, edge_vely, N_Y);
-        _ppm_edges_nonuniform(velz, dev_weight_y, edge_velz, N_Y);
+        _ppm_edges_nonuniform(lx, dev_weight_y, edge_lx, N_Y);
+        _ppm_edges_nonuniform(vy, dev_weight_y, edge_vy, N_Y);
+        _ppm_edges_nonuniform(lz, dev_weight_y, edge_lz, N_Y);
 
         // compute interior face fluxes and the outflow-only outer boundary flux
-        real flux_dens[N_Y], flux_momx[N_Y], flux_momy[N_Y], flux_momz[N_Y];
+        real flux_dens[N_Y], flux_mx[N_Y], flux_my[N_Y], flux_mz[N_Y];
         for (int iy = 0; iy < N_Y; iy++)
         {
             if (iy == N_Y - 1)
             {
                 // permit outward transport and suppress inflow at the outer radial boundary
-                real speed_ob = vely[iy];
+                real speed_ob = vy[iy];
                 real outflow = (speed_ob > 0.0) ? 1.0 : 0.0;
 
                 flux_dens[iy] = outflow*speed_ob*fmax(dens[iy], 0.0);
-                flux_momx[iy] = flux_dens[iy]*velx[iy];
-                flux_momy[iy] = flux_dens[iy]*vely[iy];
-                flux_momz[iy] = flux_dens[iy]*velz[iy];
-                edge_dens[iy] = edge_velx[iy] = edge_vely[iy] = edge_velz[iy] = 0.0;
+                flux_mx[iy] = flux_dens[iy]*lx[iy];
+                flux_my[iy] = flux_dens[iy]*vy[iy];
+                flux_mz[iy] = flux_dens[iy]*lz[iy];
+                edge_dens[iy] = edge_lx[iy] = edge_vy[iy] = edge_lz[iy] = 0.0;
 
                 continue;
             }
@@ -89,129 +83,125 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             // use zero PPM tracing fraction because SSPRK supplies temporal integration
             real dens_L = fmax(_ppm_face_value(edge_dens, dens, iy,     iy + 1, true,  0.0), 0.0);
             real dens_R = fmax(_ppm_face_value(edge_dens, dens, iy + 1, iy + 2, false, 0.0), 0.0);
-            real velx_L =      _ppm_face_value(edge_velx, velx, iy,     iy + 1, true,  0.0);
-            real velx_R =      _ppm_face_value(edge_velx, velx, iy + 1, iy + 2, false, 0.0);
-            real vely_L =      _ppm_face_value(edge_vely, vely, iy,     iy + 1, true,  0.0);
-            real vely_R =      _ppm_face_value(edge_vely, vely, iy + 1, iy + 2, false, 0.0);
-            real velz_L =      _ppm_face_value(edge_velz, velz, iy,     iy + 1, true,  0.0);
-            real velz_R =      _ppm_face_value(edge_velz, velz, iy + 1, iy + 2, false, 0.0);
+            real lx_L =      _ppm_face_value(edge_lx, lx, iy,     iy + 1, true,  0.0);
+            real lx_R =      _ppm_face_value(edge_lx, lx, iy + 1, iy + 2, false, 0.0);
+            real vy_L =      _ppm_face_value(edge_vy, vy, iy,     iy + 1, true,  0.0);
+            real vy_R =      _ppm_face_value(edge_vy, vy, iy + 1, iy + 2, false, 0.0);
+            real lz_L =      _ppm_face_value(edge_lz, lz, iy,     iy + 1, true,  0.0);
+            real lz_R =      _ppm_face_value(edge_lz, lz, iy + 1, iy + 2, false, 0.0);
 
             _pressureless_hll_flux(
-                vely_L, vely_R,
-                dens_L, velx_L, vely_L, velz_L,
-                dens_R, velx_R, vely_R, velz_R,
-                flux_dens[iy], flux_momx[iy], flux_momy[iy], flux_momz[iy]
+                vy_L, vy_R,
+                dens_L, lx_L, vy_L, lz_L,
+                dens_R, lx_R, vy_R, lz_R,
+                flux_dens[iy], flux_mx[iy], flux_my[iy], flux_mz[iy]
             );
 
             // compute the low-order HLL flux from adjacent cell-centred states
-            real flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low;
+            real flux_dens_low, flux_mx_low, flux_my_low, flux_mz_low;
             _pressureless_hll_flux(
-                vely[iy], vely[iy + 1],
-                dens[iy], velx[iy], vely[iy], velz[iy],
-                dens[iy + 1], velx[iy + 1], vely[iy + 1], velz[iy + 1],
-                flux_dens_low, flux_momx_low, flux_momy_low, flux_momz_low
+                vy[iy], vy[iy + 1],
+                dens[iy], lx[iy], vy[iy], lz[iy],
+                dens[iy + 1], lx[iy + 1], vy[iy + 1], lz[iy + 1],
+                flux_dens_low, flux_mx_low, flux_my_low, flux_mz_low
             );
 
             // retain low-order fluxes and store high-minus-low differences for the antidiffusive correction
             edge_dens[iy] = flux_dens[iy] - flux_dens_low;
-            edge_velx[iy] = flux_momx[iy] - flux_momx_low;
-            edge_vely[iy] = flux_momy[iy] - flux_momy_low;
-            edge_velz[iy] = flux_momz[iy] - flux_momz_low;
+            edge_lx[iy] = flux_mx[iy] - flux_mx_low;
+            edge_vy[iy] = flux_my[iy] - flux_my_low;
+            edge_lz[iy] = flux_mz[iy] - flux_mz_low;
             
             flux_dens[iy] = flux_dens_low;
-            flux_momx[iy] = flux_momx_low;
-            flux_momy[iy] = flux_momy_low;
-            flux_momz[iy] = flux_momz_low;
+            flux_mx[iy] = flux_mx_low;
+            flux_my[iy] = flux_my_low;
+            flux_mz[iy] = flux_mz_low;
         }
 
         // permit outward transport and suppress inflow at the inner radial boundary
-        real speed_ib = vely[0];
+        real speed_ib = vy[0];
         real flux_dens_ib = (speed_ib < 0.0) ? speed_ib*fmax(dens[0], 0.0) : 0.0;
-        real flux_momx_ib = flux_dens_ib*velx[0];
-        real flux_momy_ib = flux_dens_ib*vely[0];
-        real flux_momz_ib = flux_dens_ib*velz[0];
-
-        // precompute the outer-to-inner face area ratio for logarithmic radial cells
-        real area_ratio = pow(dy, pow_y - 1.0);
+        real flux_mx_ib = flux_dens_ib*lx[0];
+        real flux_my_ib = flux_dens_ib*vy[0];
+        real flux_mz_ib = flux_dens_ib*lz[0];
 
         // apply the geometry-aware low-order update to the innermost radial cell
         {
-            real y0 = Y_MIN;
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real area_i = pow(y0, pow_y - 1.0);
+            real vol_y = _get_vol_y(0);
+            real area_i = _get_area_y(0);
+            real area_o = _get_area_y(1);
 
-            dens[0] -= dt*area_i*(area_ratio*flux_dens[0] - flux_dens_ib) / vol_y;
-            momx[0] -= dt*area_i*(area_ratio*flux_momx[0] - flux_momx_ib) / vol_y;
-            momy[0] -= dt*area_i*(area_ratio*flux_momy[0] - flux_momy_ib) / vol_y;
-            momz[0] -= dt*area_i*(area_ratio*flux_momz[0] - flux_momz_ib) / vol_y;
+            dens[0] -= dt*(area_o*flux_dens[0] - area_i*flux_dens_ib) / vol_y;
+            mx[0] -= dt*(area_o*flux_mx[0] - area_i*flux_mx_ib) / vol_y;
+            my[0] -= dt*(area_o*flux_my[0] - area_i*flux_my_ib) / vol_y;
+            mz[0] -= dt*(area_o*flux_mz[0] - area_i*flux_mz_ib) / vol_y;
 
-            if (dens[0] < 0.0) dens[0] = momx[0] = momy[0] = momz[0] = 0.0;
+            if (dens[0] < 0.0) dens[0] = mx[0] = my[0] = mz[0] = 0.0;
         }
 
         // apply the geometry-aware low-order update to the remaining radial cells
         for (int iy = 1; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real area_i = pow(y0, pow_y - 1.0);
+            real vol_y = _get_vol_y(iy);
+            real area_i = _get_area_y(iy);
+            real area_o = _get_area_y(iy + 1);
 
-            dens[iy] -= dt*area_i*(area_ratio*flux_dens[iy] - flux_dens[iy - 1]) / vol_y;
-            momx[iy] -= dt*area_i*(area_ratio*flux_momx[iy] - flux_momx[iy - 1]) / vol_y;
-            momy[iy] -= dt*area_i*(area_ratio*flux_momy[iy] - flux_momy[iy - 1]) / vol_y;
-            momz[iy] -= dt*area_i*(area_ratio*flux_momz[iy] - flux_momz[iy - 1]) / vol_y;
+            dens[iy] -= dt*(area_o*flux_dens[iy] - area_i*flux_dens[iy - 1]) / vol_y;
+            mx[iy] -= dt*(area_o*flux_mx[iy] - area_i*flux_mx[iy - 1]) / vol_y;
+            my[iy] -= dt*(area_o*flux_my[iy] - area_i*flux_my[iy - 1]) / vol_y;
+            mz[iy] -= dt*(area_o*flux_mz[iy] - area_i*flux_mz[iy - 1]) / vol_y;
 
-            if (dens[iy] < 0.0) dens[iy] = momx[iy] = momy[iy] = momz[iy] = 0.0;
+            if (dens[iy] < 0.0) dens[iy] = mx[iy] = my[iy] = mz[iy] = 0.0;
         }
 
         // apply volume-scaled antidiffusive transfers across interior radial faces
         for (int iy = 0; iy < N_Y - 1; iy++)
         {
-            real y_face = Y_MIN*pow(dy, static_cast<real>(iy + 1));
-            real area_f = pow(y_face, pow_y - 1.0);
-            real vol_L = pow(y_face / dy, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
-            real vol_R = pow(y_face, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+            real area_f = _get_area_y(iy + 1);
+            real vol_L = _get_vol_y(iy);
+            real vol_R = _get_vol_y(iy + 1);
 
             real corr_dens_L = -dt*area_f*edge_dens[iy] / vol_L;
-            real corr_momx_L = -dt*area_f*edge_velx[iy] / vol_L;
-            real corr_momy_L = -dt*area_f*edge_vely[iy] / vol_L;
-            real corr_momz_L = -dt*area_f*edge_velz[iy] / vol_L;
+            real corr_mx_L = -dt*area_f*edge_lx[iy] / vol_L;
+            real corr_my_L = -dt*area_f*edge_vy[iy] / vol_L;
+            real corr_mz_L = -dt*area_f*edge_lz[iy] / vol_L;
             real corr_dens_R =  dt*area_f*edge_dens[iy] / vol_R;
-            real corr_momx_R =  dt*area_f*edge_velx[iy] / vol_R;
-            real corr_momy_R =  dt*area_f*edge_vely[iy] / vol_R;
-            real corr_momz_R =  dt*area_f*edge_velz[iy] / vol_R;
+            real corr_mx_R =  dt*area_f*edge_lx[iy] / vol_R;
+            real corr_my_R =  dt*area_f*edge_vy[iy] / vol_R;
+            real corr_mz_R =  dt*area_f*edge_lz[iy] / vol_R;
 
-            real velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L;
-            real velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R;
+            real lx_min_L, lx_max_L, vy_min_L, vy_max_L, lz_min_L, lz_max_L;
+            real lx_min_R, lx_max_R, vy_min_R, vy_max_R, lz_min_R, lz_max_R;
 
             // bound each transported primitive quantity by neighboring stage values
-            _local_bounds(velx, iy,     N_Y, velx_min_L, velx_max_L);
-            _local_bounds(vely, iy,     N_Y, vely_min_L, vely_max_L);
-            _local_bounds(velz, iy,     N_Y, velz_min_L, velz_max_L);
-            _local_bounds(velx, iy + 1, N_Y, velx_min_R, velx_max_R);
-            _local_bounds(vely, iy + 1, N_Y, vely_min_R, vely_max_R);
-            _local_bounds(velz, iy + 1, N_Y, velz_min_R, velz_max_R);
+            _local_bounds(lx, iy,     N_Y, lx_min_L, lx_max_L);
+            _local_bounds(vy, iy,     N_Y, vy_min_L, vy_max_L);
+            _local_bounds(lz, iy,     N_Y, lz_min_L, lz_max_L);
+            _local_bounds(lx, iy + 1, N_Y, lx_min_R, lx_max_R);
+            _local_bounds(vy, iy + 1, N_Y, vy_min_R, vy_max_R);
+            _local_bounds(lz, iy + 1, N_Y, lz_min_R, lz_max_R);
 
             real scale_L = _invariant_scale(
-                dens[iy], momx[iy], momy[iy], momz[iy],
-                corr_dens_L, corr_momx_L, corr_momy_L, corr_momz_L,
-                velx_min_L, velx_max_L, vely_min_L, vely_max_L, velz_min_L, velz_max_L
+                dens[iy], mx[iy], my[iy], mz[iy],
+                corr_dens_L, corr_mx_L, corr_my_L, corr_mz_L,
+                lx_min_L, lx_max_L, vy_min_L, vy_max_L, lz_min_L, lz_max_L
             );
             real scale_R = _invariant_scale(
-                dens[iy + 1], momx[iy + 1], momy[iy + 1], momz[iy + 1],
-                corr_dens_R, corr_momx_R, corr_momy_R, corr_momz_R,
-                velx_min_R, velx_max_R, vely_min_R, vely_max_R, velz_min_R, velz_max_R
+                dens[iy + 1], mx[iy + 1], my[iy + 1], mz[iy + 1],
+                corr_dens_R, corr_mx_R, corr_my_R, corr_mz_R,
+                lx_min_R, lx_max_R, vy_min_R, vy_max_R, lz_min_R, lz_max_R
             );
             // limit both cell corrections by one shared scale to preserve conservation and the local invariant domain
             real scale = fmin(scale_L, scale_R);
 
             dens[iy] += scale*corr_dens_L;
-            momx[iy] += scale*corr_momx_L;
-            momy[iy] += scale*corr_momy_L;
-            momz[iy] += scale*corr_momz_L;
+            mx[iy] += scale*corr_mx_L;
+            my[iy] += scale*corr_my_L;
+            mz[iy] += scale*corr_mz_L;
             dens[iy + 1] += scale*corr_dens_R;
-            momx[iy + 1] += scale*corr_momx_R;
-            momy[iy + 1] += scale*corr_momy_R;
-            momz[iy + 1] += scale*corr_momz_R;
+            mx[iy + 1] += scale*corr_mx_R;
+            my[iy + 1] += scale*corr_my_R;
+            mz[iy + 1] += scale*corr_mz_R;
         }
 
         // form the second SSPRK(3,3) convex combination after the second Euler evaluation
@@ -222,9 +212,9 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 int ic = ix + iy*N_X + iz*N_X*N_Y;
 
                 dens[iy] = 0.75*dev_dustdens[ic] + 0.25*dens[iy];
-                momx[iy] = 0.75*dev_dustmomx[ic] + 0.25*momx[iy];
-                momy[iy] = 0.75*dev_dustmomy[ic] + 0.25*momy[iy];
-                momz[iy] = 0.75*dev_dustmomz[ic] + 0.25*momz[iy];
+                mx[iy] = 0.75*dev_dustmomx[ic] + 0.25*mx[iy];
+                my[iy] = 0.75*dev_dustmomy[ic] + 0.25*my[iy];
+                mz[iy] = 0.75*dev_dustmomz[ic] + 0.25*mz[iy];
             }
         }
     }
@@ -235,8 +225,8 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         int ic = ix + iy*N_X + iz*N_X*N_Y;
 
         dev_dustdens[ic] = (1.0/3.0)*dev_dustdens[ic] + (2.0/3.0)*dens[iy];
-        dev_dustmomx[ic] = (1.0/3.0)*dev_dustmomx[ic] + (2.0/3.0)*momx[iy];
-        dev_dustmomy[ic] = (1.0/3.0)*dev_dustmomy[ic] + (2.0/3.0)*momy[iy];
-        dev_dustmomz[ic] = (1.0/3.0)*dev_dustmomz[ic] + (2.0/3.0)*momz[iy];
+        dev_dustmomx[ic] = (1.0/3.0)*dev_dustmomx[ic] + (2.0/3.0)*mx[iy];
+        dev_dustmomy[ic] = (1.0/3.0)*dev_dustmomy[ic] + (2.0/3.0)*my[iy];
+        dev_dustmomz[ic] = (1.0/3.0)*dev_dustmomz[ic] + (2.0/3.0)*mz[iy];
     }
 }

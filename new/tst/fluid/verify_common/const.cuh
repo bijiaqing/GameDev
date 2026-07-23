@@ -112,21 +112,21 @@ const real T_BETA = 1.0;
 // A Schmidt number of one activates diffusion in the direction being tested.  A numerically enormous value makes diffusion
 // negligible in every other direction while preserving the same production kernel interface.
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_RING_DIFFUSION)
-const real SC_X = 1.0;
+const real SCHMIDT_X = 1.0;
 #else
-const real SC_X = 1.0e300;
+const real SCHMIDT_X = 1.0e300;
 #endif
 
 #if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
-const real SC_Y = 1.0;
+const real SCHMIDT_Y = 1.0;
 #else
-const real SC_Y = 1.0e300;
+const real SCHMIDT_Y = 1.0e300;
 #endif
 
 #if defined(VERIFY_Z_DIFFUSION)
-const real SC_Z = 1.0;
+const real SCHMIDT_Z = 1.0;
 #else
-const real SC_Z = 1.0e300;
+const real SCHMIDT_Z = 1.0e300;
 #endif
 
 const real POS_LIMIT = 0.9;
@@ -135,14 +135,14 @@ const real POS_LIMIT = 0.9;
 const int SAVE_MAX = 1;
 const real DT_OUT  = 1.0;
 const real DT_MAX  = 1.0;
-constexpr real CFL_NUM = VERIFY_CFL;
+constexpr real CFL_DYN = VERIFY_CFL;
 const real RHO_VAC = 1.0e-15;
 
 // Kernel launch counts correspond to one thread per cell, x ring, y column, or z column.  The extra block is harmless because
 // every kernel begins with an out-of-range return.
 const int TPB  = 32;
 const int N_G  = N_X*N_Y*N_Z;
-const int NB_A = N_G     / TPB + 1;
+const int NB_G = N_G     / TPB + 1;
 const int NB_X = N_Y*N_Z / TPB + 1;
 const int NB_Y = N_X*N_Z / TPB + 1;
 const int NB_Z = N_X*N_Y / TPB + 1;
@@ -188,6 +188,6 @@ static_assert(N_Z == 1 || (Z_MIN < 0.5*M_PI && Z_MAX > 0.5*M_PI), "A full polar 
 static_assert(N_Z == 1, "Production guards require DIFFUSION when N_Z>1");
 #endif
 
-static_assert(CFL_NUM > 0.0 && CFL_NUM <= 0.5, "Verification CFL must be in (0,0.5]");
+static_assert(CFL_DYN > 0.0 && CFL_DYN <= 0.5, "Verification CFL must be in (0,0.5]");
 
 #endif

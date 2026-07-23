@@ -83,10 +83,10 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
         }
         else
         {
-            real idx_dim = static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1) + 1.0;
+            real mesh_dim = _get_mesh_dim();
             
-            // place cell-centred values at the exact volume centroid in the active spatial dimension
-            m_y = log((idx_dim / (idx_dim + 1.0))*(pow(d_y, idx_dim + 1.0) - 1.0) / (pow(d_y, idx_dim) - 1.0)) / log(d_y);
+            // place cell-centred values at the exact centroid of the represented disk measure
+            m_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(d_y, mesh_dim + 1.0) - 1.0) / (pow(d_y, mesh_dim) - 1.0)) / log(d_y);
         }
         
         bool edge_y = loc_y < m_y || loc_y > static_cast<real>(N_Y) + m_y - 1.0;
@@ -209,7 +209,7 @@ real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z
         if (!_is_in_bounds(loc_x, loc_y, loc_z)) return 0.0;
     }
 
-    int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
+    int idx_cell = static_cast<int>(loc_z)*N_X*N_Y + static_cast<int>(loc_y)*N_X + static_cast<int>(loc_x);
     auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z, outer_edge);
 
     real value = 0.0;
@@ -246,7 +246,7 @@ void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, rea
 
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
 
-    int idx_cell = _get_cell_index(loc_x, loc_y, loc_z);
+    int idx_cell = static_cast<int>(loc_z)*N_X*N_Y + static_cast<int>(loc_y)*N_X + static_cast<int>(loc_x);
     auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z);
 
     atomicAdd(&dev_grid_out[idx_cell                           ], (1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z)*weight);

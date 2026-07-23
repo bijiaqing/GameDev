@@ -51,13 +51,17 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real dx = _get_dx();
     real dy = _get_dy();
     real dz = _get_dz();
+    int iy = static_cast<int>(log(y / Y_MIN) / log(dy));
+    iy = (iy >= N_Y) ? N_Y - 1 : iy;
+    real dr = _get_yedge(iy)*(dy - 1.0);
 
     // limit orbital phase evolution and particle crossing of every active mesh direction
+    // the radial scale is the exact width of the logarithmic cell containing the particle
     real omega = _get_omegaK(R);
     real rate = omega / CFL_DYN;
     if (N_X > 1) rate = fmax(rate, omega / (dx*CFL_DYN));
     if (N_X > 1) rate = fmax(rate, abs(lx) / (R*R*dx*CFL_DYN));
-    if (N_Y > 1) rate = fmax(rate, abs(vy) / (y*log(dy)*CFL_DYN));
+    if (N_Y > 1) rate = fmax(rate, abs(vy) / (dr*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(lz) / (y*y*dz*CFL_DYN));
 
     #ifdef IMPORTGAS
@@ -75,7 +79,7 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     gas_z = fmax(abs(gas_z), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
     
     if (N_X > 1) rate = fmax(rate, abs(gas_x) / (R*dx*CFL_DYN));
-    if (N_Y > 1) rate = fmax(rate, abs(gas_y) / (y*log(dy)*CFL_DYN));
+    if (N_Y > 1) rate = fmax(rate, abs(gas_y) / (dr*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(gas_z) / (y*dz*CFL_DYN));
     #endif // IMPORTGAS
 
@@ -98,7 +102,7 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real cent_y = lx*lx / (R*R*y) + lz*lz / (y*y*y);
     real accel_y = abs(force_y + cent_y);
     
-    rate = fmax(rate, sqrt(accel_y / (2.0*CFL_DYN*y*log(dy))));
+    rate = fmax(rate, sqrt(accel_y / (2.0*CFL_DYN*dr)));
     if (N_Z > 1)
     {
         real accel_z = abs(lx*lx / (R*R)*cos(z) / sin(z)) / y;
@@ -111,7 +115,7 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
         real h_g_acc = _get_hg(R);
         real vgas_R = _get_visc_vel(R, y*cos(z), h_g_acc);
 
-        if (N_Y > 1) rate = fmax(rate, abs(vgas_R*sin(z)) / (y*log(dy)*CFL_DYN));
+        if (N_Y > 1) rate = fmax(rate, abs(vgas_R*sin(z)) / (dr*CFL_DYN));
         if (N_Z > 1) rate = fmax(rate, abs(vgas_R*cos(z)) / (y*dz*CFL_DYN));
     }
     #endif // VISC_ACCRETION
@@ -135,12 +139,11 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     // project cylindrical diffusion variance and drift onto spherical radial and polar directions
     real sin_z = sin(z);
     real cos_z = cos(z);
-    real cell_y = y*log(dy);
     real coeff_y = coeff_R*sin_z*sin_z + coeff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
     
-    rate = fmax(rate, 2.0*coeff_y / (CFL_DYN*CFL_DYN*cell_y*cell_y));
-    rate = fmax(rate, abs(drift_y) / (CFL_DYN*cell_y));
+    rate = fmax(rate, 2.0*coeff_y / (CFL_DYN*CFL_DYN*dr*dr));
+    rate = fmax(rate, abs(drift_y) / (CFL_DYN*dr));
 
     if (N_X > 1)
     {

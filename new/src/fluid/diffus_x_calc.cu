@@ -29,17 +29,15 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     int iz = idx / N_Y;
 
     real dx = _get_dx();
-    real dy = _get_dy();
-    real dz = _get_dz();
 
-    real yc = Y_MIN*pow(dy, iy + 0.5);
-    real zc = Z_MIN + (iz + 0.5)*dz;
+    real yc = _get_ycent(iy);
+    real zc = _get_zcent(iz);
 
     real Rc = yc*sin(zc);
     real dx_len = Rc*dx;
 
     real h_g = _get_hg(Rc);
-    real Dx = _get_nu(Rc, h_g) / SC_X;
+    real Dx = _get_nu(Rc, h_g) / SCHMIDT_X;
 
     // load dust density along one azimuthal ring
     real dens[N_X];
@@ -126,9 +124,9 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[ix_up];
 
             int ic_up = ix_up + iy*N_X + iz*N_X*N_Y;
-            real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc, 0.0));
+            real lx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc, 0.0));
 
-            cycle_work[ix] = upper_work[ix]*velx_up;
+            cycle_work[ix] = upper_work[ix]*lx_up;
         }
 
         // update azimuthal momentum from the conservative flux divergence
@@ -147,9 +145,9 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[ix_up];
 
             int ic_up = ix_up + iy*N_X + iz*N_X*N_Y;
-            real vely_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
+            real vy_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
 
-            cycle_work[ix] = upper_work[ix]*vely_up;
+            cycle_work[ix] = upper_work[ix]*vy_up;
         }
 
         // update radial momentum from the conservative flux divergence
@@ -168,9 +166,9 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[ix_up];
 
             int ic_up = ix_up + iy*N_X + iz*N_X*N_Y;
-            real velz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
+            real lz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
 
-            cycle_work[ix] = upper_work[ix]*velz_up;
+            cycle_work[ix] = upper_work[ix]*lz_up;
         }
 
         // update polar momentum and accept the density solution for this substep

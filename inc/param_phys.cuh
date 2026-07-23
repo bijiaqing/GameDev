@@ -52,7 +52,7 @@ real _get_eta (real R, real Z, real h_g)
 
 // calculate the exact vertically isothermal spherical gas stratification relative to the midplane
 __device__ __forceinline__
-real _get_rhog_strat (real R, real Z, real h_g)
+real _get_gas_strat (real R, real Z, real h_g)
 { return exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g)); }
 
 #ifdef COLLISION
@@ -70,7 +70,7 @@ __device__ __forceinline__
 real _get_cs (real R, real h_g)
 { return h_g*_get_omegaK(R)*R; }
 
-#if defined(DIFFUSION) || defined(COLLISION) || defined(VISC_ACCRETION)
+#if defined(DIFFUSION) || defined(COLLISION)
 // calculate the kinematic viscosity from the configured constant-nu or alpha prescription
 __device__ __forceinline__
 real _get_nu (real R, real h_g)
@@ -82,7 +82,7 @@ real _get_nu (real R, real h_g)
     return nu;
     #endif // CONST_NU
 }
-#endif // DIFFUSION || COLLISION || VISC_ACCRETION
+#endif // DIFFUSION || COLLISION
 
 #ifdef VISC_ACCRETION
 // calculate the cylindrical radial gas velocity from equation 41 of Kanagawa et al. 2017
@@ -100,12 +100,11 @@ real _get_visc_vel (real R, real Z, real h_g)
     // use the vertically integrated equation 9 in the vertically integrated 2D model
     if (N_Z == 1) return -3.0*nu*(grad_nu_R + IDX_P + 0.5) / R;
 
-    real y_sph = sqrt(R*R + Z*Z);
-    real cyl_frac = R / y_sph;
+    real y = sqrt(R*R + Z*Z);
+    real cyl_frac = R / y;
     real strat = (cyl_frac - 1.0) / (h_g*h_g);
 
-    real grad_strat_R = cyl_frac*(1.0 - cyl_frac*cyl_frac) / (h_g*h_g);
-    grad_strat_R -= (IDX_Q + 1.0)*strat;
+    real grad_strat_R =  cyl_frac*(1.0 - cyl_frac*cyl_frac) / (h_g*h_g) - (IDX_Q + 1.0)*strat;
     real grad_strat_Z = -cyl_frac*(1.0 - cyl_frac*cyl_frac) / (h_g*h_g);
 
     real grad_rhog_R = IDX_P - 0.5*(IDX_Q + 3.0) + grad_strat_R;
@@ -135,8 +134,6 @@ real _get_alpha (real R, real h_g)
 __device__ __forceinline__
 real _get_hd (real R, real St)
 {
-    // evaluate h_g at the individual particle radius rather than at the pair midpoint
-    
     real h_g = _get_hg(R);
     real alpha_Z = _get_alpha(R, h_g) / SCHMIDT_Z;
     
@@ -150,13 +147,13 @@ real _get_hd (real R, real St)
 
 // calculate the local Stokes number from grain size and the analytic or imported gas density
 __device__ __forceinline__
-real _get_St (real R, real Z, real s, real h_g
+real _get_stokes (real R, real Z, real s, real h_g
     #ifdef IMPORTGAS
     , real x, real y, real z, const real *dev_gas_dens
     #endif // IMPORTGAS
 )
 {
-    real St = ST_0*(s / S_0);
+    real stokes = STOKES_0*(s / S_0);
 
     #ifndef CONST_ST
     #ifdef IMPORTGAS
@@ -174,18 +171,18 @@ real _get_St (real R, real Z, real s, real h_g
             assert(false);
         }
         
-        St *= SIGMA_0 / (rhog*sqrt(2.0*M_PI)*h_g*R);
+        stokes *= SIGMA_0 / (rhog*sqrt(2.0*M_PI)*h_g*R);
     }
     else
     #endif // IMPORTGAS
     {
         // apply the radial surface-density scaling and exact spherical vertical stratification
-        St /= pow(R / R_0, IDX_P);
-        St /= _get_rhog_strat(R, Z, h_g);
+        stokes /= pow(R / R_0, IDX_P);
+        stokes /= _get_gas_strat(R, Z, h_g);
     }
     #endif // NOT CONST_ST
 
-    return St;
+    return stokes;
 }
 
 // =========================================================================================================================

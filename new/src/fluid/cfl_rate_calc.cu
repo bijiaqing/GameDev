@@ -17,34 +17,30 @@ void cfl_rate_calc (
     int iz = idx / N_Y;
 
     real dx = _get_dx();
-    real dy = _get_dy();
-    real dz = _get_dz();
 
-    real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-    real yc = Y_MIN*pow(dy, iy + 0.5);
-    real zc = Z_MIN + (iz + 0.5)*dz;
+    real yc = _get_ycent(iy);
+    real zc = _get_zcent(iz);
     real Rc = yc*sin(zc);
 
-    real pow_y = _get_powy();
-    real vol_y = (pow(y0*dy, pow_y) - pow(y0, pow_y)) / pow_y;
+    real vol_y = _get_vol_y(iy);
 
     // construct radial and polar inverse length scales from finite-volume geometry
-    real cfl_invlen_y = pow(y0*dy, pow_y - 1.0) / vol_y;
+    real cfl_invlen_y = _get_area_y(iy + 1) / vol_y;
     real cfl_invlen_z = 0.0;
 
     if (N_Z > 1)
     {
-        real z0 = Z_MIN + static_cast<real>(iz)*dz;
-        real z1 = z0 + dz;
+        real z0 = _get_zedge(iz);
+        real z1 = _get_zedge(iz + 1);
 
-        real vol_z = cos(z0) - cos(z1);
+        real vol_z = _get_vol_z(iz);
         real sin_max = fmax(sin(z0), sin(z1));
         if (z0 <= 0.5*M_PI && z1 >= 0.5*M_PI) sin_max = 1.0;
 
         cfl_invlen_z = sin_max / (yc*vol_z);
     }
 
-    real velx_avg = 0.0;
+    real lx_avg = 0.0;
     bool ring_finite = true;
 
     // validate one ring and average azimuthal specific angular momentum for the FARGO frame
@@ -53,25 +49,25 @@ void cfl_rate_calc (
         int ic = ix + iy*N_X + iz*N_X*N_Y;
 
         real dens = dev_dustdens[ic];
-        real momx = dev_dustmomx[ic];
-        real momy = dev_dustmomy[ic];
-        real momz = dev_dustmomz[ic];
-        real velx = dev_dustvelx[ic];
-        real vely = dev_dustvely[ic];
-        real velz = dev_dustvelz[ic];
+        real mx = dev_dustmomx[ic];
+        real my = dev_dustmomy[ic];
+        real mz = dev_dustmomz[ic];
+        real lx = dev_dustvelx[ic];
+        real vy = dev_dustvely[ic];
+        real lz = dev_dustvelz[ic];
 
         bool cell_finite = isfinite(dens);
-        cell_finite = cell_finite && isfinite(velx) && isfinite(vely) && isfinite(velz);
-        cell_finite = cell_finite && isfinite(momx) && isfinite(momy) && isfinite(momz);
+        cell_finite = cell_finite && isfinite(lx) && isfinite(vy) && isfinite(lz);
+        cell_finite = cell_finite && isfinite(mx) && isfinite(my) && isfinite(mz);
         if (!cell_finite) ring_finite = false;
 
-        velx_avg += velx;
+        lx_avg += lx;
     }
 
-    velx_avg /= static_cast<real>(N_X);
+    lx_avg /= static_cast<real>(N_X);
 
     // force timestep rejection when any ring state is nonfinite
-    if (!ring_finite || !isfinite(velx_avg))
+    if (!ring_finite || !isfinite(lx_avg))
     {
         for (int ix = 0; ix < N_X; ix++)
         {
@@ -92,19 +88,19 @@ void cfl_rate_calc (
             continue;
         }
 
-        real velx = dev_dustvelx[ic];
-        real vely = dev_dustvely[ic];
-        real velz = dev_dustvelz[ic];
+        real lx = dev_dustvelx[ic];
+        real vy = dev_dustvely[ic];
+        real lz = dev_dustvelz[ic];
 
         // convert angular primitives to residual azimuthal and linear polar speeds
-        real speed_z = velz / yc;
+        real vz = lz / yc;
 
-        real omega_res = (velx - velx_avg) / fmax(Rc*Rc, 1.0e-30);
+        real omega_res = (lx - lx_avg) / fmax(Rc*Rc, 1.0e-30);
 
         real cfl_rate = 0.0;
         cfl_rate = fmax(cfl_rate, fabs(omega_res) / dx);
-        cfl_rate = fmax(cfl_rate, fabs(vely)*cfl_invlen_y);
-        cfl_rate = fmax(cfl_rate, fabs(speed_z)*cfl_invlen_z);
+        cfl_rate = fmax(cfl_rate, fabs(vy)*cfl_invlen_y);
+        cfl_rate = fmax(cfl_rate, fabs(vz)*cfl_invlen_z);
 
         #ifdef VISC_ACCRETION
         // include the analytic gas target velocity before a stiff source update transfers it to the dust

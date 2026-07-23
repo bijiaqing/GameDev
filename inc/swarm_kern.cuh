@@ -9,9 +9,9 @@
 #error "RADIATION requires TRANSPORT"
 #endif // RADIATION && !TRANSPORT
 
-#if defined(VISC_ACCRETION) && !defined(TRANSPORT)
-#error "VISC_ACCRETION requires TRANSPORT"
-#endif // VISC_ACCRETION && !TRANSPORT
+#if defined(VISC_ACCRETION) && !defined(DIFFUSION)
+#error "VISC_ACCRETION requires DIFFUSION"
+#endif // VISC_ACCRETION && !DIFFUSION
 
 #if defined(VISC_ACCRETION) && defined(IMPORTGAS)
 #error "VISC_ACCRETION cannot be combined with imported gas velocities"

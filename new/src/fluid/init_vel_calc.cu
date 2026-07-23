@@ -15,11 +15,10 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     int iy = (idx / N_X) % N_Y;
     int iz = idx / (N_X*N_Y);
 
-    real dy = _get_dy();
     real dz = _get_dz();
 
-    real yc = Y_MIN*pow(dy, iy + 0.5);
-    real zc = Z_MIN + (iz + 0.5)*dz;
+    real yc = _get_ycent(iy);
+    real zc = _get_zcent(iz);
 
     real Rc = yc*sin(zc);
     real Zc = yc*cos(zc);
@@ -45,7 +44,7 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     if (N_Z > 1)
     {
         // balance the initialized density gradient with spherical polar diffusion
-        real Dz = _get_nu(Rc, h_g) / SC_Z;
+        real Dz = _get_nu(Rc, h_g) / SCHMIDT_Z;
         real dens = dev_dustdens[idx];
         real grad_dens;
 

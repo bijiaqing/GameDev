@@ -17,6 +17,12 @@
 //   4 donor-state momentum transport with the diffusing mass
 // =========================================================================================================================
 
+__device__ __forceinline__
+real _get_dr_cc_i (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0) / _get_dy(); }
+
+__device__ __forceinline__
+real _get_dr_cc_o (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0); }
+
 __global__
 void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real *dev_dustmomz, real dt)
@@ -28,13 +34,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     int ix = idx % N_X;
     int iz = idx / N_X;
 
-    real dy = _get_dy();
-    real dz = _get_dz();
-
-    // select cylindrical radial geometry in 2D and spherical radial geometry in 3D
-    real pow_y = _get_powy();
-
-    real zc = Z_MIN + (iz + 0.5)*dz;
+    real zc = _get_zcent(iz);
 
     // load dust density along one radial column
     real dens[N_Y];
@@ -49,28 +49,27 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real max_cn_sum = 0.0;
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-        real y1 = Y_MIN*pow(dy, static_cast<real>(iy + 1));
-        real yc = Y_MIN*pow(dy, iy + 0.5);
+        real y0 = _get_yedge(iy);
+        real y1 = _get_yedge(iy + 1);
 
-        real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+        real vol_y = _get_vol_y(iy);
 
-        real dy_len_i = yc*(dy - 1.0) / dy;
-        real dy_len_o = yc*(dy - 1.0);
+        real dr_i = _get_dr_cc_i(iy);
+        real dr_o = _get_dr_cc_o(iy);
 
         real Rc_i = y0*sin(zc);
         real h_i = _get_hg(Rc_i);
-        real Dy_i = _get_nu(Rc_i, h_i) / SC_Y;
+        real Dy_i = _get_nu(Rc_i, h_i) / SCHMIDT_Y;
 
         real Rc_o = y1*sin(zc);
         real h_o = _get_hg(Rc_o);
-        real Dy_o = _get_nu(Rc_o, h_o) / SC_Y;
+        real Dy_o = _get_nu(Rc_o, h_o) / SCHMIDT_Y;
 
-        real area_i = pow(y0, pow_y - 1.0);
-        real area_o = pow(y1, pow_y - 1.0);
+        real area_i = _get_area_y(iy);
+        real area_o = _get_area_y(iy + 1);
 
-        real cn_i = (iy > 0)       ? (0.5*dt*area_i*Dy_i / (dy_len_i*vol_y)) : 0.0;
-        real cn_o = (iy < N_Y - 1) ? (0.5*dt*area_o*Dy_o / (dy_len_o*vol_y)) : 0.0;
+        real cn_i = (iy > 0)       ? (0.5*dt*area_i*Dy_i / (dr_i*vol_y)) : 0.0;
+        real cn_o = (iy < N_Y - 1) ? (0.5*dt*area_o*Dy_o / (dr_o*vol_y)) : 0.0;
 
         cn_lower[iy] = -cn_i;
         cn_upper[iy] = -cn_o;
@@ -136,8 +135,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 continue;
             }
 
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
 
             real cn_o = -cn_upper[iy];
 
@@ -151,21 +149,20 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             int iy_up = (upper_work[iy] >= 0.0) ? iy : iy + 1;
             if (iy == N_Y - 1) iy_up = iy;
 
-            real y_up = Y_MIN*pow(dy, iy_up + 0.5);
+            real y_up = _get_ycent(iy_up);
             real Rc_up = y_up*sin(zc);
             real dens_up = dens[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
-            real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc_up, 0.0));
+            real lx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc_up, 0.0));
 
-            dens_rhs[iy] = upper_work[iy]*velx_up;
+            dens_rhs[iy] = upper_work[iy]*lx_up;
         }
 
         // update azimuthal momentum from the geometry-aware conservative flux divergence
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
             real flux_i = (iy > 0) ? dens_rhs[iy - 1] : 0.0;
 
             int ic = ix + iy*N_X + iz*N_X*N_Y;
@@ -181,16 +178,15 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
-            real vely_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
+            real vy_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
 
-            dens_rhs[iy] = upper_work[iy]*vely_up;
+            dens_rhs[iy] = upper_work[iy]*vy_up;
         }
 
         // update radial momentum from the geometry-aware conservative flux divergence
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
             real flux_i = (iy > 0) ? dens_rhs[iy - 1] : 0.0;
 
             int ic = ix + iy*N_X + iz*N_X*N_Y;
@@ -206,16 +202,15 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real dens_up = dens[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
-            real velz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
+            real lz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
 
-            dens_rhs[iy] = upper_work[iy]*velz_up;
+            dens_rhs[iy] = upper_work[iy]*lz_up;
         }
 
         // update polar momentum and accept the density solution for this substep
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
-            real vol_y = pow(y0, pow_y)*(pow(dy, pow_y) - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
             real flux_i = (iy > 0) ? dens_rhs[iy - 1] : 0.0;
 
             int ic = ix + iy*N_X + iz*N_X*N_Y;

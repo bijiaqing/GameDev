@@ -64,7 +64,7 @@ int main (int argc, char **argv)
     auto validate_finite_state = [&]()
     {
         CUDA_CHECK(cudaMemset(dev_badstate, 0, sizeof(int)));
-        inf_cell_flag <<< NB_A, TPB >>> (
+        inf_cell_flag <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz,
             #ifdef RADIATION
             dev_optdepth,
@@ -108,12 +108,12 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaMemcpy(dev_initdens, initdens, sizeof(real)*(N_Y + 1), cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaFreeHost(initdens));
 
-        init_rho_calc <<< NB_A, TPB >>> (dev_dustdens, dev_initdens);
+        init_rho_calc <<< NB_G, TPB >>> (dev_dustdens, dev_initdens);
         CUDA_KERNEL_CHECK("init_rho_calc");
 
         #ifdef RADIATION
         // construct the initial cumulative radial optical depth
-        optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
 
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -123,7 +123,7 @@ int main (int argc, char **argv)
         #endif
 
         // initialize primitive velocities and build their conserved fields
-        init_vel_calc <<< NB_A, TPB >>> (
+        init_vel_calc <<< NB_G, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz
             #ifdef DIFFUSION
             , dev_dustdens
@@ -131,7 +131,7 @@ int main (int argc, char **argv)
         );
         CUDA_KERNEL_CHECK("init_vel_calc");
 
-        momentum_setv <<< NB_A, TPB >>> (
+        momentum_setv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
         CUDA_KERNEL_CHECK("momentum_setv");
@@ -169,7 +169,7 @@ int main (int argc, char **argv)
 
         LOAD_DUSTDATA_TO_VRAM(idx_from);
 
-        momentum_setv <<< NB_A, TPB >>> (
+        momentum_setv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
         CUDA_KERNEL_CHECK("momentum_setv");
@@ -178,7 +178,7 @@ int main (int argc, char **argv)
 
         #ifdef RADIATION
         // reconstruct optical depth from the restored density
-        optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
 
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -199,7 +199,7 @@ int main (int argc, char **argv)
     // recover synchronized primitives after every conservative operator
     auto recover_dust_velocity = [&]()
     {
-        momentum_getv <<< NB_A, TPB >>> (
+        momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         CUDA_KERNEL_CHECK("momentum_getv");
@@ -296,7 +296,7 @@ int main (int argc, char **argv)
         );
         CUDA_KERNEL_CHECK("diffus_z_calc");
 
-        momentum_getv <<< NB_A, TPB >>> (
+        momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         CUDA_KERNEL_CHECK("momentum_getv");
@@ -315,7 +315,7 @@ int main (int argc, char **argv)
 
         // evaluate optical depth at the source-step midpoint state
         #ifdef RADIATION
-        optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
 
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -332,7 +332,7 @@ int main (int argc, char **argv)
         #endif
 
         // advance the centred source operator and synchronize conserved momentum
-        source_update <<< NB_A, TPB >>> (
+        source_update <<< NB_G, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
             #ifdef RADIATION
             dev_optdepth, beta_taper,
@@ -341,7 +341,7 @@ int main (int argc, char **argv)
         );
         CUDA_KERNEL_CHECK("source_update");
 
-        momentum_setv <<< NB_A, TPB >>> (
+        momentum_setv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
         CUDA_KERNEL_CHECK("momentum_setv");
@@ -372,7 +372,7 @@ int main (int argc, char **argv)
         );
         CUDA_KERNEL_CHECK("diffus_y_calc");
 
-        momentum_getv <<< NB_A, TPB >>> (
+        momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         CUDA_KERNEL_CHECK("momentum_getv");
@@ -395,7 +395,7 @@ int main (int argc, char **argv)
             clock_out = 0.0;
 
             #ifdef RADIATION
-            optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dustdens);
+            optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
             CUDA_KERNEL_CHECK("optdepth_calc");
 
             optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);

@@ -1,6 +1,10 @@
 #ifndef FLUID_KERN_CUH
 #define FLUID_KERN_CUH
 
+#if defined(VISC_ACCRETION) && !defined(DIFFUSION)
+#error "VISC_ACCRETION requires DIFFUSION"
+#endif // VISC_ACCRETION && !DIFFUSION
+
 #include <const.cuh>
 
 // =========================================================================================================================

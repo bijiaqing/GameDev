@@ -347,7 +347,7 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("dt_rates_calc");
             thrust::device_ptr <const real> dt_rates_ptr(dev_dt_rates);
             real max_dt_rates = *thrust::max_element(dt_rates_ptr, dt_rates_ptr + N_P);
-            dt_dyn = fmin(DT_DYN, fmin(1.0 / max_dt_rates, dt_out - clock_out));
+            dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rates, dt_out - clock_out));
 
             #ifdef IMPORTGAS
             // interpolate the working gas fields to the midpoint time of this dynamics step

@@ -309,7 +309,7 @@ void save_state (const std::string &stage, real *dev_dens, real *dev_momx,
     real *dev_momy, real *dev_momz, real *dev_velx, real *dev_vely, real *dev_velz)
 {
     // Synchronize primitive variables with the current conserved fields before copying either representation to the host.
-    momentum_getv <<< NB_A, TPB >>> (
+    momentum_getv <<< NB_G, TPB >>> (
         dev_dens, dev_momx, dev_momy, dev_momz, dev_velx, dev_vely, dev_velz
     );
     CUDA_KERNEL_CHECK("momentum_getv");
@@ -365,7 +365,7 @@ int main ()
     CUDA_CHECK(cudaMemcpy(dev_momy, momy.data(), sizeof(real)*N_G, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(dev_momz, momz.data(), sizeof(real)*N_G, cudaMemcpyHostToDevice));
 
-    momentum_getv <<< NB_A, TPB >>> (
+    momentum_getv <<< NB_G, TPB >>> (
         dev_dens, dev_momx, dev_momy, dev_momz, dev_velx, dev_vely, dev_velz
     );
     CUDA_KERNEL_CHECK("momentum_getv");
@@ -398,7 +398,7 @@ int main ()
     {
         // Conservative transport and diffusion update momentum, so primitives must be reconstructed before any subsequent
         // operator that reads velocity or specific angular momentum.
-        momentum_getv <<< NB_A, TPB >>> (
+        momentum_getv <<< NB_G, TPB >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dev_velx, dev_vely, dev_velz
         );
         CUDA_KERNEL_CHECK("momentum_getv");
@@ -423,7 +423,7 @@ int main ()
 #if defined(VERIFY_OPTDEPTH)
     // Optical depth is a spatial quadrature test, not a time integration test.  Construct the cumulative radial field once,
     // save it, and leave clock and steps at zero for the metadata record.
-    optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dens);
+    optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dens);
     CUDA_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
     CUDA_KERNEL_CHECK("optdepth_csum");
@@ -434,11 +434,11 @@ int main ()
 #elif defined(VERIFY_SOURCE_DRAG)
     // Apply exactly one full source step.  The model-local source kernel prescribes gas velocities, stopping times, and
     // linearly varying forces whose closed-form solution is evaluated independently in validate_case.py.
-    source_update <<< NB_A, TPB >>> (
+    source_update <<< NB_G, TPB >>> (
         dev_velx, dev_vely, dev_velz, dev_dens, VERIFY_TEND
     );
     CUDA_KERNEL_CHECK("source_update");
-    momentum_setv <<< NB_A, TPB >>> (
+    momentum_setv <<< NB_G, TPB >>> (
         dev_dens, dev_velx, dev_vely, dev_velz, dev_momx, dev_momy, dev_momz
     );
     CUDA_KERNEL_CHECK("momentum_setv");
@@ -479,18 +479,18 @@ int main ()
         #ifdef RADIATION
         // Radiation builds recompute optical depth at the state presented to the centered source operator.  The taper is one
         // in verification runs so the analytical acceleration is active for the entire step.
-        optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dens);
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dens);
         CUDA_KERNEL_CHECK("optdepth_calc");
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
         CUDA_KERNEL_CHECK("optdepth_csum");
-        source_update <<< NB_A, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dens, dev_optdepth, 1.0, dt);
+        source_update <<< NB_G, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dens, dev_optdepth, 1.0, dt);
         #else
-        source_update <<< NB_A, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dens, dt);
+        source_update <<< NB_G, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dens, dt);
         #endif
         CUDA_KERNEL_CHECK("source_update");
 
         // source_update advances primitives, so rebuild conserved momenta before returning to conservative transport.
-        momentum_setv <<< NB_A, TPB >>> (
+        momentum_setv <<< NB_G, TPB >>> (
             dev_dens, dev_velx, dev_vely, dev_velz, dev_momx, dev_momy, dev_momz
         );
         CUDA_KERNEL_CHECK("momentum_setv");
@@ -568,7 +568,7 @@ int main ()
 #if !defined(VERIFY_OPTDEPTH)
     #ifdef RADIATION
     // Save final optical depth for combined radiation cases after the last density update.
-    optdepth_calc <<< NB_A, TPB >>> (dev_optdepth, dev_dens);
+    optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dens);
     CUDA_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
     CUDA_KERNEL_CHECK("optdepth_csum");
@@ -594,7 +594,7 @@ int main ()
          << "nz=" << N_Z << '\n'
          << "time=" << clock << '\n'
          << "steps=" << steps << '\n'
-         << "cfl=" << CFL_NUM << '\n'
+         << "cfl=" << CFL_DYN << '\n'
          << "shift=" << static_cast<real>(VERIFY_SHIFT) << '\n'
          << "power=" << static_cast<real>(VERIFY_POWER) << '\n';
 

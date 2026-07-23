@@ -65,13 +65,13 @@ const real  ASPR_0      = 0.05;             // the reference aspect ratio of the
 const real  IDX_P       = -1.0;             // the radial power-law index of the gas surface density profile
 const real  IDX_Q       = -0.4;             // the radial power-law index of the gas temperature profile (vertically isothermal)
 
-#if defined(COLLISION) || defined(DIFFUSION) || defined(VISC_ACCRETION)
+#if defined(COLLISION) || defined(DIFFUSION)
 #ifdef CONST_NU
 const real  NU          = 1.0e-05;          // the kinematic viscosity parameter of the gas
 #else  // CONST_ALPHA
 const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity parameter of the gas
 #endif // CONST_NU
-#endif // COLLISION || DIFFUSION || VISC_ACCRETION
+#endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION
 #ifdef CODE_UNIT
@@ -86,7 +86,7 @@ const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm
 // dust parameters for dynamics
 // =========================================================================================================================
 
-const real  ST_0        = 1.0e-03;          // the reference Stokes number of dust with the reference size
+const real  STOKES_0    = 1.0e-03;          // the reference Stokes number of dust with the reference size
 
 const real  RHO_0       = 1.0;              // compact-grain internal density
 
@@ -132,7 +132,7 @@ const int  SAVE_MAX     = 100;                // total number of outputs for mes
 const real DT_OUT       = 1.0;
 
 #ifdef TRANSPORT
-const real DT_DYN       = 0.1;
+const real DT_MAX       = 0.1;
 const real CFL_DYN      = 0.5;              // maximum fraction of a local mesh scale crossed in one dynamics step
 #endif // TRANSPORT
 

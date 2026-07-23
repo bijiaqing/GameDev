@@ -49,7 +49,7 @@ real _get_stokes (real R, real Z, real h_g)
     return stokes;
 }
 
-#if defined(DIFFUSION) || defined(VISC_ACCRETION)
+#ifdef DIFFUSION
 __device__ __forceinline__
 real _get_nu (real R, real h_g)
 {
@@ -60,7 +60,6 @@ real _get_nu (real R, real h_g)
         return NU;
     #endif // CONST_NU
 }
-#endif // DIFFUSION || VISC_ACCRETION
 
 #ifdef VISC_ACCRETION
 // calculate the cylindrical radial gas velocity from equation 41 of Kanagawa et al. 2017
@@ -78,8 +77,8 @@ real _get_visc_vel (real R, real Z, real h_g)
     // use the vertically integrated equation 9 in the vertically integrated 2D model
     if (N_Z == 1) return -3.0*nu*(grad_nu_R + IDX_P + 0.5) / R;
 
-    real y_sph = sqrt(R*R + Z*Z);
-    real cyl_frac = R / y_sph;
+    real y = sqrt(R*R + Z*Z);
+    real cyl_frac = R / y;
     real strat = (cyl_frac - 1.0) / (h_g*h_g);
 
     real grad_strat_R = cyl_frac*(1.0 - cyl_frac*cyl_frac) / (h_g*h_g);
@@ -96,7 +95,6 @@ real _get_visc_vel (real R, real Z, real h_g)
 }
 #endif // VISC_ACCRETION
 
-#ifdef DIFFUSION
 __device__ __forceinline__
 real _get_alpha (real R, real h_g)
 {
@@ -116,7 +114,7 @@ real _get_hd (real R, real h_g)
     real H_g = h_g*R;
 
     #ifdef DIFFUSION
-    real alpha_z = _get_alpha(R, h_g) / SC_Z;
+    real alpha_z = _get_alpha(R, h_g) / SCHMIDT_Z;
     real stokes_mid = _get_stokes(R, 0.0, h_g);
     return H_g*sqrt(alpha_z / stokes_mid);
     #else

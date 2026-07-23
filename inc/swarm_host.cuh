@@ -21,6 +21,22 @@
 #include <param_phys.cuh>
 
 // =========================================================================================================================
+// host-only mesh coordinates
+// =========================================================================================================================
+
+inline __host__
+real _get_ycent (int iy) { return Y_MIN*std::pow(_get_dy(), static_cast<real>(iy) + 0.5); }
+
+inline __host__
+real _get_zcent (int iz) { return Z_MIN + (static_cast<real>(iz) + 0.5)*_get_dz(); }
+
+inline __host__
+real _get_s_y (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
+
+inline __host__
+real _get_s_z (real z) { return -std::cos(z); }
+
+// =========================================================================================================================
 // elementary random profiles
 // =========================================================================================================================
 
@@ -234,7 +250,7 @@ real _get_init_density (real sigma, real R, real Z, real size)
     real alpha_z = ALPHA / SCHMIDT_Z;
     #endif // CONST_NU
 
-    real stokes_mid = ST_0*(size / S_0);
+    real stokes_mid = STOKES_0*(size / S_0);
     #ifndef CONST_ST
     stokes_mid /= std::pow(R / R_0, IDX_P);
     #endif // NOT CONST_ST
@@ -252,29 +268,22 @@ real get_dust_mass ()
     std::vector <real> sigma_profile;
     _get_initdens_profile(radial_axis, sigma_profile);
 
-    real dy = _get_dy();
-    real dz = _get_dz();
-    real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
-    real dy_pow = std::pow(dy, pow_y);
-    real vol_x = (N_X > 1) ? X_MAX - X_MIN : 1.0;
+    real vol_x = (N_X > 1) ? X_MAX - X_MIN : 2.0*M_PI;
     real dust_mass = 0.0;
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real z0 = (N_Z > 1) ? Z_MIN + static_cast<real>(iz)*dz : 0.5*(Z_MIN + Z_MAX);
-        real z1 = (N_Z > 1) ? z0 + dz : z0;
-        real zc = (N_Z > 1) ? 0.5*(z0 + z1) : z0;
-        real vol_z = (N_Z > 1) ? std::cos(z0) - std::cos(z1) : 1.0;
+        real zc = _get_zcent(iz);
+        real vol_z = _get_vol_z(iz);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
-            real yc = y0*std::sqrt(dy);
+            real yc = _get_ycent(iy);
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
             real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
             real density = _get_init_density(sigma, R, Z, S_0);
-            real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
 
             dust_mass += density*vol_x*vol_y*vol_z;
         }
@@ -300,10 +309,7 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
     std::vector <real> sigma_profile;
     _get_initdens_profile(radial_axis, sigma_profile);
 
-    real dy = _get_dy();
-    real dz = _get_dz();
-    real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
-    real dy_pow = std::pow(dy, pow_y);
+    real mesh_dim = _get_mesh_dim();
 
     std::vector <real> cell_mass(N_Y*N_Z);
     std::vector <real> cdf(N_Y*N_Z + 1, 0.0);
@@ -311,22 +317,18 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
     // integrate the local dust profile over each radial-polar cell
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real z0 = (N_Z > 1) ? Z_MIN + static_cast<real>(iz)*dz : 0.5*(Z_MIN + Z_MAX);
-        real z1 = (N_Z > 1) ? z0 + dz : z0;
-        real zc = (N_Z > 1) ? 0.5*(z0 + z1) : z0;
-        real vol_z = (N_Z > 1) ? std::cos(z0) - std::cos(z1) : 1.0;
+        real zc = _get_zcent(iz);
+        real vol_z = _get_vol_z(iz);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
-            real y1 = y0*dy;
-            real yc = std::sqrt(y0*y1);
+            real yc = _get_ycent(iy);
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
             real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
             real density = _get_init_density(sigma, R, Z, size);
 
-            real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
             int idx = iy + iz*N_Y;
             cell_mass[idx] = density*vol_y*vol_z;
             cdf[idx + 1] = cdf[idx] + cell_mass[idx];
@@ -336,6 +338,12 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
     // normalize the cell-mass CDF before inverse sampling
     real total_mass = cdf.back();
     for (real &value : cdf) value /= total_mass;
+
+    std::vector<real> y_face_s(N_Y + 1);
+    for (int iy = 0; iy <= N_Y; iy++) y_face_s[iy] = _get_s_y(_get_yedge(iy));
+
+    std::vector<real> z_face_s(N_Z + 1);
+    for (int iz = 0; iz <= N_Z; iz++) z_face_s[iz] = _get_s_z(_get_zedge(iz));
 
     for (int i = 0; i < number; i++)
     {
@@ -347,15 +355,17 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
         pos_x[i] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
 
         // sample uniformly in the exact radial and polar volume coordinates inside the chosen cell
-        real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
-        real y_pow = std::pow(y0, pow_y)*(1.0 + (dy_pow - 1.0)*random(rand_generator));
-        pos_y[i] = std::pow(y_pow, 1.0 / pow_y);
+        real s_y0 = y_face_s[iy];
+        real s_y1 = y_face_s[iy + 1];
+        real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
+        pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
 
         if (N_Z > 1)
         {
-            real z0 = Z_MIN + static_cast<real>(iz)*dz;
-            real cos_z = std::cos(z0) + (std::cos(z0 + dz) - std::cos(z0))*random(rand_generator);
-            pos_z[i] = std::acos(cos_z);
+            real s_z0 = z_face_s[iz];
+            real s_z1 = z_face_s[iz + 1];
+            real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
+            pos_z[i] = std::acos(-s_z);
         }
         else
         {
@@ -369,11 +379,6 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
 inline static __host__
 void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_profile, real size)
 {
-    real dy = _get_dy();
-    real dz = _get_dz();
-    real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
-    real dy_pow = std::pow(dy, pow_y);
-
     int cells = N_Y*N_Z;
     real log_zero = -std::numeric_limits<real>::infinity();
     std::vector <real> log_mass(cells, log_zero);
@@ -381,16 +386,12 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real z0 = (N_Z > 1) ? Z_MIN + static_cast<real>(iz)*dz : 0.5*(Z_MIN + Z_MAX);
-        real z1 = (N_Z > 1) ? z0 + dz : z0;
-        real zc = (N_Z > 1) ? 0.5*(z0 + z1) : z0;
-        real vol_z = (N_Z > 1) ? std::cos(z0) - std::cos(z1) : 1.0;
+        real zc = _get_zcent(iz);
+        real vol_z = _get_vol_z(iz);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
-            real y1 = y0*dy;
-            real yc = std::sqrt(y0*y1);
+            real yc = _get_ycent(iy);
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
             real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
@@ -408,7 +409,7 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
                 real alpha_z = ALPHA / SCHMIDT_Z;
                 #endif // CONST_NU
 
-                real stokes_mid = ST_0*(size / S_0);
+                real stokes_mid = STOKES_0*(size / S_0);
                 #ifndef CONST_ST
                 stokes_mid /= std::pow(R / R_0, IDX_P);
                 #endif // NOT CONST_ST
@@ -418,7 +419,7 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
                 log_density -= std::log(H_d);
             }
 
-            real vol_y = std::pow(y0, pow_y)*(dy_pow - 1.0) / pow_y;
+            real vol_y = _get_vol_y(iy);
             int idx = iy + iz*N_Y;
             if (sigma > 0.0) log_mass[idx] = log_density + std::log(vol_y) + std::log(vol_z);
         }
@@ -470,11 +471,14 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(is)*static_cast<size_t>(cells + 1));
     }
 
-    real dy = _get_dy();
-    real dz = _get_dz();
-    real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
-    real dy_pow = std::pow(dy, pow_y);
+    real mesh_dim = _get_mesh_dim();
     std::uniform_real_distribution <real> random(0.0, 1.0);
+
+    std::vector<real> y_face_s(N_Y + 1);
+    for (int iy = 0; iy <= N_Y; iy++) y_face_s[iy] = _get_s_y(_get_yedge(iy));
+
+    std::vector<real> z_face_s(N_Z + 1);
+    for (int iz = 0; iz <= N_Z; iz++) z_face_s[iz] = _get_s_z(_get_zedge(iz));
 
     for (int i = 0; i < number; i++)
     {
@@ -501,13 +505,15 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
 
         pos_x[i] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
 
-        real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
-        real y_pow = std::pow(y0, pow_y)*(1.0 + (dy_pow - 1.0)*random(rand_generator));
-        pos_y[i] = std::pow(y_pow, 1.0 / pow_y);
+        real s_y0 = y_face_s[iy];
+        real s_y1 = y_face_s[iy + 1];
+        real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
+        pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
 
-        real z0 = Z_MIN + static_cast<real>(iz)*dz;
-        real cos_z = std::cos(z0) + (std::cos(z0 + dz) - std::cos(z0))*random(rand_generator);
-        pos_z[i] = std::acos(cos_z);
+        real s_z0 = z_face_s[iz];
+        real s_z1 = z_face_s[iz + 1];
+        real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
+        pos_z[i] = std::acos(-s_z);
     }
 }
 #endif // MULTISIZE && DIFFUSION
@@ -570,30 +576,23 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
     
-    real dx = _get_dx();
-    real dy = _get_dy();
-    real dz = _get_dz();
+    real mesh_dim = _get_mesh_dim();
     
-    real idx_dim = static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1) + 1.0;
-    real dy_pow = std::pow(dy, idx_dim);
-    
-    // integrate the imported dust density with the same cell measure as _get_grid_volume
+    // integrate the imported dust density with the same exact disk cell measure
     std::vector <real> dust_mass(N_G);
     real total_mass = 0.0;
     
     for (int idx_z = 0; idx_z < N_Z; idx_z++)
     {
-        real z0 = Z_MIN + dz*static_cast<real>(idx_z);
-        real vol_z = (N_Z > 1) ? (std::cos(z0) - std::cos(z0 + dz)) : 1.0;
+        real vol_z = _get_vol_z(idx_z);
         
         for (int idx_y = 0; idx_y < N_Y; idx_y++)
         {
-            real y0 = Y_MIN*std::pow(dy, static_cast<real>(idx_y));
-            real vol_y = std::pow(y0, idx_dim)*(dy_pow - 1.0) / idx_dim;
+            real vol_y = _get_vol_y(idx_y);
             
             for (int idx_x = 0; idx_x < N_X; idx_x++)
             {
-                real vol_x = (N_X > 1) ? dx : 1.0;
+                real vol_x = _get_vol_x();
                 real cell_volume = vol_x*vol_y*vol_z;
                 
                 int idx = idx_x + idx_y*N_X + idx_z*N_X*N_Y;
@@ -617,6 +616,12 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     {
         cdf[idx] /= total_mass;
     }
+
+    std::vector<real> y_face_s(N_Y + 1);
+    for (int idx_y = 0; idx_y <= N_Y; idx_y++) y_face_s[idx_y] = _get_s_y(_get_yedge(idx_y));
+
+    std::vector<real> z_face_s(N_Z + 1);
+    for (int idx_z = 0; idx_z <= N_Z; idx_z++) z_face_s[idx_z] = _get_s_z(_get_zedge(idx_z));
     
     // select cells by inverse transform sampling
     for (int i = 0; i < number; i++)
@@ -632,18 +637,19 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
         int idx_z = idx_cell / (N_X * N_Y);
         
         // sample logarithmic radial cells uniformly in the exact radial volume coordinate
-        real y0 = Y_MIN*std::pow(dy, static_cast<real>(idx_y));
-        real y0_pow = std::pow(y0, idx_dim);
-        real y_pow = y0_pow*(1.0 + (dy_pow - 1.0)*random(rand_generator));
+        real s_y0 = y_face_s[idx_y];
+        real s_y1 = y_face_s[idx_y + 1];
+        real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
 
         // sample azimuth uniformly and polar angle uniformly in cos(z)
         pos_x[i] = X_MIN + dx*(static_cast<real>(idx_x) + random(rand_generator));
-        pos_y[i] = std::pow(y_pow, 1.0 / idx_dim);
+        pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
         if (N_Z > 1)
         {
-            real z0 = Z_MIN + dz*static_cast<real>(idx_z);
-            real cos_z = std::cos(z0) + (std::cos(z0 + dz) - std::cos(z0))*random(rand_generator);
-            pos_z[i] = std::acos(cos_z);
+            real s_z0 = z_face_s[idx_z];
+            real s_z1 = z_face_s[idx_z + 1];
+            real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
+            pos_z[i] = std::acos(-s_z);
         }
         else
         {
@@ -878,13 +884,13 @@ bool save_variable (const std::string &file_name, real dust_mass)
     file << "ASPR_0      = " << std::defaultfloat   << std::setprecision(8) << ASPR_0       << std::endl;
     file << "IDX_P       = " << std::defaultfloat   << std::setprecision(8) << IDX_P        << std::endl;
     file << "IDX_Q       = " << std::defaultfloat   << std::setprecision(8) << IDX_Q        << std::endl;
-    #if defined(DIFFUSION) || defined(COLLISION) || defined(VISC_ACCRETION)
+    #if defined(DIFFUSION) || defined(COLLISION)
     #ifdef CONST_NU
     file << "NU          = " << std::scientific     << std::setprecision(8) << NU           << std::endl;
     #else  // CONST_ALPHA
     file << "ALPHA       = " << std::scientific     << std::setprecision(8) << ALPHA        << std::endl;
     #endif // CONST_NU
-    #endif // DIFFUSION || COLLISION || VISC_ACCRETION
+    #endif // DIFFUSION || COLLISION
     #ifdef VISC_ACCRETION
     file << "VISC_ACCRETION = " << std::defaultfloat << 1                                << std::endl;
     #endif // VISC_ACCRETION
@@ -899,7 +905,7 @@ bool save_variable (const std::string &file_name, real dust_mass)
     file                                                                                    << std::endl;
     
     // dust parameters
-    file << "ST_0        = " << std::scientific     << std::setprecision(8) << ST_0         << std::endl;
+    file << "STOKES_0    = " << std::scientific     << std::setprecision(8) << STOKES_0     << std::endl;
     file << "DUST_MASS   = " << std::scientific     << std::setprecision(8) << dust_mass    << std::endl;
     file << "RHO_0       = " << std::scientific     << std::setprecision(8) << RHO_0        << std::endl;
     #ifdef RADIATION
@@ -960,7 +966,7 @@ bool save_variable (const std::string &file_name, real dust_mass)
     #endif // LOGOUTPUT or LOGTIMING
     file << "DT_OUT      = " << std::scientific     << std::setprecision(8) << DT_OUT       << std::endl;
     #ifdef TRANSPORT
-    file << "DT_DYN      = " << std::scientific     << std::setprecision(8) << DT_DYN       << std::endl;
+    file << "DT_MAX      = " << std::scientific     << std::setprecision(8) << DT_MAX       << std::endl;
     file << "CFL_DYN     = " << std::defaultfloat   << std::setprecision(8) << CFL_DYN      << std::endl;
     #endif // TRANSPORT
     file                                                                                    << std::endl;

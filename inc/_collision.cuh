@@ -277,12 +277,12 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     real h_i = _get_hg(R_i);
     real h_j = _get_hg(R_j);
 
-    real St_i = _get_St(R_i, Z_i, s_i, h_i
+    real St_i = _get_stokes(R_i, Z_i, s_i, h_i
         #ifdef IMPORTGAS
         , x_i, y_i, z_i, dev_gas_dens
         #endif // IMPORTGAS
     );
-    real St_j = _get_St(R_j, Z_j, s_j, h_j
+    real St_j = _get_stokes(R_j, Z_j, s_j, h_j
         #ifdef IMPORTGAS
         , x_j, y_j, z_j, dev_gas_dens
         #endif // IMPORTGAS
@@ -375,7 +375,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
             real Z_i = dev_particle[idx_old_i].position.y*cos(dev_particle[idx_old_i].position.z);
             real Z_j = dev_particle[idx_old_j].position.y*cos(dev_particle[idx_old_j].position.z);
 
-            real St_i = _get_St(R_i, Z_i, s_i, _get_hg(R_i)
+            real St_i = _get_stokes(R_i, Z_i, s_i, _get_hg(R_i)
                 #ifdef IMPORTGAS
                 , dev_particle[idx_old_i].position.x
                 , dev_particle[idx_old_i].position.y
@@ -383,7 +383,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
                 , dev_gas_dens
                 #endif // IMPORTGAS
             );
-            real St_j = _get_St(R_j, Z_j, s_j, _get_hg(R_j)
+            real St_j = _get_stokes(R_j, Z_j, s_j, _get_hg(R_j)
                 #ifdef IMPORTGAS
                 , dev_particle[idx_old_j].position.x
                 , dev_particle[idx_old_j].position.y

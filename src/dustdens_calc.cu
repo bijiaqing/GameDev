@@ -14,7 +14,10 @@ void dustdens_calc (real *dev_dustdens)
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     if (idx >= N_G) return;
 
-    real volume = _get_grid_volume(idx); // use the cell measure of the active spatial dimension
+    int iy = (idx / N_X) % N_Y;
+    int iz = idx / (N_X*N_Y);
+
+    real volume = _get_vol_x()*_get_vol_y(iy)*_get_vol_z(iz);
     dev_dustdens[idx] /= volume;
 }
 
