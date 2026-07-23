@@ -10,9 +10,9 @@ real _get_init_ratio (const real *dev_dustdens, int idx, real yc, real zc)
     real Rc = yc*sin(zc);
     real Zc = yc*cos(zc);
     real h_g = _get_hg(Rc);
-    real rhog = _get_rhog(Rc, Zc, h_g);
+    real gasdens = _get_gasdens(Rc, Zc, h_g);
 
-    return dev_dustdens[idx] / rhog;
+    return dev_dustdens[idx] / gasdens;
 }
 #endif
 

@@ -108,17 +108,18 @@ real radial_mode (real y, int dimension)
     return value / norm;
 }
 
-real host_rhog (real R, real Z)
+real host_gasdens (real R, real Z)
 {
-    // Reproduce the gas-density prescription used by the device helpers so that ring initial conditions specify a known
-    // dust-to-gas ratio.  Isolated diffusion tests can replace it with unity through VERIFY_UNIFORM_GAS.
+    // Reproduce the gas measure used by the device helpers so ring initial conditions specify a known dust-to-gas ratio
 #ifdef VERIFY_UNIFORM_GAS
     (void)R;
     (void)Z;
     return 1.0;
 #else
-    real h_g = ASPR_0*pow(R/R_0, 0.5*(IDX_Q + 1.0));
     real sigma_g = SIGMA_0*pow(R/R_0, IDX_P);
+    if (N_Z == 1) return sigma_g;
+
+    real h_g = ASPR_0*pow(R/R_0, 0.5*(IDX_Q + 1.0));
     real rho_mid = sigma_g / (sqrt(2.0*M_PI)*h_g*R);
     return rho_mid*exp((R/sqrt(R*R + Z*Z) - 1.0)/(h_g*h_g));
 #endif
@@ -276,8 +277,9 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
                 momy[idx] = -0.8;
                 momz[idx] = 0.6;
 #elif defined(VERIFY_OPTDEPTH)
-                // A radial power-law density has a closed-form optical-depth integral at every outer cell face.
-                dens[idx] = pow(yc, static_cast<real>(VERIFY_POWER));
+                // Choose surface density so the reconstructed midplane volume density is the requested radial power law
+                real h_g = ASPR_0*pow(Rc/R_0, 0.5*(IDX_Q + 1.0));
+                dens[idx] = sqrt(2.0*M_PI)*h_g*Rc*pow(yc, static_cast<real>(VERIFY_POWER));
                 momx[idx] = momy[idx] = momz[idx] = 0.0;
 #elif defined(VERIFY_RING)
                 // Initialize a Fourier perturbation in dust-to-gas ratio on circular equilibrium rings.  Radiation modifies
@@ -289,7 +291,7 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
                 const real beta = 0.0;
 #endif
                 real ell = sqrt((1.0 - beta)*G*M_S*Rc);
-                dens[idx] = host_rhog(Rc, Zc)*q;
+                dens[idx] = host_gasdens(Rc, Zc)*q;
                 momx[idx] = dens[idx]*ell;
                 momy[idx] = 0.0;
                 momz[idx] = 0.0;

@@ -129,12 +129,10 @@ def norm_set(error: np.ndarray, volume: np.ndarray) -> dict[str, float]:
 
 
 def gas_density(radius: np.ndarray, beta: float) -> np.ndarray:
-    """Return the 2D gas density profile configured for the ring tests"""
+    """Return the 2D gas surface-density profile configured for the ring tests"""
 
-    aspect = 0.5
     power = 2.0 - 4.0 * beta
-    sigma = radius**power
-    return sigma / (np.sqrt(2.0 * np.pi) * aspect * radius)
+    return radius**power
 
 
 def analyze(out_dir: Path, resolution: int) -> dict:

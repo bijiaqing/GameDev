@@ -44,12 +44,12 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real Rc = yc*sin(zc);
         real Zc = yc*cos(zc);
 
-        real h_g  = _get_hg(Rc);
-        real rhog = _get_rhog(Rc, Zc, h_g);
+        real h_g = _get_hg(Rc);
+        real gasdens = _get_gasdens(Rc, Zc, h_g);
 
         int ic = ix + iy*N_X + iz*N_X*N_Y;
 
-        ratio[iy] = dev_dustdens[ic] / rhog;
+        ratio[iy] = dev_dustdens[ic] / gasdens;
     }
 
     // assemble full-step Crank-Nicolson face couplings and measure the largest local coefficient sum
@@ -69,26 +69,26 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real Rc = yc*sin(zc);
         real Zc = yc*cos(zc);
 
-        real h_g  = _get_hg(Rc);
-        real rhog = _get_rhog(Rc, Zc, h_g);
+        real h_g = _get_hg(Rc);
+        real gasdens = _get_gasdens(Rc, Zc, h_g);
 
         real R_i = y0*sin(zc);
         real Z_i = y0*cos(zc);
         real h_i = _get_hg(R_i);
-        real rhog_i = _get_rhog(R_i, Z_i, h_i);
+        real gasdens_i = _get_gasdens(R_i, Z_i, h_i);
         real Dy_i = _get_nu(R_i, h_i) / SC_Y;
 
         real R_o = y1*sin(zc);
         real Z_o = y1*cos(zc);
         real h_o = _get_hg(R_o);
-        real rhog_o = _get_rhog(R_o, Z_o, h_o);
+        real gasdens_o = _get_gasdens(R_o, Z_o, h_o);
         real Dy_o = _get_nu(R_o, h_o) / SC_Y;
 
         real area_i = pow(y0, pow_y - 1.0);
         real area_o = pow(y1, pow_y - 1.0);
 
-        real cn_i = (iy > 0)       ? (0.5*dt*area_i*Dy_i*rhog_i / (dy_len_i*vol_y*rhog)) : 0.0;
-        real cn_o = (iy < N_Y - 1) ? (0.5*dt*area_o*Dy_o*rhog_o / (dy_len_o*vol_y*rhog)) : 0.0;
+        real cn_i = (iy > 0)       ? (0.5*dt*area_i*Dy_i*gasdens_i / (dy_len_i*vol_y*gasdens)) : 0.0;
+        real cn_o = (iy < N_Y - 1) ? (0.5*dt*area_o*Dy_o*gasdens_o / (dy_len_o*vol_y*gasdens)) : 0.0;
 
         cn_lower[iy] = -cn_i;
         cn_upper[iy] = -cn_o;
@@ -161,11 +161,11 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real Rc = yc*sin(zc);
             real Zc = yc*cos(zc);
 
-            real h_g  = _get_hg(Rc);
-            real rhog = _get_rhog(Rc, Zc, h_g);
+            real h_g = _get_hg(Rc);
+            real gasdens = _get_gasdens(Rc, Zc, h_g);
             real cn_o = -cn_upper[iy];
 
-            upper_work[iy]  = -(cn_o*vol_y*rhog / dt_sub);
+            upper_work[iy]  = -(cn_o*vol_y*gasdens / dt_sub);
             upper_work[iy] *= (ratio[iy + 1] - ratio[iy]) + (ratio_work[iy + 1] - ratio_work[iy]);
         }
 
@@ -180,7 +180,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real Z_up = y_up*cos(zc);
 
             real h_up = _get_hg(R_up);
-            real dens_up = _get_rhog(R_up, Z_up, h_up)*ratio[iy_up];
+            real dens_up = _get_gasdens(R_up, Z_up, h_up)*ratio[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
             real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(R_up, 0.0));
@@ -210,7 +210,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real Z_up = y_up*cos(zc);
 
             real h_up = _get_hg(R_up);
-            real dens_up = _get_rhog(R_up, Z_up, h_up)*ratio[iy_up];
+            real dens_up = _get_gasdens(R_up, Z_up, h_up)*ratio[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
             real vely_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
@@ -240,7 +240,7 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real Z_up = y_up*cos(zc);
 
             real h_up = _get_hg(R_up);
-            real dens_up = _get_rhog(R_up, Z_up, h_up)*ratio[iy_up];
+            real dens_up = _get_gasdens(R_up, Z_up, h_up)*ratio[iy_up];
 
             int ic_up = ix + iy_up*N_X + iz*N_X*N_Y;
             real velz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
@@ -269,11 +269,11 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real Rc = yc*sin(zc);
         real Zc = yc*cos(zc);
 
-        real h_g  = _get_hg(Rc);
-        real rhog = _get_rhog(Rc, Zc, h_g);
+        real h_g = _get_hg(Rc);
+        real gasdens = _get_gasdens(Rc, Zc, h_g);
 
         int ic = ix + iy*N_X + iz*N_X*N_Y;
-        dev_dustdens[ic] = rhog*ratio[iy];
+        dev_dustdens[ic] = gasdens*ratio[iy];
     }
 }
 

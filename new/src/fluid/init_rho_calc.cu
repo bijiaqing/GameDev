@@ -26,15 +26,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
     real h_g = _get_hg(Rc);
 
     real H_g = h_g*Rc;
-
-    // set the equilibrium dust scale height from vertical diffusion and settling
-    #ifdef DIFFUSION
-    real alpha_z = _get_alpha(Rc, h_g) / SC_Z;
-    real stokes_mid = _get_stokes(Rc, 0.0, h_g);
-    real H_d        = H_g*sqrt(alpha_z / (alpha_z + stokes_mid));
-    #else
-    real H_d     = H_g;
-    #endif
+    real H_d = _get_hd(Rc, h_g);
 
     // interpolate the convolved dust surface density at cylindrical radius
     real sigma_d = 0.0;
@@ -48,12 +40,21 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
         sigma_d = (1.0 - frac_u)*dev_initdens[iu] + frac_u*dev_initdens[iu + 1];
     }
 
-    // embed the surface profile with the settled dust-to-gas vertical stratification
-    real sigma_g = SIGMA_0*pow(Rc / R_0, IDX_P);
-    real rhog = _get_rhog(Rc, Zc, h_g);
-    real ratio_mid = sigma_d*H_g / (sigma_g*H_d);
-    real settle_exp = exp(-0.5*Zc*Zc*(1.0/(H_d*H_d) - 1.0/(H_g*H_g)));
-    real dens = rhog*ratio_mid*settle_exp;
+    real dens;
+    if (N_Z == 1)
+    {
+        // evolve the vertically integrated dust surface density in a 2D disk
+        dens = sigma_d;
+    }
+    else
+    {
+        // embed the surface profile with the settled dust-to-gas vertical stratification
+        real sigma_g = _get_sigma_g(Rc);
+        real rhog = _get_rhog(Rc, Zc, h_g);
+        real ratio_mid = sigma_d*H_g / (sigma_g*H_d);
+        real settle_exp = exp(-0.5*Zc*Zc*(1.0/(H_d*H_d) - 1.0/(H_g*H_g)));
+        dens = rhog*ratio_mid*settle_exp;
+    }
 
     // apply azimuthal density noise shared across radius and polar angle
     curandState rng;

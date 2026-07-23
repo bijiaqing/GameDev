@@ -26,14 +26,23 @@ real _get_gas_strat (real R, real Z, real h_g)
 // =========================================================================================================================
 
 __device__ __forceinline__
+real _get_sigma_g (real R)
+{ return SIGMA_0*pow(R / R_0, IDX_P); }
+
+__device__ __forceinline__
 real _get_rhog (real R, real Z, real h_g)
 {
     real H_g = h_g*R;
-    real sigma_g = SIGMA_0*pow(R / R_0, IDX_P);
+    real sigma_g = _get_sigma_g(R);
     real rho_mid = sigma_g / (sqrt(2.0*M_PI)*H_g);
 
     return rho_mid*_get_gas_strat(R, Z, h_g);
 }
+
+// return the gas density with the same dimensional measure as the evolved dust density
+__device__ __forceinline__
+real _get_gasdens (real R, real Z, real h_g)
+{ return (N_Z > 1) ? _get_rhog(R, Z, h_g) : _get_sigma_g(R); }
 
 __device__ __forceinline__
 real _get_stokes (real R, real Z, real h_g)
@@ -68,6 +77,21 @@ real _get_alpha (real R, real h_g)
     #endif
 }
 #endif
+
+// calculate the settled dust scale height used by initialization and the 2D radiation closure
+__device__ __forceinline__
+real _get_hd (real R, real h_g)
+{
+    real H_g = h_g*R;
+
+    #ifdef DIFFUSION
+    real alpha_z = _get_alpha(R, h_g) / SC_Z;
+    real stokes_mid = _get_stokes(R, 0.0, h_g);
+    return H_g*sqrt(alpha_z / (alpha_z + stokes_mid));
+    #else
+    return H_g;
+    #endif
+}
 
 // =========================================================================================================================
 

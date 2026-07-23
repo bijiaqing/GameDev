@@ -29,7 +29,7 @@ exercised, finite-volume comparison, and expected result.
 | `verify_ring_all_2d` | Transport, diffusion, radiation, drag, and gravity | Damped optically thin reduced-gravity Fourier rings |
 
 The constant-gas/constant-diffusivity operator cases use `verify_common/param_phys.cuh`. It wraps the
-production helper header and replaces only `_get_rhog`, `_get_nu`, and `_get_alpha`; PPM, HLL,
+production helper header and replaces only `_get_rhog`, `_get_gasdens`, `_get_nu`, and `_get_alpha`; PPM, HLL,
 geometry, vacuum recovery, and all other helpers remain the production definitions. The source
 test necessarily replaces `source_update.cu`, because the production interface cannot prescribe
 arbitrary constant gas velocities and force endpoints. Its scope is the exponential quadrature,

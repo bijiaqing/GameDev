@@ -261,13 +261,14 @@ build's `--use_fast_math` transcendental accuracy.
 Purpose: test the production cell optical-depth quadrature and radial cumulative-sum indexing
 without dynamics.
 
-Initialize at logarithmic cell centers
+Initialize the evolved surface density at logarithmic cell centers as
 
 $$
-\rho_d(y)=y^p,\qquad \kappa=1.
+\Sigma_d(y)=\sqrt{2\pi}H_d(y)y^p,\qquad \kappa=1.
 $$
 
-The continuum outward-face solution is
+The production 2D radiation closure reconstructs
+\(\rho_{d,0}=\Sigma_d/(\sqrt{2\pi}H_d)=y^p\), so the continuum outward-face solution is
 
 $$
 \tau(y)=

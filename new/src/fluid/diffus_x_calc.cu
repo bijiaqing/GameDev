@@ -41,7 +41,7 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real dx_len = Rc*dx;
 
     real h_g  = _get_hg(Rc);
-    real rhog = _get_rhog(Rc, Zc, h_g);
+    real gasdens = _get_gasdens(Rc, Zc, h_g);
     real Dx   = _get_nu(Rc, h_g) / SC_X;
 
     // load the dust-to-gas ratio along one azimuthal ring
@@ -49,7 +49,7 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     for (int ix = 0; ix < N_X; ix++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;
-        ratio[ix] = dev_dustdens[ic] / rhog;
+        ratio[ix] = dev_dustdens[ic] / gasdens;
     }
 
     // limit each Crank-Nicolson substep by the configured positivity coefficient
@@ -119,14 +119,14 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         for (int ix = 0; ix < N_X; ix++)
         {
             int ixp1 = (ix + 1) % N_X;
-            upper_work[ix] = -0.5*Dx*rhog*((ratio[ixp1] - ratio[ix]) + (ratio_work[ixp1] - ratio_work[ix])) / dx_len;
+            upper_work[ix] = -0.5*Dx*gasdens*((ratio[ixp1] - ratio[ix]) + (ratio_work[ixp1] - ratio_work[ix])) / dx_len;
         }
 
         // combine each face mass flux with the donor azimuthal primitive quantity
         for (int ix = 0; ix < N_X; ix++)
         {
             int ix_up = (upper_work[ix] >= 0.0) ? ix : (ix + 1) % N_X;
-            real dens_up = rhog*ratio[ix_up];
+            real dens_up = gasdens*ratio[ix_up];
 
             int ic_up = ix_up + iy*N_X + iz*N_X*N_Y;
             real velx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc, 0.0));
@@ -147,7 +147,7 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         for (int ix = 0; ix < N_X; ix++)
         {
             int ix_up = (upper_work[ix] >= 0.0) ? ix : (ix + 1) % N_X;
-            real dens_up = rhog*ratio[ix_up];
+            real dens_up = gasdens*ratio[ix_up];
 
             int ic_up = ix_up + iy*N_X + iz*N_X*N_Y;
             real vely_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
@@ -168,7 +168,7 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         for (int ix = 0; ix < N_X; ix++)
         {
             int ix_up = (upper_work[ix] >= 0.0) ? ix : (ix + 1) % N_X;
-            real dens_up = rhog*ratio[ix_up];
+            real dens_up = gasdens*ratio[ix_up];
 
             int ic_up = ix_up + iy*N_X + iz*N_X*N_Y;
             real velz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
@@ -191,7 +191,7 @@ void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     for (int ix = 0; ix < N_X; ix++)
     {
         int ic = ix + iy*N_X + iz*N_X*N_Y;
-        dev_dustdens[ic] = rhog*ratio[ix];
+        dev_dustdens[ic] = gasdens*ratio[ix];
     }
 }
 
