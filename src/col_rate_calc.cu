@@ -29,6 +29,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     if (idx_tree >= N_T || dev_col_tree[idx_tree].image != 0) return;
     
     int idx_old_i = dev_col_tree[idx_tree].index_old;
+    
     dev_col_rate[idx_old_i] = 0.0;
     dev_col_dist[idx_old_i] = 0.0;
 
@@ -47,32 +48,35 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     float max_search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
         
     candidatelist query_result(max_search_dist);
-    cukd::cct::knn <candidatelist, tree, tree_traits> (query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T);
+    cukd::cct::knn <candidatelist, tree, tree_traits> (
+        query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T
+    );
 
-    real col_rate_i = 0.0;
+    real col_rate_i = 0.0; // total collision rate for the representative particle
     float max_dist2 = 0.0f;
 
     for(int j = 0; j < N_K; j++)
+    {
+        real col_rate_ij = 0.0;
+        int idx_query = query_result.returnIndex(j);
+
+        if (idx_query != -1)
         {
-            real col_rate_ij = 0.0;
-            int idx_query = query_result.returnIndex(j);
+            int idx_old_j = dev_col_tree[idx_query].index_old;
+            if (idx_old_j == idx_old_i) continue; // skip self-collision
 
-            if (idx_query != -1)
-            {
-                int idx_old_j = dev_col_tree[idx_query].index_old;
-                if (idx_old_j == idx_old_i) continue;
+            float dist2 = query_result.returnDist2(j);
+            max_dist2 = fmaxf(max_dist2, dist2);
 
-                float dist2 = query_result.returnDist2(j);
-                max_dist2 = fmaxf(max_dist2, dist2);
-                col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
-                    dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
-                    #ifdef IMPORTGAS
-                    , dev_gas_dens
-                    #endif
-                );
-            }
+            col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+                dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j
+                #ifdef IMPORTGAS
+                , dev_gas_dens
+                #endif
+            );
+        }
 
-            col_rate_i += col_rate_ij;
+        col_rate_i += col_rate_ij;
     }
 
     // normalize by the accessible measure of the smallest ball containing the returned neighbors
@@ -81,8 +85,8 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     #ifdef COLLISION_UNIT_VOLUME
     // bypass KNN geometry only for dimensionless analytic kernel tests
     volume = 1.0;
-    #endif
-    col_rate_i = (volume > 0.0) ? col_rate_i/volume : 0.0;
+    #endif // COLLISION_UNIT_VOLUME
+    col_rate_i = (volume > 0.0) ? col_rate_i / volume : 0.0;
 
     // retain the neighborhood radius and total rate for event execution
     dev_col_dist[idx_old_i] = radius;

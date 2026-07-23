@@ -17,9 +17,8 @@
 // =========================================================================================================================
 
 __global__
-void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
-    const real *dev_col_dist, const real *dev_size_old, const real *dev_numr_old,
-    const tree *dev_col_tree, const bbox *dev_boundbox,
+void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate, const real *dev_col_dist,
+    const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif
@@ -34,24 +33,26 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     if (col_rate_i <= 0.0) return;
 
     // sample the exact probability of at least one event for the frozen total propensity
-    curs rs_swarm = dev_rngstate[idx_old_i];
+    curs rngstate = dev_rngstate[idx_old_i];
     real event_prob = -expm1(-col_rate_i*dt_col);
-    if (curand_uniform_double(&rs_swarm) > event_prob)
+    if (curand_uniform_double(&rngstate) > event_prob)
     {
-        dev_rngstate[idx_old_i] = rs_swarm;
+        dev_rngstate[idx_old_i] = rngstate;
         return;
     }
 
     real x = dev_particle[idx_old_i].position.x;
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
+    
     real R = y*sin(z);
     float max_search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
     // recover the same local neighbor set used to calculate col_rate_i
     candidatelist query_result(max_search_dist);
     cukd::cct::knn <candidatelist, tree, tree_traits> (
-        query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T);
+        query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T
+    );
 
     real measure = _get_ball_measure(x, y, z, dev_col_dist[idx_old_i]);
     #ifdef COLLISION_UNIT_VOLUME
@@ -61,7 +62,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     if (measure <= 0.0) return;
 
     // select one partner by inverse sampling of the pair-propensity sum
-    real target = col_rate_i*curand_uniform_double(&rs_swarm);
+    real target = col_rate_i*curand_uniform_double(&rngstate);
     real cumulative = 0.0;
     int idx_old_j = -1;
     for (int j = 0; j < N_K; j++)
@@ -102,20 +103,20 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     if (v_rel <= V_FRAG)
     {
         // coagulate both physical grain masses into the updated representative species
-        dev_particle[idx_old_i].par_size  = s_k;
+        dev_particle[idx_old_i].par_size = s_k;
         dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
     }
     else
     {
         // sample the fragment size distribution and conserve the representative swarm mass
-        real sample = curand_uniform_double(&rs_swarm);
+        real sample = curand_uniform_double(&rngstate);
         s_k = fmax(INIT_SMIN, s_k*sample*sample);
-        dev_particle[idx_old_i].par_size  = s_k;
+        dev_particle[idx_old_i].par_size = s_k;
         dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
     }
     #endif
 
-    dev_rngstate[idx_old_i] = rs_swarm;
+    dev_rngstate[idx_old_i] = rngstate;
 }
 
 #endif // COLLISION

@@ -74,7 +74,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     }
     else
     {
-        real d_y = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+        real d_y = _get_dy();
         real m_y;
         
         if (outer_edge)

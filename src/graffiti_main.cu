@@ -294,10 +294,9 @@ int main (int argc, char **argv)
             }
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
-            dt_col = fmin(CFL_COL/max_rate, remaining);
-            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate,
-                dev_col_dist, dev_size_old, dev_numr_old,
-                dev_col_tree, dev_boundbox,
+            dt_col = fmin(CFL_COL / max_rate, remaining);
+            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, 
+                dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif
@@ -316,7 +315,6 @@ int main (int argc, char **argv)
     for (int idx_file = idx_from + 1; idx_file <= SAVE_MAX; idx_file++)
     {
         // preload the next external frame and advance exactly one output interval
-        
         dt_out = _get_dt_out(idx_file);
 
         #ifdef IMPORTGAS
@@ -338,22 +336,25 @@ int main (int argc, char **argv)
             // reduce all local inverse rates to a globally valid dynamics timestep
             dt_rates_calc <<< NB_P, TPB >>> (dev_dt_rates, dev_particle
                 #ifdef IMPORTGAS
-                , dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
-                  dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
+                , dev_gas_dens, dev_gas_velx
+                , dev_gas_vely, dev_gas_velz
+                , dev_gas_dens_next, dev_gas_velx_next
+                , dev_gas_vely_next, dev_gas_velz_next
                 #endif
             );
             CUDA_KERNEL_CHECK("dt_rates_calc");
-            thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rates);
-            real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
-            dt_dyn = fmin(DT_DYN, fmin(1.0/max_dt_rate, dt_out - clock_out));
-            if (dt_dyn < DT_MIN) break;
+            thrust::device_ptr <const real> dt_rates_ptr(dev_dt_rates);
+            real max_dt_rates = *thrust::max_element(dt_rates_ptr, dt_rates_ptr + N_P);
+            dt_dyn = fmin(DT_DYN, fmin(1.0 / max_dt_rates, dt_out - clock_out));
 
             #ifdef IMPORTGAS
             // interpolate the working gas fields to the midpoint time of this dynamics step
-            real gas_target = (clock_out + 0.5*dt_dyn)/dt_out;
-            real gas_blend = (gas_target - gas_frac)/(1.0 - gas_frac);
-            gas_lerp_calc <<< NB_G, TPB >>> (dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
-                dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend);
+            real gas_target = (clock_out + 0.5*dt_dyn) / dt_out;
+            real gas_blend = (gas_target - gas_frac) / (1.0 - gas_frac);
+            gas_lerp_calc <<< NB_G, TPB >>> (
+                dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
+                dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend
+            );
             CUDA_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
             #endif
@@ -434,19 +435,23 @@ int main (int argc, char **argv)
             count_col = 0;
             clock_dyn = 0.0;
             real duration = dt_out - clock_out;
+            
             #ifdef IMPORTGAS
-            real gas_target = (clock_out + 0.5*duration)/dt_out;
-            real gas_blend = (gas_target - gas_frac)/(1.0 - gas_frac);
-            gas_lerp_calc <<< NB_G, TPB >>> (dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
-                dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend);
+            real gas_target = (clock_out + 0.5*duration) / dt_out;
+            real gas_blend = (gas_target - gas_frac) / (1.0 - gas_frac);
+            gas_lerp_calc <<< NB_G, TPB >>> (
+                dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
+                dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend
+            );
             CUDA_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
-            #endif
+            #endif // IMPORTGAS
+            
             evolve_collisions(duration);
             clock_out += duration;
             clock_sim += duration;
             PRINT_VALUE_TO_SCREEN();
-            #endif
+            #endif // COLLISION and no TRANSPORT
         } while (clock_out < dt_out);
 
         #ifdef IMPORTGAS

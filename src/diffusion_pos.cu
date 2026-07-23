@@ -50,7 +50,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     real h_g = _get_hg(R);
     real nu = _get_nu(R, h_g);
 
-    curs rs_swarm = dev_rngstate[idx]; // keep the random state local until all directional draws are complete
+    curs rngstate = dev_rngstate[idx]; // keep the random state local until all directional draws are complete
 
     real delta_x = 0.0;
     real delta_R = 0.0;
@@ -73,7 +73,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
         real avg_x = dt*coeff_x*term_x / (R*R);
         real std_x = sqrt(2.0*dt*coeff_x) / R;
 
-        delta_x = avg_x + std_x*curand_normal_double(&rs_swarm);
+        delta_x = avg_x + std_x*curand_normal_double(&rngstate);
     }
 
     if (N_Y > 1)
@@ -88,7 +88,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
         #endif // NOT CONST_NU
 
         real std_R = sqrt(2.0*dt*coeff_R);
-        delta_R = avg_R + std_R*curand_normal_double(&rs_swarm);
+        delta_R = avg_R + std_R*curand_normal_double(&rngstate);
     }
 
     if (N_Z > 1)
@@ -98,7 +98,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
         real avg_Z = dt*coeff_Z*term_Z;
         real std_Z = sqrt(2.0*dt*coeff_Z);
 
-        delta_Z = avg_Z + std_Z*curand_normal_double(&rs_swarm);
+        delta_Z = avg_Z + std_Z*curand_normal_double(&rngstate);
     }
 
     real x_new = x + delta_x;
@@ -134,7 +134,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate,
     dev_particle[idx].velocity.y = vy;
     dev_particle[idx].velocity.z = lz;
 
-    dev_rngstate[idx] = rs_swarm; // persist the advanced random stream
+    dev_rngstate[idx] = rngstate; // persist the advanced random stream
 }
 
 // =========================================================================================================================

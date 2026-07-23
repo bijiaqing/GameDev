@@ -42,7 +42,7 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
 
     if (N_X > 1 && rho > 0.0)
     {
-        real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
+        real dx = _get_dx();
         
         real x_p = x + dx;
         real x_m = x - dx;
@@ -62,7 +62,7 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
     
     if (N_Y > 1)
     {
-        real dy = y*(log(Y_MAX / Y_MIN) / static_cast<real>(N_Y));
+        real dy = y*log(_get_dy());
         
         if (loc_y < 0.5) // use a one-sided difference next to the inner radial boundary
         {
@@ -91,7 +91,7 @@ void _get_term_grad_cyl (real x, real y, real z, real &term_x, real &term_R, rea
 
     if (N_Z > 1)
     {
-        real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
+        real dz = _get_dz();
         
         if (loc_z < 0.5) // use a one-sided difference next to the lower polar boundary
         {

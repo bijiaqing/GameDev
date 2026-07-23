@@ -125,10 +125,10 @@ void msg_output (int idx_file)
     std::time_t end_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     int length = std::max(3, static_cast<int>(std::to_string(SAVE_MAX).length()));
     std::cout   
-        << std::endl << std::setfill('0')
-        << std::setw(length) << idx_file << "/" 
-        << std::setw(length) << SAVE_MAX << " finished on " << std::ctime(&end_time)
-        << std::endl;
+    << std::endl << std::setfill('0')
+    << std::setw(length) << idx_file << "/" 
+    << std::setw(length) << SAVE_MAX << " finished on " << std::ctime(&end_time)
+    << std::endl;
 }
 
 #ifdef LOGOUTPUT
@@ -285,7 +285,6 @@ bool save_variable (const std::string &file_name)
     file << "DT_DYN      = " << std::scientific     << std::setprecision(8) << DT_DYN       << std::endl;
     file << "CFL_DYN     = " << std::defaultfloat   << std::setprecision(8) << CFL_DYN      << std::endl;
     #endif // TRANSPORT
-    file << "DT_MIN      = " << std::scientific     << std::setprecision(8) << DT_MIN       << std::endl;
     file                                                                                    << std::endl;
 
     // swarm structure as a configparser-compatible NumPy dtype, in Python write as:

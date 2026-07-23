@@ -131,8 +131,6 @@ const int  LOG_BASE     = 10;               // logarithmic base for time steppin
 const int  LIN_BASE     = 1;                // save particle data every LIN_BASE iterations
 #endif // LOGTIMING || LOGOUTPUT
 
-const real DT_MIN       = 1.0e-14;          // calculation steps with smaller dt will be skipped
-
 // =========================================================================================================================
 // structures
 

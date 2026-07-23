@@ -9,6 +9,7 @@
 #include <vector>           // for std::vector
 
 #include <const.cuh>
+#include <paramgrid.cuh>
 
 // =========================================================================================================================
 // elementary random profiles
@@ -167,8 +168,8 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
     std::vector <real> sigma_profile;
     _get_convpow_profile(radial_axis, sigma_profile, Y_MIN, Y_MAX, IDX_P, 0.05*R_0, N_Y);
 
-    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
-    real dz = (N_Z > 1) ? (Z_MAX - Z_MIN) / static_cast<real>(N_Z) : 0.0;
+    real dy = _get_dy();
+    real dz = _get_dz();
     real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
     real dy_pow = std::pow(dy, pow_y);
 
@@ -263,8 +264,8 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
 inline static __host__
 void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_profile, real size)
 {
-    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
-    real dz = (N_Z > 1) ? (Z_MAX - Z_MIN) / static_cast<real>(N_Z) : 0.0;
+    real dy = _get_dy();
+    real dz = _get_dz();
     real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
     real dy_pow = std::pow(dy, pow_y);
 
@@ -365,8 +366,8 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(is)*static_cast<size_t>(cells + 1));
     }
 
-    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
-    real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
+    real dy = _get_dy();
+    real dz = _get_dz();
     real pow_y = 1.0 + static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1);
     real dy_pow = std::pow(dy, pow_y);
     std::uniform_real_distribution <real> random(0.0, 1.0);
@@ -465,9 +466,9 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
     
-    real dx =         (X_MAX - X_MIN)     / static_cast<real>(N_X);
-    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
-    real dz =         (Z_MAX - Z_MIN)     / static_cast<real>(N_Z);
+    real dx = _get_dx();
+    real dy = _get_dy();
+    real dz = _get_dz();
     
     real idx_dim = static_cast<real>(N_X > 1) + static_cast<real>(N_Z > 1) + 1.0;
     real dy_pow = std::pow(dy, idx_dim);

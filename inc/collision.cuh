@@ -32,14 +32,17 @@ real3 _get_cart_vel (const swarm &particle)
     real x = particle.position.x;
     real y = particle.position.y;
     real z = particle.position.z;
-    real v_phi = particle.velocity.x/(y*sin(z));
+
+    real v_phi = particle.velocity.x / (y*sin(z));
     real v_rad = particle.velocity.y;
-    real v_pol = particle.velocity.z/y;
+    real v_pol = particle.velocity.z / y;
 
     real3 velocity;
+
     velocity.x = v_rad*sin(z)*cos(x) + v_pol*cos(z)*cos(x) - v_phi*sin(x);
     velocity.y = v_rad*sin(z)*sin(x) + v_pol*cos(z)*sin(x) + v_phi*cos(x);
     velocity.z = v_rad*cos(z)        - v_pol*sin(z);
+    
     return velocity;
 }
 
@@ -50,9 +53,7 @@ real _get_ball_measure (real x, real y, real z, real radius)
     if (radius <= 0.0) return 0.0;
 
     int dim = 1 + static_cast<int>(N_X > 1) + static_cast<int>(N_Z > 1);
-    real measure = (dim == 1) ? 2.0*radius
-                 : (dim == 2) ? M_PI*radius*radius
-                              : 4.0*M_PI*radius*radius*radius/3.0;
+    real measure = (dim == 1) ? 2.0*radius : (dim == 2) ? M_PI*radius*radius : 4.0*M_PI*radius*radius*radius / 3.0;
 
     real distances[4] = {y - Y_MIN, Y_MAX - y, 1.0e100, 1.0e100};
     if (N_Z > 1)
@@ -73,13 +74,13 @@ real _get_ball_measure (real x, real y, real z, real radius)
         }
         else if (dim == 2)
         {
-            real cap = radius*radius*acos(d/radius) - d*sqrt(radius*radius - d*d);
+            real cap = radius*radius*acos(d / radius) - d*sqrt(radius*radius - d*d);
             measure *= 1.0 - cap/(M_PI*radius*radius);
         }
         else
         {
-            real cap = M_PI*(radius - d)*(radius - d)*(2.0*radius + d)/3.0;
-            measure *= 1.0 - cap/(4.0*M_PI*radius*radius*radius/3.0);
+            real cap = M_PI*(radius - d)*(radius - d)*(2.0*radius + d) / 3.0;
+            measure *= 1.0 - cap / (4.0*M_PI*radius*radius*radius / 3.0);
         }
     }
 
@@ -122,7 +123,7 @@ real _get_ReInvSqrt (real R, real alpha)
     return 1.0 / sqrt(Re);
 }
 
-// calculate the turbulence-induced relative speed using the Ormel--Cuzzi regimes
+// calculate the turbulence-induced relative speed using the Ormel-Cuzzi regimes
 __device__ __forceinline__
 real _get_vrel_t (real R, real St_i, real St_j, real h_g)
 {
@@ -289,9 +290,11 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
 
     real3 vel_i = _get_cart_vel(dev_particle[idx_old_i]);
     real3 vel_j = _get_cart_vel(dev_particle[idx_old_j]);
+
     real dv_x = vel_i.x - vel_j.x;
     real dv_y = vel_i.y - vel_j.y;
     real dv_z = vel_i.z - vel_j.z;
+
     real vrel_sq = dv_x*dv_x + dv_y*dv_y + dv_z*dv_z;
 
     // omit Brownian motion in code units and use the prescribed Reynolds-number normalization for turbulence
@@ -371,20 +374,27 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
             real R_j = dev_particle[idx_old_j].position.y*sin(dev_particle[idx_old_j].position.z);
             real Z_i = dev_particle[idx_old_i].position.y*cos(dev_particle[idx_old_i].position.z);
             real Z_j = dev_particle[idx_old_j].position.y*cos(dev_particle[idx_old_j].position.z);
+
             real St_i = _get_St(R_i, Z_i, s_i, _get_hg(R_i)
                 #ifdef IMPORTGAS
-                , dev_particle[idx_old_i].position.x, dev_particle[idx_old_i].position.y,
-                  dev_particle[idx_old_i].position.z, dev_gas_dens
+                , dev_particle[idx_old_i].position.x
+                , dev_particle[idx_old_i].position.y
+                , dev_particle[idx_old_i].position.z
+                , dev_gas_dens
                 #endif
             );
             real St_j = _get_St(R_j, Z_j, s_j, _get_hg(R_j)
                 #ifdef IMPORTGAS
-                , dev_particle[idx_old_j].position.x, dev_particle[idx_old_j].position.y,
-                  dev_particle[idx_old_j].position.z, dev_gas_dens
+                , dev_particle[idx_old_j].position.x
+                , dev_particle[idx_old_j].position.y
+                , dev_particle[idx_old_j].position.z
+                , dev_gas_dens
                 #endif
             );
+
             real H_i = R_i*_get_hd(R_i, St_i);
             real H_j = R_j*_get_hd(R_j, St_j);
+
             rate_volume /= sqrt(2.0*M_PI*(H_i*H_i + H_j*H_j));
         }
 
