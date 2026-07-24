@@ -43,9 +43,9 @@
 // particle initialization
 // =========================================================================================================================
 
-__global__ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *dev_random_y, const real *dev_random_z
+__global__ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *dev_randposy, const real *dev_randposz
     #ifdef MULTISIZE
-    , const real *dev_random_s, real mass_norm
+    , const real *dev_randsize, real mass_norm
     #endif // MULTISIZE
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
@@ -59,7 +59,7 @@ __global__ void particle_init (swarm *dev_particle, const real *dev_random_x, co
 #ifdef IMPORTGAS
 __global__ void gas_lerp_calc (real *dev_gas_dens, real *dev_gas_velx, real *dev_gas_vely, real *dev_gas_velz,
     const real *dev_gas_dens_next, const real *dev_gas_velx_next,
-    const real *dev_gas_vely_next, const real *dev_gas_velz_next, real blend);
+    const real *dev_gas_vely_next, const real *dev_gas_velz_next, real gas_blend);
 #endif // IMPORTGAS
 
 // =========================================================================================================================

@@ -10,10 +10,10 @@
 __global__
 void optdepth_init (real *dev_optdepth)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_G) return;
+    int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_cell >= N_G) return;
 
-    dev_optdepth[idx] = 0.0;
+    dev_optdepth[idx_cell] = 0.0;
 }
 
 // =========================================================================================================================

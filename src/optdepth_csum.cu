@@ -10,16 +10,16 @@
 __global__
 void optdepth_csum (real *dev_optdepth)
 {
-    int idx_y = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx_y >= N_X*N_Z) return;
+    int idx_ray = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_ray >= N_X*N_Z) return;
 
-    int idx_x = idx_y % N_X;
-    int idx_z = idx_y / N_X;
+    int ix = idx_ray % N_X;
+    int iz = idx_ray / N_X;
 
     // accumulate one independent radial ray at fixed azimuth and polar angle
-    for (int i = 1; i < N_Y; i++)
+    for (int iy = 1; iy < N_Y; iy++)
     {
-        int idx_cell = idx_z*N_X*N_Y + i*N_X + idx_x;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
         dev_optdepth[idx_cell] += dev_optdepth[idx_cell - N_X];
     }
 }

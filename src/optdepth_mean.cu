@@ -10,28 +10,28 @@
 __global__
 void optdepth_mean (real *dev_optdepth)
 {
-    int idx_x = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx_x >= N_Y*N_Z) return;
+    int idx_ring = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_ring >= N_Y*N_Z) return;
 
-    int idx_y = idx_x % N_Y;
-    int idx_z = idx_x / N_Y;
+    int iy = idx_ring % N_Y;
+    int iz = idx_ring / N_Y;
 
     real optdepth_sum = 0.0;
 
     // sum one independent azimuthal ring at fixed radius and polar angle
-    for (int i = 0; i < N_X; i++)
+    for (int ix = 0; ix < N_X; ix++)
     {
-        int idx_cell = idx_z*N_X*N_Y + idx_y*N_X + i;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
         optdepth_sum += dev_optdepth[idx_cell];
     }
 
-    real optdepth_avg = optdepth_sum / N_X;
+    real optdepth_mean = optdepth_sum / N_X;
 
     // broadcast the ring mean to every azimuthal cell
-    for (int j = 0; j < N_X; j++)
+    for (int ix = 0; ix < N_X; ix++)
     {
-        int idx_cell = idx_z*N_X*N_Y + idx_y*N_X + j;
-        dev_optdepth[idx_cell] = optdepth_avg;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+        dev_optdepth[idx_cell] = optdepth_mean;
     }
 }
 

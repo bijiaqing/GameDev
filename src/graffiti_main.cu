@@ -118,40 +118,40 @@ int main (int argc, char **argv)
         
         idx_from = 0;
 
-        real *random_x, *dev_random_x;
-        CUDA_CHECK(cudaMallocHost((void**)&random_x, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_random_x, sizeof(real)*N_P));
+        real *randposx, *dev_randposx;
+        CUDA_CHECK(cudaMallocHost((void**)&randposx, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_randposx, sizeof(real)*N_P));
 
-        real *random_y, *dev_random_y;
-        CUDA_CHECK(cudaMallocHost((void**)&random_y, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_random_y, sizeof(real)*N_P));
+        real *randposy, *dev_randposy;
+        CUDA_CHECK(cudaMallocHost((void**)&randposy, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_randposy, sizeof(real)*N_P));
 
-        real *random_z, *dev_random_z;
-        CUDA_CHECK(cudaMallocHost((void**)&random_z, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_random_z, sizeof(real)*N_P));
+        real *randposz, *dev_randposz;
+        CUDA_CHECK(cudaMallocHost((void**)&randposz, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_randposz, sizeof(real)*N_P));
 
         #ifdef MULTISIZE
-        real *random_s, *dev_random_s;
-        CUDA_CHECK(cudaMallocHost((void**)&random_s, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_random_s, sizeof(real)*N_P));
+        real *randsize, *dev_randsize;
+        CUDA_CHECK(cudaMallocHost((void**)&randsize, sizeof(real)*N_P));
+        CUDA_CHECK(cudaMalloc((void**)&dev_randsize, sizeof(real)*N_P));
         #endif // MULTISIZE
 
         rand_generator.seed(0); // keep initialization reproducible across runs
 
         #ifdef MULTISIZE
         // sample grain properties before positions so settled spatial distributions can depend on size
-        real idx_swarm = -0.5;  // equal represented mass per swarm
+        real power_idx = -0.5;  // equal represented mass per swarm
         #ifdef RADIATION
-        idx_swarm = -1.5;       // equal represented surface area per swarm, see _get_grain_number
+        power_idx = -1.5;       // equal represented surface area per swarm, see _get_grain_number
         #endif // RADIATION
         #ifdef COLLISION_LINEAR_TEST
-        rand_gamma_k2(random_s, N_P);
+        rand_gamma_k2(randsize, N_P);
         #else  // STANDARD_INITIALIZATION
-        rand_powerlaw(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
+        rand_powerlaw(randsize, N_P, INIT_SMIN, INIT_SMAX, power_idx);
         #endif // COLLISION_LINEAR_TEST
 
         // correct finite-sample size fluctuations so represented masses sum exactly to total_dust_mass
-        real mass_norm = get_mass_norm(random_s, total_dust_mass);
+        real mass_norm = get_mass_norm(randsize, total_dust_mass);
         #endif // MULTISIZE
 
         #ifdef IMPORTGAS
@@ -167,29 +167,29 @@ int main (int argc, char **argv)
         }
 
         // use one imported total-dust spatial distribution for all previously sampled grain species
-        rand_from_file(random_x, random_y, random_z, N_P, gas_dens, epsilon);
+        rand_from_file(randposx, randposy, randposz, N_P, gas_dens, epsilon);
         
         CUDA_CHECK(cudaFreeHost(epsilon));
         #else  // NO IMPORTGAS
         #if defined(MULTISIZE) && defined(DIFFUSION)
-        rand_disk_poly(random_x, random_y, random_z, random_s, N_P);
+        rand_disk_poly(randposx, randposy, randposz, randsize, N_P);
         #else  // !(MULTISIZE && DIFFUSION)
-        rand_disk_mono(random_x, random_y, random_z, S_0,      N_P);
+        rand_disk_mono(randposx, randposy, randposz, S_0, N_P);
         #endif // MULTISIZE && DIFFUSION
         #endif // IMPORTGAS
 
-        CUDA_CHECK(cudaMemcpy(dev_random_x, random_x, sizeof(real)*N_P, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_random_y, random_y, sizeof(real)*N_P, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_random_z, random_z, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_randposx, randposx, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_randposy, randposy, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_randposz, randposz, sizeof(real)*N_P, cudaMemcpyHostToDevice));
 
         #ifdef MULTISIZE
-        CUDA_CHECK(cudaMemcpy(dev_random_s, random_s, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev_randsize, randsize, sizeof(real)*N_P, cudaMemcpyHostToDevice));
         #endif // MULTISIZE
 
         // convert sampled coordinates and sizes into the device particle state
-        particle_init <<< NB_P, TPB >>> (dev_particle, dev_random_x, dev_random_y, dev_random_z
+        particle_init <<< NB_P, TPB >>> (dev_particle, dev_randposx, dev_randposy, dev_randposz
             #ifdef MULTISIZE
-            , dev_random_s, mass_norm
+            , dev_randsize, mass_norm
             #endif // MULTISIZE
             #ifdef IMPORTGAS
             , dev_gas_dens
@@ -197,16 +197,16 @@ int main (int argc, char **argv)
         );
         CUDA_KERNEL_CHECK("particle_init");
 
-        CUDA_CHECK(cudaFreeHost(random_x));
-        CUDA_CHECK(cudaFree(dev_random_x));
-        CUDA_CHECK(cudaFreeHost(random_y));
-        CUDA_CHECK(cudaFree(dev_random_y));
-        CUDA_CHECK(cudaFreeHost(random_z));
-        CUDA_CHECK(cudaFree(dev_random_z));
+        CUDA_CHECK(cudaFreeHost(randposx));
+        CUDA_CHECK(cudaFree(dev_randposx));
+        CUDA_CHECK(cudaFreeHost(randposy));
+        CUDA_CHECK(cudaFree(dev_randposy));
+        CUDA_CHECK(cudaFreeHost(randposz));
+        CUDA_CHECK(cudaFree(dev_randposz));
 
         #ifdef MULTISIZE
-        CUDA_CHECK(cudaFreeHost(random_s));
-        CUDA_CHECK(cudaFree(dev_random_s));
+        CUDA_CHECK(cudaFreeHost(randsize));
+        CUDA_CHECK(cudaFree(dev_randsize));
         #endif // MULTISIZE
         
         #if defined(COLLISION) || defined(DIFFUSION)

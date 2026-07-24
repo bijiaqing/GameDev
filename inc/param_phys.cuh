@@ -14,8 +14,8 @@
 // =========================================================================================================================
 
 __device__ __forceinline__
-real _get_grain_mass (real s)
-{ return M_PI*RHO_0*s*s*s / 6.0; }
+real _get_grain_mass (real size)
+{ return M_PI*RHO_0*size*size*size / 6.0; }
 
 #ifdef MULTISIZE
 // calculate the represented-mass weight implied by the sampled swarm-size distribution
@@ -135,13 +135,13 @@ real _get_visc_vel (real R, real Z, real h_g)
 
 // calculate the local Stokes number from grain size and the analytic or imported gas density
 __device__ __forceinline__
-real _get_stokes (real R, real Z, real s, real h_g
+real _get_stokes (real R, real Z, real size, real h_g
     #ifdef IMPORTGAS
     , real x, real y, real z, const real *dev_gas_dens
     #endif // IMPORTGAS
 )
 {
-    real stokes = STOKES_0*(s / S_0);
+    real stokes = STOKES_0*(size / S_0);
 
     #ifdef IMPORTGAS
     // calibrate the imported density to the analytical reference midplane at R_0

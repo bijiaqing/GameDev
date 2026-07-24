@@ -71,13 +71,13 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         int idx_query = query_result.returnIndex(j);
         if (idx_query < 0) continue;
 
-        int candidate = dev_col_tree[idx_query].index_old;
-        if (candidate == idx_old_i) continue;
+        int idx_candidate = dev_col_tree[idx_query].index_old;
+        if (idx_candidate == idx_old_i) continue;
         if (!_is_particle_active(
-            dev_particle[candidate].position.y, dev_particle[candidate].position.z
+            dev_particle[idx_candidate].position.y, dev_particle[idx_candidate].position.z
         )) continue;
 
-        idx_old_j = candidate;
+        idx_old_j = idx_candidate;
         cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
@@ -91,33 +91,33 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
     #ifdef MULTISIZE
     // use the physical relative speed only when deciding a physical-kernel collision outcome
-    real v_rel = 0.0;
+    real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
-        v_rel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS
         );
     }
 
-    real s_i = dev_size_old[idx_old_i];
-    real s_j = dev_size_old[idx_old_j];
-    real s_k = cbrt(s_i*s_i*s_i + s_j*s_j*s_j);
+    real size_i = dev_size_old[idx_old_i];
+    real size_j = dev_size_old[idx_old_j];
+    real size_k = cbrt(size_i*size_i*size_i + size_j*size_j*size_j);
 
-    if (v_rel <= V_FRAG)
+    if (vrel <= V_FRAG)
     {
         // coagulate both physical grain masses into the updated representative species
-        dev_particle[idx_old_i].par_size = s_k;
-        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i / (s_k*s_k*s_k);
+        dev_particle[idx_old_i].par_size = size_k;
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*size_i*size_i*size_i / (size_k*size_k*size_k);
     }
     else
     {
         // sample the fragment size distribution and conserve the representative swarm mass
-        real sample = curand_uniform_double(&rngstate);
-        s_k = fmax(INIT_SMIN, s_k*sample*sample);
-        dev_particle[idx_old_i].par_size = s_k;
-        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i / (s_k*s_k*s_k);
+        real frag_sample = curand_uniform_double(&rngstate);
+        size_k = fmax(INIT_SMIN, size_k*frag_sample*frag_sample);
+        dev_particle[idx_old_i].par_size = size_k;
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*size_i*size_i*size_i / (size_k*size_k*size_k);
     }
     #endif // MULTISIZE
 

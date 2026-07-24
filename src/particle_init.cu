@@ -29,12 +29,12 @@ real _get_grain_number (real size, real mass_norm)
     // to achieve all swarms having the same total surface area, there is
     // (3) n_d(s) = n_1 * s^-2 (n_1 = const)
     // combining (2) and (3) there is
-    // (4) n_p(s) = n_2 * s^-1.5 (n_2 = const), which explains why pow_idx = -1.5 in main.cu
+    // (4) n_p(s) = n_2 * s^-1.5 (n_2 = const), which explains why power_idx = -1.5 in main.cu
 
     // (note) if all swarms have the same total mass, there is
     // (3') n_d(s) = n_1 * s^-3 (n_1 = const)
     // combining (2) and (3') there is
-    // (4') n_p(s) = n_2 * s^-0.5 (n_2 = const), which explains why pow_idx = -0.5 in main.cu
+    // (4') n_p(s) = n_2 * s^-0.5 (n_2 = const), which explains why power_idx = -0.5 in main.cu
 
     // with (4), the total number of all swarms is
     // (5) N_P = integrate( n_p(s) ds ) = integrate( n_2 * s^-1.5 ds )
@@ -63,9 +63,9 @@ real _get_grain_number (real size, real mass_norm)
 // =========================================================================================================================
 
 __global__
-void particle_init (swarm *dev_particle, const real *dev_random_x, const real *dev_random_y, const real *dev_random_z
+void particle_init (swarm *dev_particle, const real *dev_randposx, const real *dev_randposy, const real *dev_randposz
     #ifdef MULTISIZE
-    , const real *dev_random_s, real mass_norm
+    , const real *dev_randsize, real mass_norm
     #endif // MULTISIZE
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
@@ -76,9 +76,9 @@ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *d
     if (idx >= N_P) return;
 
     // copy host-sampled spherical positions into the particle state
-    dev_particle[idx].position.x = dev_random_x[idx];
-    dev_particle[idx].position.y = dev_random_y[idx];
-    dev_particle[idx].position.z = (N_Z > 1) ? dev_random_z[idx] : 0.5*M_PI;
+    dev_particle[idx].position.x = dev_randposx[idx];
+    dev_particle[idx].position.y = dev_randposy[idx];
+    dev_particle[idx].position.z = (N_Z > 1) ? dev_randposz[idx] : 0.5*M_PI;
 
     real y = dev_particle[idx].position.y;
     real z = dev_particle[idx].position.z;
@@ -86,7 +86,7 @@ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *d
     real Z = y*cos(z);
 
     #ifdef MULTISIZE
-    real size = dev_random_s[idx];
+    real size = dev_randsize[idx];
     #else  // MONOSIZE
     real size = S_0;
     #endif // MULTISIZE

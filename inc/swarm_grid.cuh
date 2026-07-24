@@ -209,7 +209,10 @@ real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z
         if (!_is_in_bounds(loc_x, loc_y, loc_z)) return 0.0;
     }
 
-    int idx_cell = static_cast<int>(loc_z)*N_X*N_Y + static_cast<int>(loc_y)*N_X + static_cast<int>(loc_x);
+    int ix = static_cast<int>(loc_x);
+    int iy = static_cast<int>(loc_y);
+    int iz = static_cast<int>(loc_z);
+    int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
     auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z, outer_edge);
 
     real value = 0.0;
@@ -246,7 +249,10 @@ void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, rea
 
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
 
-    int idx_cell = static_cast<int>(loc_z)*N_X*N_Y + static_cast<int>(loc_y)*N_X + static_cast<int>(loc_x);
+    int ix = static_cast<int>(loc_x);
+    int iy = static_cast<int>(loc_y);
+    int iz = static_cast<int>(loc_z);
+    int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
     auto [next_x, next_y, next_z, frac_x, frac_y, frac_z] = _3d_interp(loc_x, loc_y, loc_z);
 
     atomicAdd(&dev_grid_out[idx_cell                           ], (1.0 - frac_x)*(1.0 - frac_y)*(1.0 - frac_z)*weight);

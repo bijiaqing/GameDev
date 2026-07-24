@@ -159,11 +159,11 @@ void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i
 
 // calculate radial gravity, radial centrifugal acceleration, and polar centrifugal torque
 __device__ __forceinline__
-void _get_force_term (real y, real z, real R, real l_x, real l_z, real beta, real &F_y, real &Fc_y, real &Tc_z)
+void _get_force_term (real y, real z, real R, real lx, real lz, real beta, real &grav_y, real &cent_y, real &torq_z)
 {
-    F_y  = -(1.0 - beta)*_get_omegaK(y)*_get_omegaK(y)*y;
-    Fc_y = l_x*l_x / R / R / y + l_z*l_z / y / y / y;
-    Tc_z = (N_Z > 1) ? l_x*l_x / R / R / sin(z)*cos(z) : 0.0;
+    grav_y = -(1.0 - beta)*_get_omegaK(y)*_get_omegaK(y)*y;
+    cent_y = lx*lx / R / R / y + lz*lz / y / y / y;
+    torq_z = (N_Z > 1) ? lx*lx / R / R / sin(z)*cos(z) : 0.0;
 }
 
 // integrate drag analytically at the midpoint and complete the velocity and position update
@@ -222,22 +222,22 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     real tau_1 = dt / ts_1;
 
     // evaluate midpoint forces with the initial angular momenta
-    real Fy_1, Fcy_1, Tcz_1;
-    _get_force_term(y_1, z_1, R_1, lx_i, lz_i, beta, Fy_1, Fcy_1, Tcz_1);
+    real grav_y_1, cent_y_1, torq_z_1;
+    _get_force_term(y_1, z_1, R_1, lx_i, lz_i, beta, grav_y_1, cent_y_1, torq_z_1);
 
     // obtain a midpoint velocity with the exact frozen-coefficient drag response
     real lx_1 = lx_i + (lxg_1 - lx_i)*(1.0 - exp(-0.5*tau_1));
-    real vy_1 = vy_i + ((Fy_1 + Fcy_1)*ts_1 + vyg_1 - vy_i)*(1.0 - exp(-0.5*tau_1));
-    real lz_1 = lz_i + (Tcz_1*ts_1 + lzg_1 - lz_i)*(1.0 - exp(-0.5*tau_1));
+    real vy_1 = vy_i + ((grav_y_1 + cent_y_1)*ts_1 + vyg_1 - vy_i)*(1.0 - exp(-0.5*tau_1));
+    real lz_1 = lz_i + (torq_z_1*ts_1 + lzg_1 - lz_i)*(1.0 - exp(-0.5*tau_1));
 
     // reevaluate centrifugal terms with the midpoint angular momenta while reusing position-dependent beta
-    real Fy_2, Fcy_2, Tcz_2;
-    _get_force_term(y_1, z_1, R_1, lx_1, lz_1, beta, Fy_2, Fcy_2, Tcz_2);
+    real grav_y_2, cent_y_2, torq_z_2;
+    _get_force_term(y_1, z_1, R_1, lx_1, lz_1, beta, grav_y_2, cent_y_2, torq_z_2);
 
     // complete the full-step frozen-coefficient drag response with midpoint forces
     lx_j = lx_i + (lxg_1 - lx_i)*(1.0 - exp(-tau_1));
-    vy_j = vy_i + ((Fy_2 + Fcy_2)*ts_1 + vyg_1 - vy_i)*(1.0 - exp(-tau_1));
-    lz_j = lz_i + (Tcz_2*ts_1 + lzg_1 - lz_i)*(1.0 - exp(-tau_1));
+    vy_j = vy_i + ((grav_y_2 + cent_y_2)*ts_1 + vyg_1 - vy_i)*(1.0 - exp(-tau_1));
+    lz_j = lz_i + (torq_z_2*ts_1 + lzg_1 - lz_i)*(1.0 - exp(-tau_1));
 
     // drift from the midpoint position to the final state j
     y_j = y_1 + 0.5*vy_j*dt;

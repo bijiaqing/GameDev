@@ -70,17 +70,17 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real loc_y = _get_loc_y(y);
     real loc_z = _get_loc_z(z);
 
-    real gas_x = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z);
-    real gas_y = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
-    real gas_z = _interp_field(dev_gas_velz, loc_x, loc_y, loc_z);
+    real vgas_x = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z);
+    real vgas_y = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
+    real vgas_z = _interp_field(dev_gas_velz, loc_x, loc_y, loc_z);
 
-    gas_x = fmax(abs(gas_x), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
-    gas_y = fmax(abs(gas_y), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
-    gas_z = fmax(abs(gas_z), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
+    vgas_x = fmax(abs(vgas_x), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
+    vgas_y = fmax(abs(vgas_y), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
+    vgas_z = fmax(abs(vgas_z), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
     
-    if (N_X > 1) rate = fmax(rate, abs(gas_x) / (R*dx*CFL_DYN));
-    if (N_Y > 1) rate = fmax(rate, abs(gas_y) / (dr*CFL_DYN));
-    if (N_Z > 1) rate = fmax(rate, abs(gas_z) / (y*dz*CFL_DYN));
+    if (N_X > 1) rate = fmax(rate, abs(vgas_x) / (R*dx*CFL_DYN));
+    if (N_Y > 1) rate = fmax(rate, abs(vgas_y) / (dr*CFL_DYN));
+    if (N_Z > 1) rate = fmax(rate, abs(vgas_z) / (y*dz*CFL_DYN));
     #endif // IMPORTGAS
 
     real beta = 0.0;
@@ -98,22 +98,23 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     #endif // RADIATION
 
     // require constant-acceleration displacement to remain below a local mesh fraction
-    real force_y = -(1.0 - beta)*G*M_S / (y*y);
+    real grav_y = -(1.0 - beta)*G*M_S / (y*y);
     real cent_y = lx*lx / (R*R*y) + lz*lz / (y*y*y);
-    real accel_y = abs(force_y + cent_y);
+    real accel_y = abs(grav_y + cent_y);
     
     rate = fmax(rate, sqrt(accel_y / (2.0*CFL_DYN*dr)));
     if (N_Z > 1)
     {
-        real accel_z = abs(lx*lx / (R*R)*cos(z) / sin(z)) / y;
+        real torq_z = lx*lx / (R*R)*cos(z) / sin(z);
+        real accel_z = abs(torq_z) / y;
         rate = fmax(rate, sqrt(accel_z / (2.0*CFL_DYN*y*dz)));
     }
 
     #ifdef VISC_ACCRETION
     {
         // include the analytic gas target velocity before drag can transfer it to the dust
-        real h_g_acc = _get_hg(R);
-        real vgas_R = _get_visc_vel(R, y*cos(z), h_g_acc);
+        real h_g = _get_hg(R);
+        real vgas_R = _get_visc_vel(R, y*cos(z), h_g);
 
         if (N_Y > 1) rate = fmax(rate, abs(vgas_R*sin(z)) / (dr*CFL_DYN));
         if (N_Z > 1) rate = fmax(rate, abs(vgas_R*cos(z)) / (y*dz*CFL_DYN));

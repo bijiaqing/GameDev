@@ -33,17 +33,17 @@ real3 _get_cart_vel (const swarm &particle)
     real y = particle.position.y;
     real z = particle.position.z;
 
-    real v_phi = particle.velocity.x / (y*sin(z));
-    real v_rad = particle.velocity.y;
-    real v_pol = particle.velocity.z / y;
+    real vel_x = particle.velocity.x / (y*sin(z));
+    real vel_y = particle.velocity.y;
+    real vel_z = particle.velocity.z / y;
 
-    real3 velocity;
+    real3 vel_cart;
 
-    velocity.x = v_rad*sin(z)*cos(x) + v_pol*cos(z)*cos(x) - v_phi*sin(x);
-    velocity.y = v_rad*sin(z)*sin(x) + v_pol*cos(z)*sin(x) + v_phi*cos(x);
-    velocity.z = v_rad*cos(z)        - v_pol*sin(z);
+    vel_cart.x = vel_y*sin(z)*cos(x) + vel_z*cos(z)*cos(x) - vel_x*sin(x);
+    vel_cart.y = vel_y*sin(z)*sin(x) + vel_z*cos(z)*sin(x) + vel_x*cos(x);
+    vel_cart.z = vel_y*cos(z)        - vel_z*sin(z);
     
-    return velocity;
+    return vel_cart;
 }
 
 // approximate the part of a local KNN ball lying inside radial and polar domain boundaries
@@ -93,15 +93,15 @@ real _get_ball_measure (real y, real z, real radius)
 #ifndef CODE_UNIT // i.e., only when physical units are used
 // calculate the Brownian relative speed and cap it at the sound speed
 __device__ __forceinline__
-real _get_vrel_b (real R, real s_i, real s_j, real h_g)
+real _get_vrel_b (real R, real size_i, real size_j, real h_g)
 {
     // Brownian motion-induced relative velocity v = sqrt(8*k_B*T*(m_i+m_j) / (pi*m_i*m_j))
     // here we take c_s^2 = k_B*T / mmw_gas
     
     real c_s = _get_cs(R, h_g);
 
-    real m_i = _get_grain_mass(s_i);
-    real m_j = _get_grain_mass(s_j);
+    real m_i = _get_grain_mass(size_i);
+    real m_j = _get_grain_mass(size_j);
 
     real vrel_b = sqrt(8.0*c_s*c_s*M_MOL*(m_i + m_j) / (M_PI*m_i*m_j));
 
@@ -111,24 +111,24 @@ real _get_vrel_b (real R, real s_i, real s_j, real h_g)
 
 // calculate the inverse square root of the turbulent Reynolds number
 __device__ __forceinline__
-real _get_ReInvSqrt (real R, real alpha)
+real _get_re_inv_sqrt (real R, real alpha)
 {
-    real Re = 1.0;
-    real sigma = _get_sigma_g(R);
+    real reynolds = 1.0;
+    real sigma_g = _get_sigma_g(R);
     
     #ifdef CODE_UNIT
     real alpha_0 = _get_alpha(R_0, ASPR_0);
-    Re = RE_0*(alpha / alpha_0)*(sigma / SIGMA_0);
+    reynolds = RE_0*(alpha / alpha_0)*(sigma_g / SIGMA_0);
     #else  // PHYSICAL_UNIT
-    Re = 0.5*alpha*sigma*X_SEC / M_MOL;
+    reynolds = 0.5*alpha*sigma_g*X_SEC / M_MOL;
     #endif // CODE_UNIT
 
-    return 1.0 / sqrt(Re);
+    return 1.0 / sqrt(reynolds);
 }
 
 // calculate the turbulence-induced relative speed using the Ormel-Cuzzi regimes
 __device__ __forceinline__
-real _get_vrel_t (real R, real St_i, real St_j, real h_g)
+real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
 {
     // turbulence-induced relative velocity based on Ormel & Cuzzi (2007), A&A, 466, 413
     // part of code adapted from DustPy (Stammler & Birnstiel 2022, ApJ, 935, 35), also see:
@@ -156,25 +156,25 @@ real _get_vrel_t (real R, real St_i, real St_j, real h_g)
     
     real c_s = _get_cs(R, h_g);
     real alpha = _get_alpha(R, h_g);
-    real ReInvSqrt = _get_ReInvSqrt(R, alpha);
+    real re_inv_sqrt = _get_re_inv_sqrt(R, alpha);
 
     // comes from normalizing the power spectrum                            (page 415, section 3.2)
-    real v_gas2 = 1.5*alpha*c_s*c_s;
+    real vgas_sq = 1.5*alpha*c_s*c_s;
 
-    real St_large, St_small, eps;
+    real stokes_large, stokes_small, eps;
     
-    if (St_i >= St_j) 
+    if (stokes_i >= stokes_j)
     {
-        St_large = St_i;
-        St_small = St_j;
+        stokes_large = stokes_i;
+        stokes_small = stokes_j;
     } 
     else 
     {
-        St_large = St_j;
-        St_small = St_i;
+        stokes_large = stokes_j;
+        stokes_small = stokes_i;
     }
     
-    eps = St_small / St_large;
+    eps = stokes_small / stokes_large;
     
     // y_a = t_star / t_stop = 1.6 is the solution to y_star when St << 1
     // y_s is an empirical polynomial fit to the exact solution of y_star (eq. 21d)
@@ -182,61 +182,61 @@ real _get_vrel_t (real R, real St_i, real St_j, real h_g)
     real y_s = 1.6015125;
     
     // taken from DustPy
-    y_s += -0.63119577*St_large;
-    y_s +=  0.32938936*St_large*St_large;
-    y_s += -0.29847604*St_large*St_large*St_large;
+    y_s += -0.63119577*stokes_large;
+    y_s +=  0.32938936*stokes_large*stokes_large;
+    y_s += -0.29847604*stokes_large*stokes_large*stokes_large;
 
     real vrel_sq = 0.0;
     
-    if (St_large < 0.2*ReInvSqrt) 
+    if (stokes_large < 0.2*re_inv_sqrt)
     {
         // regime 1: very small particles (t_stop_large << t_small) following eq. 27
         
-        vrel_sq = v_gas2*(St_large - St_small)*(St_large - St_small) / ReInvSqrt;
+        vrel_sq = vgas_sq*(stokes_large - stokes_small)*(stokes_large - stokes_small) / re_inv_sqrt;
     }
-    else if (St_large < ReInvSqrt / y_a)
+    else if (stokes_large < re_inv_sqrt / y_a)
     {
         // regime 2: transition near t_small boundary (t_stop_large ~ t_small) following eq. 26
         
-        vrel_sq = v_gas2*(St_large - St_small) / (St_large + St_small);
-        vrel_sq *= (St_large / (1.0 + ReInvSqrt / St_large) - St_small / (1.0 + ReInvSqrt / St_small));
+        vrel_sq = vgas_sq*(stokes_large - stokes_small) / (stokes_large + stokes_small);
+        vrel_sq *= (stokes_large / (1.0 + re_inv_sqrt / stokes_large) - stokes_small / (1.0 + re_inv_sqrt / stokes_small));
     }
-    else if (St_large < 5.0*ReInvSqrt) 
+    else if (stokes_large < 5.0*re_inv_sqrt)
     {
         // regime 3: intermediate coupling (t_small < t_stop_large < 5*t_small)
         
         real coeff = 0.0;
         // coefficient of delta_VI^2  following eq. 17
-        coeff  = (St_large - St_small) / (St_large + St_small);
-        coeff *= (St_large / (1.0 + y_a) - St_small*St_small / (St_small + y_a*St_large));
+        coeff  = (stokes_large - stokes_small) / (stokes_large + stokes_small);
+        coeff *= (stokes_large / (1.0 + y_a) - stokes_small*stokes_small / (stokes_small + y_a*stokes_large));
         // coefficient of delta_VII^2 following eq. 18
-        coeff += 2.0*(y_a*St_large - ReInvSqrt) + St_large / (1.0 + y_a);
-        coeff -= St_large*St_large / (St_large + ReInvSqrt);
-        coeff += St_small*St_small / (y_a*St_large + St_small);
-        coeff -= St_small*St_small / (St_small + ReInvSqrt);
+        coeff += 2.0*(y_a*stokes_large - re_inv_sqrt) + stokes_large / (1.0 + y_a);
+        coeff -= stokes_large*stokes_large / (stokes_large + re_inv_sqrt);
+        coeff += stokes_small*stokes_small / (y_a*stokes_large + stokes_small);
+        coeff -= stokes_small*stokes_small / (stokes_small + re_inv_sqrt);
         
-        vrel_sq = v_gas2*coeff;
+        vrel_sq = vgas_sq*coeff;
     }
-    else if (St_large < 0.2)
+    else if (stokes_large < 0.2)
     {
         // regime 4: fully intermediate regime (5t_small < t_stop_large < 0.2t_large) following eq. 28
         
-        vrel_sq = v_gas2*St_large;
+        vrel_sq = vgas_sq*stokes_large;
         vrel_sq *= (2.0*y_a - (1.0 + eps) + 2.0 / (1.0 + eps)*(1.0 / (1.0 + y_a) + eps*eps*eps / (y_a + eps)));
     }
-    else if (St_large < 1.0)
+    else if (stokes_large < 1.0)
     {
         // regime 5: transition near t_large boundary (0.2t_large < t_stop_large < t_large) 
         // following eq. 28, but uses the empirical y_s fit instead of the fixed y_a = 1.6
         
-        vrel_sq = v_gas2*St_large;
+        vrel_sq = vgas_sq*stokes_large;
         vrel_sq *= (2.0*y_s - (1.0 + eps) + 2.0 / (1.0 + eps)*(1.0 / (1.0 + y_s) + eps*eps*eps / (y_s + eps)));
     }
     else
     {
         // regime 6: heavy particles (t_stop_large >= t_large) following eq. 29
         
-        vrel_sq = v_gas2*(1.0 / (1.0 + St_large) + 1.0 / (1.0 + St_small));
+        vrel_sq = vgas_sq*(1.0 / (1.0 + stokes_large) + 1.0 / (1.0 + stokes_small));
     }
 
     if (vrel_sq < 0.0)
@@ -265,8 +265,8 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     real z_i = dev_particle[idx_old_i].position.z;
     real z_j = dev_particle[idx_old_j].position.z;
     
-    real s_i = dev_size_old[idx_old_i];
-    real s_j = dev_size_old[idx_old_j];
+    real size_i = dev_size_old[idx_old_i];
+    real size_j = dev_size_old[idx_old_j];
     
     real R_i = y_i*sin(z_i);
     real R_j = y_j*sin(z_j);
@@ -277,15 +277,15 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     real R = 0.5*(R_i + R_j);
 
     real h_g = _get_hg(R);
-    real h_i = _get_hg(R_i);
-    real h_j = _get_hg(R_j);
+    real h_gi = _get_hg(R_i);
+    real h_gj = _get_hg(R_j);
 
-    real St_i = _get_stokes(R_i, Z_i, s_i, h_i
+    real stokes_i = _get_stokes(R_i, Z_i, size_i, h_gi
         #ifdef IMPORTGAS
         , x_i, y_i, z_i, dev_gas_dens
         #endif // IMPORTGAS
     );
-    real St_j = _get_stokes(R_j, Z_j, s_j, h_j
+    real stokes_j = _get_stokes(R_j, Z_j, size_j, h_gj
         #ifdef IMPORTGAS
         , x_j, y_j, z_j, dev_gas_dens
         #endif // IMPORTGAS
@@ -303,11 +303,11 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     // omit Brownian motion in code units and use the prescribed Reynolds-number normalization for turbulence
 
     #ifndef CODE_UNIT
-    real vrel_b = _get_vrel_b(R, s_i, s_j, h_g);
+    real vrel_b = _get_vrel_b(R, size_i, size_j, h_g);
     vrel_sq += vrel_b*vrel_b;
     #endif // NOT CODE_UNIT
 
-    real vrel_t = _get_vrel_t(R, St_i, St_j, h_g);
+    real vrel_t = _get_vrel_t(R, stokes_i, stokes_j, h_g);
     vrel_sq += vrel_t*vrel_t;
     
     return sqrt(vrel_sq);
@@ -341,35 +341,35 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     }
     else if constexpr (kernel == LINEAR_KERNEL)
     {
-        real s_i = dev_size_old[idx_old_i];
-        real s_j = dev_size_old[idx_old_j];
+        real size_i = dev_size_old[idx_old_i];
+        real size_j = dev_size_old[idx_old_j];
 
         // m_i + m_j
-        return lambda_0*numr_j*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
+        return lambda_0*numr_j*(_get_grain_mass(size_i) + _get_grain_mass(size_j));
     }
     else if constexpr (kernel == PRODUCT_KERNEL)
     {
-        real s_i = dev_size_old[idx_old_i];
-        real s_j = dev_size_old[idx_old_j];
+        real size_i = dev_size_old[idx_old_i];
+        real size_j = dev_size_old[idx_old_j];
         
         // m_i * m_j
-        return lambda_0*numr_j*_get_grain_mass(s_i)*_get_grain_mass(s_j);
+        return lambda_0*numr_j*_get_grain_mass(size_i)*_get_grain_mass(size_j);
     }
     else if constexpr (kernel == CUSTOM_KERNEL)
     {
         // use K_ij = sigma_ij delta_v_ij for the physical collision kernel
         
-        real s_i = dev_size_old[idx_old_i];
-        real s_j = dev_size_old[idx_old_j];
+        real size_i = dev_size_old[idx_old_i];
+        real size_j = dev_size_old[idx_old_j];
         
-        real v_rel_ij = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        real vrel_ij = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS
         );
-        real sigma_ij = M_PI*(s_i + s_j)*(s_i + s_j) / 4.0;
+        real sigma_ij = M_PI*(size_i + size_j)*(size_i + size_j) / 4.0;
         
-        real rate_volume = numr_j*v_rel_ij*sigma_ij;
+        real rate_numer = numr_j*vrel_ij*sigma_ij;
         if (N_Z == 1)
         {
             // convert the vertically integrated neighbor area to an effective pair volume
@@ -379,10 +379,10 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
             real H_gj = R_j*_get_hg(R_j);
 
             // assume every species shares the gas vertical profile in a vertically integrated disk
-            rate_volume /= sqrt(2.0*M_PI*(H_gi*H_gi + H_gj*H_gj));
+            rate_numer /= sqrt(2.0*M_PI*(H_gi*H_gi + H_gj*H_gj));
         }
 
-        return rate_volume;
+        return rate_numer;
     }
     else
     {

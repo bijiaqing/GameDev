@@ -47,13 +47,13 @@ extern std::mt19937 rand_generator;
 #ifdef MULTISIZE
 // calculate the mass scale that makes the sampled representative masses sum to the target dust mass
 inline __host__
-real get_mass_norm (const real *grain_size, real total_dust_mass)
+real get_mass_norm (const real *randsize, real total_dust_mass)
 {
     long double weight_sum = 0.0;
 
     for (int idx = 0; idx < N_P; idx++)
     {
-        weight_sum += static_cast<long double>(_get_mass_weight(grain_size[idx]));
+        weight_sum += static_cast<long double>(_get_mass_weight(randsize[idx]));
     }
 
     return static_cast<real>(
@@ -62,19 +62,19 @@ real get_mass_norm (const real *grain_size, real total_dust_mass)
 }
 #endif // MULTISIZE
 
-// sample a probability density proportional to p raised to idx_pow
+// sample a probability density proportional to p raised to power_idx
 inline __host__
-void rand_powerlaw (real *profile, int number, real p_min, real p_max, real idx_pow)
+void rand_powerlaw (real *randsize, int number, real p_min, real p_max, real power_idx)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
-    real tmp_min = std::pow(p_min, idx_pow + 1.0);
-    real tmp_max = std::pow(p_max, idx_pow + 1.0);
+    real tmp_min = std::pow(p_min, power_idx + 1.0);
+    real tmp_max = std::pow(p_max, power_idx + 1.0);
 
-    // invert the cumulative distribution for dN proportional to p^idx_pow dp
-    for (int i = 0; i < number; i++)
+    // invert the cumulative distribution for dN proportional to p^power_idx dp
+    for (int idx = 0; idx < number; idx++)
     {
-        profile[i] = std::pow((tmp_max - tmp_min)*random(rand_generator) + tmp_min, 1.0 / (idx_pow + 1.0));
+        randsize[idx] = std::pow((tmp_max - tmp_min)*random(rand_generator) + tmp_min, 1.0 / (power_idx + 1.0));
     }
 }
 
@@ -84,58 +84,58 @@ void rand_powerlaw (real *profile, int number, real p_min, real p_max, real idx_
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
 inline static __host__
-void _get_initdens_profile (std::vector <real> &sigma_profile)
+void _get_initdens_profile (std::vector <real> &sigma_d_profile)
 {
     const real smooth = 0.05*R_0;
-    const real src_min = Y_MIN + 2.0*smooth;
-    const real src_max = Y_MAX - 2.0*smooth;
-    const real sigma_kernel = 0.5*smooth;
-    const real du = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
-    const real norm = 1.0 / (std::sqrt(2.0*M_PI)*sigma_kernel);
+    const real R_src_min = Y_MIN + 2.0*smooth;
+    const real R_src_max = Y_MAX - 2.0*smooth;
+    const real kernel_std = 0.5*smooth;
+    const real dR = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
+    const real kernel_norm = 1.0 / (std::sqrt(2.0*M_PI)*kernel_std);
 
     std::vector <real> R_axis(N_Y + 1);
-    sigma_profile.assign(N_Y + 1, 0.0);
+    sigma_d_profile.assign(N_Y + 1, 0.0);
 
-    for (int iu = 0; iu <= N_Y; iu++)
+    for (int idx_R = 0; idx_R <= N_Y; idx_R++)
     {
-        R_axis[iu] = Y_MIN + static_cast<real>(iu)*du;
+        R_axis[idx_R] = Y_MIN + static_cast<real>(idx_R)*dR;
     }
 
-    for (int is = 0; is <= N_Y; is++)
+    for (int idx_src = 0; idx_src <= N_Y; idx_src++)
     {
-        real R_src = R_axis[is];
-        if (R_src < src_min || R_src > src_max) continue;
+        real R_src = R_axis[idx_src];
+        if (R_src < R_src_min || R_src > R_src_max) continue;
 
         real sigma_d = METAL_Z*SIGMA_0*std::pow(R_src / R_0, IDX_P);
 
-        for (int iu = 0; iu <= N_Y; iu++)
+        for (int idx_R = 0; idx_R <= N_Y; idx_R++)
         {
-            real delta_R = R_axis[iu] - R_src;
-            real kernel = norm*std::exp(-0.5*delta_R*delta_R / (sigma_kernel*sigma_kernel));
-            sigma_profile[iu] += sigma_d*kernel*du;
+            real delta_R = R_axis[idx_R] - R_src;
+            real kernel_weight = kernel_norm*std::exp(-0.5*delta_R*delta_R / (kernel_std*kernel_std));
+            sigma_d_profile[idx_R] += sigma_d*kernel_weight*dR;
         }
     }
 }
 
 // interpolate a tabulated convolved profile on its uniform axis
 inline static __host__
-real _interp_convpow_profile (real x, const std::vector <real> &profile, real x_min, real x_max)
+real _interp_convpow_profile (real R, const std::vector <real> &profile, real R_min, real R_max)
 {
-    if (x < x_min || x > x_max) return 0.0;
+    if (R < R_min || R > R_max) return 0.0;
 
     int bins = static_cast<int>(profile.size()) - 1;
-    real loc = (x - x_min)*static_cast<real>(bins) / (x_max - x_min);
-    int idx = std::min(static_cast<int>(loc), bins - 1);
-    real frac = loc - static_cast<real>(idx);
+    real loc = (R - R_min)*static_cast<real>(bins) / (R_max - R_min);
+    int idx_bin = std::min(static_cast<int>(loc), bins - 1);
+    real frac = loc - static_cast<real>(idx_bin);
 
-    return (1.0 - frac)*profile[idx] + frac*profile[idx + 1];
+    return (1.0 - frac)*profile[idx_bin] + frac*profile[idx_bin + 1];
 }
 
 // evaluate the physical initialized dust density for one cylindrical position and grain size
 inline static __host__
-real _get_init_density (real sigma, real R, real Z, real size)
+real _get_init_density (real sigma_d, real R, real Z, real size)
 {
-    if (N_Z == 1 || sigma <= 0.0) return sigma;
+    if (N_Z == 1 || sigma_d <= 0.0) return sigma_d;
 
     real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
     real H_d = h_g*R;
@@ -150,17 +150,17 @@ real _get_init_density (real sigma, real R, real Z, real size)
     H_d *= std::sqrt(alpha_z / stokes_mid);
     #endif // DIFFUSION
 
-    return sigma*std::exp(-0.5*Z*Z / (H_d*H_d)) / (std::sqrt(2.0*M_PI)*H_d);
+    return sigma_d*std::exp(-0.5*Z*Z / (H_d*H_d)) / (std::sqrt(2.0*M_PI)*H_d);
 }
 
 // integrate the initialized profile to obtain the total dust mass represented by the simulation domain
 inline __host__
 real get_total_dust_mass ()
 {
-    std::vector <real> sigma_profile;
-    _get_initdens_profile(sigma_profile);
+    std::vector <real> sigma_d_profile;
+    _get_initdens_profile(sigma_d_profile);
 
-    real vol_x = (N_X > 1) ? X_MAX - X_MIN : 2.0*M_PI;
+    real vol_x = _get_vol_x();
     real total_dust_mass = 0.0;
 
     for (int iz = 0; iz < N_Z; iz++)
@@ -174,11 +174,11 @@ real get_total_dust_mass ()
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
 
-            real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
-            real density = _get_init_density(sigma, R, Z, S_0);
+            real sigma_d = _interp_convpow_profile(R, sigma_d_profile, Y_MIN, Y_MAX);
+            real rhod = _get_init_density(sigma_d, R, Z, S_0);
             real vol_y = _get_vol_y(iy);
 
-            total_dust_mass += density*vol_x*vol_y*vol_z;
+            total_dust_mass += rhod*vol_x*vol_y*vol_z;
         }
     }
 
@@ -194,12 +194,12 @@ real get_total_dust_mass ()
 // draw y and z together because R = y sin(z) and Z = y cos(z) jointly determine radial and vertical dust density
 // when diffusion is enabled use size to calculate the Stokes-dependent scale height before drawing the shared cell
 inline __host__
-void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int number)
+void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, int number)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
-    std::vector <real> sigma_profile;
-    _get_initdens_profile(sigma_profile);
+    std::vector <real> sigma_d_profile;
+    _get_initdens_profile(sigma_d_profile);
 
     real mesh_dim = _get_mesh_dim();
 
@@ -218,14 +218,14 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
 
-            real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
-            real density = _get_init_density(sigma, R, Z, size);
+            real sigma_d = _interp_convpow_profile(R, sigma_d_profile, Y_MIN, Y_MAX);
+            real rhod = _get_init_density(sigma_d, R, Z, size);
 
             real vol_y = _get_vol_y(iy);
-            int idx = iy + iz*N_Y;
+            int idx_cell = iy + iz*N_Y;
 
-            cell_mass[idx] = density*vol_y*vol_z;
-            cdf[idx + 1] = cdf[idx] + cell_mass[idx];
+            cell_mass[idx_cell] = rhod*vol_y*vol_z;
+            cdf[idx_cell + 1] = cdf[idx_cell] + cell_mass[idx_cell];
         }
     }
 
@@ -248,21 +248,22 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
         z_face_s[iz] = _get_s_z(_get_zedge(iz));
     }
 
-    for (int i = 0; i < number; i++)
+    for (int idx = 0; idx < number; idx++)
     {
-        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), random(rand_generator));
+        real cdf_sample = random(rand_generator);
+        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), cdf_sample);
         int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
         int iy = idx_cell % N_Y;
         int iz = idx_cell / N_Y;
 
-        pos_x[i] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
+        randposx[idx] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
 
         // sample uniformly in the exact radial and polar volume coordinates inside the chosen cell
         real s_y0 = y_face_s[iy];
         real s_y1 = y_face_s[iy + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
 
-        pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
+        randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
 
         if (N_Z > 1)
         {
@@ -270,11 +271,11 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
             real s_z1 = z_face_s[iz + 1];
             real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
 
-            pos_z[i] = std::acos(-s_z);
+            randposz[idx] = std::acos(-s_z);
         }
         else
         {
-            pos_z[i] = 0.5*M_PI;
+            randposz[idx] = 0.5*M_PI;
         }
     }
 }
@@ -282,7 +283,7 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
 #if defined(MULTISIZE) && defined(DIFFUSION)
 // precompute one normalized spatial CDF for a selected grain size
 inline static __host__
-void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_profile, real size)
+void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_d_profile, real size)
 {
     int cells = N_Y*N_Z;
     real log_zero = -std::numeric_limits<real>::infinity();
@@ -299,10 +300,10 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
             real yc = _get_ycent(iy);
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
-            real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
-            real log_density = (sigma > 0.0) ? std::log(sigma) : log_zero;
+            real sigma_d = _interp_convpow_profile(R, sigma_d_profile, Y_MIN, Y_MAX);
+            real log_rhod = (sigma_d > 0.0) ? std::log(sigma_d) : log_zero;
 
-            if (N_Z > 1 && sigma > 0.0)
+            if (N_Z > 1 && sigma_d > 0.0)
             {
                 real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
                 real H_g = h_g*R;
@@ -316,13 +317,13 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
 
                 real H_d = H_g*std::sqrt(alpha_z / stokes_mid);
 
-                log_density -= 0.5*Z*Z / (H_d*H_d);
-                log_density -= std::log(H_d);
+                log_rhod -= 0.5*Z*Z / (H_d*H_d);
+                log_rhod -= std::log(H_d);
             }
 
             real vol_y = _get_vol_y(iy);
-            int idx = iy + iz*N_Y;
-            if (sigma > 0.0) log_mass[idx] = log_density + std::log(vol_y) + std::log(vol_z);
+            int idx_cell = iy + iz*N_Y;
+            if (sigma_d > 0.0) log_mass[idx_cell] = log_rhod + std::log(vol_y) + std::log(vol_z);
         }
     }
 
@@ -343,15 +344,15 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
 // sample polydisperse dust from the joint y-z distribution conditioned on each previously assigned grain size
 // interpolate log-size CDFs because size changes the Stokes number and therefore the coupled vertical distribution
 inline __host__
-void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size, int number)
+void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real *randsize, int number)
 {
-    auto [size_min_ptr, size_max_ptr] = std::minmax_element(par_size, par_size + number);
+    auto [size_min_ptr, size_max_ptr] = std::minmax_element(randsize, randsize + number);
     real size_min = *size_min_ptr;
     real size_max = *size_max_ptr;
 
     if (N_Z == 1 || size_min == size_max)
     {
-        rand_disk_mono(pos_x, pos_y, pos_z, size_min, number);
+        rand_disk_mono(randposx, randposy, randposz, size_min, number);
         return;
     }
 
@@ -362,16 +363,16 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
     real log_size_max = std::log(size_max);
     real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bins - 1);
 
-    std::vector <real> sigma_profile;
-    _get_initdens_profile(sigma_profile);
+    std::vector <real> sigma_d_profile;
+    _get_initdens_profile(sigma_d_profile);
 
     std::vector <real> cdf;
     std::vector <real> cdf_bank(static_cast<size_t>(size_bins)*static_cast<size_t>(cells + 1));
-    for (int is = 0; is < size_bins; is++)
+    for (int idx_size = 0; idx_size < size_bins; idx_size++)
     {
-        real size = std::exp(log_size_min + static_cast<real>(is)*dlog_size);
-        _get_disk_cdf(cdf, sigma_profile, size);
-        std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(is)*static_cast<size_t>(cells + 1));
+        real size = std::exp(log_size_min + static_cast<real>(idx_size)*dlog_size);
+        _get_disk_cdf(cdf, sigma_d_profile, size);
+        std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(idx_size)*static_cast<size_t>(cells + 1));
     }
 
     real mesh_dim = _get_mesh_dim();
@@ -389,22 +390,22 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         z_face_s[iz] = _get_s_z(_get_zedge(iz));
     }
 
-    for (int i = 0; i < number; i++)
+    for (int idx = 0; idx < number; idx++)
     {
-        real loc_size = (std::log(par_size[i]) - log_size_min) / dlog_size;
+        real loc_size = (std::log(randsize[idx]) - log_size_min) / dlog_size;
         int size_lo = std::min(static_cast<int>(loc_size), size_bins - 2);
         real frac_size = loc_size - static_cast<real>(size_lo);
         const real *cdf_lo = cdf_bank.data() + static_cast<size_t>(size_lo)*static_cast<size_t>(cells + 1);
         const real *cdf_hi = cdf_lo + cells + 1;
 
-        real sample = random(rand_generator);
+        real cdf_sample = random(rand_generator);
         int idx_lo = 0;
         int idx_hi = cells;
         while (idx_lo < idx_hi)
         {
             int idx_mid = idx_lo + (idx_hi - idx_lo) / 2;
             real prob_mid = (1.0 - frac_size)*cdf_lo[idx_mid] + frac_size*cdf_hi[idx_mid];
-            if (prob_mid < sample) idx_lo = idx_mid + 1;
+            if (prob_mid < cdf_sample) idx_lo = idx_mid + 1;
             else idx_hi = idx_mid;
         }
 
@@ -412,19 +413,19 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         int iy = idx_cell % N_Y;
         int iz = idx_cell / N_Y;
 
-        pos_x[i] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
+        randposx[idx] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
 
         real s_y0 = y_face_s[iy];
         real s_y1 = y_face_s[iy + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
         
-        pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
+        randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
 
         real s_z0 = z_face_s[iz];
         real s_z1 = z_face_s[iz + 1];
         real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
         
-        pos_z[i] = std::acos(-s_z);
+        randposz[idx] = std::acos(-s_z);
     }
 }
 #endif // MULTISIZE && DIFFUSION
@@ -462,13 +463,13 @@ real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
 
 // sample the analytic initial distribution used by the linear-kernel collision test
 inline __host__
-void rand_gamma_k2 (real *profile, int number)
+void rand_gamma_k2 (real *randsize, int number)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
-    for (int i = 0; i < number; i++)
+    for (int idx = 0; idx < number; idx++)
     {
-        profile[i] = -(_get_lambertW_m1((random(rand_generator) - 1.0) / std::exp(1.0)) + 1.0);
+        randsize[idx] = -(_get_lambertW_m1((random(rand_generator) - 1.0) / std::exp(1.0)) + 1.0);
     }
 }
 #endif // COLLISION
@@ -480,7 +481,7 @@ void rand_gamma_k2 (real *profile, int number)
 #ifdef IMPORTGAS
 // sample positions from imported gas density times dust-to-gas ratio and exact cell measure
 inline __host__
-void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const real *gas_dens, const real *epsilon)
+void rand_from_file (real *randposx, real *randposy, real *randposz, int number, const real *gas_dens, const real *epsilon)
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
     
@@ -490,22 +491,22 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     std::vector <real> cell_mass(N_G);
     real total_mass = 0.0;
     
-    for (int idx_z = 0; idx_z < N_Z; idx_z++)
+    for (int iz = 0; iz < N_Z; iz++)
     {
-        real vol_z = _get_vol_z(idx_z);
-        
-        for (int idx_y = 0; idx_y < N_Y; idx_y++)
+        real vol_z = _get_vol_z(iz);
+
+        for (int iy = 0; iy < N_Y; iy++)
         {
-            real vol_y = _get_vol_y(idx_y);
-            
-            for (int idx_x = 0; idx_x < N_X; idx_x++)
+            real vol_y = _get_vol_y(iy);
+
+            for (int ix = 0; ix < N_X; ix++)
             {
                 real vol_x = _get_vol_x();
-                real cell_volume = vol_x*vol_y*vol_z;
-                
-                int idx = idx_x + idx_y*N_X + idx_z*N_X*N_Y;
-                cell_mass[idx] = gas_dens[idx]*epsilon[idx]*cell_volume;
-                total_mass += cell_mass[idx];
+                real cell_measure = vol_x*vol_y*vol_z;
+
+                int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                cell_mass[idx_cell] = gas_dens[idx_cell]*epsilon[idx_cell]*cell_measure;
+                total_mass += cell_mass[idx_cell];
             }
         }
     }
@@ -526,49 +527,49 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     }
 
     std::vector<real> y_face_s(N_Y + 1);
-    for (int idx_y = 0; idx_y <= N_Y; idx_y++)
+    for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[idx_y] = _get_s_y(_get_yedge(idx_y));
+        y_face_s[iy] = _get_s_y(_get_yedge(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
-    for (int idx_z = 0; idx_z <= N_Z; idx_z++)
+    for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[idx_z] = _get_s_z(_get_zedge(idx_z));
+        z_face_s[iz] = _get_s_z(_get_zedge(iz));
     }
     
     // select cells by inverse transform sampling
-    for (int i = 0; i < number; i++)
+    for (int idx = 0; idx < number; idx++)
     {
-        real u_sample = random(rand_generator);
+        real cdf_sample = random(rand_generator);
         
         // locate the cell containing the sampled cumulative probability
-        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), u_sample);
+        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), cdf_sample);
         int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
         
-        int idx_x = idx_cell % N_X;
-        int idx_y = (idx_cell / N_X) % N_Y;
-        int idx_z = idx_cell / (N_X*N_Y);
+        int ix = idx_cell % N_X;
+        int iy = (idx_cell / N_X) % N_Y;
+        int iz = idx_cell / (N_X*N_Y);
         
         // sample logarithmic radial cells uniformly in the exact radial volume coordinate
-        real s_y0 = y_face_s[idx_y];
-        real s_y1 = y_face_s[idx_y + 1];
+        real s_y0 = y_face_s[iy];
+        real s_y1 = y_face_s[iy + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
 
         // sample active azimuth uniformly within the selected cell and lock an inactive azimuth
-        pos_x[i] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(idx_x) + random(rand_generator)) : 0.5*(X_MIN + X_MAX);
-        pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
+        randposx[idx] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(ix) + random(rand_generator)) : 0.5*(X_MIN + X_MAX);
+        randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
         if (N_Z > 1)
         {
-            real s_z0 = z_face_s[idx_z];
-            real s_z1 = z_face_s[idx_z + 1];
+            real s_z0 = z_face_s[iz];
+            real s_z1 = z_face_s[iz + 1];
             real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
             
-            pos_z[i] = std::acos(-s_z);
+            randposz[idx] = std::acos(-s_z);
         }
         else
         {
-            pos_z[i] = 0.5*M_PI;
+            randposz[idx] = 0.5*M_PI;
         }
     }
 }
@@ -610,11 +611,11 @@ do {                                                                            
 
 // calculate a nonnegative integer power without floating-point roundoff
 inline __host__
-real int_pow (int base, int exp)
+real int_pow (int base, int power)
 {
     real result = 1.0;
 
-    for (int i = 0; i < exp; i++)
+    for (int i = 0; i < power; i++)
     {
         result *= static_cast<real>(base);
     }
@@ -770,9 +771,9 @@ void load_velocity_as_sam (swarm *particle)
 
 // format a frame index with the zero padding used by binary output files
 inline __host__
-std::string frame_num (int number)
+std::string frame_num (int idx_file)
 {
-    std::string str = std::to_string(number);
+    std::string str = std::to_string(idx_file);
     int length = std::max(5, static_cast<int>(std::to_string(SAVE_MAX).length()));
     if (str.length() < length) str.insert(0, length - str.length(), '0');
     return str;
@@ -822,28 +823,28 @@ bool is_log_power (int idx_file)
 inline __host__
 bool load_epsilon (const std::string &path, int idx_file, real *epsilon)
 {
-    std::string fname = path + "epsilon_" + frame_num(idx_file) + ".dat";
-    return load_host_binary(fname, epsilon, N_G);
+    std::string file_name = path + "epsilon_" + frame_num(idx_file) + ".dat";
+    return load_host_binary(file_name, epsilon, N_G);
 }
 
 // load density and all three linear velocity components for one gas frame
 inline __host__
 bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real *gas_velx, real *gas_vely, real *gas_velz)
 {
-    std::string fname;
+    std::string file_name;
     bool success = true;
     
-    fname = path + "gasdens_" + frame_num(idx_file) + ".dat";
-    success &= load_host_binary(fname, gas_dens, N_G);
+    file_name = path + "gasdens_" + frame_num(idx_file) + ".dat";
+    success &= load_host_binary(file_name, gas_dens, N_G);
     
-    fname = path + "gasvelx_" + frame_num(idx_file) + ".dat";
-    success &= load_host_binary(fname, gas_velx, N_G);
+    file_name = path + "gasvelx_" + frame_num(idx_file) + ".dat";
+    success &= load_host_binary(file_name, gas_velx, N_G);
     
-    fname = path + "gasvely_" + frame_num(idx_file) + ".dat";
-    success &= load_host_binary(fname, gas_vely, N_G);
+    file_name = path + "gasvely_" + frame_num(idx_file) + ".dat";
+    success &= load_host_binary(file_name, gas_vely, N_G);
     
-    fname = path + "gasvelz_" + frame_num(idx_file) + ".dat";
-    success &= load_host_binary(fname, gas_velz, N_G);
+    file_name = path + "gasvelz_" + frame_num(idx_file) + ".dat";
+    success &= load_host_binary(file_name, gas_velz, N_G);
     
     return success;
 }
@@ -984,18 +985,18 @@ bool save_particle_data (const std::string &path, int idx_file, swarm *particle,
     CUDA_CHECK(cudaMemcpy(particle, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost));
     save_sam_as_velocity(particle);
 
-    std::string fname = path + "particle_" + frame_num(idx_file) + ".dat";
-    if (!save_host_binary(fname, particle, N_P))
+    std::string file_name = path + "particle_" + frame_num(idx_file) + ".dat";
+    if (!save_host_binary(file_name, particle, N_P))
     {
-        std::cerr << "Error: Failed to save file: " << fname << std::endl;
+        std::cerr << "Error: Failed to save file: " << file_name << std::endl;
         return false;
     }
 
     #if defined(COLLISION) || defined(DIFFUSION)
-    fname = path + "rngstate_" + frame_num(idx_file) + ".dat";
-    if (!save_device_binary(fname, dev_rngstate, N_P))
+    file_name = path + "rngstate_" + frame_num(idx_file) + ".dat";
+    if (!save_device_binary(file_name, dev_rngstate, N_P))
     {
-        std::cerr << "Error: Failed to save file: " << fname << std::endl;
+        std::cerr << "Error: Failed to save file: " << file_name << std::endl;
         return false;
     }
     #endif // COLLISION || DIFFUSION
@@ -1011,10 +1012,10 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
     #endif // COLLISION || DIFFUSION
 )
 {
-    std::string fname = path + "particle_" + frame_num(idx_file) + ".dat";
-    if (!load_host_binary(fname, particle, N_P))
+    std::string file_name = path + "particle_" + frame_num(idx_file) + ".dat";
+    if (!load_host_binary(file_name, particle, N_P))
     {
-        std::cerr << "Error: Failed to load file: " << fname << std::endl;
+        std::cerr << "Error: Failed to load file: " << file_name << std::endl;
         return false;
     }
 
@@ -1030,10 +1031,10 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
     CUDA_CHECK(cudaMemcpy(dev_particle, particle, sizeof(swarm)*N_P, cudaMemcpyHostToDevice));
 
     #if defined(COLLISION) || defined(DIFFUSION)
-    fname = path + "rngstate_" + frame_num(idx_file) + ".dat";
-    if (!load_device_binary(fname, dev_rngstate, N_P))
+    file_name = path + "rngstate_" + frame_num(idx_file) + ".dat";
+    if (!load_device_binary(file_name, dev_rngstate, N_P))
     {
-        std::cerr << "Error: Failed to load file: " << fname << std::endl;
+        std::cerr << "Error: Failed to load file: " << file_name << std::endl;
         return false;
     }
     #endif // COLLISION || DIFFUSION
@@ -1042,31 +1043,31 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
 }
 
 #if defined(COLLISION) || defined(DIFFUSION)
-#define SAVE_PARTICLE_TO_FILE(idx)                                                          \
+#define SAVE_PARTICLE_TO_FILE(idx_file)                                                     \
 do {                                                                                        \
-    if (!save_particle_data(PATH, idx, particle, dev_particle, dev_rngstate)) return 1;     \
+    if (!save_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) return 1; \
 } while(0)
-#define LOAD_PARTICLE_TO_VRAM(idx)                                                          \
+#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                     \
 do {                                                                                        \
-    if (!load_particle_data(PATH, idx, particle, dev_particle, dev_rngstate)) return 1;     \
+    if (!load_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) return 1; \
 } while(0)
 #else  // NO COLLISION OR DIFFUSION
-#define SAVE_PARTICLE_TO_FILE(idx)                                                          \
+#define SAVE_PARTICLE_TO_FILE(idx_file)                                                     \
 do {                                                                                        \
-    if (!save_particle_data(PATH, idx, particle, dev_particle)) return 1;                   \
+    if (!save_particle_data(PATH, idx_file, particle, dev_particle)) return 1;              \
 } while(0)
-#define LOAD_PARTICLE_TO_VRAM(idx)                                                          \
+#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                     \
 do {                                                                                        \
-    if (!load_particle_data(PATH, idx, particle, dev_particle)) return 1;                   \
+    if (!load_particle_data(PATH, idx_file, particle, dev_particle)) return 1;              \
 } while(0)
 #endif // COLLISION || DIFFUSION
 
 #ifdef IMPORTGAS
-#define LOAD_GAS_DATA_TO_VRAM(idx)                                                          \
+#define LOAD_GAS_DATA_TO_VRAM(idx_file)                                                     \
 do {                                                                                        \
-    if (!load_gas_data(PATH, idx, gas_dens, gas_velx, gas_vely, gas_velz))                      \
+    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))             \
     {                                                                                       \
-        std::cerr << "Error: Failed to load gas data files for frame " << idx << std::endl; \
+        std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
         return 1;                                                                           \
     }                                                                                       \
     CUDA_CHECK(cudaMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, cudaMemcpyHostToDevice));             \
@@ -1075,11 +1076,11 @@ do {                                                                            
     CUDA_CHECK(cudaMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, cudaMemcpyHostToDevice));             \
 } while(0)
 
-#define LOAD_GAS_NEXT_TO_VRAM(idx)                                                          \
+#define LOAD_GAS_NEXT_TO_VRAM(idx_file)                                                     \
 do {                                                                                        \
-    if (!load_gas_data(PATH, idx, gas_dens, gas_velx, gas_vely, gas_velz))                      \
+    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))             \
     {                                                                                       \
-        std::cerr << "Error: Failed to load gas data files for frame " << idx << std::endl; \
+        std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
         return 1;                                                                           \
     }                                                                                       \
     CUDA_CHECK(cudaMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, cudaMemcpyHostToDevice));        \
@@ -1090,7 +1091,7 @@ do {                                                                            
 #endif // IMPORTGAS
 
 #ifdef SAVE_DENS
-#define SAVE_DUSTDENS_TO_FILE(idx)                                                          \
+#define SAVE_DUSTDENS_TO_FILE(idx_file)                                                     \
 do {                                                                                        \
     dustdens_init <<< NB_G, TPB >>> (dev_dustdens);                                         \
     CUDA_KERNEL_CHECK("dustdens_init");                                                     \
@@ -1099,17 +1100,17 @@ do {                                                                            
     dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);                                         \
     CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
     CUDA_CHECK(cudaMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost));           \
-    std::string fname = PATH + "dustdens_" + frame_num(idx) + ".dat";                       \
-    if (!save_host_binary(fname, dustdens, N_G))                                            \
+    std::string file_name = PATH + "dustdens_" + frame_num(idx_file) + ".dat";              \
+    if (!save_host_binary(file_name, dustdens, N_G))                                        \
     {                                                                                       \
-        std::cerr << "Error: Failed to save file: " << fname << std::endl;                  \
+        std::cerr << "Error: Failed to save file: " << file_name << std::endl;              \
         return 1;                                                                           \
     }                                                                                       \
 } while(0)
 #endif // SAVE_DENS
 
 #ifdef RADIATION
-#define SAVE_OPTDEPTH_TO_FILE(idx, do_avg)                                                  \
+#define SAVE_OPTDEPTH_TO_FILE(idx_file, do_avg)                                             \
 do {                                                                                        \
     optdepth_init <<< NB_G, TPB >>> (dev_optdepth);                                         \
     CUDA_KERNEL_CHECK("optdepth_init");                                                     \
@@ -1125,10 +1126,10 @@ do {                                                                            
         CUDA_KERNEL_CHECK("optdepth_mean");                                                 \
     }                                                                                       \
     CUDA_CHECK(cudaMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, cudaMemcpyDeviceToHost));           \
-    std::string fname = PATH + "optdepth_" + frame_num(idx) + ".dat";                       \
-    if (!save_host_binary(fname, optdepth, N_G))                                            \
+    std::string file_name = PATH + "optdepth_" + frame_num(idx_file) + ".dat";              \
+    if (!save_host_binary(file_name, optdepth, N_G))                                        \
     {                                                                                       \
-        std::cerr << "Error: Failed to save file: " << fname << std::endl;                  \
+        std::cerr << "Error: Failed to save file: " << file_name << std::endl;              \
         return 1;                                                                           \
     }                                                                                       \
 } while(0)
