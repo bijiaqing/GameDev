@@ -17,26 +17,26 @@
 
 __global__
 void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
-    const real *dev_weight_y, real dt)
+    const real *dev_ppm_weight_y, real dt)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_X*N_Z) return;
+    int idx_col = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_col >= N_X*N_Z) return;
 
-    int ix = idx % N_X;
-    int iz = idx / N_X;
+    int ix = idx_col % N_X;
+    int iz = idx_col / N_X;
 
-    real zc = _get_zcent(iz);
+    real z = _get_zcent(iz);
 
     // load one radial column from global memory
     real dens[N_Y], mx[N_Y], my[N_Y], mz[N_Y];
     for (int iy = 0; iy < N_Y; iy++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        dens[iy] = dev_dustdens[ic];
-        mx[iy] = dev_dustmomx[ic];
-        my[iy] = dev_dustmomy[ic];
-        mz[iy] = dev_dustmomz[ic];
+        dens[iy] = dev_dustdens[idx_cell];
+        mx[iy] = dev_dustmomx[idx_cell];
+        my[iy] = dev_dustmomy[idx_cell];
+        mz[iy] = dev_dustmomz[idx_cell];
     }
 
     // advance three forward-Euler operator evaluations for SSPRK(3,3)
@@ -46,19 +46,19 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         real lx[N_Y], vy[N_Y], lz[N_Y];
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real yc = _get_ycent(iy);
-            real Rc = yc*sin(zc);
+            real y = _get_ycent(iy);
+            real R = y*sin(z);
 
-            _recover_dust_state(dens[iy], Rc, mx[iy], my[iy], mz[iy], lx[iy], vy[iy], lz[iy]);
+            _recover_dust_state(dens[iy], R, mx[iy], my[iy], mz[iy], lx[iy], vy[iy], lz[iy]);
         }
 
         // reconstruct PPM face values in the radial finite-volume coordinate
-        real edge_dens[N_Y + 1], edge_lx[N_Y + 1], edge_vy[N_Y + 1], edge_lz[N_Y + 1];
+        real face_dens[N_Y + 1], face_lx[N_Y + 1], face_vy[N_Y + 1], face_lz[N_Y + 1];
 
-        _ppm_edges_nonuniform(dens, dev_weight_y, edge_dens, N_Y);
-        _ppm_edges_nonuniform(lx, dev_weight_y, edge_lx, N_Y);
-        _ppm_edges_nonuniform(vy, dev_weight_y, edge_vy, N_Y);
-        _ppm_edges_nonuniform(lz, dev_weight_y, edge_lz, N_Y);
+        _ppm_faces_nonuniform(dens, dev_ppm_weight_y, face_dens, N_Y);
+        _ppm_faces_nonuniform(lx, dev_ppm_weight_y, face_lx, N_Y);
+        _ppm_faces_nonuniform(vy, dev_ppm_weight_y, face_vy, N_Y);
+        _ppm_faces_nonuniform(lz, dev_ppm_weight_y, face_lz, N_Y);
 
         // compute interior face fluxes and the outflow-only outer boundary flux
         real flux_dens[N_Y], flux_mx[N_Y], flux_my[N_Y], flux_mz[N_Y];
@@ -74,21 +74,21 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_mx[iy] = flux_dens[iy]*lx[iy];
                 flux_my[iy] = flux_dens[iy]*vy[iy];
                 flux_mz[iy] = flux_dens[iy]*lz[iy];
-                edge_dens[iy] = edge_lx[iy] = edge_vy[iy] = edge_lz[iy] = 0.0;
+                face_dens[iy] = face_lx[iy] = face_vy[iy] = face_lz[iy] = 0.0;
 
                 continue;
             }
 
             // reconstruct high-order PPM states at the interior radial face
             // use zero PPM tracing fraction because SSPRK supplies temporal integration
-            real dens_L = fmax(_ppm_face_value(edge_dens, dens, iy,     iy + 1, true,  0.0), 0.0);
-            real dens_R = fmax(_ppm_face_value(edge_dens, dens, iy + 1, iy + 2, false, 0.0), 0.0);
-            real lx_L =      _ppm_face_value(edge_lx, lx, iy,     iy + 1, true,  0.0);
-            real lx_R =      _ppm_face_value(edge_lx, lx, iy + 1, iy + 2, false, 0.0);
-            real vy_L =      _ppm_face_value(edge_vy, vy, iy,     iy + 1, true,  0.0);
-            real vy_R =      _ppm_face_value(edge_vy, vy, iy + 1, iy + 2, false, 0.0);
-            real lz_L =      _ppm_face_value(edge_lz, lz, iy,     iy + 1, true,  0.0);
-            real lz_R =      _ppm_face_value(edge_lz, lz, iy + 1, iy + 2, false, 0.0);
+            real dens_L = fmax(_ppm_face_value(face_dens, dens, iy,     iy + 1, true,  0.0), 0.0);
+            real dens_R = fmax(_ppm_face_value(face_dens, dens, iy + 1, iy + 2, false, 0.0), 0.0);
+            real lx_L =      _ppm_face_value(face_lx, lx, iy,     iy + 1, true,  0.0);
+            real lx_R =      _ppm_face_value(face_lx, lx, iy + 1, iy + 2, false, 0.0);
+            real vy_L =      _ppm_face_value(face_vy, vy, iy,     iy + 1, true,  0.0);
+            real vy_R =      _ppm_face_value(face_vy, vy, iy + 1, iy + 2, false, 0.0);
+            real lz_L =      _ppm_face_value(face_lz, lz, iy,     iy + 1, true,  0.0);
+            real lz_R =      _ppm_face_value(face_lz, lz, iy + 1, iy + 2, false, 0.0);
 
             _pressureless_hll_flux(
                 vy_L, vy_R,
@@ -107,10 +107,10 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             );
 
             // retain low-order fluxes and store high-minus-low differences for the antidiffusive correction
-            edge_dens[iy] = flux_dens[iy] - flux_dens_low;
-            edge_lx[iy] = flux_mx[iy] - flux_mx_low;
-            edge_vy[iy] = flux_my[iy] - flux_my_low;
-            edge_lz[iy] = flux_mz[iy] - flux_mz_low;
+            face_dens[iy] = flux_dens[iy] - flux_dens_low;
+            face_lx[iy] = flux_mx[iy] - flux_mx_low;
+            face_vy[iy] = flux_my[iy] - flux_my_low;
+            face_lz[iy] = flux_mz[iy] - flux_mz_low;
             
             flux_dens[iy] = flux_dens_low;
             flux_mx[iy] = flux_mx_low;
@@ -161,14 +161,14 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             real vol_L = _get_vol_y(iy);
             real vol_R = _get_vol_y(iy + 1);
 
-            real corr_dens_L = -dt*area_f*edge_dens[iy] / vol_L;
-            real corr_mx_L = -dt*area_f*edge_lx[iy] / vol_L;
-            real corr_my_L = -dt*area_f*edge_vy[iy] / vol_L;
-            real corr_mz_L = -dt*area_f*edge_lz[iy] / vol_L;
-            real corr_dens_R =  dt*area_f*edge_dens[iy] / vol_R;
-            real corr_mx_R =  dt*area_f*edge_lx[iy] / vol_R;
-            real corr_my_R =  dt*area_f*edge_vy[iy] / vol_R;
-            real corr_mz_R =  dt*area_f*edge_lz[iy] / vol_R;
+            real corr_dens_L = -dt*area_f*face_dens[iy] / vol_L;
+            real corr_mx_L = -dt*area_f*face_lx[iy] / vol_L;
+            real corr_my_L = -dt*area_f*face_vy[iy] / vol_L;
+            real corr_mz_L = -dt*area_f*face_lz[iy] / vol_L;
+            real corr_dens_R =  dt*area_f*face_dens[iy] / vol_R;
+            real corr_mx_R =  dt*area_f*face_lx[iy] / vol_R;
+            real corr_my_R =  dt*area_f*face_vy[iy] / vol_R;
+            real corr_mz_R =  dt*area_f*face_lz[iy] / vol_R;
 
             real lx_min_L, lx_max_L, vy_min_L, vy_max_L, lz_min_L, lz_max_L;
             real lx_min_R, lx_max_R, vy_min_R, vy_max_R, lz_min_R, lz_max_R;
@@ -209,12 +209,12 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         {
             for (int iy = 0; iy < N_Y; iy++)
             {
-                int ic = ix + iy*N_X + iz*N_X*N_Y;
+                int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-                dens[iy] = 0.75*dev_dustdens[ic] + 0.25*dens[iy];
-                mx[iy] = 0.75*dev_dustmomx[ic] + 0.25*mx[iy];
-                my[iy] = 0.75*dev_dustmomy[ic] + 0.25*my[iy];
-                mz[iy] = 0.75*dev_dustmomz[ic] + 0.25*mz[iy];
+                dens[iy] = 0.75*dev_dustdens[idx_cell] + 0.25*dens[iy];
+                mx[iy] = 0.75*dev_dustmomx[idx_cell] + 0.25*mx[iy];
+                my[iy] = 0.75*dev_dustmomy[idx_cell] + 0.25*my[iy];
+                mz[iy] = 0.75*dev_dustmomz[idx_cell] + 0.25*mz[iy];
             }
         }
     }
@@ -222,11 +222,11 @@ void advect_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     // form the final SSPRK(3,3) combination and write the radial column to global memory
     for (int iy = 0; iy < N_Y; iy++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        dev_dustdens[ic] = (1.0/3.0)*dev_dustdens[ic] + (2.0/3.0)*dens[iy];
-        dev_dustmomx[ic] = (1.0/3.0)*dev_dustmomx[ic] + (2.0/3.0)*mx[iy];
-        dev_dustmomy[ic] = (1.0/3.0)*dev_dustmomy[ic] + (2.0/3.0)*my[iy];
-        dev_dustmomz[ic] = (1.0/3.0)*dev_dustmomz[ic] + (2.0/3.0)*mz[iy];
+        dev_dustdens[idx_cell] = (1.0/3.0)*dev_dustdens[idx_cell] + (2.0/3.0)*dens[iy];
+        dev_dustmomx[idx_cell] = (1.0/3.0)*dev_dustmomx[idx_cell] + (2.0/3.0)*mx[iy];
+        dev_dustmomy[idx_cell] = (1.0/3.0)*dev_dustmomy[idx_cell] + (2.0/3.0)*my[iy];
+        dev_dustmomz[idx_cell] = (1.0/3.0)*dev_dustmomz[idx_cell] + (2.0/3.0)*mz[iy];
     }
 }

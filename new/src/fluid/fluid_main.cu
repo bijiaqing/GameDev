@@ -35,24 +35,24 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_dustvelz, sizeof(real)*N_G));
     CUDA_CHECK(cudaMalloc((void**)&dev_dustmomz, sizeof(real)*N_G));
 
-    real *dev_cfl_rate;
-    CUDA_CHECK(cudaMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
+    real *dev_cfl_rates;
+    CUDA_CHECK(cudaMalloc((void**)&dev_cfl_rates, sizeof(real)*N_G));
 
-    int  *dev_badstate;
-    CUDA_CHECK(cudaMalloc((void**)&dev_badstate, sizeof(int)));
+    int  *dev_bad_cell;
+    CUDA_CHECK(cudaMalloc((void**)&dev_bad_cell, sizeof(int)));
 
-    real *dev_weight_y, *dev_weight_z;
-    CUDA_CHECK(cudaMalloc((void**)&dev_weight_y, sizeof(real)*4*(N_Y + 1)));
-    CUDA_CHECK(cudaMalloc((void**)&dev_weight_z, sizeof(real)*4*(N_Z + 1)));
+    real *dev_ppm_weight_y, *dev_ppm_weight_z;
+    CUDA_CHECK(cudaMalloc((void**)&dev_ppm_weight_y, sizeof(real)*4*(N_Y + 1)));
+    CUDA_CHECK(cudaMalloc((void**)&dev_ppm_weight_z, sizeof(real)*4*(N_Z + 1)));
 
-    std::vector<real> weight_y(4*(N_Y + 1));
-    std::vector<real> weight_z(4*(N_Z + 1));
+    std::vector<real> ppm_weight_y(4*(N_Y + 1));
+    std::vector<real> ppm_weight_z(4*(N_Z + 1));
 
     // precompute nonuniform PPM face weights and upload them once
-    ppm_geometry_weights_calc(weight_y.data(), weight_z.data());
+    ppm_geometry_weights_calc(ppm_weight_y.data(), ppm_weight_z.data());
 
-    CUDA_CHECK(cudaMemcpy(dev_weight_y, weight_y.data(), sizeof(real)*4*(N_Y + 1), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(dev_weight_z, weight_z.data(), sizeof(real)*4*(N_Z + 1), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(dev_ppm_weight_y, ppm_weight_y.data(), sizeof(real)*4*(N_Y + 1), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(real)*4*(N_Z + 1), cudaMemcpyHostToDevice));
 
     #ifdef RADIATION
     real *optdepth, *dev_optdepth;
@@ -63,21 +63,21 @@ int main (int argc, char **argv)
     // abort at the first cell containing a nonfinite evolved value
     auto validate_finite_state = [&]()
     {
-        CUDA_CHECK(cudaMemset(dev_badstate, 0, sizeof(int)));
+        CUDA_CHECK(cudaMemset(dev_bad_cell, 0, sizeof(int)));
         inf_cell_flag <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz,
             #ifdef RADIATION
             dev_optdepth,
             #endif
-            dev_badstate
+            dev_bad_cell
         );
         CUDA_KERNEL_CHECK("inf_cell_flag");
 
-        int badstate = 0;
-        CUDA_CHECK(cudaMemcpy(&badstate, dev_badstate, sizeof(int), cudaMemcpyDeviceToHost));
-        if (badstate != 0)
+        int bad_cell = 0;
+        CUDA_CHECK(cudaMemcpy(&bad_cell, dev_bad_cell, sizeof(int), cudaMemcpyDeviceToHost));
+        if (bad_cell != 0)
         {
-            int idx_bad = badstate - 1;
+            int idx_bad = bad_cell - 1;
             int ix_bad = idx_bad % N_X;
             int iy_bad = (idx_bad / N_X) % N_Y;
             int iz_bad = idx_bad / (N_X * N_Y);
@@ -209,13 +209,13 @@ int main (int argc, char **argv)
     auto recalc_dt_cfl = [&](bool verbose)
     {
         cfl_rate_calc <<< NB_X, TPB >>> (
-            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+            dev_cfl_rates, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         CUDA_KERNEL_CHECK("cfl_rate_calc");
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        return get_dt_cfl(dev_cfl_rate, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
+        return get_dt_cfl(dev_cfl_rates, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
     };
 
     // advance each directional transport operator with fresh CFL-limited substeps
@@ -244,7 +244,7 @@ int main (int argc, char **argv)
             real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
 
             advect_y_calc <<< NB_Y, TPB >>> (
-                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dt_sub
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dt_sub
             );
             CUDA_KERNEL_CHECK("advect_y_calc");
 
@@ -261,7 +261,7 @@ int main (int argc, char **argv)
             real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
 
             advect_z_calc <<< NB_Z, TPB >>> (
-                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dt_sub
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt_sub
             );
             CUDA_KERNEL_CHECK("advect_z_calc");
 
@@ -417,10 +417,10 @@ int main (int argc, char **argv)
     // release all persistent host and device allocations
     CUDA_CHECK(cudaFreeHost(dustdens));
     CUDA_CHECK(cudaFree(dev_dustdens));
-    CUDA_CHECK(cudaFree(dev_cfl_rate));
-    CUDA_CHECK(cudaFree(dev_badstate));
-    CUDA_CHECK(cudaFree(dev_weight_y));
-    CUDA_CHECK(cudaFree(dev_weight_z));
+    CUDA_CHECK(cudaFree(dev_cfl_rates));
+    CUDA_CHECK(cudaFree(dev_bad_cell));
+    CUDA_CHECK(cudaFree(dev_ppm_weight_y));
+    CUDA_CHECK(cudaFree(dev_ppm_weight_z));
     CUDA_CHECK(cudaFreeHost(dustvelx));
     CUDA_CHECK(cudaFree(dev_dustvelx));
     CUDA_CHECK(cudaFree(dev_dustmomx));

@@ -6,21 +6,21 @@
 
 __global__
 void cfl_rate_calc (
-    real *dev_cfl_rate, const real *dev_dustdens,
+    real *dev_cfl_rates, const real *dev_dustdens,
     const real *dev_dustmomx, const real *dev_dustmomy, const real *dev_dustmomz,
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_Y*N_Z) return;
+    int idx_ring = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_ring >= N_Y*N_Z) return;
 
-    int iy = idx % N_Y;
-    int iz = idx / N_Y;
+    int iy = idx_ring % N_Y;
+    int iz = idx_ring / N_Y;
 
     real dx = _get_dx();
 
-    real yc = _get_ycent(iy);
-    real zc = _get_zcent(iz);
-    real Rc = yc*sin(zc);
+    real y = _get_ycent(iy);
+    real z = _get_zcent(iz);
+    real R = y*sin(z);
 
     real vol_y = _get_vol_y(iy);
 
@@ -30,14 +30,14 @@ void cfl_rate_calc (
 
     if (N_Z > 1)
     {
-        real z0 = _get_zedge(iz);
-        real z1 = _get_zedge(iz + 1);
+        real z_i = _get_zedge(iz);
+        real z_o = _get_zedge(iz + 1);
 
         real vol_z = _get_vol_z(iz);
-        real sin_max = fmax(sin(z0), sin(z1));
-        if (z0 <= 0.5*M_PI && z1 >= 0.5*M_PI) sin_max = 1.0;
+        real sin_max = fmax(sin(z_i), sin(z_o));
+        if (z_i <= 0.5*M_PI && z_o >= 0.5*M_PI) sin_max = 1.0;
 
-        cfl_invlen_z = sin_max / (yc*vol_z);
+        cfl_invlen_z = sin_max / (y*vol_z);
     }
 
     real lx_avg = 0.0;
@@ -46,15 +46,15 @@ void cfl_rate_calc (
     // validate one ring and average azimuthal specific angular momentum for the FARGO frame
     for (int ix = 0; ix < N_X; ix++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        real dens = dev_dustdens[ic];
-        real mx = dev_dustmomx[ic];
-        real my = dev_dustmomy[ic];
-        real mz = dev_dustmomz[ic];
-        real lx = dev_dustvelx[ic];
-        real vy = dev_dustvely[ic];
-        real lz = dev_dustvelz[ic];
+        real dens = dev_dustdens[idx_cell];
+        real mx = dev_dustmomx[idx_cell];
+        real my = dev_dustmomy[idx_cell];
+        real mz = dev_dustmomz[idx_cell];
+        real lx = dev_dustvelx[idx_cell];
+        real vy = dev_dustvely[idx_cell];
+        real lz = dev_dustvelz[idx_cell];
 
         bool cell_finite = isfinite(dens);
         cell_finite = cell_finite && isfinite(lx) && isfinite(vy) && isfinite(lz);
@@ -71,8 +71,8 @@ void cfl_rate_calc (
     {
         for (int ix = 0; ix < N_X; ix++)
         {
-            int ic = ix + iy*N_X + iz*N_X*N_Y;
-            dev_cfl_rate[ic] = INFINITY;
+            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+            dev_cfl_rates[idx_cell] = INFINITY;
         }
         return;
     }
@@ -80,37 +80,37 @@ void cfl_rate_calc (
     // store the largest directional transport rate for each non-vacuum cell
     for (int ix = 0; ix < N_X; ix++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        if (dev_dustdens[ic] < RHO_VAC)
+        if (dev_dustdens[idx_cell] < RHO_VAC)
         {
-            dev_cfl_rate[ic] = 0.0;
+            dev_cfl_rates[idx_cell] = 0.0;
             continue;
         }
 
-        real lx = dev_dustvelx[ic];
-        real vy = dev_dustvely[ic];
-        real lz = dev_dustvelz[ic];
+        real lx = dev_dustvelx[idx_cell];
+        real vy = dev_dustvely[idx_cell];
+        real lz = dev_dustvelz[idx_cell];
 
         // convert angular primitives to residual azimuthal and linear polar speeds
-        real vz = lz / yc;
+        real vel_z = lz / y;
 
-        real omega_res = (lx - lx_avg) / fmax(Rc*Rc, 1.0e-30);
+        real omega_res = (lx - lx_avg) / fmax(R*R, 1.0e-30);
 
         real cfl_rate = 0.0;
         cfl_rate = fmax(cfl_rate, fabs(omega_res) / dx);
         cfl_rate = fmax(cfl_rate, fabs(vy)*cfl_invlen_y);
-        cfl_rate = fmax(cfl_rate, fabs(vz)*cfl_invlen_z);
+        cfl_rate = fmax(cfl_rate, fabs(vel_z)*cfl_invlen_z);
 
         #ifdef VISC_ACCRETION
         // include the analytic gas target velocity before a stiff source update transfers it to the dust
-        real Zc = yc*cos(zc);
-        real h_g = _get_hg(Rc);
-        real vgas_R = _get_visc_vel(Rc, Zc, h_g);
-        cfl_rate = fmax(cfl_rate, fabs(vgas_R*sin(zc))*cfl_invlen_y);
-        cfl_rate = fmax(cfl_rate, fabs(vgas_R*cos(zc))*cfl_invlen_z);
+        real Z = y*cos(z);
+        real h_g = _get_hg(R);
+        real vgas_R = _get_visc_vel(R, Z, h_g);
+        cfl_rate = fmax(cfl_rate, fabs(vgas_R*sin(z))*cfl_invlen_y);
+        cfl_rate = fmax(cfl_rate, fabs(vgas_R*cos(z))*cfl_invlen_z);
         #endif // VISC_ACCRETION
 
-        dev_cfl_rate[ic] = isfinite(cfl_rate) ? cfl_rate : INFINITY;
+        dev_cfl_rates[idx_cell] = isfinite(cfl_rate) ? cfl_rate : INFINITY;
     }
 }

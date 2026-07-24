@@ -62,7 +62,7 @@ do {                                                                            
 
 // solve four-cell interpolation weights that reproduce cubic data at one interior face
 inline __host__
-void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *weight)
+void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *face_weight)
 {
     real face = face_s[iface];
     real scale = std::max(face - face_s[iface - 2], face_s[iface + 2] - face);
@@ -132,38 +132,38 @@ void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *
     // copy the solved interpolation weights
     for (int j = 0; j < 4; j++)
     {
-        weight[j] = aug_matrix[j][4];
+        face_weight[j] = aug_matrix[j][4];
     }
 }
 
 // build face interpolation weights for one nonuniform volume coordinate
 inline __host__
-void _ppm_nonuniform_weights (const std::vector<real> &face_s, real *weight)
+void _ppm_nonuniform_weights (const std::vector<real> &face_s, real *face_weight)
 {
-    int n_cells = static_cast<int>(face_s.size()) - 1;
-    std::fill(weight, weight + 4*(n_cells + 1), 0.0);
+    int cell_count = static_cast<int>(face_s.size()) - 1;
+    std::fill(face_weight, face_weight + 4*(cell_count + 1), 0.0);
 
     // assign cubic interior weights and linear boundary-adjacent weights to every internal face
-    for (int iface = 1; iface < n_cells; iface++)
+    for (int iface = 1; iface < cell_count; iface++)
     {
-        real *face_weight = weight + 4*iface;
-        if (iface >= 2 && iface <= n_cells - 2)
+        real *weight = face_weight + 4*iface;
+        if (iface >= 2 && iface <= cell_count - 2)
         {
-            _ppm_cubic_face_weights(face_s, iface, face_weight);
+            _ppm_cubic_face_weights(face_s, iface, weight);
             continue;
         }
 
         real center_L = 0.5*(face_s[iface - 1] + face_s[iface]);
         real center_R = 0.5*(face_s[iface] + face_s[iface + 1]);
 
-        face_weight[0] = (center_R - face_s[iface]) / (center_R - center_L);
-        face_weight[1] = (face_s[iface] - center_L) / (center_R - center_L);
+        weight[0] = (center_R - face_s[iface]) / (center_R - center_L);
+        weight[1] = (face_s[iface] - center_L) / (center_R - center_L);
     }
 }
 
 // build radial and polar PPM weights in their finite-volume coordinates
 inline __host__
-void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
+void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
 {
     std::vector<real> y_face_s(N_Y + 1);
 
@@ -173,7 +173,7 @@ void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
         y_face_s[iy] = _get_s_y(_get_yedge(iy));
     }
 
-    _ppm_nonuniform_weights(y_face_s, weight_y);
+    _ppm_nonuniform_weights(y_face_s, ppm_weight_y);
 
     std::vector<real> z_face_s(N_Z + 1);
 
@@ -183,7 +183,7 @@ void ppm_geometry_weights_calc (real *weight_y, real *weight_z)
         z_face_s[iz] = _get_s_z(_get_zedge(iz));
     }
 
-    _ppm_nonuniform_weights(z_face_s, weight_z);
+    _ppm_nonuniform_weights(z_face_s, ppm_weight_z);
 }
 
 // =========================================================================================================================
@@ -235,10 +235,10 @@ void convpow_calc (real *initdens)
 // and print information about the cell with the maximum rate if verbose is true
 
 inline __host__
-real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
+real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
     bool verbose = true)
 {
-    thrust::device_ptr <const real> ptr_cfl(dev_cfl_rate);
+    thrust::device_ptr <const real> ptr_cfl(dev_cfl_rates);
     auto max_it = thrust::max_element(ptr_cfl, ptr_cfl + N_G);
     real max_rate = *max_it;
 
@@ -274,15 +274,15 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     CUDA_CHECK(cudaMemcpy(&vy, dev_dustvely + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(&lz, dev_dustvelz + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
 
-    real yc = _get_ycent(iy);
-    real zc = _get_zcent(iz);
-    real Rc = yc*std::sin(zc);
+    real y = _get_ycent(iy);
+    real z = _get_zcent(iz);
+    real R = y*std::sin(z);
 
-    int idx_base = iy*N_X + iz*N_X*N_Y;
-    thrust::device_ptr <const real> ptr_lx(dev_dustvelx + idx_base);
+    int idx_ring = iy*N_X + iz*N_X*N_Y;
+    thrust::device_ptr <const real> ptr_lx(dev_dustvelx + idx_ring);
     real lx_avg = thrust::reduce(ptr_lx, ptr_lx + N_X, 0.0) / static_cast<real>(N_X);
-    real vx_res = (lx - lx_avg) / std::fmax(Rc, 1.0e-30);
-    real vz = lz / yc;
+    real vel_x_res = (lx - lx_avg) / std::fmax(R, 1.0e-30);
+    real vel_z = lz / y;
 
     std::cout
     << std::setfill(' ')
@@ -290,10 +290,10 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     << std::setw(4) << ix << ","
     << std::setw(4) << iy << ","
     << std::setw(4) << iz << ")"
-    << "  Rc="   << std::scientific << std::setprecision(3) << Rc
-    << "  dvx="  << std::setw(8) << vx_res
+    << "  R="    << std::scientific << std::setprecision(3) << R
+    << "  dvx="  << std::setw(8) << vel_x_res
     << "  vy="   << std::setw(8) << vy
-    << "  vz="   << std::setw(8) << vz
+    << "  vz="   << std::setw(8) << vel_z
     << "  rate=" << std::setw(8) << max_rate
     << "  dt="   << std::setw(8) << CFL_DYN / max_rate
     << std::endl;
@@ -348,9 +348,9 @@ void msg_step (int idx_from, real dt, real clock_out, real clock_sim)
 // save and load binary data to/from files
 
 inline __host__
-std::string frame_num (int number)
+std::string frame_num (int idx_file)
 {
-    std::string num_str = std::to_string(number);
+    std::string num_str = std::to_string(idx_file);
     int num_len = std::max(5, (int)std::to_string(SAVE_MAX).length());
 
     if ((int)num_str.length() < num_len)
@@ -362,22 +362,22 @@ std::string frame_num (int number)
 }
 
 template <typename T> inline __host__
-bool save_binary (const std::string &fname, T *data, int number)
+bool save_binary (const std::string &file_name, T *data, int count)
 {
-    std::ofstream file(fname, std::ios::binary);
+    std::ofstream file(file_name, std::ios::binary);
     if (!file) return false;
 
-    file.write(reinterpret_cast<char*>(data), sizeof(T)*number);
+    file.write(reinterpret_cast<char*>(data), sizeof(T)*count);
     return file.good();
 }
 
 template <typename T> inline __host__
-bool load_binary (const std::string &fname, T *data, int number)
+bool load_binary (const std::string &file_name, T *data, int count)
 {
-    std::ifstream file(fname, std::ios::binary);
+    std::ifstream file(file_name, std::ios::binary);
     if (!file) return false;
 
-    file.read(reinterpret_cast<char*>(data), sizeof(T)*number);
+    file.read(reinterpret_cast<char*>(data), sizeof(T)*count);
     return file.good();
 }
 
@@ -386,20 +386,19 @@ void save_sam_as_velocity (real *dustvelx, real *dustvelz)
 {
     for (int iz = 0; iz < N_Z; iz++)
     {
-        const real zc = _get_zcent(iz);
-        const real sin_zc = std::sin(zc);
+        const real z = _get_zcent(iz);
+        const real sin_z = std::sin(z);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            const real yc = _get_ycent(iy);
-            const real Rc = yc*sin_zc;
-            const int idx_base = iy*N_X + iz*N_X*N_Y;
+            const real y = _get_ycent(iy);
+            const real R = y*sin_z;
 
             for (int ix = 0; ix < N_X; ix++)
             {
-                const int idx = ix + idx_base;
-                dustvelx[idx] = (Rc > 0.0) ? dustvelx[idx] / Rc : 0.0;
-                dustvelz[idx] /= yc;
+                const int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                dustvelx[idx_cell] = (R > 0.0) ? dustvelx[idx_cell] / R : 0.0;
+                dustvelz[idx_cell] /= y;
             }
         }
     }
@@ -410,20 +409,19 @@ void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 {
     for (int iz = 0; iz < N_Z; iz++)
     {
-        const real zc = _get_zcent(iz);
-        const real sin_zc = std::sin(zc);
+        const real z = _get_zcent(iz);
+        const real sin_z = std::sin(z);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            const real yc = _get_ycent(iy);
-            const real Rc = yc*sin_zc;
-            const int idx_base = iy*N_X + iz*N_X*N_Y;
+            const real y = _get_ycent(iy);
+            const real R = y*sin_z;
 
             for (int ix = 0; ix < N_X; ix++)
             {
-                const int idx = ix + idx_base;
-                dustvelx[idx] *= Rc;
-                dustvelz[idx] *= yc;
+                const int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                dustvelx[idx_cell] *= R;
+                dustvelz[idx_cell] *= y;
             }
         }
     }
@@ -480,9 +478,9 @@ do {                                                                            
 // saving variables to file 
 
 inline __host__
-bool save_variable (const std::string &fname)
+bool save_variable (const std::string &file_name)
 {
-    std::ofstream file(fname);
+    std::ofstream file(file_name);
     if (!file) return false;
 
     file << "[PARAMETERS]"                                                             << "\n";

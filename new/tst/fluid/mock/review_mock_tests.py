@@ -392,19 +392,19 @@ def ppm_nonuniform_weights(face_s):
             w[iface, 1] = (face_s[iface] - cL)/(cR - cL)
     return w
 
-def ppm_edges_nonuniform(cellval, w):
-    n = len(cellval)
+def ppm_edges_nonuniform(cell_val, w):
+    n = len(cell_val)
     edge = np.zeros(n + 1)
-    edge[0] = cellval[0]
+    edge[0] = cell_val[0]
     for iface in range(1, n):
         if 2 <= iface <= n - 2:
-            edge[iface] = w[iface] @ cellval[iface-2:iface+2]
+            edge[iface] = w[iface] @ cell_val[iface-2:iface+2]
         else:
-            edge[iface] = w[iface, 0]*cellval[iface-1] + w[iface, 1]*cellval[iface]
-        lo = min(cellval[iface-1], cellval[iface])
-        hi = max(cellval[iface-1], cellval[iface])
+            edge[iface] = w[iface, 0]*cell_val[iface-1] + w[iface, 1]*cell_val[iface]
+        lo = min(cell_val[iface-1], cell_val[iface])
+        hi = max(cell_val[iface-1], cell_val[iface])
         edge[iface] = min(max(edge[iface], lo), hi)
-    edge[n] = cellval[n-1]
+    edge[n] = cell_val[n-1]
     return edge
 
 def test_ppm_weights():
@@ -475,8 +475,8 @@ def ppm_limit(q0, ql, qr):
         q6 = 6.0*q0 - 3.0*(ql + qr)
     return ql, qr, dq, q6
 
-def ppm_face_value(edge, cellval, iL, iR, up_left, cfl):
-    ql, qr, dq, q6 = ppm_limit(cellval[iL], edge[iL], edge[iR])
+def ppm_face_value(edge, cell_val, iL, iR, up_left, cfl):
+    ql, qr, dq, q6 = ppm_limit(cell_val[iL], edge[iL], edge[iR])
     if up_left:
         return qr - 0.5*cfl*(dq - (1.0 - 2.0*cfl/3.0)*q6)
     return ql + 0.5*cfl*(dq + (1.0 - 2.0*cfl/3.0)*q6)

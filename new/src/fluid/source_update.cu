@@ -28,11 +28,12 @@ real _interp_optdepth (real tau_i, real tau_o)
 
 // evaluate spherical radial force, radial centrifugal acceleration, and polar geometric torque
 static __device__ __forceinline__
-void _get_force_term (real yc, real zc, real Rc, real lx, real lz, real beta, real &Fy, real &Fcy, real &Tcz)
+void _get_force_term (real y, real z, real R, real lx, real lz, real beta,
+    real &grav_y, real &cent_y, real &torq_z)
 {
-    Fy  = -(1.0 - beta)*_get_omegaK(yc)*_get_omegaK(yc)*yc;
-    Fcy = lx*lx / Rc / Rc / yc + lz*lz / yc / yc / yc;
-    Tcz = (N_Z > 1) ? lx*lx / Rc / Rc / sin(zc)*cos(zc) : 0.0;
+    grav_y = -(1.0 - beta)*_get_omegaK(y)*_get_omegaK(y)*y;
+    cent_y = lx*lx / R / R / y + lz*lz / y / y / y;
+    torq_z = (N_Z > 1) ? lx*lx / R / R / sin(z)*cos(z) : 0.0;
 }
 
 __global__
@@ -44,33 +45,33 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     #endif
     real dt)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_G) return;
+    int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_cell >= N_G) return;
 
-    int iy = (idx / N_X) % N_Y;
-    int iz = idx / (N_X*N_Y);
+    int iy = (idx_cell / N_X) % N_Y;
+    int iz = idx_cell / (N_X*N_Y);
 
-    real yc = _get_ycent(iy);
-    real zc = _get_zcent(iz);
+    real y = _get_ycent(iy);
+    real z = _get_zcent(iz);
 
-    real Rc = yc*sin(zc);
-    real Zc = yc*cos(zc);
+    real R = y*sin(z);
+    real Z = y*cos(z);
 
     // reset near-vacuum cells to the fallback primitive state
-    if (dev_dustdens[idx] < RHO_VAC)
+    if (dev_dustdens[idx_cell] < RHO_VAC)
     {
-        dev_dustvelx[idx] = sqrt(G*M_S*fmax(Rc, 0.0));
-        dev_dustvely[idx] = 0.0;
-        dev_dustvelz[idx] = 0.0;
+        dev_dustvelx[idx_cell] = sqrt(G*M_S*fmax(R, 0.0));
+        dev_dustvely[idx_cell] = 0.0;
+        dev_dustvelz[idx_cell] = 0.0;
 
         return;
     }
 
-    real omega = _get_omegaK(Rc);
-    real h_g = _get_hg(Rc);
+    real omega = _get_omegaK(R);
+    real h_g = _get_hg(R);
 
     // construct exact exponential drag relaxation coefficients
-    real stokes = _get_stokes(Rc, Zc, h_g);
+    real stokes = _get_stokes(R, Z, h_g);
     real ts = stokes / omega;
     real drag_h = dt / ts;
 
@@ -95,58 +96,58 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
 
     // attenuate radiation pressure by the optical depth interpolated to the logarithmic cell center
     #ifdef RADIATION
-    real tau_i = (iy > 0) ? dev_optdepth[idx - N_X] : 0.0;
-    real tau_o = dev_optdepth[idx];
+    real tau_i = (iy > 0) ? dev_optdepth[idx_cell - N_X] : 0.0;
+    real tau_o = dev_optdepth[idx_cell];
     real beta  = beta_taper*BETA_0*exp(-_interp_optdepth(tau_i, tau_o));
     #else
     real beta  = 0.0;
     #endif
 
     // load dust primitives and construct the local gas equilibrium state
-    real lx = dev_dustvelx[idx];
-    real vy = dev_dustvely[idx];
-    real lz = (N_Z > 1) ? dev_dustvelz[idx] : 0.0;
+    real lx = dev_dustvelx[idx_cell];
+    real vy = dev_dustvely[idx_cell];
+    real lz = (N_Z > 1) ? dev_dustvelz[idx_cell] : 0.0;
 
-    real eta = _get_eta(Rc, Zc, h_g);
-    real lx_g = Rc*Rc*omega*sqrt(fmax(1.0 - 2.0*eta, 0.0));
+    real eta = _get_eta(R, Z, h_g);
+    real lx_g = R*R*omega*sqrt(fmax(1.0 - 2.0*eta, 0.0));
 
     #ifdef VISC_ACCRETION
-    real vgas_R = _get_visc_vel(Rc, Zc, h_g);
-    real vy_g = vgas_R*sin(zc);
-    real lz_g = (N_Z > 1) ? yc*vgas_R*cos(zc) : 0.0;
+    real vgas_R = _get_visc_vel(R, Z, h_g);
+    real vy_g = vgas_R*sin(z);
+    real lz_g = (N_Z > 1) ? y*vgas_R*cos(z) : 0.0;
     #else  // PURE_ROTATION
     real vy_g = 0.0;
     real lz_g = 0.0;
     #endif // VISC_ACCRETION
 
     // evaluate forces at the old state and relax azimuthal specific angular momentum
-    real Fy_n, Fcy_n, Tcz_n, lx_new;
-    _get_force_term(yc, zc, Rc, lx, lz, beta, Fy_n, Fcy_n, Tcz_n);
+    real grav_y_n, cent_y_n, torq_z_n, lx_new;
+    _get_force_term(y, z, R, lx, lz, beta, grav_y_n, cent_y_n, torq_z_n);
 
     lx_new  = drag_decay*lx;
     lx_new += drag_relax*lx_g;
 
     // re-evaluate polar torque and update polar specific angular momentum
-    real Fy_tmp, Fcy_tmp, Tcz_new, lz_new;
-    _get_force_term(yc, zc, Rc, lx_new, lz, beta, Fy_tmp, Fcy_tmp, Tcz_new);
+    real grav_y_tmp, cent_y_tmp, torq_z_new, lz_new;
+    _get_force_term(y, z, R, lx_new, lz, beta, grav_y_tmp, cent_y_tmp, torq_z_new);
 
     lz_new  = drag_decay*lz;
     lz_new += drag_relax*lz_g;
-    lz_new += force_weight_n*Tcz_n;
-    lz_new += force_weight_new*Tcz_new;
+    lz_new += force_weight_n*torq_z_n;
+    lz_new += force_weight_new*torq_z_new;
     if (N_Z == 1) lz_new = 0.0;
 
     // re-evaluate radial forces and update radial velocity
-    real Fy_new, Fcy_new, vy_new;
-    _get_force_term(yc, zc, Rc, lx_new, lz_new, beta, Fy_new, Fcy_new, Tcz_new);
+    real grav_y_new, cent_y_new, vy_new;
+    _get_force_term(y, z, R, lx_new, lz_new, beta, grav_y_new, cent_y_new, torq_z_new);
 
     vy_new  = drag_decay*vy;
     vy_new += drag_relax*vy_g;
-    vy_new += force_weight_n*(Fy_n + Fcy_n);
-    vy_new += force_weight_new*(Fy_new + Fcy_new);
+    vy_new += force_weight_n*(grav_y_n + cent_y_n);
+    vy_new += force_weight_new*(grav_y_new + cent_y_new);
 
     // write the updated primitive state to global memory
-    dev_dustvelx[idx] = lx_new;
-    dev_dustvely[idx] = vy_new;
-    dev_dustvelz[idx] = lz_new;
+    dev_dustvelx[idx_cell] = lx_new;
+    dev_dustvely[idx_cell] = vy_new;
+    dev_dustvelz[idx_cell] = lz_new;
 }

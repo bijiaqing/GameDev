@@ -18,31 +18,31 @@
 __global__
 void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_Y*N_Z) return;
+    int idx_ring = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_ring >= N_Y*N_Z) return;
 
-    int iy = idx % N_Y;
-    int iz = idx / N_Y;
+    int iy = idx_ring % N_Y;
+    int iz = idx_ring / N_Y;
 
     real dx = _get_dx();
 
-    real yc = _get_ycent(iy);
-    real zc = _get_zcent(iz);
-    real Rc = yc*sin(zc);
+    real y = _get_ycent(iy);
+    real z = _get_zcent(iz);
+    real R = y*sin(z);
 
     // load one ring and recover primitive quantities with a Keplerian azimuthal fallback in near-vacuum cells
     real dens[N_X], mx[N_X], my[N_X], mz[N_X], lx[N_X];
     for (int ix = 0; ix < N_X; ix++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        dens[ix] = dev_dustdens[ic];
-        mx[ix] = dev_dustmomx[ic];
-        my[ix] = dev_dustmomy[ic];
-        mz[ix] = dev_dustmomz[ic];
+        dens[ix] = dev_dustdens[idx_cell];
+        mx[ix] = dev_dustmomx[idx_cell];
+        my[ix] = dev_dustmomy[idx_cell];
+        mz[ix] = dev_dustmomz[idx_cell];
 
         real vy_tmp, lz_tmp;
-        _recover_dust_state(dens[ix], Rc, mx[ix], my[ix], mz[ix], lx[ix], vy_tmp, lz_tmp);
+        _recover_dust_state(dens[ix], R, mx[ix], my[ix], mz[ix], lx[ix], vy_tmp, lz_tmp);
     }
 
     // average the specific angular momentum used to choose the FARGO integer shift
@@ -54,10 +54,10 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     lx_avg /= static_cast<real>(N_X);
 
     // represent the ring-mean displacement by the nearest integer shift and leave its fractional remainder for PPM
-    real shift_cells = lx_avg*dt / (Rc*Rc*dx);
+    real shift_cells = lx_avg*dt / (R*R*dx);
     int n_shift = __double2int_rn(shift_cells);
     real omega_shift = static_cast<real>(n_shift)*dx / dt;
-    real lx_frame = Rc*Rc*omega_shift;
+    real lx_frame = R*R*omega_shift;
 
     // circularly shift each conserved state from cell ix minus n_shift
     real dens_shift[N_X], mx_shift[N_X], my_shift[N_X], mz_shift[N_X], lx_shift[N_X];
@@ -76,7 +76,7 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     real vy_shift[N_X], lz_shift[N_X];
     for (int ix = 0; ix < N_X; ix++)
     {
-        _recover_dust_state(dens_shift[ix], Rc,
+        _recover_dust_state(dens_shift[ix], R,
             mx_shift[ix], my_shift[ix], mz_shift[ix],
             lx_shift[ix], vy_shift[ix], lz_shift[ix]
         );
@@ -89,18 +89,18 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         lx_res[ix] = lx_shift[ix] - lx_frame;
     }
 
-    // reconstruct periodic PPM face values with edge ix between cells ix minus one and ix
-    real edge_dens[N_X], edge_lx[N_X], edge_vy[N_X], edge_lz[N_X];
+    // reconstruct periodic PPM face values with face ix between cells ix minus one and ix
+    real face_dens[N_X], face_lx[N_X], face_vy[N_X], face_lz[N_X];
     for (int ix = 0; ix < N_X; ix++)
     {
         int ixm2 = (ix - 2 + N_X) % N_X;
         int ixm1 = (ix - 1 + N_X) % N_X;
         int ixp1 = (ix + 1) % N_X;
 
-        edge_dens[ix] = _ppm_edge(dens_shift[ixm2], dens_shift[ixm1], dens_shift[ix], dens_shift[ixp1]);
-        edge_lx[ix] = _ppm_edge(lx_shift[ixm2], lx_shift[ixm1], lx_shift[ix], lx_shift[ixp1]);
-        edge_vy[ix] = _ppm_edge(vy_shift[ixm2], vy_shift[ixm1], vy_shift[ix], vy_shift[ixp1]);
-        edge_lz[ix] = _ppm_edge(lz_shift[ixm2], lz_shift[ixm1], lz_shift[ix], lz_shift[ixp1]);
+        face_dens[ix] = _ppm_face_uniform(dens_shift[ixm2], dens_shift[ixm1], dens_shift[ix], dens_shift[ixp1]);
+        face_lx[ix] = _ppm_face_uniform(lx_shift[ixm2], lx_shift[ixm1], lx_shift[ix], lx_shift[ixp1]);
+        face_vy[ix] = _ppm_face_uniform(vy_shift[ixm2], vy_shift[ixm1], vy_shift[ix], vy_shift[ixp1]);
+        face_lz[ix] = _ppm_face_uniform(lz_shift[ixm2], lz_shift[ixm1], lz_shift[ix], lz_shift[ixp1]);
     }
 
     // compute high-order fluxes from PPM-traced interface states with the pressureless HLL solver
@@ -111,22 +111,22 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         int ixp1 = (ix + 1) % N_X;
         int ixp2 = (ix + 2) % N_X;
 
-        real cfl_L = fabs(lx_res[ix]  /(Rc*Rc))*dt / dx;
-        real cfl_R = fabs(lx_res[ixp1]/(Rc*Rc))*dt / dx;
+        real cfl_L = fabs(lx_res[ix]  /(R*R))*dt / dx;
+        real cfl_R = fabs(lx_res[ixp1]/(R*R))*dt / dx;
 
         // clamp reconstructed density nonnegative while preserving the signs of the reconstructed primitive quantities
-        real dens_L = fmax(_ppm_face_value(edge_dens, dens_shift, ix,   ixp1, true,  cfl_L), 0.0);
-        real dens_R = fmax(_ppm_face_value(edge_dens, dens_shift, ixp1, ixp2, false, cfl_R), 0.0);
-        real lx_L =      _ppm_face_value(edge_lx, lx_shift, ix,   ixp1, true,  cfl_L);
-        real lx_R =      _ppm_face_value(edge_lx, lx_shift, ixp1, ixp2, false, cfl_R);
-        real vy_L =      _ppm_face_value(edge_vy, vy_shift, ix,   ixp1, true,  cfl_L);
-        real vy_R =      _ppm_face_value(edge_vy, vy_shift, ixp1, ixp2, false, cfl_R);
-        real lz_L =      _ppm_face_value(edge_lz, lz_shift, ix,   ixp1, true,  cfl_L);
-        real lz_R =      _ppm_face_value(edge_lz, lz_shift, ixp1, ixp2, false, cfl_R);
+        real dens_L = fmax(_ppm_face_value(face_dens, dens_shift, ix,   ixp1, true,  cfl_L), 0.0);
+        real dens_R = fmax(_ppm_face_value(face_dens, dens_shift, ixp1, ixp2, false, cfl_R), 0.0);
+        real lx_L =      _ppm_face_value(face_lx, lx_shift, ix,   ixp1, true,  cfl_L);
+        real lx_R =      _ppm_face_value(face_lx, lx_shift, ixp1, ixp2, false, cfl_R);
+        real vy_L =      _ppm_face_value(face_vy, vy_shift, ix,   ixp1, true,  cfl_L);
+        real vy_R =      _ppm_face_value(face_vy, vy_shift, ixp1, ixp2, false, cfl_R);
+        real lz_L =      _ppm_face_value(face_lz, lz_shift, ix,   ixp1, true,  cfl_L);
+        real lz_R =      _ppm_face_value(face_lz, lz_shift, ixp1, ixp2, false, cfl_R);
 
         // convert reconstructed specific angular momentum to residual angular transport speed
-        real omega_L = (lx_L - lx_frame) / (Rc*Rc);
-        real omega_R = (lx_R - lx_frame) / (Rc*Rc);
+        real omega_L = (lx_L - lx_frame) / (R*R);
+        real omega_R = (lx_R - lx_frame) / (R*R);
 
         _pressureless_hll_flux(
             omega_L, omega_R,
@@ -141,8 +141,8 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     for (int ix = 0; ix < N_X; ix++)
     {
         int ixp1 = (ix + 1) % N_X;
-        real omega_L = lx_res[ix] / (Rc*Rc);
-        real omega_R = lx_res[ixp1] / (Rc*Rc);
+        real omega_L = lx_res[ix] / (R*R);
+        real omega_R = lx_res[ixp1] / (R*R);
         real flux_dens_low, flux_mx_low, flux_my_low, flux_mz_low;
 
         _pressureless_hll_flux(
@@ -229,11 +229,11 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     // write the updated ring to global memory
     for (int ix = 0; ix < N_X; ix++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        dev_dustdens[ic] = dens_shift[ix];
-        dev_dustmomx[ic] = mx_shift[ix];
-        dev_dustmomy[ic] = my_shift[ix];
-        dev_dustmomz[ic] = mz_shift[ix];
+        dev_dustdens[idx_cell] = dens_shift[ix];
+        dev_dustmomx[idx_cell] = mx_shift[ix];
+        dev_dustmomy[idx_cell] = my_shift[ix];
+        dev_dustmomz[idx_cell] = mz_shift[ix];
     }
 }

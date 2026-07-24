@@ -8,21 +8,21 @@ void inf_cell_flag (
     #ifdef RADIATION
     const real *dev_optdepth,
     #endif
-    int *dev_badstate
+    int *dev_bad_cell
 )
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_G) return;
+    int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_cell >= N_G) return;
 
     // test every evolved field in the current cell
-    bool finite = isfinite(dev_dustdens[idx]);
-    finite = finite && isfinite(dev_dustmomx[idx]) && isfinite(dev_dustmomy[idx]) && isfinite(dev_dustmomz[idx]);
-    finite = finite && isfinite(dev_dustvelx[idx]) && isfinite(dev_dustvely[idx]) && isfinite(dev_dustvelz[idx]);
+    bool finite = isfinite(dev_dustdens[idx_cell]);
+    finite = finite && isfinite(dev_dustmomx[idx_cell]) && isfinite(dev_dustmomy[idx_cell]) && isfinite(dev_dustmomz[idx_cell]);
+    finite = finite && isfinite(dev_dustvelx[idx_cell]) && isfinite(dev_dustvely[idx_cell]) && isfinite(dev_dustvelz[idx_cell]);
 
     #ifdef RADIATION
-    finite = finite && isfinite(dev_optdepth[idx]);
+    finite = finite && isfinite(dev_optdepth[idx_cell]);
     #endif
 
     // record the first nonfinite cell with zero reserved for a clean state
-    if (!finite) atomicCAS(dev_badstate, 0, idx + 1);
+    if (!finite) atomicCAS(dev_bad_cell, 0, idx_cell + 1);
 }

@@ -5,17 +5,17 @@
 __global__
 void optdepth_csum (real *dev_optdepth)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_X*N_Z) return;
+    int idx_ray = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_ray >= N_X*N_Z) return;
 
-    int ix = idx % N_X;
-    int iz = idx / N_X;
+    int ix = idx_ray % N_X;
+    int iz = idx_ray / N_X;
 
     // accumulate local contributions outward along one radial ray
     for (int iy = 1; iy < N_Y; iy++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
-        dev_optdepth[ic] += dev_optdepth[ic - N_X];
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+        dev_optdepth[idx_cell] += dev_optdepth[idx_cell - N_X];
     }
 }
 

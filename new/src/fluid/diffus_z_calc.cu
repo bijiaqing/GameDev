@@ -21,24 +21,24 @@ __global__
 void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real *dev_dustmomz, real dt)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_X*N_Y) return;
+    int idx_col = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_col >= N_X*N_Y) return;
     if (N_Z == 1) return;
     if (dt <= 0.0) return;
 
-    int ix = idx % N_X;
-    int iy = idx / N_X;
+    int ix = idx_col % N_X;
+    int iy = idx_col / N_X;
 
     real dz = _get_dz();
 
-    real yc = _get_ycent(iy);
+    real y = _get_ycent(iy);
 
     // load dust density along one polar column
     real dens[N_Z];
     for (int iz = 0; iz < N_Z; iz++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
-        dens[iz] = dev_dustdens[ic];
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+        dens[iz] = dev_dustdens[idx_cell];
     }
 
     // assemble full-step Crank-Nicolson face couplings and measure the largest local coefficient sum
@@ -47,32 +47,32 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real z0 = _get_zedge(iz);
-        real z1 = _get_zedge(iz + 1);
+        real z_i = _get_zedge(iz);
+        real z_o = _get_zedge(iz + 1);
 
         real vol_z  = _get_vol_z(iz);
-        real dz_len = yc*dz;
+        real dz_len = y*dz;
 
-        real Dz_i = 0.0;
+        real diff_z_i = 0.0;
         if (iz > 0)
         {
-            real Rc_i = yc*sin(z0);
+            real R_i = y*sin(z_i);
 
-            real h_i = _get_hg(Rc_i);
-            Dz_i = _get_nu(Rc_i, h_i) / SCHMIDT_Z;
+            real h_i = _get_hg(R_i);
+            diff_z_i = _get_nu(R_i, h_i) / SCHMIDT_Z;
         }
 
-        real Dz_o = 0.0;
+        real diff_z_o = 0.0;
         if (iz < N_Z - 1)
         {
-            real Rc_o = yc*sin(z1);
+            real R_o = y*sin(z_o);
 
-            real h_o = _get_hg(Rc_o);
-            Dz_o = _get_nu(Rc_o, h_o) / SCHMIDT_Z;
+            real h_o = _get_hg(R_o);
+            diff_z_o = _get_nu(R_o, h_o) / SCHMIDT_Z;
         }
 
-        real cn_i = (iz > 0)       ? (0.5*dt*sin(z0)*Dz_i / (yc*dz_len*vol_z)) : 0.0;
-        real cn_o = (iz < N_Z - 1) ? (0.5*dt*sin(z1)*Dz_o / (yc*dz_len*vol_z)) : 0.0;
+        real cn_i = (iz > 0)       ? (0.5*dt*sin(z_i)*diff_z_i / (y*dz_len*vol_z)) : 0.0;
+        real cn_o = (iz < N_Z - 1) ? (0.5*dt*sin(z_o)*diff_z_o / (y*dz_len*vol_z)) : 0.0;
 
         cn_lower[iz] = -cn_i;
         cn_upper[iz] = -cn_o;
@@ -141,7 +141,7 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
             real cn_o = -cn_upper[iz];
 
-            upper_work[iz]  = -(cn_o*yc*vol_z / dt_sub);
+            upper_work[iz]  = -(cn_o*y*vol_z / dt_sub);
             upper_work[iz] *= (dens[iz + 1] - dens[iz]) + (dens_work[iz + 1] - dens_work[iz]);
         }
 
@@ -152,11 +152,11 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             if (iz == N_Z - 1) iz_up = iz;
 
             real z_up = _get_zcent(iz_up);
-            real Rc_up = yc*sin(z_up);
+            real R_up = y*sin(z_up);
             real dens_up = dens[iz_up];
 
-            int ic_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real lx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[ic_up] / dens_up : sqrt(G*M_S*fmax(Rc_up, 0.0));
+            int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
+            real lx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[idx_cell_up] / dens_up : sqrt(G*M_S*fmax(R_up, 0.0));
 
             dens_rhs[iz] = upper_work[iz]*lx_up;
         }
@@ -167,8 +167,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real vol_z = _get_vol_z(iz);
             real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
 
-            int ic = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomx[ic] -= dt_sub*(dens_rhs[iz] - flux_i) / (yc*vol_z);
+            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+            dev_dustmomx[idx_cell] -= dt_sub*(dens_rhs[iz] - flux_i) / (y*vol_z);
         }
 
         // combine each face mass flux with the donor radial velocity
@@ -179,8 +179,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
             real dens_up = dens[iz_up];
 
-            int ic_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real vy_up = (dens_up >= RHO_VAC) ? dev_dustmomy[ic_up] / dens_up : 0.0;
+            int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
+            real vy_up = (dens_up >= RHO_VAC) ? dev_dustmomy[idx_cell_up] / dens_up : 0.0;
 
             dens_rhs[iz] = upper_work[iz]*vy_up;
         }
@@ -191,8 +191,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real vol_z = _get_vol_z(iz);
             real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
 
-            int ic = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomy[ic] -= dt_sub*(dens_rhs[iz] - flux_i) / (yc*vol_z);
+            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+            dev_dustmomy[idx_cell] -= dt_sub*(dens_rhs[iz] - flux_i) / (y*vol_z);
         }
 
         // combine each face mass flux with the donor polar primitive quantity
@@ -203,8 +203,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
             real dens_up = dens[iz_up];
 
-            int ic_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real lz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[ic_up] / dens_up : 0.0;
+            int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
+            real lz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[idx_cell_up] / dens_up : 0.0;
 
             dens_rhs[iz] = upper_work[iz]*lz_up;
         }
@@ -215,8 +215,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             real vol_z = _get_vol_z(iz);
             real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
 
-            int ic = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomz[ic] -= dt_sub*(dens_rhs[iz] - flux_i) / (yc*vol_z);
+            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+            dev_dustmomz[idx_cell] -= dt_sub*(dens_rhs[iz] - flux_i) / (y*vol_z);
 
             dens[iz] = dens_work[iz];
         }
@@ -225,8 +225,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     // store the final dust density
     for (int iz = 0; iz < N_Z; iz++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
-        dev_dustdens[ic] = dens[iz];
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+        dev_dustdens[idx_cell] = dens[iz];
     }
 }
 

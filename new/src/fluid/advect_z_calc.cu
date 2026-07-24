@@ -17,27 +17,27 @@
 
 __global__
 void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
-    const real *dev_weight_z, real dt)
+    const real *dev_ppm_weight_z, real dt)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_X*N_Y) return;
+    int idx_col = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_col >= N_X*N_Y) return;
     if (N_Z == 1) return;
 
-    int ix = idx % N_X;
-    int iy = idx / N_X;
+    int ix = idx_col % N_X;
+    int iy = idx_col / N_X;
 
-    real yc = _get_ycent(iy);
+    real y = _get_ycent(iy);
 
     // load one polar column from global memory
     real dens[N_Z], mx[N_Z], my[N_Z], mz[N_Z];
     for (int iz = 0; iz < N_Z; iz++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        dens[iz] = dev_dustdens[ic];
-        mx[iz] = dev_dustmomx[ic];
-        my[iz] = dev_dustmomy[ic];
-        mz[iz] = dev_dustmomz[ic];
+        dens[iz] = dev_dustdens[idx_cell];
+        mx[iz] = dev_dustmomx[idx_cell];
+        my[iz] = dev_dustmomy[idx_cell];
+        mz[iz] = dev_dustmomz[idx_cell];
     }
 
     // advance three forward-Euler operator evaluations for SSPRK(3,3)
@@ -47,19 +47,19 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         real lx[N_Z], vy[N_Z], lz[N_Z];
         for (int iz = 0; iz < N_Z; iz++)
         {
-            real zc = _get_zcent(iz);
-            real Rc = yc*sin(zc);
+            real z = _get_zcent(iz);
+            real R = y*sin(z);
 
-            _recover_dust_state(dens[iz], Rc, mx[iz], my[iz], mz[iz], lx[iz], vy[iz], lz[iz]);
+            _recover_dust_state(dens[iz], R, mx[iz], my[iz], mz[iz], lx[iz], vy[iz], lz[iz]);
         }
 
         // reconstruct PPM face values in the spherical polar finite-volume coordinate
-        real edge_dens[N_Z + 1], edge_lx[N_Z + 1], edge_vy[N_Z + 1], edge_lz[N_Z + 1];
+        real face_dens[N_Z + 1], face_lx[N_Z + 1], face_vy[N_Z + 1], face_lz[N_Z + 1];
 
-        _ppm_edges_nonuniform(dens, dev_weight_z, edge_dens, N_Z);
-        _ppm_edges_nonuniform(lx, dev_weight_z, edge_lx, N_Z);
-        _ppm_edges_nonuniform(vy, dev_weight_z, edge_vy, N_Z);
-        _ppm_edges_nonuniform(lz, dev_weight_z, edge_lz, N_Z);
+        _ppm_faces_nonuniform(dens, dev_ppm_weight_z, face_dens, N_Z);
+        _ppm_faces_nonuniform(lx, dev_ppm_weight_z, face_lx, N_Z);
+        _ppm_faces_nonuniform(vy, dev_ppm_weight_z, face_vy, N_Z);
+        _ppm_faces_nonuniform(lz, dev_ppm_weight_z, face_lz, N_Z);
 
         // compute interior face fluxes and the configured outer boundary flux
         real flux_dens[N_Z], flux_mx[N_Z], flux_my[N_Z], flux_mz[N_Z];
@@ -72,30 +72,30 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_dens[iz] = flux_mx[iz] = flux_my[iz] = flux_mz[iz] = 0.0;
                 #else
                 // permit outward transport and suppress inflow at the outer polar boundary
-                real speed_ob = lz[iz] / yc;
+                real speed_ob = lz[iz] / y;
                 flux_dens[iz] = (speed_ob > 0.0) ? speed_ob*fmax(dens[iz], 0.0) : 0.0;
                 flux_mx[iz] = flux_dens[iz]*lx[iz];
                 flux_my[iz] = flux_dens[iz]*vy[iz];
                 flux_mz[iz] = flux_dens[iz]*lz[iz];
                 #endif
-                edge_dens[iz] = edge_lx[iz] = edge_vy[iz] = edge_lz[iz] = 0.0;
+                face_dens[iz] = face_lx[iz] = face_vy[iz] = face_lz[iz] = 0.0;
 
                 continue;
             }
 
             // reconstruct high-order PPM states at the interior polar face
             // use zero PPM tracing fraction because SSPRK supplies temporal integration
-            real dens_L = fmax(_ppm_face_value(edge_dens, dens, iz,     iz + 1, true,  0.0), 0.0);
-            real dens_R = fmax(_ppm_face_value(edge_dens, dens, iz + 1, iz + 2, false, 0.0), 0.0);
-            real lx_L =      _ppm_face_value(edge_lx, lx, iz,     iz + 1, true,  0.0);
-            real lx_R =      _ppm_face_value(edge_lx, lx, iz + 1, iz + 2, false, 0.0);
-            real vy_L =      _ppm_face_value(edge_vy, vy, iz,     iz + 1, true,  0.0);
-            real vy_R =      _ppm_face_value(edge_vy, vy, iz + 1, iz + 2, false, 0.0);
-            real lz_L =      _ppm_face_value(edge_lz, lz, iz,     iz + 1, true,  0.0);
-            real lz_R =      _ppm_face_value(edge_lz, lz, iz + 1, iz + 2, false, 0.0);
+            real dens_L = fmax(_ppm_face_value(face_dens, dens, iz,     iz + 1, true,  0.0), 0.0);
+            real dens_R = fmax(_ppm_face_value(face_dens, dens, iz + 1, iz + 2, false, 0.0), 0.0);
+            real lx_L =      _ppm_face_value(face_lx, lx, iz,     iz + 1, true,  0.0);
+            real lx_R =      _ppm_face_value(face_lx, lx, iz + 1, iz + 2, false, 0.0);
+            real vy_L =      _ppm_face_value(face_vy, vy, iz,     iz + 1, true,  0.0);
+            real vy_R =      _ppm_face_value(face_vy, vy, iz + 1, iz + 2, false, 0.0);
+            real lz_L =      _ppm_face_value(face_lz, lz, iz,     iz + 1, true,  0.0);
+            real lz_R =      _ppm_face_value(face_lz, lz, iz + 1, iz + 2, false, 0.0);
 
             _pressureless_hll_flux(
-                lz_L / yc, lz_R / yc,
+                lz_L / y, lz_R / y,
                 dens_L, lx_L, vy_L, lz_L,
                 dens_R, lx_R, vy_R, lz_R,
                 flux_dens[iz], flux_mx[iz], flux_my[iz], flux_mz[iz]
@@ -104,17 +104,17 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             // compute the low-order HLL flux from adjacent cell-centred states
             real flux_dens_low, flux_mx_low, flux_my_low, flux_mz_low;
             _pressureless_hll_flux(
-                lz[iz] / yc, lz[iz + 1] / yc,
+                lz[iz] / y, lz[iz + 1] / y,
                 dens[iz], lx[iz], vy[iz], lz[iz],
                 dens[iz + 1], lx[iz + 1], vy[iz + 1], lz[iz + 1],
                 flux_dens_low, flux_mx_low, flux_my_low, flux_mz_low
             );
 
             // retain low-order fluxes and store high-minus-low differences for the antidiffusive correction
-            edge_dens[iz] = flux_dens[iz] - flux_dens_low;
-            edge_lx[iz] = flux_mx[iz] - flux_mx_low;
-            edge_vy[iz] = flux_my[iz] - flux_my_low;
-            edge_lz[iz] = flux_mz[iz] - flux_mz_low;
+            face_dens[iz] = flux_dens[iz] - flux_dens_low;
+            face_lx[iz] = flux_mx[iz] - flux_mx_low;
+            face_vy[iz] = flux_my[iz] - flux_my_low;
+            face_lz[iz] = flux_mz[iz] - flux_mz_low;
             
             flux_dens[iz] = flux_dens_low;
             flux_mx[iz] = flux_mx_low;
@@ -123,7 +123,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
 
         // permit outward transport and suppress inflow at the inner polar boundary
-        real speed_ib = lz[0] / yc;
+        real speed_ib = lz[0] / y;
         real flux_dens_ib = (speed_ib < 0.0) ? speed_ib*fmax(dens[0], 0.0) : 0.0;
         real flux_mx_ib = flux_dens_ib*lx[0];
         real flux_my_ib = flux_dens_ib*vy[0];
@@ -131,14 +131,14 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
         // apply the spherical-geometry low-order update to the innermost polar cell
         {
-            real z0 = _get_zedge(0);
-            real z1 = _get_zedge(1);
+            real z_i = _get_zedge(0);
+            real z_o = _get_zedge(1);
             real vol_z = _get_vol_z(0);
 
-            dens[0] -= dt*(sin(z1)*flux_dens[0] - sin(z0)*flux_dens_ib) / (yc*vol_z);
-            mx[0] -= dt*(sin(z1)*flux_mx[0] - sin(z0)*flux_mx_ib) / (yc*vol_z);
-            my[0] -= dt*(sin(z1)*flux_my[0] - sin(z0)*flux_my_ib) / (yc*vol_z);
-            mz[0] -= dt*(sin(z1)*flux_mz[0] - sin(z0)*flux_mz_ib) / (yc*vol_z);
+            dens[0] -= dt*(sin(z_o)*flux_dens[0] - sin(z_i)*flux_dens_ib) / (y*vol_z);
+            mx[0] -= dt*(sin(z_o)*flux_mx[0] - sin(z_i)*flux_mx_ib) / (y*vol_z);
+            my[0] -= dt*(sin(z_o)*flux_my[0] - sin(z_i)*flux_my_ib) / (y*vol_z);
+            mz[0] -= dt*(sin(z_o)*flux_mz[0] - sin(z_i)*flux_mz_ib) / (y*vol_z);
 
             if (dens[0] < 0.0) dens[0] = mx[0] = my[0] = mz[0] = 0.0;
         }
@@ -146,14 +146,14 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         // apply the spherical-geometry low-order update to the remaining polar cells
         for (int iz = 1; iz < N_Z; iz++)
         {
-            real z0 = _get_zedge(iz);
-            real z1 = _get_zedge(iz + 1);
+            real z_i = _get_zedge(iz);
+            real z_o = _get_zedge(iz + 1);
             real vol_z = _get_vol_z(iz);
 
-            dens[iz] -= dt*(sin(z1)*flux_dens[iz] - sin(z0)*flux_dens[iz - 1]) / (yc*vol_z);
-            mx[iz] -= dt*(sin(z1)*flux_mx[iz] - sin(z0)*flux_mx[iz - 1]) / (yc*vol_z);
-            my[iz] -= dt*(sin(z1)*flux_my[iz] - sin(z0)*flux_my[iz - 1]) / (yc*vol_z);
-            mz[iz] -= dt*(sin(z1)*flux_mz[iz] - sin(z0)*flux_mz[iz - 1]) / (yc*vol_z);
+            dens[iz] -= dt*(sin(z_o)*flux_dens[iz] - sin(z_i)*flux_dens[iz - 1]) / (y*vol_z);
+            mx[iz] -= dt*(sin(z_o)*flux_mx[iz] - sin(z_i)*flux_mx[iz - 1]) / (y*vol_z);
+            my[iz] -= dt*(sin(z_o)*flux_my[iz] - sin(z_i)*flux_my[iz - 1]) / (y*vol_z);
+            mz[iz] -= dt*(sin(z_o)*flux_mz[iz] - sin(z_i)*flux_mz[iz - 1]) / (y*vol_z);
 
             if (dens[iz] < 0.0) dens[iz] = mx[iz] = my[iz] = mz[iz] = 0.0;
         }
@@ -166,14 +166,14 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             real vol_L = _get_vol_z(iz);
             real vol_R = _get_vol_z(iz + 1);
 
-            real corr_dens_L = -dt*area_f*edge_dens[iz] / (yc*vol_L);
-            real corr_mx_L = -dt*area_f*edge_lx[iz] / (yc*vol_L);
-            real corr_my_L = -dt*area_f*edge_vy[iz] / (yc*vol_L);
-            real corr_mz_L = -dt*area_f*edge_lz[iz] / (yc*vol_L);
-            real corr_dens_R =  dt*area_f*edge_dens[iz] / (yc*vol_R);
-            real corr_mx_R =  dt*area_f*edge_lx[iz] / (yc*vol_R);
-            real corr_my_R =  dt*area_f*edge_vy[iz] / (yc*vol_R);
-            real corr_mz_R =  dt*area_f*edge_lz[iz] / (yc*vol_R);
+            real corr_dens_L = -dt*area_f*face_dens[iz] / (y*vol_L);
+            real corr_mx_L = -dt*area_f*face_lx[iz] / (y*vol_L);
+            real corr_my_L = -dt*area_f*face_vy[iz] / (y*vol_L);
+            real corr_mz_L = -dt*area_f*face_lz[iz] / (y*vol_L);
+            real corr_dens_R =  dt*area_f*face_dens[iz] / (y*vol_R);
+            real corr_mx_R =  dt*area_f*face_lx[iz] / (y*vol_R);
+            real corr_my_R =  dt*area_f*face_vy[iz] / (y*vol_R);
+            real corr_mz_R =  dt*area_f*face_lz[iz] / (y*vol_R);
 
             real lx_min_L, lx_max_L, vy_min_L, vy_max_L, lz_min_L, lz_max_L;
             real lx_min_R, lx_max_R, vy_min_R, vy_max_R, lz_min_R, lz_max_R;
@@ -214,12 +214,12 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         {
             for (int iz = 0; iz < N_Z; iz++)
             {
-                int ic = ix + iy*N_X + iz*N_X*N_Y;
+                int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-                dens[iz] = 0.75*dev_dustdens[ic] + 0.25*dens[iz];
-                mx[iz] = 0.75*dev_dustmomx[ic] + 0.25*mx[iz];
-                my[iz] = 0.75*dev_dustmomy[ic] + 0.25*my[iz];
-                mz[iz] = 0.75*dev_dustmomz[ic] + 0.25*mz[iz];
+                dens[iz] = 0.75*dev_dustdens[idx_cell] + 0.25*dens[iz];
+                mx[iz] = 0.75*dev_dustmomx[idx_cell] + 0.25*mx[iz];
+                my[iz] = 0.75*dev_dustmomy[idx_cell] + 0.25*my[iz];
+                mz[iz] = 0.75*dev_dustmomz[idx_cell] + 0.25*mz[iz];
             }
         }
     }
@@ -227,11 +227,11 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     // form the final SSPRK(3,3) combination and write the polar column to global memory
     for (int iz = 0; iz < N_Z; iz++)
     {
-        int ic = ix + iy*N_X + iz*N_X*N_Y;
+        int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        dev_dustdens[ic] = (1.0/3.0)*dev_dustdens[ic] + (2.0/3.0)*dens[iz];
-        dev_dustmomx[ic] = (1.0/3.0)*dev_dustmomx[ic] + (2.0/3.0)*mx[iz];
-        dev_dustmomy[ic] = (1.0/3.0)*dev_dustmomy[ic] + (2.0/3.0)*my[iz];
-        dev_dustmomz[ic] = (1.0/3.0)*dev_dustmomz[ic] + (2.0/3.0)*mz[iz];
+        dev_dustdens[idx_cell] = (1.0/3.0)*dev_dustdens[idx_cell] + (2.0/3.0)*dens[iz];
+        dev_dustmomx[idx_cell] = (1.0/3.0)*dev_dustmomx[idx_cell] + (2.0/3.0)*mx[iz];
+        dev_dustmomy[idx_cell] = (1.0/3.0)*dev_dustmomy[idx_cell] + (2.0/3.0)*my[iz];
+        dev_dustmomz[idx_cell] = (1.0/3.0)*dev_dustmomz[idx_cell] + (2.0/3.0)*mz[iz];
     }
 }

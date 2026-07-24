@@ -33,7 +33,7 @@ void _recover_dust_state (real dens, real R, real &mx, real &my, real &mz, real 
 
 // reconstruct a bounded PPM face value on a uniform grid from four neighboring cells (for x direction)
 __device__ __forceinline__
-static real _ppm_edge (real qm1, real q0, real qp1, real qp2)
+static real _ppm_face_uniform (real qm1, real q0, real qp1, real qp2)
 {
     real qe = (7.0*(q0 + qp1) - (qm1 + qp2)) / 12.0;
     real lo = fmin(q0, qp1);
@@ -43,30 +43,30 @@ static real _ppm_edge (real qm1, real q0, real qp1, real qp2)
 
 // reconstruct bounded face values on a nonuniform grid using precomputed PPM weights (for y and z directions)
 __device__ __forceinline__
-static void _ppm_edges_nonuniform (const real *cellval, const real *face_weight, real *edge, int ncells)
+static void _ppm_faces_nonuniform (const real *cell_val, const real *face_weight, real *face, int cell_count)
 {
-    edge[0] = cellval[0];
+    face[0] = cell_val[0];
 
-    for (int iface = 1; iface < ncells; iface++)
+    for (int iface = 1; iface < cell_count; iface++)
     {
         const real *weight = face_weight + 4*iface;
-        if (iface >= 2 && iface <= ncells - 2)
+        if (iface >= 2 && iface <= cell_count - 2)
         {
-            edge[iface]  = weight[0]*cellval[iface - 2] + weight[1]*cellval[iface - 1];
-            edge[iface] += weight[2]*cellval[iface]     + weight[3]*cellval[iface + 1];
+            face[iface]  = weight[0]*cell_val[iface - 2] + weight[1]*cell_val[iface - 1];
+            face[iface] += weight[2]*cell_val[iface]     + weight[3]*cell_val[iface + 1];
         }
         else
         {
-            edge[iface]  = weight[0]*cellval[iface - 1] + weight[1]*cellval[iface];
+            face[iface]  = weight[0]*cell_val[iface - 1] + weight[1]*cell_val[iface];
         }
 
-        real edge_min = fmin(cellval[iface - 1], cellval[iface]);
-        real edge_max = fmax(cellval[iface - 1], cellval[iface]);
+        real face_min = fmin(cell_val[iface - 1], cell_val[iface]);
+        real face_max = fmax(cell_val[iface - 1], cell_val[iface]);
 
-        edge[iface] = fmax(edge_min, fmin(edge_max, edge[iface]));
+        face[iface] = fmax(face_min, fmin(face_max, face[iface]));
     }
 
-    edge[ncells] = cellval[ncells - 1];
+    face[cell_count] = cell_val[cell_count - 1];
 }
 
 // =========================================================================================================================
@@ -114,13 +114,13 @@ static real _ppm_state_L (real qa, real dq, real q6, real cfl)
 
 // produce the time-averaged upwind face state for the Riemann solver
 __device__ __forceinline__
-static real _ppm_face_value (const real *edge, const real *cellval, int iupL, int iupR, bool upwind_on_left, real cfl)
+static real _ppm_face_value (const real *face, const real *cell_val, int iupL, int iupR, bool upwind_on_left, real cfl)
 {
-    real val_L = edge[iupL];
-    real val_R = edge[iupR];
+    real val_L = face[iupL];
+    real val_R = face[iupR];
     real dval, coeff_curv;
 
-    _ppm_limit(cellval[iupL], val_L, val_R, dval, coeff_curv);
+    _ppm_limit(cell_val[iupL], val_L, val_R, dval, coeff_curv);
 
     return upwind_on_left ?
         _ppm_state_R(val_R, dval, coeff_curv, cfl) :

@@ -16,18 +16,18 @@ __global__ void advect_x_calc (
 
 __global__ void advect_y_calc (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
-    const real *dev_weight_y, real dt
+    const real *dev_ppm_weight_y, real dt
 );
 
 __global__ void advect_z_calc (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
-    const real *dev_weight_z, real dt
+    const real *dev_ppm_weight_z, real dt
 );
 
 // =========================================================================================================================
 
 __global__ void cfl_rate_calc (
-    real *dev_cfl_rate, const real *dev_dustdens,
+    real *dev_cfl_rates, const real *dev_dustdens,
     const real *dev_dustmomx, const real *dev_dustmomy, const real *dev_dustmomz,
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz
 );
@@ -58,7 +58,7 @@ __global__ void inf_cell_flag (
     #ifdef RADIATION
     const real *dev_optdepth,
     #endif
-    int *dev_badstate
+    int *dev_bad_cell
 );
 
 // =========================================================================================================================
