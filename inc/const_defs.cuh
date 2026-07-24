@@ -86,7 +86,7 @@ const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm
 // dust parameters for dynamics
 // =========================================================================================================================
 
-const real  STOKES_0    = 1.0e-03;          // the reference Stokes number of dust with the reference size
+const real  STOKES_0    = 1.0e-03;          // midplane Stokes number at R_0 for dust with the reference size
 
 const real  RHO_0       = 1.0;              // compact-grain internal density
 

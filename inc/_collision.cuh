@@ -375,30 +375,11 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
             // convert the vertically integrated neighbor area to an effective pair volume
             real R_i = dev_particle[idx_old_i].position.y*sin(dev_particle[idx_old_i].position.z);
             real R_j = dev_particle[idx_old_j].position.y*sin(dev_particle[idx_old_j].position.z);
-            real Z_i = dev_particle[idx_old_i].position.y*cos(dev_particle[idx_old_i].position.z);
-            real Z_j = dev_particle[idx_old_j].position.y*cos(dev_particle[idx_old_j].position.z);
+            real H_gi = R_i*_get_hg(R_i);
+            real H_gj = R_j*_get_hg(R_j);
 
-            real St_i = _get_stokes(R_i, Z_i, s_i, _get_hg(R_i)
-                #ifdef IMPORTGAS
-                , dev_particle[idx_old_i].position.x
-                , dev_particle[idx_old_i].position.y
-                , dev_particle[idx_old_i].position.z
-                , dev_gas_dens
-                #endif // IMPORTGAS
-            );
-            real St_j = _get_stokes(R_j, Z_j, s_j, _get_hg(R_j)
-                #ifdef IMPORTGAS
-                , dev_particle[idx_old_j].position.x
-                , dev_particle[idx_old_j].position.y
-                , dev_particle[idx_old_j].position.z
-                , dev_gas_dens
-                #endif // IMPORTGAS
-            );
-
-            real H_i = R_i*_get_hd(R_i, St_i);
-            real H_j = R_j*_get_hd(R_j, St_j);
-
-            rate_volume /= sqrt(2.0*M_PI*(H_i*H_i + H_j*H_j));
+            // assume every species shares the gas vertical profile in a vertically integrated disk
+            rate_volume /= sqrt(2.0*M_PI*(H_gi*H_gi + H_gj*H_gj));
         }
 
         return rate_volume;

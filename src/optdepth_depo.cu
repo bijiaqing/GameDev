@@ -30,21 +30,10 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real dust_mas
     if (N_Z == 1)
     {
         real R = dev_particle[idx].position.y*sin(dev_particle[idx].position.z);
-        real h_g = _get_hg(R);
-        real H_d = h_g*R;
-        #ifdef DIFFUSION
-        #ifdef CONST_NU
-        real alpha_z = NU/(h_g*h_g*R*R*_get_omegaK(R)*SCHMIDT_Z);
-        #else  // CONST_ALPHA
-        real alpha_z = ALPHA / SCHMIDT_Z;
-        #endif // CONST_NU
-        real stokes_mid = STOKES_0*(size / S_0);
-        #ifndef CONST_ST
-        stokes_mid /= pow(R / R_0, IDX_P);
-        #endif // NOT CONST_ST
-        H_d *= sqrt(alpha_z/stokes_mid);
-        #endif // DIFFUSION
-        weight /= sqrt(2.0*M_PI)*H_d;
+        real H_g = _get_hg(R)*R;
+
+        // close the vertically integrated disk with a well-mixed gas-scale-height profile
+        weight /= sqrt(2.0*M_PI)*H_g;
     }
 
     _deposit_field(dev_optdepth, dev_particle, idx, weight);

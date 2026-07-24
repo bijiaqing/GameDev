@@ -1,7 +1,7 @@
 # CUDA verification models
 
-These model directories turn the analytical tests in
-`.github/rpi_fluid_convergence_tests.md` into cluster-runnable CUDA cases without changing
+These model directories turn the analytical tests summarized in
+`doc/fluid_verification.md` into cluster-runnable CUDA cases without changing
 `mod/rpi_fluid/inc` or `mod/rpi_fluid/src`. Model-local `graffiti_main.cu` files include the shared
 driver in this directory. The Makefile still selects production kernels from `src/` unless a test
 explicitly supplies a model-local replacement.

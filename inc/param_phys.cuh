@@ -1,9 +1,9 @@
 #ifndef PARAM_PHYS_CUH
 #define PARAM_PHYS_CUH
 
-#if defined(IMPORTGAS) && !defined(CONST_ST)
+#ifdef IMPORTGAS
 #include <cassert>      // assert
-#endif // IMPORTGAS && !CONST_ST
+#endif // IMPORTGAS
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
@@ -130,15 +130,6 @@ real _get_alpha (real R, real h_g)
     #endif // CONST_NU
 }
 
-// calculate the density-diffusion dust aspect ratio used by vertically integrated collision rates
-__device__ __forceinline__
-real _get_hd (real R, real St)
-{
-    real h_g = _get_hg(R);
-    real alpha_Z = _get_alpha(R, h_g) / SCHMIDT_Z;
-    
-    return h_g*sqrt(alpha_Z / St);
-}
 #endif // COLLISION
 
 // =========================================================================================================================
@@ -155,32 +146,33 @@ real _get_stokes (real R, real Z, real s, real h_g
 {
     real stokes = STOKES_0*(s / S_0);
 
-    #ifndef CONST_ST
     #ifdef IMPORTGAS
-    if (dev_gas_dens != nullptr)
+    // calibrate the imported density to the analytical reference midplane at R_0
+    assert(dev_gas_dens != nullptr);
+
+    real loc_x = _get_loc_x(x);
+    real loc_y = _get_loc_y(y);
+    real loc_z = _get_loc_z(z);
+
+    real rhog = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
+    if (rhog <= 0.0)
     {
-        // scale the reference midplane Stokes number by the local Epstein-drag dependence
-        real loc_x = _get_loc_x(x);
-        real loc_y = _get_loc_y(y);
-        real loc_z = _get_loc_z(z);
-        
-        real rhog = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
-        if (rhog <= 0.0)
-        {
-            printf("ERROR: Invalid gas density rhog = %e at (x,y,z) = (%e,%e,%e)\n", rhog, x, y, z);
-            assert(false);
-        }
-        
-        stokes *= SIGMA_0 / (rhog*sqrt(2.0*M_PI)*h_g*R);
+        printf("ERROR: Invalid gas density rhog = %e at (x,y,z) = (%e,%e,%e)\n", rhog, x, y, z);
+        assert(false);
     }
-    else
-    #endif // IMPORTGAS
-    {
-        // apply the radial surface-density scaling and exact spherical vertical stratification
-        stokes /= pow(R / R_0, IDX_P);
-        stokes /= _get_gas_strat(R, Z, h_g);
-    }
+
+    real H_g0 = ASPR_0*R_0;
+    real rhog_0 = SIGMA_0 / (sqrt(2.0*M_PI)*H_g0);
+    real H_g = h_g*R;
+
+    stokes *= rhog_0*H_g0 / (rhog*H_g);
+    #else  // ANALYTIC_GAS
+    #ifndef CONST_ST
+    // apply the radial surface-density scaling and exact spherical vertical stratification
+    stokes /= pow(R / R_0, IDX_P);
+    stokes /= _get_gas_strat(R, Z, h_g);
     #endif // NOT CONST_ST
+    #endif // IMPORTGAS
 
     return stokes;
 }

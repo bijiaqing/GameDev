@@ -108,11 +108,11 @@ away from the radial boundaries.
 Expected with the present SSPRK(3,3) algorithm: mass conservation near roundoff and formally
 second-order-or-better coupled convergence. The previous SSPRK2 CFL-0.5 global density orders at
 $N=32,64,128,256$ are 1.7220, 2.3958, 1.6333 for `cyl` and 1.6393, 2.4543, 1.4472 for `sph`.
-The native SSPRK(3,3) orders are 1.6343, 2.5713, 2.6908 for `cyl` and 1.5825, 2.4995, 2.7157 for
-`sph`, confirming the predicted finer-grid behavior. The $N=32$ bump spans only about five cells
-and is not expected to be asymptotic. This case must also report step counts: the current open N7
-defect produces 43 rather than 9 steps for cylindrical $N=128$ and 18 rather than 9 for spherical
-$N=128$, despite correct conservative-field convergence.
+The native post-limiter SSPRK(3,3) orders are 1.5915, 2.4017, 2.7952 for `cyl` and
+1.5428, 2.3757, 2.8012 for `sph`, confirming the predicted finer-grid behavior. The $N=32$ bump
+spans only about five cells and is not expected to be asymptotic. The invariant-domain correction
+also restores the expected step sequences 3, 5, 9, 16, so near-vacuum cells no longer collapse the
+global CFL timestep.
 
 ## `verify_z_transport_3d`
 
@@ -143,8 +143,8 @@ Constant transverse specific fields $\ell_x=0.7$ and $v_y=0.05$ test conservativ
 components. The final time is $T=0.30$ and the support remains separated from both boundaries.
 
 Expected with SSPRK(3,3): mass conservation near roundoff and at least second-order convergence.
-The native CFL-0.5 density orders at $N=32,64,128,256$ are 1.6794, 2.3604, 2.4963. Step counts are
-unchanged from SSPRK2, so the N7 CFL collapse was not observed in this polar problem.
+The native post-limiter CFL-0.5 density orders at $N=32,64,128,256$ are
+1.6813, 2.3623, 2.4999. The step sequence is 4, 7, 13, 26.
 
 ## `verify_x_diffusion_2d`
 

@@ -8,7 +8,7 @@ Purpose
 macOS cannot build the CUDA production code, so this script re-implements the
 *serial algorithm cores* of mod/rpi_fluid in pure numpy, line-by-line from the
 kernels, and checks the mathematical claims made in
-.github/rpi_fluid_numerical_audit.md:
+doc/fluid_numerics.md:
 
   T1  f_diffusion_x : Sherman-Morrison cyclic Crank-Nicolson solve
       - residual of the SM solve against a dense cyclic solve

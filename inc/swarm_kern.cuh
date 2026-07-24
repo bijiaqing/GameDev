@@ -47,6 +47,9 @@ __global__ void particle_init (swarm *dev_particle, const real *dev_random_x, co
     #ifdef MULTISIZE
     , const real *dev_random_s, real mass_norm
     #endif // MULTISIZE
+    #ifdef IMPORTGAS
+    , const real *dev_gas_dens
+    #endif // IMPORTGAS
 );
 
 // =========================================================================================================================

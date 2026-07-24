@@ -67,6 +67,9 @@ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *d
     #ifdef MULTISIZE
     , const real *dev_random_s, real mass_norm
     #endif // MULTISIZE
+    #ifdef IMPORTGAS
+    , const real *dev_gas_dens
+    #endif // IMPORTGAS
 )
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
@@ -96,7 +99,7 @@ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *d
     real vgas_x = v_K*sqrt(fmax(1.0 - 2.0*eta, 0.0));
     real stokes = _get_stokes(R, Z, size, h_g
         #ifdef IMPORTGAS
-        , dev_particle[idx].position.x, y, z, nullptr
+        , dev_particle[idx].position.x, y, z, dev_gas_dens
         #endif // IMPORTGAS
     );
 

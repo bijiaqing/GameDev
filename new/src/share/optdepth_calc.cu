@@ -18,11 +18,10 @@ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens)
     if (N_Z == 1)
     {
         real yc = _get_ycent(iy);
-        real h_g = _get_hg(yc);
-        real H_d = _get_hd(yc, h_g);
+        real H_g = _get_hg(yc)*yc;
 
-        // reconstruct midplane volume density from the evolved surface density
-        extinction_dens /= sqrt(2.0*M_PI)*H_d;
+        // close the vertically integrated disk with a well-mixed gas-scale-height profile
+        extinction_dens /= sqrt(2.0*M_PI)*H_g;
     }
 
     // store the local radial optical-depth contribution of one cell

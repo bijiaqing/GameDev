@@ -191,6 +191,9 @@ int main (int argc, char **argv)
             #ifdef MULTISIZE
             , dev_random_s, mass_norm
             #endif // MULTISIZE
+            #ifdef IMPORTGAS
+            , dev_gas_dens
+            #endif // IMPORTGAS
         );
         CUDA_KERNEL_CHECK("particle_init");
 

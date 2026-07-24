@@ -1,7 +1,7 @@
 # Full-3D MMS preparation status
 
 This directory is intentionally **not a buildable MODEL yet**. It records the remaining work needed
-for the four full-3D manufactured-solution cases in `.github/rpi_fluid_convergence_tests.md`.
+for the four full-3D manufactured-solution cases in `doc/fluid_verification.md`.
 There is no `flags.mk`, so the Makefile will reject accidental use rather than run a non-MMS disk
 and label it as verification.
 

@@ -107,7 +107,7 @@ real _get_alpha (real R, real h_g)
 }
 #endif // DIFFUSION
 
-// calculate the density-diffusion scale height used by initialization and the 2D radiation closure
+// calculate the density-diffusion scale height used by 3D initialization
 __device__ __forceinline__
 real _get_hd (real R, real h_g)
 {
