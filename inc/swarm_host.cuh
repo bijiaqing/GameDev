@@ -61,26 +61,6 @@ real get_mass_norm (const real *grain_size, real dust_mass)
 }
 #endif // MULTISIZE
 
-// sample a Gaussian distribution truncated to the parameter interval by rejection
-inline __host__
-void rand_gaussian (real *profile, int number, real p_min, real p_max, real mu, real std)
-{
-    std::normal_distribution <real> random(mu, std);
-
-    for (int i = 0; i < number; i++)
-    {
-        real value;
-        
-        do
-        {
-            value = random(rand_generator);
-        } 
-        while (value < p_min || value > p_max);
-        
-        profile[i] = value;
-    }
-}
-
 // sample a probability density proportional to p raised to idx_pow
 inline __host__
 void rand_powerlaw (real *profile, int number, real p_min, real p_max, real idx_pow)
@@ -100,51 +80,6 @@ void rand_powerlaw (real *profile, int number, real p_min, real p_max, real idx_
 // =========================================================================================================================
 // smoothed power-law profiles
 // =========================================================================================================================
-
-// evaluate an unnormalized Gaussian convolution kernel
-inline static __host__
-real _get_gaussian (real x, real mu, real std)
-{
-    return std::exp(-(x - mu)*(x - mu)/(2.0*std*std));
-}
-
-// evaluate the compactly supported power-law profile before edge smoothing
-inline static __host__
-real _get_tapered_pow (real x, real x_min, real x_max, real idx_pow)
-{
-    if (x >= x_min && x <= x_max)
-    {
-        return std::pow(x / x_min, idx_pow);
-    }
-    else
-    {
-        return 0.0;
-    }
-}
-
-// convolve a tapered power law with a Gaussian on a uniform numerical grid
-inline static __host__
-void _get_convpow_profile (std::vector <real> &x_axis, std::vector <real> &y_axis,
-    real x_min, real x_max, real idx_pow, real smooth, int bins)
-{
-    real p_min = x_min + 2.0*smooth;
-    real p_max = x_max - 2.0*smooth;
-    real dx = (x_max - x_min) / static_cast<real>(bins);
-
-    x_axis.resize(bins + 1);
-    y_axis.assign(bins + 1, 0.0);
-
-    for (int i = 0; i <= bins; i++) x_axis[i] = x_min + static_cast<real>(i)*dx;
-
-    // accumulate every source bin into every destination bin
-    for (int j = 0; j <= bins; j++)
-    {
-        for (int k = 0; k <= bins; k++)
-        {
-            y_axis[k] += _get_tapered_pow(x_axis[j], p_min, p_max, idx_pow)*_get_gaussian(x_axis[k], x_axis[j], 0.5*smooth);
-        }
-    }
-}
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
 inline static __host__
@@ -178,44 +113,6 @@ void _get_initdens_profile (std::vector <real> &radial_axis, std::vector <real> 
             real kernel = norm*std::exp(-0.5*delta_R*delta_R/(sigma_kernel*sigma_kernel));
             sigma_profile[iu] += sigma_d*kernel*du;
         }
-    }
-}
-
-// sample the numerically convolved power law by inverse-CDF interpolation
-inline __host__
-void rand_convpow (real *profile, int number, real x_min, real x_max, real idx_pow, real smooth, int bins)
-{
-    std::vector <real> x_axis;
-    std::vector <real> y_axis;
-    real dx = (x_max - x_min) / static_cast<real>(bins);
-
-    _get_convpow_profile(x_axis, y_axis, x_min, x_max, idx_pow, smooth, bins);
-
-    std::uniform_real_distribution <real> random(0.0, 1.0);
-    std::vector <real> cdf(bins + 1);
-    cdf[0] = 0.0;
-    
-    for (int bin_idx = 1; bin_idx <= bins; bin_idx++)
-    {
-        cdf[bin_idx] = cdf[bin_idx - 1] + y_axis[bin_idx]*dx;
-    }
-    
-    real cdf_total = cdf[bins];
-    
-    for (int bin_idx = 0; bin_idx <= bins; bin_idx++)
-    {
-        cdf[bin_idx] /= cdf_total;
-    }
-
-    for (int sample_idx = 0; sample_idx < number; sample_idx++)
-    {
-        real u_sample = random(rand_generator);
-        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), u_sample);
-        int bin_lower = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
-        
-        // interpolate within the selected CDF bin
-        real bin_frac = (u_sample - cdf[bin_lower]) / (cdf[bin_lower + 1] - cdf[bin_lower]);
-        profile[sample_idx] = x_axis[bin_lower] + bin_frac*dx;
     }
 }
 
@@ -641,14 +538,15 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
         real s_y1 = y_face_s[idx_y + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
 
-        // sample azimuth uniformly and polar angle uniformly in cos(z)
-        pos_x[i] = X_MIN + dx*(static_cast<real>(idx_x) + random(rand_generator));
+        // sample active azimuth uniformly within the selected cell and lock an inactive azimuth
+        pos_x[i] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(idx_x) + random(rand_generator)) : 0.5*(X_MIN + X_MAX);
         pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
         if (N_Z > 1)
         {
             real s_z0 = z_face_s[idx_z];
             real s_z1 = z_face_s[idx_z + 1];
             real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
+            
             pos_z[i] = std::acos(-s_z);
         }
         else
@@ -696,14 +594,14 @@ do {                                                                            
 inline __host__
 real int_pow (int base, int exp)
 {
-    int result = 1;
+    real result = 1.0;
 
     for (int i = 0; i < exp; i++)
     {
-        result *= base;
+        result *= static_cast<real>(base);
     }
     
-    return static_cast<real>(result);
+    return result;
 }
 
 // calculate the physical duration between the preceding and requested output frames

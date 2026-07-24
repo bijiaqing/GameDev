@@ -23,6 +23,7 @@ endif
 # NVCC base configuration (platform-specific flags)
 NVCC  = nvcc
 NVCC += -arch=sm_80
+NVCC += -std=c++17
 NVCC += -O2 --use_fast_math
 NVCC += --diag-suppress 177,550
 

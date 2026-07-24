@@ -86,8 +86,8 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     }
 
     // normalize by the accessible measure of the smallest ball containing the returned neighbors
-    real radius = sqrtf(static_cast<real>(max_dist2));
-    real volume = _get_ball_measure(x, y, z, radius);
+    real radius = sqrt(static_cast<real>(max_dist2));
+    real volume = _get_ball_measure(y, z, radius);
     #ifdef COLLISION_UNIT_VOLUME
     // bypass KNN geometry only for dimensionless analytic kernel tests
     volume = 1.0;

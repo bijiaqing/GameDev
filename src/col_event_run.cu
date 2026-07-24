@@ -43,7 +43,6 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         return;
     }
 
-    real x = dev_particle[idx_old_i].position.x;
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
     
@@ -56,7 +55,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         query_result, dev_col_tree[idx_tree].cartesian, *dev_boundbox, dev_col_tree, N_T
     );
 
-    real measure = _get_ball_measure(x, y, z, dev_col_dist[idx_old_i]);
+    real measure = _get_ball_measure(y, z, dev_col_dist[idx_old_i]);
     #ifdef COLLISION_UNIT_VOLUME
     // use the analytic unit-volume normalization only in dimensionless kernel tests
     measure = 1.0;

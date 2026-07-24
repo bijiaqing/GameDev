@@ -48,7 +48,7 @@ real3 _get_cart_vel (const swarm &particle)
 
 // approximate the part of a local KNN ball lying inside radial and polar domain boundaries
 __device__ __forceinline__
-real _get_ball_measure (real x, real y, real z, real radius)
+real _get_ball_measure (real y, real z, real radius)
 {
     if (radius <= 0.0) return 0.0;
 
@@ -70,7 +70,7 @@ real _get_ball_measure (real x, real y, real z, real radius)
 
         if (dim == 1)
         {
-            measure *= 0.5*(1.0 + d/radius);
+            measure *= 0.5*(1.0 + d / radius);
         }
         else if (dim == 2)
         {
@@ -83,6 +83,9 @@ real _get_ball_measure (real x, real y, real z, real radius)
             measure *= 1.0 - cap / (4.0*M_PI*radius*radius*radius / 3.0);
         }
     }
+
+    // revolve a reduced-dimensional axisymmetric neighborhood around the complete ring
+    if (N_X == 1) measure *= 2.0*M_PI*y*sin(z);
 
     return measure;
 }
@@ -342,7 +345,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         real s_j = dev_size_old[idx_old_j];
 
         // m_i + m_j
-        return lambda_0*numr_j*0.5*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
+        return lambda_0*numr_j*(_get_grain_mass(s_i) + _get_grain_mass(s_j));
     }
     else if constexpr (kernel == PRODUCT_KERNEL)
     {
