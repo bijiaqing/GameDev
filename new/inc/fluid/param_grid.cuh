@@ -3,7 +3,7 @@
 
 #include <cmath> // cos, pow
 
-#include <const.cuh>
+#include <const_defs.cuh>
 
 // =========================================================================================================================
 // fluid mesh primitives

@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 
 
-# These constants mirror verify_common/const.cuh.  Keeping the analytical
+# These constants mirror verify_common/const_defs.cuh.  Keeping the analytical
 # parameters here makes validation independent of the numerical output itself;
 # an incorrect simulation cannot silently redefine its expected answer.
 Y_MIN, Y_MAX = 0.5, 2.5

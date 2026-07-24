@@ -5,7 +5,7 @@
 #error "VISC_ACCRETION requires DIFFUSION"
 #endif // VISC_ACCRETION && !DIFFUSION
 
-#include <const.cuh>
+#include <const_defs.cuh>
 
 // =========================================================================================================================
 

@@ -1,7 +1,7 @@
-#ifndef ADVECTION_CUH
-#define ADVECTION_CUH
+#ifndef FLUID_TRANSPORT_CUH
+#define FLUID_TRANSPORT_CUH
 
-#include <const.cuh>
+#include <const_defs.cuh>
 
 // =========================================================================================================================
 // dust state recovery

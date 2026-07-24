@@ -17,7 +17,7 @@
 #include <thrust/extrema.h>    // thrust::max_element
 #include <thrust/reduce.h>     // thrust::reduce
 
-#include <const.cuh>
+#include <const_defs.cuh>
 #include <param_grid.cuh>
 
 // =========================================================================================================================

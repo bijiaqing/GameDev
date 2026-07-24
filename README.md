@@ -189,7 +189,7 @@ graffiti/
 │   ├── transport.cuh        # Transport device utilities
 │   └── cukd/                # KD-tree library (header-only)
 ├── src/                      # Default source implementations
-│   ├── graffiti_main.cu     # Main program & evolution loop
+│   ├── swarm_main.cu        # Main program & evolution loop
 │   ├── collision.cu         # Collision kernels
 │   ├── diffusion_*.cu       # Diffusion kernels
 │   ├── particle_init.cu     # Initialization
@@ -209,7 +209,7 @@ graffiti/
 
 ### Key Files
 
-- **`src/graffiti_main.cu`**: Program entry point, main evolution loop, tree building, and I/O orchestration
+- **`src/swarm_main.cu`**: Program entry point, main evolution loop, tree building, and I/O orchestration
 - **`inc/const.cuh`**: Single source for simulation constants and structures (e.g., `struct swarm`)
 - **`src/col_*.cu`**: Collision-related kernels including rate calculation and event handling (`col_rate_calc`, `col_event_run`)
 - **`src/*_init.cu`**: Initialization routines for particles, grids, and RNG states

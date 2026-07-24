@@ -1,7 +1,7 @@
 #ifndef PARAM_PHYS_CUH
 #define PARAM_PHYS_CUH
 
-#include <const.cuh>
+#include <const_defs.cuh>
 
 // =========================================================================================================================
 

@@ -61,7 +61,6 @@ _OBJ =				\
 	dustdens_init.o	\
 	dustdens_depo.o	\
 	gas_lerp_calc.o	\
-	graffiti_main.o	\
 	optdepth_calc.o	\
 	optdepth_csum.o	\
 	optdepth_init.o	\
@@ -71,7 +70,8 @@ _OBJ =				\
 	rngstate_init.o	\
 	ssa_substep_1.o	\
 	ssa_substep_2.o	\
-	ssa_transport.o
+	ssa_transport.o \
+	swarm_main.o
 
 # Append model-specific files if defined in flags.mk
 _INC += $(_INC_MOD)

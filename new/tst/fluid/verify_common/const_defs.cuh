@@ -1,5 +1,5 @@
-#ifndef CONST_CUH
-#define CONST_CUH
+#ifndef CONST_DEFS_CUH
+#define CONST_DEFS_CUH
 
 #include <cmath> // M_PI
 
