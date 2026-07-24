@@ -3,6 +3,7 @@
 
 #include <cmath>                            // M_PI
 #include <string>                           // std::string
+
 #if defined(COLLISION) || defined(DIFFUSION)
 #include <curand_kernel.h>                  // curandState
 #endif // COLLISION || DIFFUSION

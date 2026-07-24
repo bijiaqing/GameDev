@@ -3,6 +3,7 @@
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
 #include <sstream>          // std::stringstream
+
 #if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // thrust::device_ptr
 #include <thrust/extrema.h>     // thrust::max_element
