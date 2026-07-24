@@ -4,6 +4,7 @@
 #include <algorithm>        // std::copy, std::lower_bound, std::max, std::max_element, std::minmax_element
 #include <chrono>           // std::chrono::system_clock
 #include <cmath>            // std::abs, std::acos, std::cos, std::exp, std::log, std::pow, std::sin, std::sqrt
+#include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
 #include <cuda_runtime.h>   // cudaError_t, cudaGetErrorString, cudaGetLastError, cudaSuccess
@@ -626,26 +627,94 @@ real _get_dt_out (int idx_file)
 // binary file I/O
 // =========================================================================================================================
 
+constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
+
 // write a contiguous host array without format conversion
 template <typename DataType> __host__ inline
-bool save_binary (const std::string &file_name, DataType *data, int number)
+bool save_host_binary (const std::string &file_name, const DataType *data, std::size_t number)
 {
     std::ofstream file(file_name, std::ios::binary);
     if (!file) return false;
-    
-    file.write(reinterpret_cast<char*>(data), sizeof(DataType)*number);
-    return file.good();
+
+    const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
+    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    {
+        std::size_t chunk = std::min(chunk_max, number - offset);
+        file.write(reinterpret_cast<const char*>(data + offset), sizeof(DataType)*chunk);
+        if (!file) return false;
+    }
+
+    return true;
 }
 
 // read a contiguous host array without format conversion
 template <typename DataType> __host__ inline
-bool load_binary (const std::string &file_name, DataType *data, int number)
+bool load_host_binary (const std::string &file_name, DataType *data, std::size_t number)
 {
     std::ifstream file(file_name, std::ios::binary);
     if (!file) return false;
-    
-    file.read(reinterpret_cast<char*>(data), sizeof(DataType)*number);
-    return file.good();
+
+    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*number);
+    file.seekg(0, std::ios::end);
+    if (file.tellg() != expected) return false;
+    file.seekg(0, std::ios::beg);
+
+    const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
+    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    {
+        std::size_t chunk = std::min(chunk_max, number - offset);
+        file.read(reinterpret_cast<char*>(data + offset), sizeof(DataType)*chunk);
+        if (!file) return false;
+    }
+
+    return true;
+}
+
+// write a device array through a bounded host buffer
+template <typename DataType> __host__ inline
+bool save_device_binary (const std::string &file_name, const DataType *dev_data, std::size_t number)
+{
+    std::ofstream file(file_name, std::ios::binary);
+    if (!file) return false;
+
+    const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
+    std::vector<DataType> buffer(std::min(number, chunk_max));
+
+    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    {
+        std::size_t chunk = std::min(chunk_max, number - offset);
+        CUDA_CHECK(cudaMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, cudaMemcpyDeviceToHost));
+        file.write(reinterpret_cast<const char*>(buffer.data()), sizeof(DataType)*chunk);
+        if (!file) return false;
+    }
+
+    return true;
+}
+
+// read a device array through a bounded host buffer
+template <typename DataType> __host__ inline
+bool load_device_binary (const std::string &file_name, DataType *dev_data, std::size_t number)
+{
+    std::ifstream file(file_name, std::ios::binary);
+    if (!file) return false;
+
+    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*number);
+    file.seekg(0, std::ios::end);
+    if (file.tellg() != expected) return false;
+    file.seekg(0, std::ios::beg);
+
+    const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
+    std::vector<DataType> buffer(std::min(number, chunk_max));
+
+    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    {
+        std::size_t chunk = std::min(chunk_max, number - offset);
+        file.read(reinterpret_cast<char*>(buffer.data()), sizeof(DataType)*chunk);
+        if (!file) return false;
+        CUDA_CHECK(cudaMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, cudaMemcpyHostToDevice));
+    }
+
+    return true;
 }
 
 // convert internal angular variables to linear azimuthal and polar velocities before file output
@@ -740,7 +809,7 @@ inline __host__
 bool load_epsilon (const std::string &path, int idx_file, real *epsilon)
 {
     std::string fname = path + "epsilon_" + frame_num(idx_file) + ".dat";
-    return load_binary(fname, epsilon, N_G);
+    return load_host_binary(fname, epsilon, N_G);
 }
 
 // load density and all three linear velocity components for one gas frame
@@ -751,16 +820,16 @@ bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real 
     bool success = true;
     
     fname = path + "gasdens_" + frame_num(idx_file) + ".dat";
-    success &= load_binary(fname, gas_dens, N_G);
+    success &= load_host_binary(fname, gas_dens, N_G);
     
     fname = path + "gasvelx_" + frame_num(idx_file) + ".dat";
-    success &= load_binary(fname, gas_velx, N_G);
+    success &= load_host_binary(fname, gas_velx, N_G);
     
     fname = path + "gasvely_" + frame_num(idx_file) + ".dat";
-    success &= load_binary(fname, gas_vely, N_G);
+    success &= load_host_binary(fname, gas_vely, N_G);
     
     fname = path + "gasvelz_" + frame_num(idx_file) + ".dat";
-    success &= load_binary(fname, gas_velz, N_G);
+    success &= load_host_binary(fname, gas_velz, N_G);
     
     return success;
 }
@@ -890,33 +959,93 @@ bool save_variable (const std::string &file_name, real dust_mass)
 // main-loop file transfers
 // =========================================================================================================================
 
+// save the complete particle checkpoint and its stochastic state
+inline __host__
+bool save_particle_data (const std::string &path, int idx_file, swarm *particle, const swarm *dev_particle
+    #if defined(COLLISION) || defined(DIFFUSION)
+    , const curs *dev_rngstate
+    #endif // COLLISION || DIFFUSION
+)
+{
+    CUDA_CHECK(cudaMemcpy(particle, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost));
+    save_sam_as_velocity(particle);
+
+    std::string fname = path + "particle_" + frame_num(idx_file) + ".dat";
+    if (!save_host_binary(fname, particle, N_P))
+    {
+        std::cerr << "Error: Failed to save file: " << fname << std::endl;
+        return false;
+    }
+
+    #if defined(COLLISION) || defined(DIFFUSION)
+    fname = path + "rngstate_" + frame_num(idx_file) + ".dat";
+    if (!save_device_binary(fname, dev_rngstate, N_P))
+    {
+        std::cerr << "Error: Failed to save file: " << fname << std::endl;
+        return false;
+    }
+    #endif // COLLISION || DIFFUSION
+
+    return true;
+}
+
+// load the complete particle checkpoint and its stochastic state
+inline __host__
+bool load_particle_data (const std::string &path, int idx_file, swarm *particle, swarm *dev_particle
+    #if defined(COLLISION) || defined(DIFFUSION)
+    , curs *dev_rngstate
+    #endif // COLLISION || DIFFUSION
+)
+{
+    std::string fname = path + "particle_" + frame_num(idx_file) + ".dat";
+    if (!load_host_binary(fname, particle, N_P))
+    {
+        std::cerr << "Error: Failed to load file: " << fname << std::endl;
+        return false;
+    }
+
+    load_velocity_as_sam(particle);
+    if (N_Z == 1)
+    {
+        for (int idx = 0; idx < N_P; idx++)
+        {
+            particle[idx].position.z = 0.5*M_PI;
+            particle[idx].velocity.z = 0.0;
+        }
+    }
+    CUDA_CHECK(cudaMemcpy(dev_particle, particle, sizeof(swarm)*N_P, cudaMemcpyHostToDevice));
+
+    #if defined(COLLISION) || defined(DIFFUSION)
+    fname = path + "rngstate_" + frame_num(idx_file) + ".dat";
+    if (!load_device_binary(fname, dev_rngstate, N_P))
+    {
+        std::cerr << "Error: Failed to load file: " << fname << std::endl;
+        return false;
+    }
+    #endif // COLLISION || DIFFUSION
+
+    return true;
+}
+
+#if defined(COLLISION) || defined(DIFFUSION)
 #define SAVE_PARTICLE_TO_FILE(idx)                                                          \
 do {                                                                                        \
-    CUDA_CHECK(cudaMemcpy(particle, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost));          \
-    save_sam_as_velocity(particle);                                                         \
-    std::string fname = PATH + "particle_" + frame_num(idx) + ".dat";                       \
-    save_binary(fname, particle, N_P);                                                      \
+    if (!save_particle_data(PATH, idx, particle, dev_particle, dev_rngstate)) return 1;     \
 } while(0)
-
 #define LOAD_PARTICLE_TO_VRAM(idx)                                                          \
 do {                                                                                        \
-    std::string fname = PATH + "particle_" + frame_num(idx) + ".dat";                       \
-    if (!load_binary(fname, particle, N_P))                                                 \
-    {                                                                                       \
-        std::cerr << "Error: Failed to load file: " << fname << std::endl;                  \
-        return 1;                                                                           \
-    }                                                                                       \
-    load_velocity_as_sam(particle);                                                         \
-    if (N_Z == 1)                                                                           \
-    {                                                                                       \
-        for (int idx_particle = 0; idx_particle < N_P; idx_particle++)                     \
-        {                                                                                   \
-            particle[idx_particle].position.z = 0.5*M_PI;                                  \
-            particle[idx_particle].velocity.z = 0.0;                                       \
-        }                                                                                   \
-    }                                                                                       \
-    CUDA_CHECK(cudaMemcpy(dev_particle, particle, sizeof(swarm)*N_P, cudaMemcpyHostToDevice));          \
+    if (!load_particle_data(PATH, idx, particle, dev_particle, dev_rngstate)) return 1;     \
 } while(0)
+#else  // NO COLLISION OR DIFFUSION
+#define SAVE_PARTICLE_TO_FILE(idx)                                                          \
+do {                                                                                        \
+    if (!save_particle_data(PATH, idx, particle, dev_particle)) return 1;                   \
+} while(0)
+#define LOAD_PARTICLE_TO_VRAM(idx)                                                          \
+do {                                                                                        \
+    if (!load_particle_data(PATH, idx, particle, dev_particle)) return 1;                   \
+} while(0)
+#endif // COLLISION || DIFFUSION
 
 #ifdef IMPORTGAS
 #define LOAD_GAS_DATA_TO_VRAM(idx)                                                          \
@@ -957,7 +1086,11 @@ do {                                                                            
     CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
     CUDA_CHECK(cudaMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost));           \
     std::string fname = PATH + "dustdens_" + frame_num(idx) + ".dat";                       \
-    save_binary(fname, dustdens, N_G);                                                      \
+    if (!save_host_binary(fname, dustdens, N_G))                                            \
+    {                                                                                       \
+        std::cerr << "Error: Failed to save file: " << fname << std::endl;                  \
+        return 1;                                                                           \
+    }                                                                                       \
 } while(0)
 #endif // SAVE_DENS
 
@@ -979,7 +1112,11 @@ do {                                                                            
     }                                                                                       \
     CUDA_CHECK(cudaMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, cudaMemcpyDeviceToHost));           \
     std::string fname = PATH + "optdepth_" + frame_num(idx) + ".dat";                       \
-    save_binary(fname, optdepth, N_G);                                                      \
+    if (!save_host_binary(fname, optdepth, N_G))                                            \
+    {                                                                                       \
+        std::cerr << "Error: Failed to save file: " << fname << std::endl;                  \
+        return 1;                                                                           \
+    }                                                                                       \
 } while(0)
 #endif // RADIATION
 

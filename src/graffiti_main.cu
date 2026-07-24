@@ -246,11 +246,6 @@ int main (int argc, char **argv)
         #ifdef IMPORTGAS
         LOAD_GAS_DATA_TO_VRAM(idx_from);
         #endif // IMPORTGAS
-
-        #if defined(COLLISION) || defined(DIFFUSION)
-        rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
-        CUDA_KERNEL_CHECK("rngstate_init");
-        #endif // COLLISION || DIFFUSION
         
         msg_output(idx_from);
     }

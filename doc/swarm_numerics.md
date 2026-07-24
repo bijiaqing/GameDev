@@ -287,9 +287,10 @@ Science files store physical linear velocity $(v_\phi,v_r,v_\theta)$. Loading co
 the internal angular variables before device evolution. Grain size and represented grain number
 are included only for multisize builds, matching the declared binary dtype.
 
-Random states are deterministically reinitialized on resume rather than serialized. A resumed
-stochastic run therefore has the correct distribution but is not the same random realization as
-an uninterrupted run.
+Collision or diffusion builds save `rngstate_<frame>.dat` beside every particle checkpoint and
+restore it on resume. The companion file contains one raw `curandState` per representative, so a
+resumed stochastic run continues the same random streams as an uninterrupted run built with the
+same CUDA state layout.
 
 ## Current limitations and required tests
 
