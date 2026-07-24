@@ -109,7 +109,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     {
         // coagulate both physical grain masses into the updated representative species
         dev_particle[idx_old_i].par_size = s_k;
-        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i / (s_k*s_k*s_k);
     }
     else
     {
@@ -117,7 +117,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         real sample = curand_uniform_double(&rngstate);
         s_k = fmax(INIT_SMIN, s_k*sample*sample);
         dev_particle[idx_old_i].par_size = s_k;
-        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i/(s_k*s_k*s_k);
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*s_i*s_i*s_i / (s_k*s_k*s_k);
     }
     #endif // MULTISIZE
 

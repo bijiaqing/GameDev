@@ -468,19 +468,11 @@ int main (int argc, char **argv)
         #endif // SAVE_DENS
 
         #ifdef LOGTIMING
-        {
-            SAVE_PARTICLE_TO_FILE(idx_file);
-        }
+        SAVE_PARTICLE_TO_FILE(idx_file);
         #elif defined(LOGOUTPUT)
-        if (is_log_power(idx_file))
-        {
-            SAVE_PARTICLE_TO_FILE(idx_file);
-        }
+        if (is_log_power(idx_file)) SAVE_PARTICLE_TO_FILE(idx_file);
         #else  // LINEAR_OUTPUT
-        if (idx_file % LIN_BASE == 0)
-        {
-            SAVE_PARTICLE_TO_FILE(idx_file);
-        }
+        if (idx_file % LIN_BASE == 0) SAVE_PARTICLE_TO_FILE(idx_file);
         #endif // LOGTIMING
 
         msg_output(idx_file);

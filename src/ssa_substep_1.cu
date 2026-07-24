@@ -13,7 +13,7 @@
 __global__
 void ssa_substep_1 (swarm *dev_particle, real dt)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
     real x_i, y_i, z_i;

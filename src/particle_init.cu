@@ -72,7 +72,7 @@ void particle_init (swarm *dev_particle, const real *dev_random_x, const real *d
     #endif // IMPORTGAS
 )
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
     // copy host-sampled spherical positions into the particle state

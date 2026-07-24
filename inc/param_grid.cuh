@@ -10,21 +10,21 @@
 // =========================================================================================================================
 
 __host__ __device__ __forceinline__
-real _get_dx() { return    (X_MAX - X_MIN)     / static_cast<real>(N_X); }
+real _get_dx() { return (X_MAX - X_MIN) / static_cast<real>(N_X); }
 
 __host__ __device__ __forceinline__
 real _get_dy() { return pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y)); }
 
 __host__ __device__ __forceinline__
-real _get_dz() { return    (Z_MAX - Z_MIN)     / static_cast<real>(N_Z); }
+real _get_dz() { return (Z_MAX - Z_MIN) / static_cast<real>(N_Z); }
 
 // =========================================================================================================================
 
 __host__ __device__ __forceinline__
-real _get_yedge (int iy) { return Y_MIN * pow(_get_dy(), static_cast<real>(iy)); }
+real _get_yedge (int iy) { return Y_MIN*pow(_get_dy(), static_cast<real>(iy)); }
 
 __host__ __device__ __forceinline__
-real _get_zedge (int iz) { return Z_MIN +     _get_dz()* static_cast<real>(iz); }
+real _get_zedge (int iz) { return Z_MIN + _get_dz()*static_cast<real>(iz); }
 
 // =========================================================================================================================
 
@@ -67,7 +67,7 @@ real _get_vol_z (int iz)
 // convert azimuth to its continuous uniform-grid coordinate
 __device__ __forceinline__
 real _get_loc_x (real x)
-{ return (N_X > 1) ?    (x - X_MIN) /     _get_dx()  : 0.0; }
+{ return (N_X > 1) ? (x - X_MIN) / _get_dx() : 0.0; }
 
 // convert spherical radius to its continuous logarithmic-grid coordinate
 __device__ __forceinline__
@@ -77,7 +77,7 @@ real _get_loc_y (real y)
 // convert polar angle to its continuous uniform-grid coordinate
 __device__ __forceinline__
 real _get_loc_z (real z)
-{ return (N_Z > 1) ?    (z - Z_MIN) /     _get_dz()  : 0.0; }
+{ return (N_Z > 1) ? (z - Z_MIN) / _get_dz() : 0.0; }
 
 // =========================================================================================================================
 // grid bounds and indexing

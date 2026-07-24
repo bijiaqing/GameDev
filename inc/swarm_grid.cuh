@@ -220,7 +220,7 @@ real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z
     value += dev_field_in[idx_cell + next_x + next_y         ]*       frac_x *       frac_y *(1.0 - frac_z);
     value += dev_field_in[idx_cell                   + next_z]*(1.0 - frac_x)*(1.0 - frac_y)*       frac_z ;
     value += dev_field_in[idx_cell + next_x          + next_z]*       frac_x *(1.0 - frac_y)*       frac_z ;
-    value += dev_field_in[idx_cell          + next_y + next_z]*(1.0 - frac_x)*       frac_y *       frac_z ;
+    value += dev_field_in[idx_cell +          next_y + next_z]*(1.0 - frac_x)*       frac_y *       frac_z ;
     value += dev_field_in[idx_cell + next_x + next_y + next_z]*       frac_x *       frac_y *       frac_z ;
 
     if (outer_edge && loc_y < 1.0) value *= 1.0 - frac_y; // interpolate from zero optical depth at the inner face

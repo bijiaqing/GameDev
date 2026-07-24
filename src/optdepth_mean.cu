@@ -10,7 +10,7 @@
 __global__
 void optdepth_mean (real *dev_optdepth)
 {
-    int idx_x = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx_x = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_x >= N_Y*N_Z) return;
 
     int idx_y = idx_x % N_Y;

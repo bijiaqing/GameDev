@@ -11,7 +11,7 @@
 __global__
 void dustdens_calc (real *dev_dustdens)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_G) return;
 
     int iy = (idx / N_X) % N_Y;

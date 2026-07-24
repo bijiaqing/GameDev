@@ -58,8 +58,14 @@ void _apply_periodic_x (real &x)
     }
     else
     {
-        while (x >= X_MAX) x -= X_MAX - X_MIN;
-        while (x <  X_MIN) x += X_MAX - X_MIN;
+        while (x >= X_MAX)
+        {
+            x -= X_MAX - X_MIN;
+        }
+        while (x < X_MIN)
+        {
+            x += X_MAX - X_MIN;
+        }
     }
 }
 
@@ -106,10 +112,7 @@ void _apply_transport_boundary (real &x, real &y, real &z, real &lx, real &vy, r
     bool polar_exit = N_Z > 1 && (z < Z_MIN || z >= Z_MAX);
     #endif // HALFDISK
 
-    if (polar_exit)
-    {
-        _absorb_particle(y, z, lx, vy, lz);
-    }
+    if (polar_exit) _absorb_particle(y, z, lx, vy, lz);
 }
 
 // reflect stochastic boundary crossings to impose zero radial and polar diffusive flux
@@ -160,7 +163,7 @@ void _get_force_term (real y, real z, real R, real l_x, real l_z, real beta, rea
 {
     F_y  = -(1.0 - beta)*_get_omegaK(y)*_get_omegaK(y)*y;
     Fc_y = l_x*l_x / R / R / y + l_z*l_z / y / y / y;
-    Tc_z = (N_Z > 1) ? l_x*l_x / R / R / sin(z) * cos(z) : 0.0;
+    Tc_z = (N_Z > 1) ? l_x*l_x / R / R / sin(z)*cos(z) : 0.0;
 }
 
 // integrate drag analytically at the midpoint and complete the velocity and position update

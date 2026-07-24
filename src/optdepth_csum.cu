@@ -10,7 +10,7 @@
 __global__
 void optdepth_csum (real *dev_optdepth)
 {
-    int idx_y = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx_y = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_y >= N_X*N_Z) return;
 
     int idx_x = idx_y % N_X;

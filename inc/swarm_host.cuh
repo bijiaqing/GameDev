@@ -74,7 +74,7 @@ void rand_powerlaw (real *profile, int number, real p_min, real p_max, real idx_
     // invert the cumulative distribution for dN proportional to p^idx_pow dp
     for (int i = 0; i < number; i++)
     {
-        profile[i] = std::pow((tmp_max - tmp_min)*random(rand_generator) + tmp_min, 1.0/(idx_pow + 1.0));
+        profile[i] = std::pow((tmp_max - tmp_min)*random(rand_generator) + tmp_min, 1.0 / (idx_pow + 1.0));
     }
 }
 
@@ -111,7 +111,7 @@ void _get_initdens_profile (std::vector <real> &sigma_profile)
         for (int iu = 0; iu <= N_Y; iu++)
         {
             real delta_R = R_axis[iu] - R_src;
-            real kernel = norm*std::exp(-0.5*delta_R*delta_R/(sigma_kernel*sigma_kernel));
+            real kernel = norm*std::exp(-0.5*delta_R*delta_R / (sigma_kernel*sigma_kernel));
             sigma_profile[iu] += sigma_d*kernel*du;
         }
     }
@@ -231,13 +231,22 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
 
     // normalize the cell-mass CDF before inverse sampling
     real total_mass = cdf.back();
-    for (real &value : cdf) value /= total_mass;
+    for (real &value : cdf)
+    {
+        value /= total_mass;
+    }
 
     std::vector<real> y_face_s(N_Y + 1);
-    for (int iy = 0; iy <= N_Y; iy++) y_face_s[iy] = _get_s_y(_get_yedge(iy));
+    for (int iy = 0; iy <= N_Y; iy++)
+    {
+        y_face_s[iy] = _get_s_y(_get_yedge(iy));
+    }
 
     std::vector<real> z_face_s(N_Z + 1);
-    for (int iz = 0; iz <= N_Z; iz++) z_face_s[iz] = _get_s_z(_get_zedge(iz));
+    for (int iz = 0; iz <= N_Z; iz++)
+    {
+        z_face_s[iz] = _get_s_z(_get_zedge(iz));
+    }
 
     for (int i = 0; i < number; i++)
     {
@@ -307,7 +316,7 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
 
                 real H_d = H_g*std::sqrt(alpha_z / stokes_mid);
 
-                log_density -= 0.5*Z*Z/(H_d*H_d);
+                log_density -= 0.5*Z*Z / (H_d*H_d);
                 log_density -= std::log(H_d);
             }
 
@@ -369,10 +378,16 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
     std::vector<real> y_face_s(N_Y + 1);
-    for (int iy = 0; iy <= N_Y; iy++) y_face_s[iy] = _get_s_y(_get_yedge(iy));
+    for (int iy = 0; iy <= N_Y; iy++)
+    {
+        y_face_s[iy] = _get_s_y(_get_yedge(iy));
+    }
 
     std::vector<real> z_face_s(N_Z + 1);
-    for (int iz = 0; iz <= N_Z; iz++) z_face_s[iz] = _get_s_z(_get_zedge(iz));
+    for (int iz = 0; iz <= N_Z; iz++)
+    {
+        z_face_s[iz] = _get_s_z(_get_zedge(iz));
+    }
 
     for (int i = 0; i < number; i++)
     {
@@ -387,7 +402,7 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         int idx_hi = cells;
         while (idx_lo < idx_hi)
         {
-            int idx_mid = idx_lo + (idx_hi - idx_lo)/2;
+            int idx_mid = idx_lo + (idx_hi - idx_lo) / 2;
             real prob_mid = (1.0 - frac_size)*cdf_lo[idx_mid] + frac_size*cdf_hi[idx_mid];
             if (prob_mid < sample) idx_lo = idx_mid + 1;
             else idx_hi = idx_mid;
@@ -439,10 +454,7 @@ real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
         
         val -= d_val;
 
-        if (std::abs(d_val) < tol*(1.0 + std::abs(val))) 
-        {
-            return val;
-        }
+        if (std::abs(d_val) < tol*(1.0 + std::abs(val))) return val;
     }
 
     throw std::runtime_error("lambertWm1: did not converge");
@@ -514,10 +526,16 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     }
 
     std::vector<real> y_face_s(N_Y + 1);
-    for (int idx_y = 0; idx_y <= N_Y; idx_y++) y_face_s[idx_y] = _get_s_y(_get_yedge(idx_y));
+    for (int idx_y = 0; idx_y <= N_Y; idx_y++)
+    {
+        y_face_s[idx_y] = _get_s_y(_get_yedge(idx_y));
+    }
 
     std::vector<real> z_face_s(N_Z + 1);
-    for (int idx_z = 0; idx_z <= N_Z; idx_z++) z_face_s[idx_z] = _get_s_z(_get_zedge(idx_z));
+    for (int idx_z = 0; idx_z <= N_Z; idx_z++)
+    {
+        z_face_s[idx_z] = _get_s_z(_get_zedge(idx_z));
+    }
     
     // select cells by inverse transform sampling
     for (int i = 0; i < number; i++)
@@ -530,7 +548,7 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
         
         int idx_x = idx_cell % N_X;
         int idx_y = (idx_cell / N_X) % N_Y;
-        int idx_z = idx_cell / (N_X * N_Y);
+        int idx_z = idx_cell / (N_X*N_Y);
         
         // sample logarithmic radial cells uniformly in the exact radial volume coordinate
         real s_y0 = y_face_s[idx_y];
@@ -566,7 +584,8 @@ void cuda_fail (cudaError_t status, const char *operation, const char *file, int
     std::cerr
     << "CUDA error at " << file << ":" << line
     << " during " << operation << ": " << cudaGetErrorString(status)
-    << " (" << static_cast<int>(status) << ")\n";
+    << " (" << static_cast<int>(status) << ")" 
+    << std::endl;
     
     std::exit(EXIT_FAILURE);
 }
@@ -786,10 +805,7 @@ bool is_log_power (int idx_file)
     else
     {
         // repeatedly remove factors for an arbitrary integer base
-        if (idx_file <= 0)
-        {
-            return false;
-        }
+        if (idx_file <= 0) return false;
 
         while (idx_file % LOG_BASE == 0)
         {

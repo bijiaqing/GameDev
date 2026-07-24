@@ -75,7 +75,7 @@ real _get_ball_measure (real y, real z, real radius)
         else if (dim == 2)
         {
             real cap = radius*radius*acos(d / radius) - d*sqrt(radius*radius - d*d);
-            measure *= 1.0 - cap/(M_PI*radius*radius);
+            measure *= 1.0 - cap / (M_PI*radius*radius);
         }
         else
         {
@@ -386,11 +386,12 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     }
     else
     {
-        if (threadIdx.x == 0 && blockIdx.x == 0) // KernelType is a compile-time constant
+        // kernel is a compile-time constant
+        if (threadIdx.x == 0 && blockIdx.x == 0) 
         {
-            printf("ERROR: Invalid COAG_KERNEL value = %d \n", static_cast<int>(kernel));
+            printf("ERROR: Invalid COAG_KERNEL value = %d\n", static_cast<int>(kernel));
         }
-        
+
         assert(false);
         return 0.0; // unreachable, but prevents compiler warning
     }

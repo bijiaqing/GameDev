@@ -10,7 +10,7 @@
 __global__
 void rngstate_init (curs *dev_rngstate, int seed)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
     curand_init(seed, idx, 0, &dev_rngstate[idx]);

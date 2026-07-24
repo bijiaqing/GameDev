@@ -20,7 +20,7 @@
 __global__
 void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
     real x = dev_particle[idx].position.x;

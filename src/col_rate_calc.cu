@@ -27,7 +27,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     real lambda_0
 )
 {
-    int idx_tree = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx_tree = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_tree >= N_T || dev_col_tree[idx_tree].image != 0) return;
     
     int idx_old_i = dev_col_tree[idx_tree].index_old;

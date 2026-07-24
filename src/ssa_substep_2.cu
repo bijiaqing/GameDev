@@ -21,7 +21,7 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     real dt
 )
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
     real x_1, y_1, z_1;

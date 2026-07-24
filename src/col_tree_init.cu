@@ -12,7 +12,7 @@
 __global__
 void col_tree_init (tree *dev_col_tree, const swarm *dev_particle)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
     float x = static_cast<float>(dev_particle[idx].position.x);

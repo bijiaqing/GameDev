@@ -13,7 +13,7 @@
 __global__
 void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real total_dust_mass)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
     if (!_is_particle_active(dev_particle[idx].position.y, dev_particle[idx].position.z)) return;
 
