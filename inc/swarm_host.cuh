@@ -47,7 +47,7 @@ extern std::mt19937 rand_generator;
 #ifdef MULTISIZE
 // calculate the mass scale that makes the sampled representative masses sum to the target dust mass
 inline __host__
-real get_mass_norm (const real *grain_size, real dust_mass)
+real get_mass_norm (const real *grain_size, real total_dust_mass)
 {
     long double weight_sum = 0.0;
 
@@ -57,7 +57,7 @@ real get_mass_norm (const real *grain_size, real dust_mass)
     }
 
     return static_cast<real>(
-        static_cast<long double>(dust_mass)*static_cast<long double>(N_P) / weight_sum
+        static_cast<long double>(total_dust_mass)*static_cast<long double>(N_P) / weight_sum
     );
 }
 #endif // MULTISIZE
@@ -84,7 +84,7 @@ void rand_powerlaw (real *profile, int number, real p_min, real p_max, real idx_
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
 inline static __host__
-void _get_initdens_profile (std::vector <real> &radial_axis, std::vector <real> &sigma_profile)
+void _get_initdens_profile (std::vector <real> &sigma_profile)
 {
     const real smooth = 0.05*R_0;
     const real src_min = Y_MIN + 2.0*smooth;
@@ -93,24 +93,24 @@ void _get_initdens_profile (std::vector <real> &radial_axis, std::vector <real> 
     const real du = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
     const real norm = 1.0 / (std::sqrt(2.0*M_PI)*sigma_kernel);
 
-    radial_axis.resize(N_Y + 1);
+    std::vector <real> R_axis(N_Y + 1);
     sigma_profile.assign(N_Y + 1, 0.0);
 
     for (int iu = 0; iu <= N_Y; iu++)
     {
-        radial_axis[iu] = Y_MIN + static_cast<real>(iu)*du;
+        R_axis[iu] = Y_MIN + static_cast<real>(iu)*du;
     }
 
     for (int is = 0; is <= N_Y; is++)
     {
-        real R_src = radial_axis[is];
+        real R_src = R_axis[is];
         if (R_src < src_min || R_src > src_max) continue;
 
         real sigma_d = METAL_Z*SIGMA_0*std::pow(R_src / R_0, IDX_P);
 
         for (int iu = 0; iu <= N_Y; iu++)
         {
-            real delta_R = radial_axis[iu] - R_src;
+            real delta_R = R_axis[iu] - R_src;
             real kernel = norm*std::exp(-0.5*delta_R*delta_R/(sigma_kernel*sigma_kernel));
             sigma_profile[iu] += sigma_d*kernel*du;
         }
@@ -141,12 +141,7 @@ real _get_init_density (real sigma, real R, real Z, real size)
     real H_d = h_g*R;
 
     #ifdef DIFFUSION
-    #ifdef CONST_NU
-    real omega = std::sqrt(G*M_S / (R*R*R));
-    real alpha_z = NU / (h_g*h_g*R*R*omega*SCHMIDT_Z);
-    #else  // CONST_ALPHA
-    real alpha_z = ALPHA / SCHMIDT_Z;
-    #endif // CONST_NU
+    real alpha_z = _get_alpha(R, h_g) / SCHMIDT_Z;
 
     real stokes_mid = STOKES_0*(size / S_0);
     #ifndef CONST_ST
@@ -155,19 +150,18 @@ real _get_init_density (real sigma, real R, real Z, real size)
     H_d *= std::sqrt(alpha_z / stokes_mid);
     #endif // DIFFUSION
 
-    return sigma*std::exp(-0.5*Z*Z/(H_d*H_d)) / (std::sqrt(2.0*M_PI)*H_d);
+    return sigma*std::exp(-0.5*Z*Z / (H_d*H_d)) / (std::sqrt(2.0*M_PI)*H_d);
 }
 
-// integrate the initialized reference-size profile over the represented spherical mesh
+// integrate the initialized profile to obtain the total dust mass represented by the simulation domain
 inline __host__
-real get_dust_mass ()
+real get_total_dust_mass ()
 {
-    std::vector <real> radial_axis;
     std::vector <real> sigma_profile;
-    _get_initdens_profile(radial_axis, sigma_profile);
+    _get_initdens_profile(sigma_profile);
 
     real vol_x = (N_X > 1) ? X_MAX - X_MIN : 2.0*M_PI;
-    real dust_mass = 0.0;
+    real total_dust_mass = 0.0;
 
     for (int iz = 0; iz < N_Z; iz++)
     {
@@ -179,15 +173,16 @@ real get_dust_mass ()
             real yc = _get_ycent(iy);
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
+
             real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
             real density = _get_init_density(sigma, R, Z, S_0);
             real vol_y = _get_vol_y(iy);
 
-            dust_mass += density*vol_x*vol_y*vol_z;
+            total_dust_mass += density*vol_x*vol_y*vol_z;
         }
     }
 
-    return dust_mass;
+    return total_dust_mass;
 }
 
 // =========================================================================================================================
@@ -203,9 +198,8 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
-    std::vector <real> radial_axis;
     std::vector <real> sigma_profile;
-    _get_initdens_profile(radial_axis, sigma_profile);
+    _get_initdens_profile(sigma_profile);
 
     real mesh_dim = _get_mesh_dim();
 
@@ -223,11 +217,13 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
             real yc = _get_ycent(iy);
             real R = yc*std::sin(zc);
             real Z = yc*std::cos(zc);
+
             real sigma = _interp_convpow_profile(R, sigma_profile, Y_MIN, Y_MAX);
             real density = _get_init_density(sigma, R, Z, size);
 
             real vol_y = _get_vol_y(iy);
             int idx = iy + iz*N_Y;
+
             cell_mass[idx] = density*vol_y*vol_z;
             cdf[idx + 1] = cdf[idx] + cell_mass[idx];
         }
@@ -256,6 +252,7 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
         real s_y0 = y_face_s[iy];
         real s_y1 = y_face_s[iy + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
+
         pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
 
         if (N_Z > 1)
@@ -263,6 +260,7 @@ void rand_disk_mono (real *pos_x, real *pos_y, real *pos_z, real size, int numbe
             real s_z0 = z_face_s[iz];
             real s_z1 = z_face_s[iz + 1];
             real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
+
             pos_z[i] = std::acos(-s_z);
         }
         else
@@ -300,12 +298,7 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
                 real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
                 real H_g = h_g*R;
 
-                #ifdef CONST_NU
-                real omega = std::sqrt(G*M_S / (R*R*R));
-                real alpha_z = NU / (h_g*h_g*R*R*omega*SCHMIDT_Z);
-                #else  // CONST_ALPHA
-                real alpha_z = ALPHA / SCHMIDT_Z;
-                #endif // CONST_NU
+                real alpha_z = _get_alpha(R, h_g) / SCHMIDT_Z;
 
                 real stokes_mid = STOKES_0*(size / S_0);
                 #ifndef CONST_ST
@@ -313,6 +306,7 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
                 #endif // NOT CONST_ST
 
                 real H_d = H_g*std::sqrt(alpha_z / stokes_mid);
+
                 log_density -= 0.5*Z*Z/(H_d*H_d);
                 log_density -= std::log(H_d);
             }
@@ -331,7 +325,10 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_pro
     }
 
     real total_mass = cdf[cells];
-    for (real &value : cdf) value /= total_mass;
+    for (real &value : cdf) 
+    {
+        value /= total_mass;
+    }
 }
 
 // sample polydisperse dust from the joint y-z distribution conditioned on each previously assigned grain size
@@ -356,9 +353,8 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
     real log_size_max = std::log(size_max);
     real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bins - 1);
 
-    std::vector <real> radial_axis;
     std::vector <real> sigma_profile;
-    _get_initdens_profile(radial_axis, sigma_profile);
+    _get_initdens_profile(sigma_profile);
 
     std::vector <real> cdf;
     std::vector <real> cdf_bank(static_cast<size_t>(size_bins)*static_cast<size_t>(cells + 1));
@@ -406,11 +402,13 @@ void rand_disk_poly (real *pos_x, real *pos_y, real *pos_z, const real *par_size
         real s_y0 = y_face_s[iy];
         real s_y1 = y_face_s[iy + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
+        
         pos_y[i] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
 
         real s_z0 = z_face_s[iz];
         real s_z1 = z_face_s[iz + 1];
         real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
+        
         pos_z[i] = std::acos(-s_z);
     }
 }
@@ -477,7 +475,7 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     real mesh_dim = _get_mesh_dim();
     
     // integrate the imported dust density with the same exact disk cell measure
-    std::vector <real> dust_mass(N_G);
+    std::vector <real> cell_mass(N_G);
     real total_mass = 0.0;
     
     for (int idx_z = 0; idx_z < N_Z; idx_z++)
@@ -494,8 +492,8 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
                 real cell_volume = vol_x*vol_y*vol_z;
                 
                 int idx = idx_x + idx_y*N_X + idx_z*N_X*N_Y;
-                dust_mass[idx] = gas_dens[idx]*epsilon[idx]*cell_volume;
-                total_mass += dust_mass[idx];
+                cell_mass[idx] = gas_dens[idx]*epsilon[idx]*cell_volume;
+                total_mass += cell_mass[idx];
             }
         }
     }
@@ -506,7 +504,7 @@ void rand_from_file (real *pos_x, real *pos_y, real *pos_z, int number, const re
     
     for (int idx = 0; idx < N_G; idx++)
     {
-        cdf[idx + 1] = cdf[idx] + dust_mass[idx];
+        cdf[idx + 1] = cdf[idx] + cell_mass[idx];
     }
     
     // normalize the CDF to unit total probability
@@ -837,7 +835,7 @@ bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real 
 
 // write the active physical, numerical, grid, and binary-layout configuration
 inline __host__
-bool save_variable (const std::string &file_name, real dust_mass)
+bool save_variable (const std::string &file_name, real total_dust_mass)
 {
     std::ofstream file(file_name);
     if (!file) return false;
@@ -873,7 +871,7 @@ bool save_variable (const std::string &file_name, real dust_mass)
     
     // dust parameters
     file << "STOKES_0    = " << std::scientific     << std::setprecision(8) << STOKES_0     << std::endl;
-    file << "DUST_MASS   = " << std::scientific     << std::setprecision(8) << dust_mass    << std::endl;
+    file << "TOTAL_DUST_MASS = " << std::scientific << std::setprecision(8) << total_dust_mass << std::endl;
     file << "RHO_0       = " << std::scientific     << std::setprecision(8) << RHO_0        << std::endl;
     #ifdef RADIATION
     file << "BETA_0      = " << std::scientific     << std::setprecision(8) << BETA_0       << std::endl;
@@ -890,7 +888,7 @@ bool save_variable (const std::string &file_name, real dust_mass)
 
     #ifdef COLLISION
     file << "LAMBDA_0    = " << std::scientific     << std::setprecision(8)
-         << N_P / (N_K - 1.0) / dust_mass << std::endl;
+         << N_P / (N_K - 1.0) / total_dust_mass << std::endl;
     file << "V_FRAG      = " << std::scientific     << std::setprecision(8) << V_FRAG       << std::endl;
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
@@ -1080,7 +1078,7 @@ do {                                                                            
 do {                                                                                        \
     dustdens_init <<< NB_G, TPB >>> (dev_dustdens);                                         \
     CUDA_KERNEL_CHECK("dustdens_init");                                                     \
-    dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, dust_mass);                \
+    dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, total_dust_mass);          \
     CUDA_KERNEL_CHECK("dustdens_depo");                                                     \
     dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);                                         \
     CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
@@ -1099,7 +1097,7 @@ do {                                                                            
 do {                                                                                        \
     optdepth_init <<< NB_G, TPB >>> (dev_optdepth);                                         \
     CUDA_KERNEL_CHECK("optdepth_init");                                                     \
-    optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, dust_mass);                \
+    optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);          \
     CUDA_KERNEL_CHECK("optdepth_depo");                                                     \
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);                                         \
     CUDA_KERNEL_CHECK("optdepth_calc");                                                     \

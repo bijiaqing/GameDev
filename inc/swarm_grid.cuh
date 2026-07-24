@@ -31,32 +31,32 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
     }
     else
     {
-        real m_x = 0.5;
-        bool edge_x = loc_x < m_x || loc_x > static_cast<real>(N_X) + m_x - 1.0;
+        real ref_x = 0.5;
+        bool edge_x = loc_x < ref_x || loc_x > static_cast<real>(N_X) + ref_x - 1.0;
 
         if (not edge_x)             // still in the interior of the X domain
         {
-            if (deci_x >= m_x)      // share with the cell on the right
+            if (deci_x >= ref_x)    // share with the cell on the right
             {
-                frac_x = deci_x - m_x;
+                frac_x = deci_x - ref_x;
                 next_x = 1;
             }
             else                    // share with the cell on the left
             {
-                frac_x = m_x - deci_x;
+                frac_x = ref_x - deci_x;
                 next_x = -1;
             }
         }
         else                        // too close to the inner or the outer X boundary 
         {
-            if (deci_x >= m_x)      // too close to the outer X boundary
+            if (deci_x >= ref_x)    // too close to the outer X boundary
             {
-                frac_x = deci_x - m_x;
+                frac_x = deci_x - ref_x;
                 next_x = 1 - N_X;   // share with the first cell of its row
             }
             else                    // too close to the inner X boundary
             {
-                frac_x = m_x - deci_x;
+                frac_x = ref_x - deci_x;
                 next_x = N_X - 1;   // share with the last  cell of its row
             }
         }
@@ -75,21 +75,21 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     else
     {
         real d_y = _get_dy();
-        real m_y;
+        real ref_y;
         
         if (outer_edge)
         {
-            m_y = 1.0;              // outer edge of Y cell
+            ref_y = 1.0;            // outer edge of Y cell
         }
         else
         {
             real mesh_dim = _get_mesh_dim();
             
             // place cell-centred values at the exact centroid of the represented disk measure
-            m_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(d_y, mesh_dim + 1.0) - 1.0) / (pow(d_y, mesh_dim) - 1.0)) / log(d_y);
+            ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(d_y, mesh_dim + 1.0) - 1.0) / (pow(d_y, mesh_dim) - 1.0)) / log(d_y);
         }
         
-        bool edge_y = loc_y < m_y || loc_y > static_cast<real>(N_Y) + m_y - 1.0;
+        bool edge_y = loc_y < ref_y || loc_y > static_cast<real>(N_Y) + ref_y - 1.0;
 
         if (outer_edge)
         {
@@ -108,14 +108,14 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
         {
             if (not edge_y)         // still in the interior of the Y domain
             {
-                if (deci_y >= m_y)  // share with the cell on the right
+                if (deci_y >= ref_y) // share with the cell on the right
                 {
-                    frac_y = (pow(d_y, deci_y - m_y) - 1.0) / (d_y - 1.0);
+                    frac_y = (pow(d_y, deci_y - ref_y) - 1.0) / (d_y - 1.0);
                     next_y = N_X;   // the index distance to the next Y cell on the right is N_X
                 }
                 else                // share with the cell on the left
                 {
-                    frac_y = (pow(d_y, deci_y - m_y) - 1.0) / (1.0 / d_y - 1.0);
+                    frac_y = (pow(d_y, deci_y - ref_y) - 1.0) / (1.0 / d_y - 1.0);
                     next_y = -N_X;
                 }
             }
@@ -139,19 +139,19 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
     }
     else
     {
-        real m_z = 0.5;
-        bool edge_z = loc_z < m_z || loc_z > static_cast<real>(N_Z) + m_z - 1.0;
+        real ref_z = 0.5;
+        bool edge_z = loc_z < ref_z || loc_z > static_cast<real>(N_Z) + ref_z - 1.0;
         
         if (not edge_z)             // still in the interior of the Z domain
         {
-            if (deci_z >= m_z)
+            if (deci_z >= ref_z)
             {
-                frac_z = deci_z - m_z;
+                frac_z = deci_z - ref_z;
                 next_z = N_X*N_Y;   // the index distance to the next Z cell on the right is N_X*N_Y
             }
             else
             {
-                frac_z = m_z - deci_z;
+                frac_z = ref_z - deci_z;
                 next_z = -N_X*N_Y;
             }
         }

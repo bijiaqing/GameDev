@@ -68,7 +68,7 @@ __global__ void gas_lerp_calc (real *dev_gas_dens, real *dev_gas_velx, real *dev
 
 #ifdef SAVE_DENS
 __global__ void dustdens_init (real *dev_dustdens);
-__global__ void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real dust_mass);
+__global__ void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real total_dust_mass);
 __global__ void dustdens_calc (real *dev_dustdens);
 #endif // SAVE_DENS
 
@@ -115,7 +115,7 @@ __global__ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
 
 #ifdef RADIATION
 __global__ void optdepth_init (real *dev_optdepth);
-__global__ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real dust_mass);
+__global__ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real total_dust_mass);
 __global__ void optdepth_calc (real *dev_optdepth);
 __global__ void optdepth_csum (real *dev_optdepth);
 __global__ void optdepth_mean (real *dev_optdepth);

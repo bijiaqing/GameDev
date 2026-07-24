@@ -11,7 +11,7 @@
 // =========================================================================================================================
 
 __global__
-void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real dust_mass)
+void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real total_dust_mass)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
@@ -22,7 +22,7 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real dust_mas
     real weight = _get_grain_mass(size)*dev_particle[idx].par_numr;
     #else  // MONOSIZE
     real size = S_0;
-    real weight = dust_mass / N_P;
+    real weight = total_dust_mass / N_P;
     #endif // MULTISIZE
 
     weight *= KAPPA_0 / (size / S_0);

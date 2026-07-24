@@ -75,10 +75,11 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
             max_dist2 = fmaxf(max_dist2, dist2);
 
             col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
-                dev_particle, dev_size_old, dev_numr_old, idx_old_i, idx_old_j, lambda_0
+                dev_particle, dev_size_old, dev_numr_old,
                 #ifdef IMPORTGAS
-                , dev_gas_dens
+                dev_gas_dens,
                 #endif // IMPORTGAS
+                idx_old_i, idx_old_j, lambda_0
             );
         }
 

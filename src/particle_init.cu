@@ -12,7 +12,7 @@ real _get_grain_number (real size, real mass_norm)
     // the question is, if we want
     // (1) the grain size distribution follows a -3.5 power-law,
     // (2) all swarms have an equal total surface area, and
-    // (3) a certain total particle number N_P and represented domain dust mass dust_mass,
+    // (3) a certain total particle number N_P and represented domain dust mass total_dust_mass,
     // what is the size distribution of swarms (to be fixed in main.cu), and
     // and what is the grain number inside each swarm (to be solved here)
 
@@ -42,15 +42,15 @@ real _get_grain_number (real size, real mass_norm)
     // (6) n_2 = 0.5*N_P / (s_min^-0.5 - s_max^-0.5)
 
     // with (1), the total mass of all swarms is
-    // (7) dust_mass = integrate( dm(s) ) = integrate( n_p(s) * n_d(s) * C_m * s^3 ds )
+    // (7) total_dust_mass = integrate( dm(s) ) = integrate( n_p(s) * n_d(s) * C_m * s^3 ds )
     // with (3), (4), and (7) there is
-    // (8) dust_mass = 2*n_1*n_2*C_m*(s_max^0.5 - s_min^0.5)
+    // (8) total_dust_mass = 2*n_1*n_2*C_m*(s_max^0.5 - s_min^0.5)
 
     // with (6) and (8) there is
-    // (9) n_1 = dust_mass / N_P / C_m / (s_max^0.5 - s_min^0.5) * (s_min^-0.5 - s_max^-0.5)
+    // (9) n_1 = total_dust_mass / N_P / C_m / (s_max^0.5 - s_min^0.5) * (s_min^-0.5 - s_max^-0.5)
 
     // finally, combining (3) and (9), we know n_d(s)
-    // replace the continuous normalization by mass_norm so the finite ensemble sums to dust_mass within roundoff
+    // replace the continuous normalization by mass_norm so the finite ensemble sums to total_dust_mass within roundoff
 
     return mass_norm*_get_mass_weight(size) / static_cast<real>(N_P) / _get_grain_mass(size);
 }

@@ -29,7 +29,7 @@ const std::string PATH = PATH_OUT; // convert the Makefile string literal to the
 
 int main (int argc, char **argv)
 {
-    const real dust_mass = get_dust_mass();
+    const real total_dust_mass = get_total_dust_mass();
 
     int idx_from;
     real clock_sim;   // total simulated time
@@ -150,8 +150,8 @@ int main (int argc, char **argv)
         rand_powerlaw(random_s, N_P, INIT_SMIN, INIT_SMAX, idx_swarm);
         #endif // COLLISION_LINEAR_TEST
 
-        // correct finite-sample size fluctuations so represented masses sum exactly to dust_mass
-        real mass_norm = get_mass_norm(random_s, dust_mass);
+        // correct finite-sample size fluctuations so represented masses sum exactly to total_dust_mass
+        real mass_norm = get_mass_norm(random_s, total_dust_mass);
         #endif // MULTISIZE
 
         #ifdef IMPORTGAS
@@ -216,7 +216,7 @@ int main (int argc, char **argv)
         
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
-        save_variable(PATH + "variables.txt", dust_mass);
+        save_variable(PATH + "variables.txt", total_dust_mass);
 
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from, false);
@@ -277,7 +277,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / dust_mass
+                N_P / (N_K - 1.0) / total_dust_mass
             );
             CUDA_KERNEL_CHECK("col_rate_calc");
 
@@ -301,7 +301,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / dust_mass,
+                N_P / (N_K - 1.0) / total_dust_mass,
                 dt_col
             );
             CUDA_KERNEL_CHECK("col_event_run");
@@ -378,7 +378,7 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("ssa_substep_1");
             optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_init");
-            optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, dust_mass);
+            optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);
             CUDA_KERNEL_CHECK("optdepth_depo");
             optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);
             CUDA_KERNEL_CHECK("optdepth_calc");

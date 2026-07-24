@@ -37,7 +37,7 @@ real _get_mass_weight (real size)
 }
 #endif // MULTISIZE
 
-__device__ __forceinline__
+__host__ __device__ __forceinline__
 real _get_omegaK (real R)
 { return sqrt(G*M_S / R / R / R); }
 
@@ -82,6 +82,18 @@ real _get_nu (real R, real h_g)
     return nu;
     #endif // CONST_NU
 }
+
+// calculate the local dimensionless turbulence strength from the configured viscosity prescription
+__host__ __device__ __forceinline__
+real _get_alpha (real R, real h_g)
+{
+    #ifdef CONST_NU
+    real alpha = NU / (h_g*h_g*R*R*_get_omegaK(R));
+    return alpha;
+    #else  // CONST_ALPHA
+    return ALPHA;
+    #endif // CONST_NU
+}
 #endif // DIFFUSION || COLLISION
 
 #ifdef VISC_ACCRETION
@@ -116,21 +128,6 @@ real _get_visc_vel (real R, real Z, real h_g)
     return -(stress_R - stress_Z) / R;
 }
 #endif // VISC_ACCRETION
-
-#ifdef COLLISION
-// calculate the local dimensionless turbulence strength from the configured viscosity prescription
-__device__ __forceinline__
-real _get_alpha (real R, real h_g)
-{
-    #ifdef CONST_NU
-    real alpha = NU / (h_g*h_g*R*R*_get_omegaK(R));
-    return alpha;
-    #else  // CONST_ALPHA
-    return ALPHA;
-    #endif // CONST_NU
-}
-
-#endif // COLLISION
 
 // =========================================================================================================================
 // stopping-time coupling

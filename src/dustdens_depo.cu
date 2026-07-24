@@ -11,7 +11,7 @@
 // =========================================================================================================================
 
 __global__
-void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real dust_mass)
+void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real total_dust_mass)
 {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
@@ -21,7 +21,7 @@ void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real dust_mas
     real size = dev_particle[idx].par_size;
     real weight = _get_grain_mass(size)*dev_particle[idx].par_numr;
     #else  // MONOSIZE
-    real weight = dust_mass / N_P;
+    real weight = total_dust_mass / N_P;
     #endif // MULTISIZE
 
     _deposit_field(dev_dustdens, dev_particle, idx, weight);

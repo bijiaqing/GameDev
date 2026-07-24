@@ -90,7 +90,7 @@ real _get_ball_measure (real y, real z, real radius)
     return measure;
 }
 
-#ifndef CODE_UNIT
+#ifndef CODE_UNIT // i.e., only when physical units are used
 // calculate the Brownian relative speed and cap it at the sound speed
 __device__ __forceinline__
 real _get_vrel_b (real R, real s_i, real s_j, real h_g)
@@ -320,10 +320,10 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
 // calculate the pair propensity numerator N_j K_ij before division by the local KNN measure
 template <KernelType kernel> __device__ __forceinline__
 real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
-    int idx_old_i, int idx_old_j, real lambda_0
     #ifdef IMPORTGAS
-    , const real *dev_gas_dens
+    const real *dev_gas_dens,
     #endif // IMPORTGAS
+    int idx_old_i, int idx_old_j, real lambda_0
 )
 {
     // text mainly from Drazkowska et al. 2013:

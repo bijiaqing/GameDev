@@ -58,7 +58,7 @@ $$
 \Sigma_d(R)=Z_{\rm metal}\Sigma_g(R)
 $$
 
-before the shared-style Gaussian edge convolution. `get_dust_mass()` integrates that initialized
+before the shared-style Gaussian edge convolution. `get_total_dust_mass()` integrates that initialized
 profile over the configured domain. Representative grain counts, opacity, diagnostics, and
 dimensionless collision normalizations use this runtime mass; there is no independent arbitrary
 dust-mass parameter.
