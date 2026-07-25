@@ -182,7 +182,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     real omega = _get_omegaK(R_1);
     
     // evaluate the gas velocity used by the midpoint drag solve
-    real lxg_1, vyg_1, lzg_1;
+    real lx_g1, vy_g1, lz_g1;
     
     #ifdef IMPORTGAS
     if ((dev_gas_velx != nullptr) && (dev_gas_vely != nullptr) && (dev_gas_velz != nullptr))
@@ -192,24 +192,24 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         real loc_y = _get_loc_y(y_1);
         real loc_z = _get_loc_z(z_1);
         
-        lxg_1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*y_1*sin(z_1);
-        vyg_1 = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
-        lzg_1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;
+        lx_g1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*y_1*sin(z_1);
+        vy_g1 = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
+        lz_g1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;
     }
     else
     #endif // IMPORTGAS
     {
         real eta = _get_eta(R_1, Z_1, h_g);
         
-        lxg_1 = sqrt(fmax(1.0 - 2.0*eta, 0.0))*omega*R_1*R_1;
+        lx_g1 = sqrt(fmax(1.0 - 2.0*eta, 0.0))*omega*R_1*R_1;
 
         #ifdef VISC_ACCRETION
-        real vgas_R = _get_visc_vel(R_1, Z_1, h_g);
-        vyg_1 = vgas_R*sin(z_1);
-        lzg_1 = (N_Z > 1) ? y_1*vgas_R*cos(z_1) : 0.0;
+        real vR_g = _get_visc_vel(R_1, Z_1, h_g);
+        vy_g1 = vR_g*sin(z_1);
+        lz_g1 = (N_Z > 1) ? y_1*vR_g*cos(z_1) : 0.0;
         #else  // PURE_ROTATION
-        vyg_1 = 0.0;
-        lzg_1 = 0.0;
+        vy_g1 = 0.0;
+        lz_g1 = 0.0;
         #endif // VISC_ACCRETION
     }
 
@@ -222,22 +222,22 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     real tau_1 = dt / ts_1;
 
     // evaluate midpoint forces with the initial angular momenta
-    real grav_y_1, cent_y_1, torq_z_1;
-    _get_force_term(y_1, z_1, R_1, lx_i, lz_i, beta, grav_y_1, cent_y_1, torq_z_1);
+    real grav_y1, cent_y1, torq_z1;
+    _get_force_term(y_1, z_1, R_1, lx_i, lz_i, beta, grav_y1, cent_y1, torq_z1);
 
     // obtain a midpoint velocity with the exact frozen-coefficient drag response
-    real lx_1 = lx_i + (lxg_1 - lx_i)*(1.0 - exp(-0.5*tau_1));
-    real vy_1 = vy_i + ((grav_y_1 + cent_y_1)*ts_1 + vyg_1 - vy_i)*(1.0 - exp(-0.5*tau_1));
-    real lz_1 = lz_i + (torq_z_1*ts_1 + lzg_1 - lz_i)*(1.0 - exp(-0.5*tau_1));
+    real lx_1 = lx_i + (lx_g1 - lx_i)*(1.0 - exp(-0.5*tau_1));
+    real vy_1 = vy_i + ((grav_y1 + cent_y1)*ts_1 + vy_g1 - vy_i)*(1.0 - exp(-0.5*tau_1));
+    real lz_1 = lz_i + (torq_z1*ts_1 + lz_g1 - lz_i)*(1.0 - exp(-0.5*tau_1));
 
     // reevaluate centrifugal terms with the midpoint angular momenta while reusing position-dependent beta
-    real grav_y_2, cent_y_2, torq_z_2;
-    _get_force_term(y_1, z_1, R_1, lx_1, lz_1, beta, grav_y_2, cent_y_2, torq_z_2);
+    real grav_y2, cent_y2, torq_z2;
+    _get_force_term(y_1, z_1, R_1, lx_1, lz_1, beta, grav_y2, cent_y2, torq_z2);
 
     // complete the full-step frozen-coefficient drag response with midpoint forces
-    lx_j = lx_i + (lxg_1 - lx_i)*(1.0 - exp(-tau_1));
-    vy_j = vy_i + ((grav_y_2 + cent_y_2)*ts_1 + vyg_1 - vy_i)*(1.0 - exp(-tau_1));
-    lz_j = lz_i + (torq_z_2*ts_1 + lzg_1 - lz_i)*(1.0 - exp(-tau_1));
+    lx_j = lx_i + (lx_g1 - lx_i)*(1.0 - exp(-tau_1));
+    vy_j = vy_i + ((grav_y2 + cent_y2)*ts_1 + vy_g1 - vy_i)*(1.0 - exp(-tau_1));
+    lz_j = lz_i + (torq_z2*ts_1 + lz_g1 - lz_i)*(1.0 - exp(-tau_1));
 
     // drift from the midpoint position to the final state j
     y_j = y_1 + 0.5*vy_j*dt;

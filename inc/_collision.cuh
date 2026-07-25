@@ -33,17 +33,17 @@ real3 _get_cart_vel (const swarm &particle)
     real y = particle.position.y;
     real z = particle.position.z;
 
-    real vel_x = particle.velocity.x / (y*sin(z));
-    real vel_y = particle.velocity.y;
-    real vel_z = particle.velocity.z / y;
+    real vx = particle.velocity.x / (y*sin(z));
+    real vy = particle.velocity.y;
+    real vz = particle.velocity.z / y;
 
-    real3 vel_cart;
+    real3 v_cart;
 
-    vel_cart.x = vel_y*sin(z)*cos(x) + vel_z*cos(z)*cos(x) - vel_x*sin(x);
-    vel_cart.y = vel_y*sin(z)*sin(x) + vel_z*cos(z)*sin(x) + vel_x*cos(x);
-    vel_cart.z = vel_y*cos(z)        - vel_z*sin(z);
+    v_cart.x = vy*sin(z)*cos(x) + vz*cos(z)*cos(x) - vx*sin(x);
+    v_cart.y = vy*sin(z)*sin(x) + vz*cos(z)*sin(x) + vx*cos(x);
+    v_cart.z = vy*cos(z)        - vz*sin(z);
     
-    return vel_cart;
+    return v_cart;
 }
 
 // approximate the part of a local KNN ball lying inside radial and polar domain boundaries
@@ -159,7 +159,7 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
     real re_inv_sqrt = _get_re_inv_sqrt(R, alpha);
 
     // comes from normalizing the power spectrum                            (page 415, section 3.2)
-    real vgas_sq = 1.5*alpha*c_s*c_s;
+    real vg_sq = 1.5*alpha*c_s*c_s;
 
     real stokes_large, stokes_small, eps;
     
@@ -192,13 +192,13 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
     {
         // regime 1: very small particles (t_stop_large << t_small) following eq. 27
         
-        vrel_sq = vgas_sq*(stokes_large - stokes_small)*(stokes_large - stokes_small) / re_inv_sqrt;
+        vrel_sq = vg_sq*(stokes_large - stokes_small)*(stokes_large - stokes_small) / re_inv_sqrt;
     }
     else if (stokes_large < re_inv_sqrt / y_a)
     {
         // regime 2: transition near t_small boundary (t_stop_large ~ t_small) following eq. 26
         
-        vrel_sq = vgas_sq*(stokes_large - stokes_small) / (stokes_large + stokes_small);
+        vrel_sq = vg_sq*(stokes_large - stokes_small) / (stokes_large + stokes_small);
         vrel_sq *= (stokes_large / (1.0 + re_inv_sqrt / stokes_large) - stokes_small / (1.0 + re_inv_sqrt / stokes_small));
     }
     else if (stokes_large < 5.0*re_inv_sqrt)
@@ -215,13 +215,13 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
         coeff += stokes_small*stokes_small / (y_a*stokes_large + stokes_small);
         coeff -= stokes_small*stokes_small / (stokes_small + re_inv_sqrt);
         
-        vrel_sq = vgas_sq*coeff;
+        vrel_sq = vg_sq*coeff;
     }
     else if (stokes_large < 0.2)
     {
         // regime 4: fully intermediate regime (5t_small < t_stop_large < 0.2t_large) following eq. 28
         
-        vrel_sq = vgas_sq*stokes_large;
+        vrel_sq = vg_sq*stokes_large;
         vrel_sq *= (2.0*y_a - (1.0 + eps) + 2.0 / (1.0 + eps)*(1.0 / (1.0 + y_a) + eps*eps*eps / (y_a + eps)));
     }
     else if (stokes_large < 1.0)
@@ -229,14 +229,14 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
         // regime 5: transition near t_large boundary (0.2t_large < t_stop_large < t_large) 
         // following eq. 28, but uses the empirical y_s fit instead of the fixed y_a = 1.6
         
-        vrel_sq = vgas_sq*stokes_large;
+        vrel_sq = vg_sq*stokes_large;
         vrel_sq *= (2.0*y_s - (1.0 + eps) + 2.0 / (1.0 + eps)*(1.0 / (1.0 + y_s) + eps*eps*eps / (y_s + eps)));
     }
     else
     {
         // regime 6: heavy particles (t_stop_large >= t_large) following eq. 29
         
-        vrel_sq = vgas_sq*(1.0 / (1.0 + stokes_large) + 1.0 / (1.0 + stokes_small));
+        vrel_sq = vg_sq*(1.0 / (1.0 + stokes_large) + 1.0 / (1.0 + stokes_small));
     }
 
     if (vrel_sq < 0.0)
@@ -244,7 +244,7 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
         printf("ERROR: negative vrel_sq in _get_vrel_t\n");
         assert(false);
     }
- 
+
     return sqrt(vrel_sq);
 }
 
@@ -291,14 +291,14 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
         #endif // IMPORTGAS
     );
 
-    real3 vel_i = _get_cart_vel(dev_particle[idx_old_i]);
-    real3 vel_j = _get_cart_vel(dev_particle[idx_old_j]);
+    real3 v_i = _get_cart_vel(dev_particle[idx_old_i]);
+    real3 v_j = _get_cart_vel(dev_particle[idx_old_j]);
 
-    real dv_x = vel_i.x - vel_j.x;
-    real dv_y = vel_i.y - vel_j.y;
-    real dv_z = vel_i.z - vel_j.z;
+    real dvx = v_i.x - v_j.x;
+    real dvy = v_i.y - v_j.y;
+    real dvz = v_i.z - v_j.z;
 
-    real vrel_sq = dv_x*dv_x + dv_y*dv_y + dv_z*dv_z;
+    real vrel_sq = dvx*dvx + dvy*dvy + dvz*dvz;
 
     // omit Brownian motion in code units and use the prescribed Reynolds-number normalization for turbulence
 
@@ -309,7 +309,7 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
 
     real vrel_t = _get_vrel_t(R, stokes_i, stokes_j, h_g);
     vrel_sq += vrel_t*vrel_t;
-    
+
     return sqrt(vrel_sq);
 }
 

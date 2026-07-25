@@ -37,12 +37,12 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     real lz = dev_particle[idx].velocity.z;
 
     // reconstruct the pre-displacement velocity in a fixed Cartesian basis
-    real vel_x = lx / R;
-    real vel_z = lz / y;
-    real vel_R = vy*sin(z) + vel_z*cos(z);
-    real vel_Z = vy*cos(z) - vel_z*sin(z);
-    real vel_Cx = vel_R*cos(x) - vel_x*sin(x);
-    real vel_Cy = vel_R*sin(x) + vel_x*cos(x);
+    real vx = lx / R;
+    real vz = lz / y;
+    real vR = vy*sin(z) + vz*cos(z);
+    real vZ = vy*cos(z) - vz*sin(z);
+    real vx_cart = vR*cos(x) - vx*sin(x);
+    real vy_cart = vR*sin(x) + vx*cos(x);
 
     real h_g = _get_hg(R);
     real nu = _get_nu(R, h_g);
@@ -109,14 +109,14 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     Z_new = y_new*cos(z_new);
 
     // project the unchanged Cartesian velocity into the new local spherical basis
-    real sin_z_new = R_new / y_new;
-    real cos_z_new = Z_new / y_new;
-    real vel_R_new = vel_Cx*cos(x_new) + vel_Cy*sin(x_new);
-    real vel_x_new = vel_Cy*cos(x_new) - vel_Cx*sin(x_new);
+    real sinz_new = R_new / y_new;
+    real cosz_new = Z_new / y_new;
+    real vR_new = vx_cart*cos(x_new) + vy_cart*sin(x_new);
+    real vx_new = vy_cart*cos(x_new) - vx_cart*sin(x_new);
 
-    lx = vel_x_new*R_new;
-    vy = vel_R_new*sin_z_new + vel_Z*cos_z_new;
-    lz = (vel_R_new*cos_z_new - vel_Z*sin_z_new)*y_new;
+    lx = vx_new*R_new;
+    vy = vR_new*sinz_new + vZ*cosz_new;
+    lz = (vR_new*cosz_new - vZ*sinz_new)*y_new;
 
     dev_particle[idx].position.x = x_new;
     dev_particle[idx].position.y = y_new;

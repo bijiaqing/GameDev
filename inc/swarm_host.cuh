@@ -32,10 +32,10 @@ inline __host__
 real _get_zcent (int iz) { return Z_MIN + (static_cast<real>(iz) + 0.5)*_get_dz(); }
 
 inline __host__
-real _get_s_y (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
+real _get_sy (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
 
 inline __host__
-real _get_s_z (real z) { return -std::cos(z); }
+real _get_sz (real z) { return -std::cos(z); }
 
 // =========================================================================================================================
 // elementary random profiles
@@ -239,13 +239,13 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
     std::vector<real> y_face_s(N_Y + 1);
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_s_y(_get_yedge(iy));
+        y_face_s[iy] = _get_sy(_get_yedge(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_s_z(_get_zedge(iz));
+        z_face_s[iz] = _get_sz(_get_zedge(iz));
     }
 
     for (int idx = 0; idx < number; idx++)
@@ -381,13 +381,13 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
     std::vector<real> y_face_s(N_Y + 1);
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_s_y(_get_yedge(iy));
+        y_face_s[iy] = _get_sy(_get_yedge(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_s_z(_get_zedge(iz));
+        z_face_s[iz] = _get_sz(_get_zedge(iz));
     }
 
     for (int idx = 0; idx < number; idx++)
@@ -529,13 +529,13 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int number,
     std::vector<real> y_face_s(N_Y + 1);
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_s_y(_get_yedge(iy));
+        y_face_s[iy] = _get_sy(_get_yedge(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_s_z(_get_zedge(iz));
+        z_face_s[iz] = _get_sz(_get_zedge(iz));
     }
     
     // select cells by inverse transform sampling

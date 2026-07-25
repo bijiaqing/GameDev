@@ -23,10 +23,11 @@ This began as a naming-only audit and now also tracks the implementation status 
 The recommended canonical naming table was applied to the production fluid code on 2026-07-24
 
 - the encoded invalid-cell value is now `bad_cell` on the host and `dev_bad_cell` on the device
-- index spaces, coordinates, face terminology, physical velocities, diffusivities, source forces, PPM weights, CFL arrays, file names, and element counts now follow the table below
+- index spaces, coordinates, face terminology, physical-quantity base names, source forces, PPM weights, CFL arrays, file names, and element counts follow the applied table below
+- compound suffixes after one-letter physical tags remain pending under finding 25
 - the changes are identifier-only and do not alter formulas, control flow, array layout, or kernel launch geometry
 - the more detailed recommendations below remain pending unless explicitly marked as applied
-- a read-only swarm–fluid consistency pass was added after the fluid-only findings; no source changes were made for that pass
+- a swarm–fluid consistency pass was added after the fluid-only findings, and the adopted swarm-side names are now being applied incrementally
 
 ## Summary
 
@@ -45,7 +46,7 @@ The principal remaining detailed inconsistencies are:
 
 1. several reused scratch arrays change physical meaning while retaining names such as `face_lx` or `dens_rhs`
 2. detailed PPM loop and stencil names remain abbreviated
-3. source-stage, drag, and boundary quantities still use a few mathematical or ambiguous suffixes
+3. source-stage, drag, boundary, and qualified directional quantities still use ambiguous or isolated one-letter suffixes
 4. convolution loop variables and some main-loop helper names remain generic
 5. several equivalent swarm and fluid quantities still use different names or suffix conventions
 
@@ -65,7 +66,7 @@ Add role suffixes only when multiple locations coexist:
 
 The coordinate forms `R_i`, `R_o`, and `R_up` are applied
 
-The more specific changes `h_i/h_o` to `h_g_i/h_g_o` and `rho_mid` to `rhog_mid` remain pending
+The more specific changes `h_i/h_o` to `h_gi/h_go` and `rho_mid` to `rhog_mid` remain pending
 
 Retain the intentional distinction between dimensionless `h_g` and physical `H_g` or `H_d`
 
@@ -119,18 +120,47 @@ Recommended treatment:
 
 This is the highest-value naming cleanup because the current names can lead to dimensional mistakes during later maintenance
 
+### 5. Local dynamical-variable names
+
+**Status: applied in swarm; fluid alignment remains pending**
+
+Use the physical quantity and coordinate directly:
+
+- stored spherical state: `lx`, `vy`, `lz`
+- physical spherical velocity: `vx`, `vy`, `vz`
+- physical cylindrical velocity: `vR`, `vZ`
+- gas linear velocity: `vx_g`, `vy_g`, `vz_g`, `vR_g`, `vZ_g`
+- gas targets in stored units: `lx_g`, `vy_g`, `lz_g`
+
+Attach later qualifiers to the complete compact base:
+
+- `vel_x_res` to `vxres`
+- `vel_z_diff` to `vzdiff`
+- staged forms such as `vel_R_new` and `vel_x_new` to `vR_new` and `vx_new`
+
+The swarm implementation now follows this convention, including `vx_cart/vy_cart` for fixed Cartesian working components
+
+Use `_sq` and `_cb` for squared and cubed quantities rather than numeric `2` or `3` suffixes; the swarm examples are `vg_sq`, `vrel_sq`, `dist_sq`, and `max_dist_sq`
+
+Persistent interfaces such as `dev_gas_velx`, the `swarm::velocity` member, and file-schema strings `velocity_x/y/z` remain unchanged because they are arrays, storage members, or external field labels rather than local dynamical variables
+
 ### 6. Diffusion coefficients and face quantities
 
 **Status: canonical diffusivity names applied; detailed helper and substep names remain pending**
 
-The diffusion kernels and velocity initializer now use descriptive lower-case names:
+The diffusion kernels and velocity initializer now use descriptive lower-case base names:
 
 - `diff_x`
 - `diff_y_i`, `diff_y_o`
 - `diff_z`
 - `diff_z_i`, `diff_z_o`
 
-This preserves the required spherical `x/y/z` directional convention without relying on pure mathematical symbols
+Merge the face qualifier with the one-letter direction suffix:
+
+- `diff_y_i/diff_y_o` to `diff_yi/diff_yo`
+- `diff_z_i/diff_z_o` to `diff_zi/diff_zo`
+
+This preserves the required spherical `x/y/z` directional convention without isolating the direction letter between underscores
 
 Use `idx_sub` instead of `i_sub` for the diffusion-substep index
 
@@ -150,11 +180,11 @@ Possible replacements are `_get_dr_cent_i` and `_get_dr_cent_o`
 - `cent_y`
 - `torq_z`
 
-Its non-SSA stage forms currently use `_n`, `_new`, and `_tmp`; normalize them to:
+Its non-SSA stage forms currently use `_n`, `_new`, and `_tmp`; normalize them without isolating the direction letter:
 
-- `grav_y_old/mid/new`
-- `cent_y_old/mid/new`
-- `torq_z_old/mid/new`
+- `grav_yold/ymid/ynew`
+- `cent_yold/ymid/ynew`
+- `torq_zold/zmid/znew`
 
 The source variable `drag_h` is the dimensionless ratio `dt/ts`, not a scale height
 
@@ -308,7 +338,8 @@ Rows already identical in the swarm model, fluid model, and recommended conventi
 |---|---|---|---|
 | convolved initial surface-density routine | `initdens_calc` | `convpow_calc` | `initdens_calc` |
 | local dust volume density | `rhod`, `log_rhod` | `dens` | `rhod`, `log_rhod` |
-| gas target in stored variables | `lxg_1`, `vyg_1`, `lzg_1` | `lx_g`, `vy_g`, `lz_g` | swarm SSA: `lx_g_1`, `vy_g_1`, `lz_g_1`; fluid: `lx_g`, `vy_g`, `lz_g` |
+| physical linear velocity | `vx/vy/vz`, `vR/vZ` | `vel_x/vel_y/vel_z`, `vel_R` | `vx/vy/vz`, `vR/vZ` |
+| gas linear velocity | `vx_g/vy_g/vz_g`, `vR_g` | `vgas_x`, `vgas_R` | `vx_g/vy_g/vz_g`, `vR_g/vZ_g` |
 | dimensionless drag interval | `tau_1` | `drag_h` | `tau`, retaining paper-defined SSA stage suffixes |
 | scalar optical depth | `optdepth` | `tau_i`, `tau_o` | `optdepth`, with `_i/_o` for face values |
 | host binary writer/reader | `save_host_binary`, `load_host_binary` | `save_binary`, `load_binary` | `save_host_binary`, `load_host_binary` |
@@ -390,7 +421,7 @@ This would make the grid-helper surface identical without changing any caller na
 
 ### 17. SSA stage suffixes and physical base names
 
-**Status: SSA suffixes are intentional; gas-target and fluid drag base names remain pending**
+**Status: SSA suffixes and gas-target base names applied; fluid drag base name remains pending**
 
 The swarm SSA implementation deliberately uses `_i`, `_1`, `_2`, and `_j` to match the notation of the reference paper
 
@@ -398,9 +429,9 @@ Retain these suffixes in all SSA-related code rather than translating them to `_
 
 The same rule makes `ts_1` a consistent stage-specific form of the stopping-time base name `ts`
 
-Only the physical base names should be aligned:
+The swarm physical base names and compound suffix spelling are aligned:
 
-- `lxg_1/vyg_1/lzg_1` to `lx_g_1/vy_g_1/lz_g_1`, retaining the SSA `_1` stage
+- `lx_g1/vy_g1/lz_g1` retain stage `1` while merging it with `_g`
 - `drag_h` to `tau` in the fluid source integrator
 - `tau_1` remains the SSA stage-specific dimensionless drag interval
 
@@ -534,10 +565,42 @@ The two main functions also give the resume-frame string stream unrelated names:
 
 Use `frame_stream` in both
 
+### 25. Compound suffixes after one-letter physical tags
+
+Use an underscore before a one-letter physical tag when it is the final suffix:
+
+- gas targets: `lx_g`, `vy_g`, `lz_g`
+- directional quantities: `diff_x`, `grav_y`, `torq_z`, `vR`
+
+If another qualifier follows, merge it with that one-letter tag rather than isolating the tag between underscores
+
+The swarm-side compound suffixes are applied:
+
+- gas targets: `lx_g1`, `vy_g1`, and `lz_g1`
+- SSA forces: `grav_y1/y2`, `cent_y1/y2`, and `torq_z1/z2`
+- diffusion-position quantities: `vR_new`, `vx_new`, `sinz_new`, and `cosz_new`
+- grid-measure helpers: `_get_sy` and `_get_sz`
+
+The remaining fluid-side identifier groups are:
+
+- non-SSA force stages: `grav_y_n/new/tmp`, `cent_y_n/new/tmp`, and `torq_z_n/new/tmp` to merged forms such as `grav_yn/ynew/ytmp`
+- face diffusivities: `diff_y_i/o` and `diff_z_i/o` to `diff_yi/yo` and `diff_zi/zo`
+- qualified velocities: `vel_x_res` and `vel_z_diff` to `vxres` and `vzdiff`
+- diffusion substep quantity: `inv_n_sub` to `inv_nsub`
+- grid-measure helpers: `_get_s_y` and `_get_s_z` to `_get_sy` and `_get_sz`
+
+The directional kernel and file names `advect_x/y/z_calc` and `diffus_x/y/z_calc` also match the isolated-letter pattern
+
+Do not rename those kernels mechanically because their current names were selected to satisfy the exact 13-character kernel-name convention
+
+Treat that conflict as a separate naming decision before changing the kernel declarations, file names, Makefile objects, or call sites
+
+The mathematical notation `delta_v_ij` appears only in a collision comment and is not counted as a code-identifier issue
+
 ## Suggested implementation order
 
 1. normalize index spaces and flattened-cell names — canonical portion applied
-2. normalize `y/z/R/Z` coordinates and physical velocity names — applied
+2. normalize `y/z/R/Z` coordinates and local dynamical-variable names — applied in swarm; fluid alignment pending
 3. normalize force and drag names — force names applied; fluid drag name pending; retain paper-defined SSA suffixes
 4. unify PPM `face` terminology and helper interfaces — face terminology applied; detailed loop names pending
 5. repair semantic names for reused advection and diffusion scratch arrays
@@ -550,6 +613,7 @@ Use `frame_stream` in both
 12. normalize non-SSA temporal suffixes while retaining `_i/_1/_2/_j` in SSA code
 13. rename fluid scalar optical depth to `optdepth`, reserve `tau` for drag, and align binary interfaces, frame locals, and pointer suffixes
 14. move literally identical grid, physics, force, and optical-depth-prefix helpers into shared headers
+15. merge compound suffixes after one-letter physical tags, with directional kernel names handled as a separate length-constrained decision
 
 Each group should be applied separately with declaration/call-site scans after the change
 
@@ -568,9 +632,6 @@ Each group should be applied separately with declaration/call-site scans after t
 | cylindrical coordinates | `Rc`, `Zc` | `R`, `Z` |
 | face coordinates | `y0/y1`, `z0/z1` | `y_i/y_o`, `z_i/z_o` |
 | stored dust primitives | `lx`, `vy`, `lz` | retain |
-| physical dust velocities | `v_x`, `v_y`, `v_z`, `vz` | `vel_x`, `vel_y`, `vel_z` |
-| physical gas velocity | `vg_x`, `vgas_R` | `vgas_x`, `vgas_R` |
-| diffusivity | `Dx`, `Dy_i/o`, `Dz`, `Dz_i/o` | `diff_x`, `diff_y_i/o`, `diff_z`, `diff_z_i/o` |
 | radial gravity | `Fy` | `grav_y` |
 | radial centrifugal acceleration | `Fcy` | `cent_y` |
 | polar geometric torque | `Tcz` | `torq_z` |
@@ -600,29 +661,13 @@ The existing flattened order is already correct and should remain:
 ix + iy*N_X + iz*N_X*N_Y
 ```
 
-### 5. Physical velocity names
-
-**Status: applied**
-
-`init_vel_calc` now uses `vgas_x`, `vel_R`, `vel_x/vel_y/vel_z`, and `vel_z_diff`
-
-The CFL diagnostic uses `vel_x_res` and `vel_z`, while the device kernel retains `omega_res` for an angular velocity
-
-Retain:
-
-- `lx`, `vy`, and `lz` for the stored fluid primitives
-- `vgas_R` for physical cylindrical-radial gas velocity
-- `lx_g`, `vy_g`, and `lz_g` for gas targets expressed in stored-state units
-
-This also aligns the fluid initializer with the swarm initializer
-
 ### 16. Directional diffusivity names
 
 **Status: resolved as an intentional coordinate distinction**
 
 The swarm diffusion SDE and its timestep estimator now use `diff_x`, `diff_R`, `diff_Z`, `diff_y`, and `diff_z`
 
-The fluid diffusion operators use `diff_x`, `diff_y_i/o`, and `diff_z_i/o`
+The fluid diffusion operators currently use `diff_x`, `diff_y_i/o`, and `diff_z_i/o`
 
 These variables all represent a physical diffusivity with dimensions of length squared per time
 
@@ -630,9 +675,11 @@ The two models already use `diff_*` consistently:
 
 - swarm cylindrical coefficients: `diff_x`, `diff_R`, `diff_Z`
 - swarm projections onto the spherical mesh: `diff_y`, `diff_z`
-- fluid spherical coefficients: retain `diff_x`, `diff_y_i/o`, `diff_z_i/o`
+- fluid spherical direction bases: retain `diff_x`, `diff_y`, and `diff_z`, with face qualifiers merged as described in finding 25
 
 The helper `_get_diff_drift_R` also accepts `diff_R`
+
+The directional distinction is resolved; the remaining `_y_i/_z_i` compound-suffix spelling is tracked separately in finding 25
 
 Retain the coordinate-letter distinction:
 
@@ -653,10 +700,8 @@ The following names already match and should not be changed merely to distinguis
 - common timestep parameters: `DT_OUT`, `DT_MAX`, `CFL_DYN`
 - mesh parameters: `N_X/Y/Z`, `X/Y/Z_MIN/MAX`, `N_G`, `NB_G/X/Y`, `TPB`
 - physical helpers: `_get_omegaK`, `_get_hg`, `_get_eta`, `_get_gas_strat`, `_get_sigma_g`, `_get_nu`, `_get_alpha`, `_get_visc_vel`
-- grid helpers: `_get_dx/dy/dz`, `_get_yedge`, `_get_zedge`, `_get_mesh_dim`, `_get_vol_y`, `_get_vol_z`, `_get_s_y`, `_get_s_z`
+- grid helpers: `_get_dx/dy/dz`, `_get_yedge`, `_get_zedge`, `_get_mesh_dim`, `_get_vol_y`, `_get_vol_z`
 - stored dust variables: `lx`, `vy`, `lz`
-- physical velocities: `vel_x`, `vel_y`, `vel_z`, `vel_R`
-- gas velocities: `vgas_x`, `vgas_R`
 - local forces: `grav_y`, `cent_y`, `torq_z`
 - grid fields: `dustdens/dev_dustdens`, `optdepth/dev_optdepth`
 - output state: `PATH`, `idx_from`, `idx_file`, `clock_sim`, `clock_out`
@@ -678,7 +723,7 @@ Do not unify the following names because they expose real representation or algo
 - swarm `particle_init` versus fluid `init_rho_calc` and `init_vel_calc`
 - swarm `diffusion_pos` versus fluid `diffus_x/y/z_calc`
 - swarm `total_dust_mass`, `mass_norm`, `size`, and represented grain number, which have no single-species fluid counterparts
-- swarm `vel_Z` for physical settling versus fluid `vel_z_diff` for a spherical-polar diffusion-balance velocity
+- swarm `vZ` for physical settling versus fluid `vzdiff` for a spherical-polar diffusion-balance velocity
 - fluid `mx/my/mz`, which are conserved density-weighted fields and have no particle-state counterparts
 - fluid `RHO_VAC` and `POS_LIMIT`, which belong to Eulerian state recovery and implicit diffusion
 
@@ -690,7 +735,7 @@ The following differences carry physical or numerical information and should not
 - `h_g` is the dimensionless gas aspect ratio while `H_g` and `H_d` are physical scale heights
 - `lx` and `lz` are specific angular momenta while `vy` is a linear spherical-radial velocity
 - `mx` and `mz` are angular-momentum densities while `my` is linear-momentum density
-- `vel_x` and `vel_z` are physical linear velocities used for initialization, diagnostics, and files
+- `vx` and `vz` are local physical linear velocities while persistent file fields retain `velocity_x` and `velocity_z`
 - outside SSA, `_i/_o` denotes inner/outer geometry, `_L/_R` denotes Riemann left/right states, and `_old/_new` denotes time states
 - inside SSA, `_i/_1/_2/_j` retains the paper-defined integration-stage notation
 - `dx` and `dz` are angular coordinate increments, `dy` is a logarithmic radial ratio, and `dx_len/dr/dz_len` are physical lengths

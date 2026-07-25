@@ -70,17 +70,17 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real loc_y = _get_loc_y(y);
     real loc_z = _get_loc_z(z);
 
-    real vgas_x = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z);
-    real vgas_y = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
-    real vgas_z = _interp_field(dev_gas_velz, loc_x, loc_y, loc_z);
+    real vx_g = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z);
+    real vy_g = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
+    real vz_g = _interp_field(dev_gas_velz, loc_x, loc_y, loc_z);
 
-    vgas_x = fmax(abs(vgas_x), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
-    vgas_y = fmax(abs(vgas_y), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
-    vgas_z = fmax(abs(vgas_z), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
+    vx_g = fmax(abs(vx_g), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
+    vy_g = fmax(abs(vy_g), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
+    vz_g = fmax(abs(vz_g), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
     
-    if (N_X > 1) rate = fmax(rate, abs(vgas_x) / (R*dx*CFL_DYN));
-    if (N_Y > 1) rate = fmax(rate, abs(vgas_y) / (dr*CFL_DYN));
-    if (N_Z > 1) rate = fmax(rate, abs(vgas_z) / (y*dz*CFL_DYN));
+    if (N_X > 1) rate = fmax(rate, abs(vx_g) / (R*dx*CFL_DYN));
+    if (N_Y > 1) rate = fmax(rate, abs(vy_g) / (dr*CFL_DYN));
+    if (N_Z > 1) rate = fmax(rate, abs(vz_g) / (y*dz*CFL_DYN));
     #endif // IMPORTGAS
 
     real beta = 0.0;
@@ -114,10 +114,10 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     {
         // include the analytic gas target velocity before drag can transfer it to the dust
         real h_g = _get_hg(R);
-        real vgas_R = _get_visc_vel(R, y*cos(z), h_g);
+        real vR_g = _get_visc_vel(R, y*cos(z), h_g);
 
-        if (N_Y > 1) rate = fmax(rate, abs(vgas_R*sin(z)) / (dr*CFL_DYN));
-        if (N_Z > 1) rate = fmax(rate, abs(vgas_R*cos(z)) / (y*dz*CFL_DYN));
+        if (N_Y > 1) rate = fmax(rate, abs(vR_g*sin(z)) / (dr*CFL_DYN));
+        if (N_Z > 1) rate = fmax(rate, abs(vR_g*cos(z)) / (y*dz*CFL_DYN));
     }
     #endif // VISC_ACCRETION
 

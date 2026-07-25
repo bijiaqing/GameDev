@@ -96,28 +96,28 @@ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *d
     real omega = _get_omegaK(R);
     real v_K = R*omega;
     real eta = _get_eta(R, Z, h_g);
-    real vgas_x = v_K*sqrt(fmax(1.0 - 2.0*eta, 0.0));
+    real vx_g = v_K*sqrt(fmax(1.0 - 2.0*eta, 0.0));
     real stokes = _get_stokes(R, Z, size, h_g
         #ifdef IMPORTGAS
         , dev_particle[idx].position.x, y, z, dev_gas_dens
         #endif // IMPORTGAS
     );
 
-    real vgas_R = 0.0;
+    real vR_g = 0.0;
     #ifdef VISC_ACCRETION
-    vgas_R = _get_visc_vel(R, Z, h_g);
+    vR_g = _get_visc_vel(R, Z, h_g);
     #endif // VISC_ACCRETION
 
-    real vel_R = (vgas_R + 2.0*stokes*(vgas_x - v_K)) / (1.0 + stokes*stokes);
-    real vel_x = vgas_x - 0.5*stokes*vel_R;
-    real vel_Z = (N_Z > 1) ? -stokes*omega*Z : 0.0;
+    real vR = (vR_g + 2.0*stokes*(vx_g - v_K)) / (1.0 + stokes*stokes);
+    real vx = vx_g - 0.5*stokes*vR;
+    real vZ = (N_Z > 1) ? -stokes*omega*Z : 0.0;
 
-    real vel_y = vel_R*sin(z) + vel_Z*cos(z);
-    real vel_z = vel_R*cos(z) - vel_Z*sin(z);
+    real vy = vR*sin(z) + vZ*cos(z);
+    real vz = vR*cos(z) - vZ*sin(z);
 
-    dev_particle[idx].velocity.x = R*vel_x;
-    dev_particle[idx].velocity.y = vel_y;
-    dev_particle[idx].velocity.z = y*vel_z;
+    dev_particle[idx].velocity.x = R*vx;
+    dev_particle[idx].velocity.y = vy;
+    dev_particle[idx].velocity.z = y*vz;
 
     #ifdef MULTISIZE
     // attach the sampled grain species and its represented physical grain count

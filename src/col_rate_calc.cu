@@ -56,7 +56,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     );
 
     real col_rate_i = 0.0; // total collision rate for the representative particle
-    float max_dist2 = 0.0f;
+    float max_dist_sq = 0.0f;
 
     for(int j = 0; j < N_K; j++)
     {
@@ -71,8 +71,8 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
                 dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
             )) continue;
 
-            float dist2 = query_result.returnDist2(j);
-            max_dist2 = fmaxf(max_dist2, dist2);
+            float dist_sq = query_result.returnDist2(j);
+            max_dist_sq = fmaxf(max_dist_sq, dist_sq);
 
             col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
                 dev_particle, dev_size_old, dev_numr_old,
@@ -87,7 +87,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     }
 
     // normalize by the accessible measure of the smallest ball containing the returned neighbors
-    real radius = sqrt(static_cast<real>(max_dist2));
+    real radius = sqrt(static_cast<real>(max_dist_sq));
     real measure = _get_ball_measure(y, z, radius);
     #ifdef COLLISION_UNIT_VOLUME
     // bypass KNN geometry only for dimensionless analytic kernel tests
