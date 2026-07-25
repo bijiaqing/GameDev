@@ -84,7 +84,7 @@ void rand_powerlaw (real *randsize, int number, real p_min, real p_max, real pow
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
 inline static __host__
-void _get_initdens_profile (std::vector <real> &sigma_d_profile)
+void initdens_calc (std::vector <real> &initdens)
 {
     const real smooth = 0.05*R_0;
     const real R_src_min = Y_MIN + 2.0*smooth;
@@ -94,7 +94,7 @@ void _get_initdens_profile (std::vector <real> &sigma_d_profile)
     const real kernel_norm = 1.0 / (std::sqrt(2.0*M_PI)*kernel_std);
 
     std::vector <real> R_axis(N_Y + 1);
-    sigma_d_profile.assign(N_Y + 1, 0.0);
+    initdens.assign(N_Y + 1, 0.0);
 
     for (int idx_R = 0; idx_R <= N_Y; idx_R++)
     {
@@ -112,7 +112,7 @@ void _get_initdens_profile (std::vector <real> &sigma_d_profile)
         {
             real delta_R = R_axis[idx_R] - R_src;
             real kernel_weight = kernel_norm*std::exp(-0.5*delta_R*delta_R / (kernel_std*kernel_std));
-            sigma_d_profile[idx_R] += sigma_d*kernel_weight*dR;
+            initdens[idx_R] += sigma_d*kernel_weight*dR;
         }
     }
 }
@@ -157,24 +157,24 @@ real _get_init_density (real sigma_d, real R, real Z, real size)
 inline __host__
 real get_total_dust_mass ()
 {
-    std::vector <real> sigma_d_profile;
-    _get_initdens_profile(sigma_d_profile);
+    std::vector <real> initdens;
+    initdens_calc(initdens);
 
     real vol_x = _get_vol_x();
     real total_dust_mass = 0.0;
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real zc = _get_zcent(iz);
+        real z = _get_zcent(iz);
         real vol_z = _get_vol_z(iz);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real yc = _get_ycent(iy);
-            real R = yc*std::sin(zc);
-            real Z = yc*std::cos(zc);
+            real y = _get_ycent(iy);
+            real R = y*std::sin(z);
+            real Z = y*std::cos(z);
 
-            real sigma_d = _interp_convpow_profile(R, sigma_d_profile, Y_MIN, Y_MAX);
+            real sigma_d = _interp_convpow_profile(R, initdens, Y_MIN, Y_MAX);
             real rhod = _get_init_density(sigma_d, R, Z, S_0);
             real vol_y = _get_vol_y(iy);
 
@@ -198,8 +198,8 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
-    std::vector <real> sigma_d_profile;
-    _get_initdens_profile(sigma_d_profile);
+    std::vector <real> initdens;
+    initdens_calc(initdens);
 
     real mesh_dim = _get_mesh_dim();
 
@@ -209,16 +209,16 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
     // integrate the local dust profile over each radial-polar cell
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real zc = _get_zcent(iz);
+        real z = _get_zcent(iz);
         real vol_z = _get_vol_z(iz);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real yc = _get_ycent(iy);
-            real R = yc*std::sin(zc);
-            real Z = yc*std::cos(zc);
+            real y = _get_ycent(iy);
+            real R = y*std::sin(z);
+            real Z = y*std::cos(z);
 
-            real sigma_d = _interp_convpow_profile(R, sigma_d_profile, Y_MIN, Y_MAX);
+            real sigma_d = _interp_convpow_profile(R, initdens, Y_MIN, Y_MAX);
             real rhod = _get_init_density(sigma_d, R, Z, size);
 
             real vol_y = _get_vol_y(iy);
@@ -283,7 +283,7 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
 #if defined(MULTISIZE) && defined(DIFFUSION)
 // precompute one normalized spatial CDF for a selected grain size
 inline static __host__
-void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_d_profile, real size)
+void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &initdens, real size)
 {
     int cells = N_Y*N_Z;
     real log_zero = -std::numeric_limits<real>::infinity();
@@ -292,15 +292,15 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &sigma_d_p
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real zc = _get_zcent(iz);
+        real z = _get_zcent(iz);
         real vol_z = _get_vol_z(iz);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real yc = _get_ycent(iy);
-            real R = yc*std::sin(zc);
-            real Z = yc*std::cos(zc);
-            real sigma_d = _interp_convpow_profile(R, sigma_d_profile, Y_MIN, Y_MAX);
+            real y = _get_ycent(iy);
+            real R = y*std::sin(z);
+            real Z = y*std::cos(z);
+            real sigma_d = _interp_convpow_profile(R, initdens, Y_MIN, Y_MAX);
             real log_rhod = (sigma_d > 0.0) ? std::log(sigma_d) : log_zero;
 
             if (N_Z > 1 && sigma_d > 0.0)
@@ -363,15 +363,15 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
     real log_size_max = std::log(size_max);
     real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bins - 1);
 
-    std::vector <real> sigma_d_profile;
-    _get_initdens_profile(sigma_d_profile);
+    std::vector <real> initdens;
+    initdens_calc(initdens);
 
     std::vector <real> cdf;
     std::vector <real> cdf_bank(static_cast<size_t>(size_bins)*static_cast<size_t>(cells + 1));
     for (int idx_size = 0; idx_size < size_bins; idx_size++)
     {
         real size = std::exp(log_size_min + static_cast<real>(idx_size)*dlog_size);
-        _get_disk_cdf(cdf, sigma_d_profile, size);
+        _get_disk_cdf(cdf, initdens, size);
         std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(idx_size)*static_cast<size_t>(cells + 1));
     }
 
@@ -649,15 +649,15 @@ constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
 
 // write a contiguous host array without format conversion
 template <typename DataType> __host__ inline
-bool save_host_binary (const std::string &file_name, const DataType *data, std::size_t number)
+bool save_host_binary (const std::string &file_name, const DataType *data, std::size_t count)
 {
     std::ofstream file(file_name, std::ios::binary);
     if (!file) return false;
 
     const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
-    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
-        std::size_t chunk = std::min(chunk_max, number - offset);
+        std::size_t chunk = std::min(chunk_max, count - offset);
         file.write(reinterpret_cast<const char*>(data + offset), sizeof(DataType)*chunk);
         if (!file) return false;
     }
@@ -667,20 +667,20 @@ bool save_host_binary (const std::string &file_name, const DataType *data, std::
 
 // read a contiguous host array without format conversion
 template <typename DataType> __host__ inline
-bool load_host_binary (const std::string &file_name, DataType *data, std::size_t number)
+bool load_host_binary (const std::string &file_name, DataType *data, std::size_t count)
 {
     std::ifstream file(file_name, std::ios::binary);
     if (!file) return false;
 
-    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*number);
+    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*count);
     file.seekg(0, std::ios::end);
     if (file.tellg() != expected) return false;
     file.seekg(0, std::ios::beg);
 
     const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
-    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
-        std::size_t chunk = std::min(chunk_max, number - offset);
+        std::size_t chunk = std::min(chunk_max, count - offset);
         file.read(reinterpret_cast<char*>(data + offset), sizeof(DataType)*chunk);
         if (!file) return false;
     }
@@ -690,17 +690,17 @@ bool load_host_binary (const std::string &file_name, DataType *data, std::size_t
 
 // write a device array through a bounded host buffer
 template <typename DataType> __host__ inline
-bool save_device_binary (const std::string &file_name, const DataType *dev_data, std::size_t number)
+bool save_device_binary (const std::string &file_name, const DataType *dev_data, std::size_t count)
 {
     std::ofstream file(file_name, std::ios::binary);
     if (!file) return false;
 
     const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
-    std::vector<DataType> buffer(std::min(number, chunk_max));
+    std::vector<DataType> buffer(std::min(count, chunk_max));
 
-    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
-        std::size_t chunk = std::min(chunk_max, number - offset);
+        std::size_t chunk = std::min(chunk_max, count - offset);
         CUDA_CHECK(cudaMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, cudaMemcpyDeviceToHost));
         file.write(reinterpret_cast<const char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
@@ -711,22 +711,22 @@ bool save_device_binary (const std::string &file_name, const DataType *dev_data,
 
 // read a device array through a bounded host buffer
 template <typename DataType> __host__ inline
-bool load_device_binary (const std::string &file_name, DataType *dev_data, std::size_t number)
+bool load_device_binary (const std::string &file_name, DataType *dev_data, std::size_t count)
 {
     std::ifstream file(file_name, std::ios::binary);
     if (!file) return false;
 
-    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*number);
+    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*count);
     file.seekg(0, std::ios::end);
     if (file.tellg() != expected) return false;
     file.seekg(0, std::ios::beg);
 
     const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
-    std::vector<DataType> buffer(std::min(number, chunk_max));
+    std::vector<DataType> buffer(std::min(count, chunk_max));
 
-    for (std::size_t offset = 0; offset < number; offset += chunk_max)
+    for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
-        std::size_t chunk = std::min(chunk_max, number - offset);
+        std::size_t chunk = std::min(chunk_max, count - offset);
         file.read(reinterpret_cast<char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
         CUDA_CHECK(cudaMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, cudaMemcpyHostToDevice));
@@ -773,22 +773,22 @@ void load_velocity_as_sam (swarm *particle)
 inline __host__
 std::string frame_num (int idx_file)
 {
-    std::string str = std::to_string(idx_file);
-    int length = std::max(5, static_cast<int>(std::to_string(SAVE_MAX).length()));
-    if (str.length() < length) str.insert(0, length - str.length(), '0');
-    return str;
+    std::string num_str = std::to_string(idx_file);
+    int width = std::max(5, static_cast<int>(std::to_string(SAVE_MAX).length()));
+    if (num_str.length() < width) num_str.insert(0, width - num_str.length(), '0');
+    return num_str;
 }
 
 // report completion time for one output frame
 inline __host__
 void msg_output (int idx_file)
 {
-    std::time_t end_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    int length = std::max(3, static_cast<int>(std::to_string(SAVE_MAX).length()));
+    std::time_t time_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    int width = std::max(3, static_cast<int>(std::to_string(SAVE_MAX).length()));
     std::cout   
     << std::endl << std::setfill('0')
-    << std::setw(length) << idx_file << "/" 
-    << std::setw(length) << SAVE_MAX << " finished on " << std::ctime(&end_time)
+    << std::setw(width) << idx_file << "/"
+    << std::setw(width) << SAVE_MAX << " finished on " << std::ctime(&time_now)
     << std::endl;
 }
 

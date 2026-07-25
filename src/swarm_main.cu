@@ -234,9 +234,9 @@ int main (int argc, char **argv)
     else
     {
         // resume particle and imported-gas states from the requested output frame
-        std::stringstream convert{argv[1]};
+        std::stringstream frame_stream{argv[1]};
 
-        if (!(convert >> idx_from))
+        if (!(frame_stream >> idx_from))
         {
             std::cerr << "Error: Invalid resume file number: " << argv[1] << std::endl;
             return 1;

@@ -126,41 +126,41 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real nu = _get_nu(R, h_g);
 
     // assemble cylindrical diffusion coefficients and deterministic physical drift speeds
-    real coeff_x = nu / SCHMIDT_X;
-    real coeff_R = nu / SCHMIDT_R;
-    real coeff_Z = (N_Z > 1) ? nu / SCHMIDT_Z : 0.0;
+    real diff_x = nu / SCHMIDT_X;
+    real diff_R = nu / SCHMIDT_R;
+    real diff_Z = (N_Z > 1) ? nu / SCHMIDT_Z : 0.0;
 
     // retain zero placeholders for future azimuthal and vertical diffusivity gradients
-    real grad_x = 0.0; // partial derivative of coeff_x with respect to x
-    real grad_Z = 0.0; // partial derivative of coeff_Z with respect to Z
+    real grad_x = 0.0; // partial derivative of diff_x with respect to x
+    real grad_Z = 0.0; // partial derivative of diff_Z with respect to Z
     real drift_x = grad_x / (R*R);
-    real drift_R = _get_diff_drift_R(R, coeff_R);
+    real drift_R = _get_diff_drift_R(R, diff_R);
     real drift_Z = grad_Z;
 
     // project cylindrical diffusion variance and drift onto spherical radial and polar directions
     real sin_z = sin(z);
     real cos_z = cos(z);
-    real coeff_y = coeff_R*sin_z*sin_z + coeff_Z*cos_z*cos_z;
+    real diff_y = diff_R*sin_z*sin_z + diff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
     
-    rate = fmax(rate, 2.0*coeff_y / (CFL_DYN*CFL_DYN*dr*dr));
+    rate = fmax(rate, 2.0*diff_y / (CFL_DYN*CFL_DYN*dr*dr));
     rate = fmax(rate, abs(drift_y) / (CFL_DYN*dr));
 
     if (N_X > 1)
     {
         real cell_x = R*dx;
         
-        rate = fmax(rate, 2.0*coeff_x / (CFL_DYN*CFL_DYN*cell_x*cell_x));
+        rate = fmax(rate, 2.0*diff_x / (CFL_DYN*CFL_DYN*cell_x*cell_x));
         rate = fmax(rate, abs(drift_x) / (CFL_DYN*dx));
     }
 
     if (N_Z > 1)
     {
         real cell_z = y*dz;
-        real coeff_z = coeff_R*cos_z*cos_z + coeff_Z*sin_z*sin_z;
+        real diff_z = diff_R*cos_z*cos_z + diff_Z*sin_z*sin_z;
         real drift_z = drift_R*cos_z - drift_Z*sin_z;
         
-        rate = fmax(rate, 2.0*coeff_z / (CFL_DYN*CFL_DYN*cell_z*cell_z));
+        rate = fmax(rate, 2.0*diff_z / (CFL_DYN*CFL_DYN*cell_z*cell_z));
         rate = fmax(rate, abs(drift_z) / (CFL_DYN*cell_z));
     }
     #endif // DIFFUSION

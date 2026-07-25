@@ -11,7 +11,7 @@
 
 // calculate the cylindrical Ito and variable-diffusivity drift for diffusion of dust density
 __device__ __forceinline__
-real _get_diff_drift_R (real R, real coeff_R)
+real _get_diff_drift_R (real R, real diff_R)
 {
     #ifdef CONST_NU
     real idx_diff = 0.0;
@@ -19,7 +19,7 @@ real _get_diff_drift_R (real R, real coeff_R)
     real idx_diff = IDX_Q + 1.5;
     #endif // CONST_NU
 
-    return coeff_R*(idx_diff + 1.0) / R;
+    return diff_R*(idx_diff + 1.0) / R;
 }
 
 #endif // DIFFUSION

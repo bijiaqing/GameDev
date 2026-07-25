@@ -56,12 +56,12 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     if (N_X > 1)
     {
         // convert physical azimuthal diffusion length to angular noise
-        real coeff_x = nu / SCHMIDT_X;
+        real diff_x = nu / SCHMIDT_X;
 
         // retain the density-diffusion drift placeholder for a future azimuthally varying diffusivity
-        real grad_x = 0.0; // replace with the partial derivative of coeff_x with respect to x
+        real grad_x = 0.0; // replace with the partial derivative of diff_x with respect to x
         real avg_x = dt*grad_x / (R*R);
-        real std_x = sqrt(2.0*dt*coeff_x) / R;
+        real std_x = sqrt(2.0*dt*diff_x) / R;
 
         delta_x = avg_x + std_x*curand_normal_double(&rngstate);
     }
@@ -69,10 +69,10 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     if (N_Y > 1)
     {
         // include the cylindrical Ito drift and variable-diffusivity drift
-        real coeff_R = nu / SCHMIDT_R;
+        real diff_R = nu / SCHMIDT_R;
         
-        real avg_R = dt*_get_diff_drift_R(R, coeff_R);
-        real std_R = sqrt(2.0*dt*coeff_R);
+        real avg_R = dt*_get_diff_drift_R(R, diff_R);
+        real std_R = sqrt(2.0*dt*diff_R);
 
         delta_R = avg_R + std_R*curand_normal_double(&rngstate);
     }
@@ -80,12 +80,12 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     if (N_Z > 1)
     {
         // apply physical vertical diffusion at fixed cylindrical radius
-        real coeff_Z = nu / SCHMIDT_Z;
+        real diff_Z = nu / SCHMIDT_Z;
 
         // retain the density-diffusion drift placeholder for a future vertically varying diffusivity
-        real grad_Z = 0.0; // replace with the partial derivative of coeff_Z with respect to Z
+        real grad_Z = 0.0; // replace with the partial derivative of diff_Z with respect to Z
         real avg_Z = dt*grad_Z;
-        real std_Z = sqrt(2.0*dt*coeff_Z);
+        real std_Z = sqrt(2.0*dt*diff_Z);
 
         delta_Z = avg_Z + std_Z*curand_normal_double(&rngstate);
     }

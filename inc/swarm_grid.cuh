@@ -34,7 +34,7 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
         real ref_x = 0.5;
         bool edge_x = loc_x < ref_x || loc_x > static_cast<real>(N_X) + ref_x - 1.0;
 
-        if (not edge_x)             // still in the interior of the X domain
+        if (!edge_x)             // still in the interior of the X domain
         {
             if (deci_x >= ref_x)    // share with the cell on the right
             {
@@ -74,7 +74,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     }
     else
     {
-        real d_y = _get_dy();
+        real dy = _get_dy();
         real ref_y;
         
         if (outer_edge)
@@ -86,36 +86,36 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
             real mesh_dim = _get_mesh_dim();
             
             // place cell-centred values at the exact centroid of the represented disk measure
-            ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(d_y, mesh_dim + 1.0) - 1.0) / (pow(d_y, mesh_dim) - 1.0)) / log(d_y);
+            ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(dy, mesh_dim + 1.0) - 1.0) / (pow(dy, mesh_dim) - 1.0)) / log(dy);
         }
         
         bool edge_y = loc_y < ref_y || loc_y > static_cast<real>(N_Y) + ref_y - 1.0;
 
         if (outer_edge)
         {
-            if (not edge_y)         // still in the interior of the Y domain
+            if (!edge_y)         // still in the interior of the Y domain
             {
-                frac_y = (d_y - pow(d_y, deci_y)) / (d_y - 1.0);
+                frac_y = (dy - pow(dy, deci_y)) / (dy - 1.0);
                 next_y = -N_X;      // share with the cell on its left
             }
             else                    // at the Y domain boundaries
             {
-                frac_y = (d_y - pow(d_y, deci_y)) / (d_y - 1.0);
+                frac_y = (dy - pow(dy, deci_y)) / (dy - 1.0);
                 next_y = 0;         // the inner-face zero is applied after interpolation
             }
         }
         else
         {
-            if (not edge_y)         // still in the interior of the Y domain
+            if (!edge_y)         // still in the interior of the Y domain
             {
                 if (deci_y >= ref_y) // share with the cell on the right
                 {
-                    frac_y = (pow(d_y, deci_y - ref_y) - 1.0) / (d_y - 1.0);
+                    frac_y = (pow(dy, deci_y - ref_y) - 1.0) / (dy - 1.0);
                     next_y = N_X;   // the index distance to the next Y cell on the right is N_X
                 }
                 else                // share with the cell on the left
                 {
-                    frac_y = (pow(d_y, deci_y - ref_y) - 1.0) / (1.0 / d_y - 1.0);
+                    frac_y = (pow(dy, deci_y - ref_y) - 1.0) / (1.0 / dy - 1.0);
                     next_y = -N_X;
                 }
             }
@@ -142,7 +142,7 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
         real ref_z = 0.5;
         bool edge_z = loc_z < ref_z || loc_z > static_cast<real>(N_Z) + ref_z - 1.0;
         
-        if (not edge_z)             // still in the interior of the Z domain
+        if (!edge_z)             // still in the interior of the Z domain
         {
             if (deci_z >= ref_z)
             {
