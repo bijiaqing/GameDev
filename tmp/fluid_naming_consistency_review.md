@@ -30,14 +30,16 @@ The recommended canonical naming table was applied to the production fluid code 
 
 ## Summary
 
-The persistent dust-field convention is already coherent:
+The persistent dust-field convention distinguishes storage names from local physical quantities:
 
-- density: `dustdens`, `dev_dustdens`, and local `dens`
+- stored dust-density fields: `dustdens` and `dev_dustdens`
+- local volume densities: `rhod` and `rhog`
+- local surface densities: `sigma_d` and `sigma_g`
 - conserved momentum: `dev_dustmomx/y/z` and local `mx/my/mz`
 - evolved primitives: `dev_dustvelx/y/z` and local `lx/vy/lz`
 - initial dust surface-density profile: `initdens` and `dev_initdens`
 
-The canonical inconsistencies identified in the first audit have been resolved
+The canonical inconsistencies identified in the first fluid-only audit have been resolved, while the later cross-model `dens` to `rhod` alignment remains pending
 
 The principal remaining detailed inconsistencies are:
 
@@ -47,52 +49,7 @@ The principal remaining detailed inconsistencies are:
 4. convolution loop variables and some main-loop helper names remain generic
 5. several equivalent swarm and fluid quantities still use different names or suffix conventions
 
-## Recommended canonical naming
-
-| Concept | Previous names | Applied names |
-|---|---|---|
-| full flattened cell index | `idx`, `ic` | `idx_cell` |
-| azimuthal-ring work item | `idx` | `idx_ring` |
-| directional-column work item | `idx` | `idx_col` |
-| radial optical-depth ray | `idx` | `idx_ray` |
-| directional indices | `ix`, `iy`, `iz` | retain |
-| spherical coordinates | `yc`, `zc` | `y`, `z` |
-| cylindrical coordinates | `Rc`, `Zc` | `R`, `Z` |
-| face coordinates | `y0/y1`, `z0/z1` | `y_i/y_o`, `z_i/z_o` |
-| stored dust primitives | `lx`, `vy`, `lz` | retain |
-| physical dust velocities | `v_x`, `v_y`, `v_z`, `vz` | `vel_x`, `vel_y`, `vel_z` |
-| physical gas velocity | `vg_x`, `vgas_R` | `vgas_x`, `vgas_R` |
-| diffusivity | `Dx`, `Dy_i/o`, `Dz`, `Dz_i/o` | `diff_x`, `diff_y_i/o`, `diff_z`, `diff_z_i/o` |
-| radial gravity | `Fy` | `grav_y` |
-| radial centrifugal acceleration | `Fcy` | `cent_y` |
-| polar geometric torque | `Tcz` | `torq_z` |
-| PPM interface | `edge`, `face` | `face` |
-| per-cell CFL array | `dev_cfl_rate` | `dev_cfl_rates` |
-| PPM weights | `weight_y/z`, `dev_weight_y/z` | `ppm_weight_y/z`, `dev_ppm_weight_y/z` |
-| encoded first invalid cell | `badstate`, `dev_badstate` | `bad_cell`, `dev_bad_cell` |
-| file name | `fname`, `file_name` | `file_name` |
-| element count | `number`, `n_cells`, `ncells` | `count`, `cell_count` as appropriate |
-
-## Detailed findings
-
-### 1. Flattened and reduced indices
-
-**Status: applied for the canonical index spaces**
-
-The sweep kernels now distinguish their reduced work-item index from the full flattened cell index:
-
-- `advect_x_calc`, `diffus_x_calc`, and `cfl_rate_calc` use `idx_ring`
-- `advect_y_calc`, `diffus_y_calc`, `advect_z_calc`, and `diffus_z_calc` use `idx_col`
-- `optdepth_csum` uses `idx_ray`
-- all full flattened indices use `idx_cell`
-
-In `fluid_host.cuh`, `idx_ring` is used when a ring offset is passed to `thrust`, while cell loops form `idx_cell` directly
-
-The existing flattened order is already correct and should remain:
-
-```cpp
-ix + iy*N_X + iz*N_X*N_Y
-```
+## Pending and partially resolved findings
 
 ### 2. Coordinate values
 
@@ -162,22 +119,6 @@ Recommended treatment:
 
 This is the highest-value naming cleanup because the current names can lead to dimensional mistakes during later maintenance
 
-### 5. Physical velocity names
-
-**Status: applied**
-
-`init_vel_calc` now uses `vgas_x`, `vel_R`, `vel_x/vel_y/vel_z`, and `vel_z_diff`
-
-The CFL diagnostic uses `vel_x_res` and `vel_z`, while the device kernel retains `omega_res` for an angular velocity
-
-Retain:
-
-- `lx`, `vy`, and `lz` for the stored fluid primitives
-- `vgas_R` for physical cylindrical-radial gas velocity
-- `lx_g`, `vy_g`, and `lz_g` for gas targets expressed in stored-state units
-
-This also aligns the fluid initializer with the swarm initializer
-
 ### 6. Diffusion coefficients and face quantities
 
 **Status: canonical diffusivity names applied; detailed helper and substep names remain pending**
@@ -201,7 +142,7 @@ Possible replacements are `_get_dr_cent_i` and `_get_dr_cent_o`
 
 ### 7. Source-force and drag names
 
-**Status: base force names applied; time-stage and drag names remain pending**
+**Status: base force names applied; fluid time-stage and drag names remain pending**
 
 `source_update.cu` now uses the same base force convention as the swarm transport code:
 
@@ -209,7 +150,7 @@ Possible replacements are `_get_dr_cent_i` and `_get_dr_cent_o`
 - `cent_y`
 - `torq_z`
 
-Its stage forms currently use `_n`, `_new`, and `_tmp`; normalize them to:
+Its non-SSA stage forms currently use `_n`, `_new`, and `_tmp`; normalize them to:
 
 - `grav_y_old/mid/new`
 - `cent_y_old/mid/new`
@@ -219,11 +160,11 @@ The source variable `drag_h` is the dimensionless ratio `dt/ts`, not a scale hei
 
 Rename:
 
-- `drag_h` to `tau_drag`
-- `drag_h2` and `drag_h3` to `tau_drag2` and `tau_drag3`
+- `drag_h` to `tau`
+- `drag_h2` and `drag_h3` to `tau2` and `tau3`
 - `force_weight_n` to `force_weight_old`
 
-Retain `ts` for stopping time because the same convention is used by the swarm transport integrator
+Reserve `tau` for a dimensionless drag interval and retain `ts` for stopping time
 
 ### 8. Boundary suffixes
 
@@ -357,7 +298,7 @@ The established `clock_sim`, `clock_out`, and `idx_from` names are used consiste
 
 The active swarm and fluid implementations already agree on most names that encode physical meaning
 
-The remaining cross-model differences are concentrated in host initialization, time-stage suffixes, diffusion coefficients, scalar optical depth, and binary-I/O helpers
+The remaining cross-model differences are concentrated in host initialization, drag and optical-depth base names, and binary-I/O helpers
 
 ### Recommended cross-model canonical names
 
@@ -366,13 +307,10 @@ Rows already identical in the swarm model, fluid model, and recommended conventi
 | Concept | Swarm name | Fluid name | Recommended common convention |
 |---|---|---|---|
 | convolved initial surface-density routine | `initdens_calc` | `convpow_calc` | `initdens_calc` |
-| local dust density | `rhod`, `log_rhod` | `dens` | `dens`, `log_dens` |
-| directional diffusivity | `diff_x`, `diff_R`, `diff_Z`, `diff_y`, `diff_z` | `diff_x`, `diff_y`, `diff_z` | swarm: `diff_x`, `diff_R`, `diff_Z`, `diff_y`, `diff_z`; fluid: `diff_x`, `diff_y`, `diff_z` |
-| old, midpoint, and new time states | `_i`, `_1`, `_2`, `_j`, `_n`, `_tmp`, `_new` | `_n`, `_tmp`, `_new` | `_old`, `_mid`, `_new` |
-| gas target in stored variables | `lxg_1`, `vyg_1`, `lzg_1` | `lx_g`, `vy_g`, `lz_g` | `lx_g`, `vy_g`, `lz_g`, with `_mid` only when needed |
-| stopping time | `ts_1` | `ts` | `ts`, with `_mid` only when needed |
-| dimensionless drag interval | `tau_1` | `drag_h` | `tau_drag` |
-| scalar optical depth | `optdepth` | `tau_i`, `tau_o` | `tau`, `tau_i`, `tau_o` |
+| local dust volume density | `rhod`, `log_rhod` | `dens` | `rhod`, `log_rhod` |
+| gas target in stored variables | `lxg_1`, `vyg_1`, `lzg_1` | `lx_g`, `vy_g`, `lz_g` | swarm SSA: `lx_g_1`, `vy_g_1`, `lz_g_1`; fluid: `lx_g`, `vy_g`, `lz_g` |
+| dimensionless drag interval | `tau_1` | `drag_h` | `tau`, retaining paper-defined SSA stage suffixes |
+| scalar optical depth | `optdepth` | `tau_i`, `tau_o` | `optdepth`, with `_i/_o` for face values |
 | host binary writer/reader | `save_host_binary`, `load_host_binary` | `save_binary`, `load_binary` | `save_host_binary`, `load_host_binary` |
 | binary template type | `DataType` | `T` | `DataType` |
 | frame/output field width | `width` | `num_len`, `len` | `width` |
@@ -406,13 +344,14 @@ This name:
 
 Use `initdens` for the output profile in both models, retaining `sigma_d` for one local physical surface-density value
 
-The swarm host code also uses `rhod` and `log_rhod` for local dust density, while fluid kernels use `dens`
+The swarm host code uses `rhod` and `log_rhod` for local dust volume density, while fluid kernels still use `dens`
 
 Use:
 
-- `dens` for one local dust density
-- `log_dens` for its logarithm
-- `rhog` and `rhog_mid` exclusively for gas volume density
+- `rhod` for one local dust volume density
+- `log_rhod` for its logarithm
+- `rhog` and `rhog_mid` for local gas volume density
+- `sigma_d` and `sigma_g` for local dust and gas surface densities
 
 The internal convolution-coordinate cleanup already recommended for the fluid code should be applied to both profile generators:
 
@@ -438,9 +377,7 @@ Three swarm host loops in `swarm_host.cuh` previously used `yc` and `zc` for cel
 
 Those locals now use `y` and `z` to match the fluid code and the rest of the swarm code
 
-The logarithmic radial ratio is named `d_y` inside `swarm_grid.cuh` but `dy` everywhere else
-
-Use `dy`; the underscore does not encode a different quantity
+The logarithmic radial ratio previously used `d_y` inside `swarm_grid.cuh` and now consistently uses `dy`
 
 The helpers `_get_ycent` and `_get_zcent` have identical names and formulas, but their placement differs:
 
@@ -451,67 +388,23 @@ Move the swarm definitions to `param_grid.cuh` and give them the same host/devic
 
 This would make the grid-helper surface identical without changing any caller names
 
-### 16. Diffusivity names
+### 17. SSA stage suffixes and physical base names
 
-The swarm diffusion SDE and its timestep estimator now use `diff_x`, `diff_R`, `diff_Z`, `diff_y`, and `diff_z`
+**Status: SSA suffixes are intentional; gas-target and fluid drag base names remain pending**
 
-The fluid diffusion operators use `diff_x`, `diff_y_i/o`, and `diff_z_i/o`
+The swarm SSA implementation deliberately uses `_i`, `_1`, `_2`, and `_j` to match the notation of the reference paper
 
-These variables all represent a physical diffusivity with dimensions of length squared per time
+Retain these suffixes in all SSA-related code rather than translating them to `_old`, `_mid`, or `_new`
 
-Use `diff_*` consistently:
+The same rule makes `ts_1` a consistent stage-specific form of the stopping-time base name `ts`
 
-- swarm cylindrical coefficients: `diff_x`, `diff_R`, `diff_Z`
-- swarm projections onto the spherical mesh: `diff_y`, `diff_z`
-- fluid spherical coefficients: retain `diff_x`, `diff_y_i/o`, `diff_z_i/o`
+Only the physical base names should be aligned:
 
-Accordingly, `_get_diff_drift_R` should accept `diff_R` rather than `coeff_R`
+- `lxg_1/vyg_1/lzg_1` to `lx_g_1/vy_g_1/lz_g_1`, retaining the SSA `_1` stage
+- `drag_h` to `tau` in the fluid source integrator
+- `tau_1` remains the SSA stage-specific dimensionless drag interval
 
-Retain the coordinate-letter distinction:
-
-- uppercase `R/Z` for cylindrical directions in swarm diffusion
-- lowercase `x/y/z` for spherical-coordinate fluid diffusion
-
-The different Schmidt-number suffixes are therefore intentional:
-
-- swarm: `SCHMIDT_X`, `SCHMIDT_R`, `SCHMIDT_Z`
-- fluid: `SCHMIDT_X`, `SCHMIDT_Y`, `SCHMIDT_Z`
-
-### 17. Dynamics time-state suffixes
-
-The two models use incompatible suffix systems for time states:
-
-- swarm staggered transport: `_i`, `_1`, `_2`, `_j`
-- fluid source update: `_n`, `_tmp`, `_new`
-- fluid geometry: `_i` and `_o` already mean inner and outer faces
-
-Using `_i` for both an initial time state and an inner spatial face is avoidably ambiguous
-
-Reserve:
-
-- `_i` and `_o` for inner and outer geometry
-- `_L` and `_R` for Riemann left and right states
-- `_old`, `_mid`, and `_new` for temporal stages
-
-For the swarm transport helper, examples are:
-
-- `x_old/y_old/z_old`
-- `x_mid/y_mid/z_mid`
-- `x_new/y_new/z_new`
-- `lx_old/lx_mid/lx_new`
-- `grav_y_old/grav_y_mid`
-
-The gas targets in the same helper should follow the fluid underscore convention:
-
-- `lxg_1/vyg_1/lzg_1` to `lx_g/vy_g/lz_g`
-- add `_mid` only if another gas stage exists in the same scope
-
-The stopping-time and drag-interval names should likewise become:
-
-- `ts` or `ts_mid`
-- `tau_drag`
-
-This also resolves the current fluid-only ambiguity where `drag_h` is not a scale height
+Reserve `tau` for the dimensionless drag interval and `ts` for stopping time
 
 ### 18. Optical-depth scalar names
 
@@ -521,11 +414,13 @@ Both models use:
 - `beta_taper` for the radiation ramp
 - `beta` for the local radiation-to-gravity ratio
 
-The interpolated scalar in `ssa_substep_2.cu` is currently also named `optdepth`, while the fluid source kernel calls scalar face values `tau_i` and `tau_o`
+The interpolated scalar in `ssa_substep_2.cu` is named `optdepth`, while the fluid source kernel calls scalar face values `tau_i` and `tau_o`
 
-Use `tau` for one scalar optical depth and retain `optdepth/dev_optdepth` for arrays
+Use `optdepth` for both scalar and stored optical depth, adding `_i/_o` when face values must be distinguished
 
-This makes scalar-versus-field roles visible without changing the file-output name `optdepth_*.dat`
+Rename the fluid face values to `optdepth_i` and `optdepth_o`
+
+This reserves `tau` unambiguously for the dimensionless drag interval
 
 ### 19. Host binary and frame interfaces
 
@@ -639,6 +534,116 @@ The two main functions also give the resume-frame string stream unrelated names:
 
 Use `frame_stream` in both
 
+## Suggested implementation order
+
+1. normalize index spaces and flattened-cell names — canonical portion applied
+2. normalize `y/z/R/Z` coordinates and physical velocity names — applied
+3. normalize force and drag names — force names applied; fluid drag name pending; retain paper-defined SSA suffixes
+4. unify PPM `face` terminology and helper interfaces — face terminology applied; detailed loop names pending
+5. repair semantic names for reused advection and diffusion scratch arrays
+6. normalize boundary suffixes
+7. normalize host arrays, file interfaces, and main-loop lambdas
+8. clean up convolution and small local-loop names
+9. align the swarm host coordinates and logarithmic-ratio local with the fluid convention
+10. unify initial-profile routine, profile-array, and local dust-density names
+11. retain resolved `diff_*` names with cylindrical `R/Z` in swarm and spherical `y/z` in fluid
+12. normalize non-SSA temporal suffixes while retaining `_i/_1/_2/_j` in SSA code
+13. rename fluid scalar optical depth to `optdepth`, reserve `tau` for drag, and align binary interfaces, frame locals, and pointer suffixes
+14. move literally identical grid, physics, force, and optical-depth-prefix helpers into shared headers
+
+Each group should be applied separately with declaration/call-site scans after the change
+
+## Resolved and intentional naming
+
+### Applied canonical naming
+
+| Concept | Previous names | Applied names |
+|---|---|---|
+| full flattened cell index | `idx`, `ic` | `idx_cell` |
+| azimuthal-ring work item | `idx` | `idx_ring` |
+| directional-column work item | `idx` | `idx_col` |
+| radial optical-depth ray | `idx` | `idx_ray` |
+| directional indices | `ix`, `iy`, `iz` | retain |
+| spherical coordinates | `yc`, `zc` | `y`, `z` |
+| cylindrical coordinates | `Rc`, `Zc` | `R`, `Z` |
+| face coordinates | `y0/y1`, `z0/z1` | `y_i/y_o`, `z_i/z_o` |
+| stored dust primitives | `lx`, `vy`, `lz` | retain |
+| physical dust velocities | `v_x`, `v_y`, `v_z`, `vz` | `vel_x`, `vel_y`, `vel_z` |
+| physical gas velocity | `vg_x`, `vgas_R` | `vgas_x`, `vgas_R` |
+| diffusivity | `Dx`, `Dy_i/o`, `Dz`, `Dz_i/o` | `diff_x`, `diff_y_i/o`, `diff_z`, `diff_z_i/o` |
+| radial gravity | `Fy` | `grav_y` |
+| radial centrifugal acceleration | `Fcy` | `cent_y` |
+| polar geometric torque | `Tcz` | `torq_z` |
+| PPM interface | `edge`, `face` | `face` |
+| per-cell CFL array | `dev_cfl_rate` | `dev_cfl_rates` |
+| PPM weights | `weight_y/z`, `dev_weight_y/z` | `ppm_weight_y/z`, `dev_ppm_weight_y/z` |
+| encoded first invalid cell | `badstate`, `dev_badstate` | `bad_cell`, `dev_bad_cell` |
+| file name | `fname`, `file_name` | `file_name` |
+| element count | `number`, `n_cells`, `ncells` | `count`, `cell_count` as appropriate |
+
+### 1. Flattened and reduced indices
+
+**Status: applied for the canonical index spaces**
+
+The sweep kernels now distinguish their reduced work-item index from the full flattened cell index:
+
+- `advect_x_calc`, `diffus_x_calc`, and `cfl_rate_calc` use `idx_ring`
+- `advect_y_calc`, `diffus_y_calc`, `advect_z_calc`, and `diffus_z_calc` use `idx_col`
+- `optdepth_csum` uses `idx_ray`
+- all full flattened indices use `idx_cell`
+
+In `fluid_host.cuh`, `idx_ring` is used when a ring offset is passed to `thrust`, while cell loops form `idx_cell` directly
+
+The existing flattened order is already correct and should remain:
+
+```cpp
+ix + iy*N_X + iz*N_X*N_Y
+```
+
+### 5. Physical velocity names
+
+**Status: applied**
+
+`init_vel_calc` now uses `vgas_x`, `vel_R`, `vel_x/vel_y/vel_z`, and `vel_z_diff`
+
+The CFL diagnostic uses `vel_x_res` and `vel_z`, while the device kernel retains `omega_res` for an angular velocity
+
+Retain:
+
+- `lx`, `vy`, and `lz` for the stored fluid primitives
+- `vgas_R` for physical cylindrical-radial gas velocity
+- `lx_g`, `vy_g`, and `lz_g` for gas targets expressed in stored-state units
+
+This also aligns the fluid initializer with the swarm initializer
+
+### 16. Directional diffusivity names
+
+**Status: resolved as an intentional coordinate distinction**
+
+The swarm diffusion SDE and its timestep estimator now use `diff_x`, `diff_R`, `diff_Z`, `diff_y`, and `diff_z`
+
+The fluid diffusion operators use `diff_x`, `diff_y_i/o`, and `diff_z_i/o`
+
+These variables all represent a physical diffusivity with dimensions of length squared per time
+
+The two models already use `diff_*` consistently:
+
+- swarm cylindrical coefficients: `diff_x`, `diff_R`, `diff_Z`
+- swarm projections onto the spherical mesh: `diff_y`, `diff_z`
+- fluid spherical coefficients: retain `diff_x`, `diff_y_i/o`, `diff_z_i/o`
+
+The helper `_get_diff_drift_R` also accepts `diff_R`
+
+Retain the coordinate-letter distinction:
+
+- uppercase `R/Z` for cylindrical directions in swarm diffusion
+- lowercase `x/y/z` for spherical-coordinate fluid diffusion
+
+The different Schmidt-number suffixes are therefore intentional:
+
+- swarm: `SCHMIDT_X`, `SCHMIDT_R`, `SCHMIDT_Z`
+- fluid: `SCHMIDT_X`, `SCHMIDT_Y`, `SCHMIDT_Z`
+
 ### Already aligned and suitable for sharing
 
 The following names already match and should not be changed merely to distinguish the representations:
@@ -677,21 +682,22 @@ Do not unify the following names because they expose real representation or algo
 - fluid `mx/my/mz`, which are conserved density-weighted fields and have no particle-state counterparts
 - fluid `RHO_VAC` and `POS_LIMIT`, which belong to Eulerian state recovery and implicit diffusion
 
-## Intentional distinctions to retain
+### Intentional distinctions to retain
 
 The following differences carry physical or numerical information and should not be unified:
 
-- `dens` is dust density while `sigma_d` is dust surface density and `rhog` is gas volume density
+- `rhod/rhog` are dust/gas volume densities while `sigma_d/sigma_g` are dust/gas surface densities
 - `h_g` is the dimensionless gas aspect ratio while `H_g` and `H_d` are physical scale heights
 - `lx` and `lz` are specific angular momenta while `vy` is a linear spherical-radial velocity
 - `mx` and `mz` are angular-momentum densities while `my` is linear-momentum density
 - `vel_x` and `vel_z` are physical linear velocities used for initialization, diagnostics, and files
-- `_i/_o` denotes inner/outer geometry, `_L/_R` denotes Riemann left/right states, and `_old/_new` denotes time states
+- outside SSA, `_i/_o` denotes inner/outer geometry, `_L/_R` denotes Riemann left/right states, and `_old/_new` denotes time states
+- inside SSA, `_i/_1/_2/_j` retains the paper-defined integration-stage notation
 - `dx` and `dz` are angular coordinate increments, `dy` is a logarithmic radial ratio, and `dx_len/dr/dz_len` are physical lengths
 - `cn_lower/diag/upper` are matrix coefficients while `flux_*` quantities are physical finite-volume fluxes
-- `tau_i/tau_o` are scalar optical depths while `optdepth/dev_optdepth` are stored fields
+- `optdepth`, `optdepth_i`, and `optdepth_o` are optical depths while `tau` is the dimensionless drag interval
 
-## Existing names suitable for future sharing
+### Existing names suitable for future sharing
 
 The following helper names already agree between the fluid and swarm implementations and should be retained:
 
@@ -723,22 +729,3 @@ Only `optdepth_csum` currently has the same interface and calculation and is dir
 - fluid constructs the increment directly from `dev_dustdens`
 
 Retain branch-specific implementations unless a common input contract is introduced
-
-## Suggested implementation order
-
-1. normalize index spaces and flattened-cell names — canonical portion applied
-2. normalize `y/z/R/Z` coordinates and physical velocity names — applied
-3. normalize force, drag, and diffusivity names — force and diffusivity bases applied; drag and stage suffixes pending
-4. unify PPM `face` terminology and helper interfaces — face terminology applied; detailed loop names pending
-5. repair semantic names for reused advection and diffusion scratch arrays
-6. normalize boundary suffixes
-7. normalize host arrays, file interfaces, and main-loop lambdas
-8. clean up convolution and small local-loop names
-9. align the swarm host coordinates and logarithmic-ratio local with the fluid convention
-10. unify initial-profile routine, profile-array, and local dust-density names
-11. unify `diff_*` names while retaining cylindrical `R/Z` and spherical `y/z`
-12. replace both temporal suffix systems with `_old/_mid/_new`
-13. align scalar optical depth, binary interfaces, frame locals, and pointer suffixes
-14. move literally identical grid, physics, force, and optical-depth-prefix helpers into shared headers
-
-Each group should be applied separately with declaration/call-site scans after the change
