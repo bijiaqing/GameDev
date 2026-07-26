@@ -134,8 +134,8 @@ Use the physical quantity and coordinate directly:
 
 Attach later qualifiers to the complete compact base:
 
-- `vel_x_res` to `vxres`
-- `vel_z_diff` to `vzdiff`
+- `vel_x_res` to `vx_res`
+- `vel_z_diff` to `vz_diff`
 - staged forms such as `vel_R_new` and `vel_x_new` to `vR_new` and `vx_new`
 
 The swarm implementation now follows this convention, including `vx_cart/vy_cart` for fixed Cartesian working components
@@ -164,6 +164,8 @@ This preserves the required spherical `x/y/z` directional convention without iso
 
 Use `idx_sub` instead of `i_sub` for the diffusion-substep index
 
+Use `sub_count` instead of `n_sub` and `inv_sub_count` instead of `inv_n_sub`
+
 The names `dx_len`, `dr_i/dr_o`, and `dz_len` correctly distinguish physical lengths from angular `dx/dz` and logarithmic ratio `dy`
 
 The local helpers `_get_dr_cc_i` and `_get_dr_cc_o` are understandable but `cc` is not self-explanatory outside the file
@@ -182,16 +184,16 @@ Possible replacements are `_get_dr_cent_i` and `_get_dr_cent_o`
 
 Its non-SSA stage forms currently use `_n`, `_new`, and `_tmp`; normalize them without isolating the direction letter:
 
-- `grav_yold/ymid/ynew`
-- `cent_yold/ymid/ynew`
-- `torq_zold/zmid/znew`
+- `grav_yold/ytmp/ynew`
+- `cent_yold/ytmp/ynew`
+- `torq_zold/znew`
 
 The source variable `drag_h` is the dimensionless ratio `dt/ts`, not a scale height
 
 Rename:
 
 - `drag_h` to `tau`
-- `drag_h2` and `drag_h3` to `tau2` and `tau3`
+- `drag_h2` and `drag_h3` to `tau_sq` and `tau_cb`
 - `force_weight_n` to `force_weight_old`
 
 Reserve `tau` for a dimensionless drag interval and retain `ts` for stopping time
@@ -243,7 +245,7 @@ Use `q_L` and `q_R` instead of `qa` and `qb` in `_ppm_state_L/R`
 
 ### 10. Convolved initial-density profile
 
-`convpow_calc` currently mixes the intended `u/v` notation with generic loop indices:
+`convpow_calc` currently mixes generic convolution names with a coordinate that is physically cylindrical radius:
 
 - `u_axis` and `v_axis`
 - `n_bin`
@@ -251,20 +253,18 @@ Use `q_L` and `q_R` instead of `qa` and `qb` in `_ppm_state_L/R`
 - `u_j`
 - `norm` and `kernel`
 
-The previously selected convolution convention should be restored consistently:
+Follow the accepted swarm profile convention:
 
 - `conv_u` for the uniformly sampled input coordinate
-- `conv_v` for the convolved output profile
+- `initdens` for the convolved output profile, or `initdens_work` if a separate scratch container remains necessary
 - `bin_count`
-- `idx_u`, `idx_src`, and `idx_dst`
-- `u_src`
+- `idx_src` and `idx_dst`
+- `R_src`
 - `kernel_norm` and `kernel_weight`
 
-Retain `du`, `u_min`, `u_max`, and the `u/v` notation because these are internal convolution coordinates rather than spherical `x/y/z`
+Use `dR`, `R_src_min/max`, `delta_R`, `smooth`, and `kernel_std` because the tabulated axis is an internal convolution coordinate but its values and dimensions are physical cylindrical radii
 
-Rename `sig_u` to `std_u` if it is intended to mean the Gaussian standard deviation
-
-In `init_rho_calc`, use `idx_u` instead of `iu` and `noise_x` instead of `xi`
+In `init_rho_calc`, replace the manual `du/iu/frac_u` block with a device form of `initdens_lerp` and use `noise_x` instead of `xi`
 
 Retain `initdens` because it denotes the initial dust surface-density profile rather than the evolved volume density
 
@@ -280,8 +280,9 @@ The encoded first-invalid-cell value is now `bad_cell` and `dev_bad_cell`, with 
 
 Detailed follow-up:
 
-- use `cfl_max` instead of `max_rate`
+- use `max_cfl_rates` instead of `max_rate`, matching swarm `max_dt_rates`
 - use `cfl_rates_ptr` and `lx_ptr` instead of `ptr_cfl` and `ptr_lx`
+- use `cfl_rates_max_ptr` instead of the generic maximum-element iterator `max_it`
 
 The lambda name `validate_finite_state` and kernel name `inf_cell_flag` describe their operations and can remain
 
@@ -326,9 +327,11 @@ The established `clock_sim`, `clock_out`, and `idx_from` names are used consiste
 
 ### Overview
 
-The active swarm and fluid implementations already agree on most names that encode physical meaning
+The active swarm implementation is the accepted naming reference for shared physical quantities and general local-variable rules
 
-The remaining cross-model differences are concentrated in host initialization, drag and optical-depth base names, and binary-I/O helpers
+A new declaration-and-use scan on 2026-07-26 covered every production swarm and fluid header and CUDA source, including function parameters, kernel locals, host locals, loop indices, scratch arrays, and shared optical-depth kernels
+
+Persistent representation-specific storage names remain intentionally different, but the fluid implementation still contains several older local conventions for density, physical velocity, gas targets, convolution, drag, diffusion substeps, PPM indices, and host utilities
 
 ### Recommended cross-model canonical names
 
@@ -336,22 +339,75 @@ Rows already identical in the swarm model, fluid model, and recommended conventi
 
 | Concept | Swarm name | Fluid name | Recommended common convention |
 |---|---|---|---|
-| convolved initial surface-density routine | `initdens_calc` | `convpow_calc` | `initdens_calc` |
-| local dust volume density | `rhod`, `log_rhod` | `dens` | `rhod`, `log_rhod` |
-| physical linear velocity | `vx/vy/vz`, `vR/vZ` | `vel_x/vel_y/vel_z`, `vel_R` | `vx/vy/vz`, `vR/vZ` |
-| gas linear velocity | `vx_g/vy_g/vz_g`, `vR_g` | `vgas_x`, `vgas_R` | `vx_g/vy_g/vz_g`, `vR_g/vZ_g` |
-| dimensionless drag interval | `tau_1` | `drag_h` | `tau`, retaining paper-defined SSA stage suffixes |
-| scalar optical depth | `optdepth` | `tau_i`, `tau_o` | `optdepth`, with `_i/_o` for face values |
-| host binary writer/reader | `save_host_binary`, `load_host_binary` | `save_binary`, `load_binary` | `save_host_binary`, `load_host_binary` |
+| **Physical density and velocity** |  |  |  |
+| local dust density and derived arrays | `rhod`, `log_rhod` | `dens`, `dens_prev/next/up/shift/work/rhs`, `face_dens`, `flux_dens`, `corr_dens` | use the `rhod` base throughout: `rhod`, `rhod_prev`, `rhod_up`, `face_rhod`, `flux_rhod`, `corr_rhod`, and so on |
+| local gas midplane density | reference-density convention uses `rhog` bases | `rho_mid` | `rhog_mid` |
+| physical spherical and cylindrical dust velocity | `vx/vy/vz`, `vR/vZ` | `vel_x/vel_y/vel_z`, `vel_R` | `vx/vy/vz`, `vR/vZ` |
+| physical gas velocity | `vx_g/vy_g/vz_g`, `vR_g` | `vgas_x`, `vgas_R` | `vx_g/vy_g/vz_g`, `vR_g/vZ_g` |
+| polar diffusive velocity contribution | compound bases such as `vR_new` and `sinz_new` | `vel_z_diff` | `vz_diff` |
+| CFL diagnostic velocities | compact velocity bases | `vel_x_res`, `vel_z` | `vx_res`, `vz` |
+| viscous-accretion decomposition | `term_R`, `term_Z` | `stress_R`, `stress_Z` | `term_R`, `term_Z` because these are algebraic terms, not stress-tensor components |
+| **Drag, radiation, and force stages** |  |  |  |
+| dimensionless drag interval | `tau_1` in the paper-defined SSA stage | `drag_h` | `tau`, retaining `tau_1` only where the SSA notation requires the stage suffix |
+| squared and cubed drag interval | `_sq/_cb` power convention | `drag_h2`, `drag_h3` | `tau_sq`, `tau_cb` |
+| scalar or face optical depth | `optdepth` | `tau_i`, `tau_o` | `optdepth_i`, `optdepth_o`; reserve `tau` for drag |
+| optical-depth interpolation parameters | `optdepth` base | `_interp_optdepth(tau_i, tau_o)` | `_interp_optdepth(optdepth_i, optdepth_o)` |
+| old source-force weight | explicit role suffixes | `force_weight_n` | `force_weight_old` |
+| non-SSA force stages | SSA intentionally uses `grav_y1/y2`, `cent_y1/y2`, `torq_z1/z2` | `grav_y_n/tmp/new`, `cent_y_n/tmp/new`, `torq_z_n/new` | use explicit non-SSA stages without isolating the direction: `grav_yold/ytmp/ynew`, `cent_yold/ytmp/ynew`, `torq_zold/znew` |
+| **Diffusion and boundary locals** |  |  |  |
+| directional diffusivity at inner/outer faces | final directional bases use `diff_x/R/Z` | `diff_y_i/o`, `diff_z_i/o` | `diff_yi/yo`, `diff_zi/zo` |
+| gas aspect ratio at inner/outer faces | qualified gas base such as `h_gi/h_gj` | `h_i`, `h_o` | `h_gi`, `h_go` |
+| diffusion-substep count | descriptive count suffixes such as `cell_count` and `bin_count` | `n_sub` | `sub_count` |
+| diffusion-substep index | `idx_*` index convention | `i_sub` | `idx_sub` |
+| reciprocal substep count | descriptive inverse prefix | `inv_n_sub` | `inv_sub_count` |
+| FARGO integer-shift count | descriptive count suffix | `n_shift` | `shift_count` |
+| center-to-center radial-spacing helpers | inner/outer suffix rule | `_get_dr_cc_i/o` | `_get_dr_cent_i/o` |
+| inner/outer boundary speed | `_i/_o` boundary suffix rule | `speed_ib`, `speed_ob` | `speed_i`, `speed_o` |
+| inner-boundary conservative flux | `_i` boundary suffix rule | `flux_dens_ib`, `flux_mx/my/mz_ib` | `flux_rhod_i`, `flux_mx_i`, `flux_my_i`, `flux_mz_i` |
+| real-valued boundary mask | descriptive mask suffix | `outflow` | `outflow_mask` or remove the temporary and use the conditional directly |
+| spherical finite-volume measure helpers | `_get_sy`, `_get_sz` | `_get_s_y`, `_get_s_z` | `_get_sy`, `_get_sz` |
+| **Initial surface-density profile** |  |  |  |
+| convolved initial profile routine | `initdens_calc` | `convpow_calc` | `initdens_calc` |
+| uniform convolution coordinate | `conv_u` | `u_axis` | `conv_u` |
+| convolved output storage | `initdens` | `v_axis`, followed by copy to `initdens` | use `initdens` directly, or `initdens_work` only when a separate scratch container is required |
+| convolution bin count | `bin_count` convention | `n_bin` | `bin_count` |
+| convolution source and destination indices | `idx_src`, `idx_dst` | generic `j`, `k` and axis-fill `i` | `idx_src`, `idx_dst` |
+| convolution source coordinate | `R_src` | `u_j` | `R_src` |
+| smoothing range and width | `smooth`, `R_src_min/max`, `kernel_std` | `u_s`, `u_min/max`, `sig_u` | `smooth`, `R_src_min/max`, `kernel_std` |
+| convolution spacing and offset | `dR`, `delta_R` | `du`, `delta_u` | `dR`, `delta_R` because the tabulated coordinate is physical cylindrical radius |
+| Gaussian normalization and value | `kernel_norm`, `kernel_weight` | `norm`, `kernel` | `kernel_norm`, `kernel_weight` |
+| initial-profile interpolation | `initdens_lerp` | manual `du`, `iu`, and `frac_u` block | use an `initdens_lerp` helper with the same name and boundary convention; the host-vector and device-pointer overloads may differ |
+| initialized local dust density | `_get_init_rhod`, local `rhod` | local `dens` | `rhod` |
+| azimuthal initialization noise | descriptive role convention | `xi` | `noise_x` |
+| local CUDA random state | `rngstate` | `rng` | `rngstate` |
+| **PPM and finite-volume indices** |  |  |  |
+| PPM face and cell indices | `idx_*` index convention | `iface`, `icell` | `idx_face`, `idx_cell` |
+| PPM stencil and polynomial loops | descriptive index convention | generic `n`, `j`, `k` | `degree`, `idx_stencil`, and `idx_aug` according to the loop role |
+| uniform PPM stencil states | signed-offset convention | `qm1`, `q0`, `qp1`, `qp2` | `q_m1`, `q_0`, `q_p1`, `q_p2` |
+| PPM left/right states | `_L/_R` Riemann-state convention | `qa`, `qb` | `q_L`, `q_R` |
+| PPM upwind indices | index-first convention | `iupL`, `iupR` | `idx_up_L`, `idx_up_R` |
+| **CFL, host utilities, and main-loop locals** |  |  |  |
+| Thrust view of a rate array | `dt_rates_ptr` | `ptr_cfl` | swarm `dt_rates_ptr`; fluid `cfl_rates_ptr` |
+| Thrust view of angular momentum | object-before-type pointer suffix | `ptr_lx` | `lx_ptr` |
+| maximum reduced dynamics rate | `max_dt_rates` | generic `max_rate` | retain `max_dt_rates`; use `max_cfl_rates` in fluid |
+| maximum-element device iterator | object-before-type pointer suffix | `max_it` | `cfl_rates_max_ptr` |
+| index of maximum CFL cell | index-first convention | `idx_max` | `idx_cfl_max` |
+| host binary writer and reader | `save_host_binary`, `load_host_binary` | `save_binary`, `load_binary` | `save_host_binary`, `load_host_binary` |
 | binary template type | `DataType` | `T` | `DataType` |
+| binary element count | `std::size_t count` | `int count` | `std::size_t count` |
 | frame/output field width | `width` | `num_len`, `len` | `width` |
 | completion timestamp | `time_now` | `t_curr` | `time_now` |
-| Thrust view of a rate array | `dt_rates_ptr` | `ptr_cfl` | swarm: `dt_rates_ptr`; fluid: `cfl_rates_ptr` |
 | output macro frame parameter | `idx_file` | `IDX` | `idx_file` |
-| local CUDA random state | `rngstate` | `rng` | `rngstate` |
 | resume-frame parser | `frame_stream` | `ss` | `frame_stream` |
+| operator duration parameter | collision operator uses `duration` | advection lambdas use `time_interval` | `duration` |
+| remaining operator duration | `remaining` | `time_remain` | `remaining` |
+| advection-operator lambdas | operation-first descriptive naming | `advance_x/y/z` | `advance_advection_x/y/z` |
+| conservative/primitive synchronization lambda | state-oriented operation naming | `recover_dust_velocity` | `sync_dust_state` because the operation can also repair the conserved fallback state |
+| advection half-interval | `dt_*` timestep convention | `adv_interval` | `dt_adv` |
+| initial CFL-limited timestep | physical timestep base | `dt_cfl_begin` | `dt_cfl` |
+| unsmoothed radiation ramp | qualified physical role | `taper` | `taper_raw`, retaining `beta_taper` for the smoothed factor |
 
-Swarm-side status: `initdens_calc`, `initdens`, host-loop `y/z`, `diff_x/R/Z/y/z`, binary `count`, `num_str`, `width`, `time_now`, `dt_rates_ptr`, and `frame_stream` are adopted canonical names
+All rows above are now fluid-side work unless the row explicitly describes an intentional overload or representation-specific name; the accepted swarm side already follows the recommended base conventions
 
 `cfl_rates_ptr` remains fluid-only because the swarm model has `dev_dt_rates`, not a fluid transport-only `dev_cfl_rates` array
 
@@ -362,7 +418,7 @@ The same Gaussian-convolved physical profile is currently presented as two diffe
 - swarm: `initdens_calc(std::vector<real> &initdens)`
 - fluid: `convpow_calc(real *initdens)`
 
-The former swarm name incorrectly used `_get_` for a routine that fills an output array, while the fluid name still describes the convolution method instead of the resulting physical quantity
+The swarm routine has already adopted the action name, while the fluid name still describes the convolution method instead of the resulting physical quantity
 
 Use `initdens_calc` for both implementations
 
@@ -384,16 +440,16 @@ Use:
 - `rhog` and `rhog_mid` for local gas volume density
 - `sigma_d` and `sigma_g` for local dust and gas surface densities
 
-The internal convolution-coordinate cleanup already recommended for the fluid code should be applied to both profile generators:
+The accepted swarm convolution names should be applied to the fluid profile generator:
 
-- `conv_u`, `conv_v`
+- `conv_u`, with `initdens` as the resulting profile
 - `idx_src`, `idx_dst`
-- `u_src`
-- `kernel_std`, `kernel_norm`, `kernel_weight`
+- `R_src`, `R_src_min/max`, `dR`, and `delta_R`
+- `smooth`, `kernel_std`, `kernel_norm`, and `kernel_weight`
 
-The swarm interpolation helper `_interp_convpow_profile` and the manual interpolation in `init_rho_calc` implement the same lookup role
+The swarm helper `initdens_lerp` and the manual interpolation in `init_rho_calc` implement the same lookup role
 
-A later sharing pass could use one helper such as `initdens_lerp` with the same boundary and interpolation convention in both models
+Use the same helper name and boundary convention in both models, with host-vector and device-pointer overloads if required
 
 ### 15. Coordinates and grid helpers
 
@@ -577,10 +633,10 @@ The swarm-side compound suffixes are applied:
 
 The remaining fluid-side identifier groups are:
 
-- non-SSA force stages: `grav_y_n/new/tmp`, `cent_y_n/new/tmp`, and `torq_z_n/new/tmp` to merged forms such as `grav_yn/ynew/ytmp`
+- non-SSA force stages: `grav_y_n/new/tmp`, `cent_y_n/new/tmp`, and `torq_z_n/new` to explicit merged forms such as `grav_yold/ynew/ytmp`
 - face diffusivities: `diff_y_i/o` and `diff_z_i/o` to `diff_yi/yo` and `diff_zi/zo`
-- qualified velocities: `vel_x_res` and `vel_z_diff` to `vxres` and `vzdiff`
-- diffusion substep quantity: `inv_n_sub` to `inv_nsub`
+- qualified velocities: `vel_x_res` and `vel_z_diff` to `vx_res` and `vz_diff`
+- diffusion substep quantities: `n_sub`, `i_sub`, and `inv_n_sub` to `sub_count`, `idx_sub`, and `inv_sub_count`
 - grid-measure helpers: `_get_s_y` and `_get_s_z` to `_get_sy` and `_get_sz`
 
 The directional kernel and file names `advect_x/y/z_calc` and `diffus_x/y/z_calc` also match the isolated-letter pattern
@@ -601,8 +657,8 @@ The mathematical notation `delta_v_ij` appears only in a collision comment and i
 6. normalize boundary suffixes
 7. normalize host arrays, file interfaces, and main-loop lambdas
 8. clean up convolution and small local-loop names
-9. align the swarm host coordinates and logarithmic-ratio local with the fluid convention
-10. unify initial-profile routine, profile-array, and local dust-density names
+9. align the fluid convolution coordinates, counts, and loop indices with the accepted swarm convention
+10. unify the initial-profile routine, interpolation-helper name, profile array, and local dust-density names
 11. retain resolved `diff_*` names with cylindrical `R/Z` in swarm and spherical `y/z` in fluid
 12. normalize non-SSA temporal suffixes while retaining `_i/_1/_2/_j` in SSA code
 13. rename fluid scalar optical depth to `optdepth`, reserve `tau` for drag, and align binary interfaces, frame locals, and pointer suffixes
@@ -717,7 +773,7 @@ Do not unify the following names because they expose real representation or algo
 - swarm `particle_init` versus fluid `init_rho_calc` and `init_vel_calc`
 - swarm `diffusion_pos` versus fluid `diffus_x/y/z_calc`
 - swarm `total_dust_mass`, `mass_norm`, `size`, and represented grain number, which have no single-species fluid counterparts
-- swarm `vZ` for physical settling versus fluid `vzdiff` for a spherical-polar diffusion-balance velocity
+- swarm `vZ` for physical settling versus fluid `vz_diff` for a spherical-polar diffusion-balance velocity
 - fluid `mx/my/mz`, which are conserved density-weighted fields and have no particle-state counterparts
 - fluid `RHO_VAC` and `POS_LIMIT`, which belong to Eulerian state recovery and implicit diffusion
 
