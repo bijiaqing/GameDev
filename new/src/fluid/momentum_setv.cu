@@ -8,13 +8,13 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
     int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_cell >= N_G) return;
 
-    real dens = dev_dustdens[idx_cell];
+    real rhod = dev_dustdens[idx_cell];
     real lx = dev_dustvelx[idx_cell];
     real vy = dev_dustvely[idx_cell];
     real lz = dev_dustvelz[idx_cell];
 
     // reset near-vacuum primitives to the fallback state
-    if (dens < RHO_VAC)
+    if (rhod < RHO_VAC)
     {
         int iy = (idx_cell / N_X) % N_Y;
         int iz = idx_cell / (N_X*N_Y);
@@ -33,7 +33,7 @@ void momentum_setv (const real *dev_dustdens, real *dev_dustvelx, real *dev_dust
     }
 
     // rebuild conserved momentum from density and synchronized primitives
-    dev_dustmomx[idx_cell] = dens*lx;
-    dev_dustmomy[idx_cell] = dens*vy;
-    dev_dustmomz[idx_cell] = dens*lz;
+    dev_dustmomx[idx_cell] = rhod*lx;
+    dev_dustmomy[idx_cell] = rhod*vy;
+    dev_dustmomz[idx_cell] = rhod*lz;
 }

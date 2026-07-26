@@ -115,8 +115,8 @@ real host_gasdens (real R, real Z)
     if (N_Z == 1) return sigma_g;
 
     real h_g = ASPR_0*pow(R/R_0, 0.5*(IDX_Q + 1.0));
-    real rho_mid = sigma_g / (sqrt(2.0*M_PI)*h_g*R);
-    return rho_mid*exp((R/sqrt(R*R + Z*Z) - 1.0)/(h_g*h_g));
+    real rhog_mid = sigma_g / (sqrt(2.0*M_PI)*h_g*R);
+    return rhog_mid*exp((R/sqrt(R*R + Z*Z) - 1.0)/(h_g*h_g));
 }
 
 const char *case_name ()
@@ -297,8 +297,7 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
 
 void save_array (const std::string &name, const std::vector<real> &array)
 {
-    // save_binary predates const-correct input pointers, hence the const_cast; the function only reads the array.
-    if (!save_binary(PATH + name + suffix(), const_cast<real*>(array.data()), N_G))
+    if (!save_host_binary(PATH + name + suffix(), array.data(), N_G))
     {
         std::cerr << "Failed to save " << name << std::endl;
         std::exit(EXIT_FAILURE);

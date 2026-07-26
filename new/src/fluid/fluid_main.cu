@@ -104,7 +104,7 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaMallocHost((void**)&initdens, sizeof(real)*(N_Y + 1)));
         CUDA_CHECK(cudaMalloc((void**)&dev_initdens, sizeof(real)*(N_Y + 1)));
 
-        convpow_calc(initdens);
+        initdens_calc(initdens);
         CUDA_CHECK(cudaMemcpy(dev_initdens, initdens, sizeof(real)*(N_Y + 1), cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaFreeHost(initdens));
 
@@ -160,8 +160,8 @@ int main (int argc, char **argv)
     else
     {
         // restore density and linear velocity output from the selected frame
-        std::stringstream ss{argv[1]};
-        if (!(ss >> idx_from))
+        std::stringstream frame_stream{argv[1]};
+        if (!(frame_stream >> idx_from))
         {
             std::cerr << "Error: invalid resume frame number: " << argv[1] << "\n";
             return 1;
@@ -197,7 +197,7 @@ int main (int argc, char **argv)
     msg_step_title();
 
     // recover synchronized primitives after every conservative operator
-    auto recover_dust_velocity = [&]()
+    auto sync_dust_state = [&]()
     {
         momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
@@ -219,62 +219,62 @@ int main (int argc, char **argv)
     };
 
     // advance each directional transport operator with fresh CFL-limited substeps
-    auto advance_x = [&](real time_interval)
+    auto advance_advection_x = [&](real duration)
     {
-        real time_remain = time_interval;
-        while (time_remain > 0.0)
+        real remaining = duration;
+        while (remaining > 0.0)
         {
-            real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(false));
 
             advect_x_calc <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_sub
             );
             CUDA_KERNEL_CHECK("advect_x_calc");
 
-            recover_dust_velocity();
-            time_remain -= dt_sub;
+            sync_dust_state();
+            remaining -= dt_sub;
         }
     };
 
-    auto advance_y = [&](real time_interval)
+    auto advance_advection_y = [&](real duration)
     {
-        real time_remain = time_interval;
-        while (time_remain > 0.0)
+        real remaining = duration;
+        while (remaining > 0.0)
         {
-            real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(false));
 
             advect_y_calc <<< NB_Y, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dt_sub
             );
             CUDA_KERNEL_CHECK("advect_y_calc");
 
-            recover_dust_velocity();
-            time_remain -= dt_sub;
+            sync_dust_state();
+            remaining -= dt_sub;
         }
     };
 
-    auto advance_z = [&](real time_interval)
+    auto advance_advection_z = [&](real duration)
     {
-        real time_remain = time_interval;
-        while (time_remain > 0.0)
+        real remaining = duration;
+        while (remaining > 0.0)
         {
-            real dt_sub = std::fmin(time_remain, recalc_dt_cfl(false));
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(false));
 
             advect_z_calc <<< NB_Z, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt_sub
             );
             CUDA_KERNEL_CHECK("advect_z_calc");
 
-            recover_dust_velocity();
-            time_remain -= dt_sub;
+            sync_dust_state();
+            remaining -= dt_sub;
         }
     };
 
     while (idx_from < SAVE_MAX)
     {
         // clip the global step at the next output time
-        real dt_cfl_begin = recalc_dt_cfl(true);
-        real dt = dt_cfl_begin;
+        real dt_cfl = recalc_dt_cfl(true);
+        real dt = dt_cfl;
         real dt_to_out = DT_OUT - clock_out;
         bool output_due = (dt >= dt_to_out);
         if (output_due) dt = dt_to_out;
@@ -303,14 +303,14 @@ int main (int argc, char **argv)
         #endif
 
         // apply the opening half of the symmetric directional transport composition
-        real adv_interval = 0.5*dt;
+        real dt_adv = 0.5*dt;
 
-        advance_x(adv_interval);
-        advance_y(adv_interval);
+        advance_advection_x(dt_adv);
+        advance_advection_y(dt_adv);
 
         if (N_Z > 1)
         {
-            advance_z(adv_interval);
+            advance_advection_z(dt_adv);
         }
 
         // evaluate optical depth at the source-step midpoint state
@@ -326,9 +326,9 @@ int main (int argc, char **argv)
 
         // ramp radiation pressure smoothly during the configured startup interval
         #ifdef RADIATION
-        real taper = (T_BETA > 0.0) ? (clock_sim + 0.5*dt) / T_BETA : 1.0;
-        taper = std::fmin(std::fmax(taper, 0.0), 1.0);
-        real beta_taper = taper*taper*(3.0 - 2.0*taper);
+        real taper_raw = (T_BETA > 0.0) ? (clock_sim + 0.5*dt) / T_BETA : 1.0;
+        taper_raw = std::fmin(std::fmax(taper_raw, 0.0), 1.0);
+        real beta_taper = taper_raw*taper_raw*(3.0 - 2.0*taper_raw);
         #endif
 
         // advance the centred source operator and synchronize conserved momentum
@@ -349,11 +349,11 @@ int main (int argc, char **argv)
         // close the symmetric directional transport composition in reverse order
         if (N_Z > 1)
         {
-            advance_z(adv_interval);
+            advance_advection_z(dt_adv);
         }
 
-        advance_y(adv_interval);
-        advance_x(adv_interval);
+        advance_advection_y(dt_adv);
+        advance_advection_x(dt_adv);
 
         // close the symmetric diffusion composition in reverse order
         #ifdef DIFFUSION

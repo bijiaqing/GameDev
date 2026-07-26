@@ -48,7 +48,7 @@ void cfl_rate_calc (
     {
         int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
 
-        real dens = dev_dustdens[idx_cell];
+        real rhod = dev_dustdens[idx_cell];
         real mx = dev_dustmomx[idx_cell];
         real my = dev_dustmomy[idx_cell];
         real mz = dev_dustmomz[idx_cell];
@@ -56,7 +56,7 @@ void cfl_rate_calc (
         real vy = dev_dustvely[idx_cell];
         real lz = dev_dustvelz[idx_cell];
 
-        bool cell_finite = isfinite(dens);
+        bool cell_finite = isfinite(rhod);
         cell_finite = cell_finite && isfinite(lx) && isfinite(vy) && isfinite(lz);
         cell_finite = cell_finite && isfinite(mx) && isfinite(my) && isfinite(mz);
         if (!cell_finite) ring_finite = false;
@@ -93,22 +93,22 @@ void cfl_rate_calc (
         real lz = dev_dustvelz[idx_cell];
 
         // convert angular primitives to residual azimuthal and linear polar speeds
-        real vel_z = lz / y;
+        real vz = lz / y;
 
         real omega_res = (lx - lx_avg) / fmax(R*R, 1.0e-30);
 
         real cfl_rate = 0.0;
         cfl_rate = fmax(cfl_rate, fabs(omega_res) / dx);
         cfl_rate = fmax(cfl_rate, fabs(vy)*cfl_invlen_y);
-        cfl_rate = fmax(cfl_rate, fabs(vel_z)*cfl_invlen_z);
+        cfl_rate = fmax(cfl_rate, fabs(vz)*cfl_invlen_z);
 
         #ifdef VISC_ACCRETION
         // include the analytic gas target velocity before a stiff source update transfers it to the dust
         real Z = y*cos(z);
         real h_g = _get_hg(R);
-        real vgas_R = _get_visc_vel(R, Z, h_g);
-        cfl_rate = fmax(cfl_rate, fabs(vgas_R*sin(z))*cfl_invlen_y);
-        cfl_rate = fmax(cfl_rate, fabs(vgas_R*cos(z))*cfl_invlen_z);
+        real vR_g = _get_visc_vel(R, Z, h_g);
+        cfl_rate = fmax(cfl_rate, fabs(vR_g*sin(z))*cfl_invlen_y);
+        cfl_rate = fmax(cfl_rate, fabs(vR_g*cos(z))*cfl_invlen_z);
         #endif // VISC_ACCRETION
 
         dev_cfl_rates[idx_cell] = isfinite(cfl_rate) ? cfl_rate : INFINITY;

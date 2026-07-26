@@ -1,9 +1,10 @@
 #ifndef FLUID_HOST_CUH
 #define FLUID_HOST_CUH
 
-#include <algorithm>           // std::copy, std::fill, std::max, std::swap
+#include <algorithm>           // std::fill, std::max, std::min, std::swap
 #include <chrono>              // std::chrono::system_clock
 #include <cmath>               // std::abs, std::cos, std::exp, std::fmin, std::fmax, std::isfinite, ...
+#include <cstddef>             // std::size_t
 #include <cstdlib>             // std::exit, EXIT_FAILURE
 #include <ctime>               // std::ctime, std::time_t
 #include <fstream>             // std::ifstream, std::ofstream
@@ -24,10 +25,10 @@
 // host-only finite-volume coordinates
 
 inline __host__
-real _get_s_y (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
+real _get_sy (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
 
 inline __host__
-real _get_s_z (real z) { return -std::cos(z); }
+real _get_sz (real z) { return -std::cos(z); }
 
 // =========================================================================================================================
 // cuda error handling
@@ -62,77 +63,77 @@ do {                                                                            
 
 // solve four-cell interpolation weights that reproduce cubic data at one interior face
 inline __host__
-void _ppm_cubic_face_weights (const std::vector<real> &face_s, int iface, real *face_weight)
+void _ppm_cubic_face_weights (const std::vector<real> &face_s, int idx_face, real *face_weight)
 {
-    real face = face_s[iface];
-    real scale = std::max(face - face_s[iface - 2], face_s[iface + 2] - face);
+    real face = face_s[idx_face];
+    real scale = std::max(face - face_s[idx_face - 2], face_s[idx_face + 2] - face);
 
     // assemble moment constraints that make the face interpolation exact for cubic data
     real aug_matrix[4][5] = {};
 
     // impose exactness for polynomial moments from degree zero through three
-    for (int n = 0; n < 4; n++)
+    for (int degree = 0; degree < 4; degree++)
     {
         // evaluate each monomial cell average over the four-cell stencil
-        for (int j = 0; j < 4; j++)
+        for (int idx_stencil = 0; idx_stencil < 4; idx_stencil++)
         {
-            int icell = iface - 2 + j;
-            real t_lower = (face_s[icell]     - face) / scale;
-            real t_upper = (face_s[icell + 1] - face) / scale;
+            int idx_cell = idx_face - 2 + idx_stencil;
+            real t_lower = (face_s[idx_cell]     - face) / scale;
+            real t_upper = (face_s[idx_cell + 1] - face) / scale;
 
-            aug_matrix[n][j]  = std::pow(t_upper, n + 1) - std::pow(t_lower, n + 1);
-            aug_matrix[n][j] /= static_cast<real>(n + 1)*(t_upper - t_lower);
+            aug_matrix[degree][idx_stencil]  = std::pow(t_upper, degree + 1) - std::pow(t_lower, degree + 1);
+            aug_matrix[degree][idx_stencil] /= static_cast<real>(degree + 1)*(t_upper - t_lower);
         }
-        aug_matrix[n][4] = (n == 0) ? 1.0 : 0.0;
+        aug_matrix[degree][4] = (degree == 0) ? 1.0 : 0.0;
     }
 
     // solve the interpolation weights by Gauss-Jordan elimination with partial pivoting
-    for (int col = 0; col < 4; col++)
+    for (int idx_col = 0; idx_col < 4; idx_col++)
     {
-        int pivot_row = col;
+        int pivot_row = idx_col;
 
         // select the largest available pivot in the current column
-        for (int row = col + 1; row < 4; row++)
+        for (int idx_row = idx_col + 1; idx_row < 4; idx_row++)
         {
-            if (std::abs(aug_matrix[row][col]) > std::abs(aug_matrix[pivot_row][col]))
+            if (std::abs(aug_matrix[idx_row][idx_col]) > std::abs(aug_matrix[pivot_row][idx_col]))
             {
-                pivot_row = row;
+                pivot_row = idx_row;
             }
         }
 
         // move the selected pivot row into the current row
-        for (int k = col; k < 5; k++)
+        for (int idx_aug = idx_col; idx_aug < 5; idx_aug++)
         {
-            std::swap(aug_matrix[col][k], aug_matrix[pivot_row][k]);
+            std::swap(aug_matrix[idx_col][idx_aug], aug_matrix[pivot_row][idx_aug]);
         }
 
-        real pivot = aug_matrix[col][col];
+        real pivot = aug_matrix[idx_col][idx_col];
 
         // normalize the current pivot row
-        for (int k = col; k < 5; k++)
+        for (int idx_aug = idx_col; idx_aug < 5; idx_aug++)
         {
-            aug_matrix[col][k] /= pivot;
+            aug_matrix[idx_col][idx_aug] /= pivot;
         }
 
         // eliminate the current column from every other row
-        for (int row = 0; row < 4; row++)
+        for (int idx_row = 0; idx_row < 4; idx_row++)
         {
-            if (row == col) continue;
+            if (idx_row == idx_col) continue;
 
-            real factor = aug_matrix[row][col];
+            real factor = aug_matrix[idx_row][idx_col];
 
             // update the remaining augmented entries in the target row
-            for (int k = col; k < 5; k++)
+            for (int idx_aug = idx_col; idx_aug < 5; idx_aug++)
             {
-                aug_matrix[row][k] -= factor*aug_matrix[col][k];
+                aug_matrix[idx_row][idx_aug] -= factor*aug_matrix[idx_col][idx_aug];
             }
         }
     }
 
     // copy the solved interpolation weights
-    for (int j = 0; j < 4; j++)
+    for (int idx_stencil = 0; idx_stencil < 4; idx_stencil++)
     {
-        face_weight[j] = aug_matrix[j][4];
+        face_weight[idx_stencil] = aug_matrix[idx_stencil][4];
     }
 }
 
@@ -144,20 +145,20 @@ void _ppm_nonuniform_weights (const std::vector<real> &face_s, real *face_weight
     std::fill(face_weight, face_weight + 4*(cell_count + 1), 0.0);
 
     // assign cubic interior weights and linear boundary-adjacent weights to every internal face
-    for (int iface = 1; iface < cell_count; iface++)
+    for (int idx_face = 1; idx_face < cell_count; idx_face++)
     {
-        real *weight = face_weight + 4*iface;
-        if (iface >= 2 && iface <= cell_count - 2)
+        real *weight = face_weight + 4*idx_face;
+        if (idx_face >= 2 && idx_face <= cell_count - 2)
         {
-            _ppm_cubic_face_weights(face_s, iface, weight);
+            _ppm_cubic_face_weights(face_s, idx_face, weight);
             continue;
         }
 
-        real center_L = 0.5*(face_s[iface - 1] + face_s[iface]);
-        real center_R = 0.5*(face_s[iface] + face_s[iface + 1]);
+        real center_L = 0.5*(face_s[idx_face - 1] + face_s[idx_face]);
+        real center_R = 0.5*(face_s[idx_face] + face_s[idx_face + 1]);
 
-        weight[0] = (center_R - face_s[iface]) / (center_R - center_L);
-        weight[1] = (face_s[iface] - center_L) / (center_R - center_L);
+        weight[0] = (center_R - face_s[idx_face]) / (center_R - center_L);
+        weight[1] = (face_s[idx_face] - center_L) / (center_R - center_L);
     }
 }
 
@@ -170,7 +171,7 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
     // map radial faces to the volume coordinate used by the radial finite-volume operator
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_s_y(_get_yface(iy));
+        y_face_s[iy] = _get_sy(_get_yface(iy));
     }
 
     _ppm_nonuniform_weights(y_face_s, ppm_weight_y);
@@ -180,7 +181,7 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
     // map polar faces to the spherical volume coordinate minus cosine theta
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_s_z(_get_zface(iz));
+        z_face_s[iz] = _get_sz(_get_zface(iz));
     }
 
     _ppm_nonuniform_weights(z_face_s, ppm_weight_z);
@@ -190,44 +191,42 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
 // calculate the power-law surface density after convolution with a Gaussian kernel 
 
 inline __host__
-void convpow_calc (real *initdens)
+void initdens_calc (real *initdens)
 {
-    const real u_s   = 0.05*R_0;
-    const real u_min = Y_MIN + 2.0*u_s;
-    const real u_max = Y_MAX - 2.0*u_s;
-    const real sig_u = 0.5*u_s;
+    const real smooth = 0.05*R_0;
+    const real R_src_min = Y_MIN + 2.0*smooth;
+    const real R_src_max = Y_MAX - 2.0*smooth;
+    const real kernel_std = 0.5*smooth;
 
-    const int n_bin = N_Y;
-    const real du = (Y_MAX - Y_MIN) / static_cast<real>(n_bin);
+    const int bin_count = N_Y;
+    const real dR = (Y_MAX - Y_MIN) / static_cast<real>(bin_count);
 
-    std::vector<real> u_axis(n_bin + 1);
-    std::vector<real> v_axis(n_bin + 1, 0.0);
+    std::vector<real> conv_u(bin_count + 1);
+    std::fill(initdens, initdens + bin_count + 1, 0.0);
 
-    for (int i = 0; i <= n_bin; i++)
+    for (int idx_dst = 0; idx_dst <= bin_count; idx_dst++)
     {
-        u_axis[i] = Y_MIN + i*du;
+        conv_u[idx_dst] = Y_MIN + static_cast<real>(idx_dst)*dR;
     }
 
     // normalization factor for the Gaussian kernel
-    const real norm = 1.0 / (std::sqrt(2.0*M_PI)*sig_u);
+    const real kernel_norm = 1.0 / (std::sqrt(2.0*M_PI)*kernel_std);
 
-    for (int j = 0; j <= n_bin; j++)
+    for (int idx_src = 0; idx_src <= bin_count; idx_src++)
     {
-        real u_j = u_axis[j];
-        if (u_j < u_min || u_j > u_max) continue;
+        real R_src = conv_u[idx_src];
+        if (R_src < R_src_min || R_src > R_src_max) continue;
 
-        real sigma_g = SIGMA_0*std::pow(u_j / R_0, IDX_P);
+        real sigma_g = SIGMA_0*std::pow(R_src / R_0, IDX_P);
         real sigma_d = METAL_Z*sigma_g;
 
-        for (int k = 0; k <= n_bin; k++)
+        for (int idx_dst = 0; idx_dst <= bin_count; idx_dst++)
         {
-            real delta_u = u_axis[k] - u_j;
-            real kernel = norm*std::exp(-delta_u*delta_u / (2.0*sig_u*sig_u));
-            v_axis[k] += sigma_d*kernel*du;
+            real delta_R = conv_u[idx_dst] - R_src;
+            real kernel_weight = kernel_norm*std::exp(-delta_R*delta_R / (2.0*kernel_std*kernel_std));
+            initdens[idx_dst] += sigma_d*kernel_weight*dR;
         }
     }
-
-    std::copy(v_axis.begin(), v_axis.end(), initdens);
 }
 
 // =========================================================================================================================
@@ -238,13 +237,13 @@ inline __host__
 real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
     bool verbose = true)
 {
-    thrust::device_ptr <const real> ptr_cfl(dev_cfl_rates);
-    auto max_it = thrust::max_element(ptr_cfl, ptr_cfl + N_G);
-    real max_rate = *max_it;
+    thrust::device_ptr <const real> cfl_rates_ptr(dev_cfl_rates);
+    auto cfl_rates_max_ptr = thrust::max_element(cfl_rates_ptr, cfl_rates_ptr + N_G);
+    real max_cfl_rates = *cfl_rates_max_ptr;
 
-    if (!std::isfinite(max_rate))
+    if (!std::isfinite(max_cfl_rates))
     {
-        int idx_bad = static_cast<int>(max_it - ptr_cfl);
+        int idx_bad = static_cast<int>(cfl_rates_max_ptr - cfl_rates_ptr);
 
         int ix_bad = idx_bad % N_X;
         int iy_bad = (idx_bad / N_X) % N_Y;
@@ -258,31 +257,31 @@ real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real
         std::exit(EXIT_FAILURE);
     }
 
-    if (max_rate <= 0.0) return DT_MAX;
+    if (max_cfl_rates <= 0.0) return DT_MAX;
 
-    real dt_cfl = std::fmin(CFL_DYN / max_rate, DT_MAX);
+    real dt_cfl = std::fmin(CFL_DYN / max_cfl_rates, DT_MAX);
     if (!verbose) return dt_cfl;
 
     // print the cell with the maximum CFL rate and its corresponding velocity components
-    int idx_max = static_cast<int>(max_it - ptr_cfl);
-    int ix = idx_max % N_X;
-    int iy = (idx_max / N_X) % N_Y;
-    int iz = idx_max / (N_X*N_Y);
+    int idx_cfl_max = static_cast<int>(cfl_rates_max_ptr - cfl_rates_ptr);
+    int ix = idx_cfl_max % N_X;
+    int iy = (idx_cfl_max / N_X) % N_Y;
+    int iz = idx_cfl_max / (N_X*N_Y);
 
     real lx, vy, lz;
-    CUDA_CHECK(cudaMemcpy(&lx, dev_dustvelx + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(&vy, dev_dustvely + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(&lz, dev_dustvelz + idx_max, sizeof(real), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&lx, dev_dustvelx + idx_cfl_max, sizeof(real), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&vy, dev_dustvely + idx_cfl_max, sizeof(real), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&lz, dev_dustvelz + idx_cfl_max, sizeof(real), cudaMemcpyDeviceToHost));
 
     real y = _get_ycent(iy);
     real z = _get_zcent(iz);
     real R = y*std::sin(z);
 
     int idx_ring = iy*N_X + iz*N_X*N_Y;
-    thrust::device_ptr <const real> ptr_lx(dev_dustvelx + idx_ring);
-    real lx_avg = thrust::reduce(ptr_lx, ptr_lx + N_X, 0.0) / static_cast<real>(N_X);
-    real vel_x_res = (lx - lx_avg) / std::fmax(R, 1.0e-30);
-    real vel_z = lz / y;
+    thrust::device_ptr <const real> lx_ptr(dev_dustvelx + idx_ring);
+    real lx_avg = thrust::reduce(lx_ptr, lx_ptr + N_X, 0.0) / static_cast<real>(N_X);
+    real vx_res = (lx - lx_avg) / std::fmax(R, 1.0e-30);
+    real vz = lz / y;
 
     std::cout
     << std::setfill(' ')
@@ -291,11 +290,11 @@ real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real
     << std::setw(4) << iy << ","
     << std::setw(4) << iz << ")"
     << "  R="    << std::scientific << std::setprecision(3) << R
-    << "  dvx="  << std::setw(8) << vel_x_res
+    << "  dvx="  << std::setw(8) << vx_res
     << "  vy="   << std::setw(8) << vy
-    << "  vz="   << std::setw(8) << vel_z
-    << "  rate=" << std::setw(8) << max_rate
-    << "  dt="   << std::setw(8) << CFL_DYN / max_rate
+    << "  vz="   << std::setw(8) << vz
+    << "  rate=" << std::setw(8) << max_cfl_rates
+    << "  dt="   << std::setw(8) << CFL_DYN / max_cfl_rates
     << std::endl;
 
     return dt_cfl;
@@ -307,15 +306,15 @@ real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real
 inline __host__
 void msg_output (int idx_file)
 {
-    std::time_t t_curr = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    int len = std::max(3, (int)std::to_string(SAVE_MAX).length());
+    std::time_t time_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    int width = std::max(3, (int)std::to_string(SAVE_MAX).length());
 
     std::cout
     << std::endl
     << std::setfill('0')
-    << std::setw(len) << idx_file << "/"
-    << std::setw(len) << SAVE_MAX
-    << " finished on " << std::ctime(&t_curr)
+    << std::setw(width) << idx_file << "/"
+    << std::setw(width) << SAVE_MAX
+    << " finished on " << std::ctime(&time_now)
     << std::endl;
 }
 
@@ -351,34 +350,55 @@ inline __host__
 std::string frame_num (int idx_file)
 {
     std::string num_str = std::to_string(idx_file);
-    int num_len = std::max(5, (int)std::to_string(SAVE_MAX).length());
+    int width = std::max(5, (int)std::to_string(SAVE_MAX).length());
 
-    if ((int)num_str.length() < num_len)
+    if ((int)num_str.length() < width)
     {
-        num_str.insert(0, num_len - num_str.length(), '0');
+        num_str.insert(0, width - num_str.length(), '0');
     }
 
     return num_str;
 }
 
-template <typename T> inline __host__
-bool save_binary (const std::string &file_name, T *data, int count)
+constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
+
+template <typename DataType> inline __host__
+bool save_host_binary (const std::string &file_name, const DataType *data, std::size_t count)
 {
     std::ofstream file(file_name, std::ios::binary);
     if (!file) return false;
 
-    file.write(reinterpret_cast<char*>(data), sizeof(T)*count);
-    return file.good();
+    const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
+    for (std::size_t offset = 0; offset < count; offset += chunk_max)
+    {
+        std::size_t chunk = std::min(chunk_max, count - offset);
+        file.write(reinterpret_cast<const char*>(data + offset), sizeof(DataType)*chunk);
+        if (!file) return false;
+    }
+
+    return true;
 }
 
-template <typename T> inline __host__
-bool load_binary (const std::string &file_name, T *data, int count)
+template <typename DataType> inline __host__
+bool load_host_binary (const std::string &file_name, DataType *data, std::size_t count)
 {
     std::ifstream file(file_name, std::ios::binary);
     if (!file) return false;
 
-    file.read(reinterpret_cast<char*>(data), sizeof(T)*count);
-    return file.good();
+    const std::streamoff expected = static_cast<std::streamoff>(sizeof(DataType)*count);
+    file.seekg(0, std::ios::end);
+    if (file.tellg() != expected) return false;
+    file.seekg(0, std::ios::beg);
+
+    const std::size_t chunk_max = std::max<std::size_t>(1, binary_chunk_bytes / sizeof(DataType));
+    for (std::size_t offset = 0; offset < count; offset += chunk_max)
+    {
+        std::size_t chunk = std::min(chunk_max, count - offset);
+        file.read(reinterpret_cast<char*>(data + offset), sizeof(DataType)*chunk);
+        if (!file) return false;
+    }
+
+    return true;
 }
 
 inline __host__
@@ -428,50 +448,50 @@ void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 }
 
 #ifdef RADIATION
-#define SAVE_OPTDEPTH_TO_FILE(IDX)                                                              \
-do {                                                                                            \
-    CUDA_CHECK(cudaMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
-    if (!save_binary(PATH + "optdepth_" + frame_num(IDX) + ".dat", optdepth, N_G))              \
-    { std::cerr << "Error: failed to save optdepth frame " << IDX << "\n"; }                    \
+#define SAVE_OPTDEPTH_TO_FILE(idx_file)                                                        \
+do {                                                                                           \
+    CUDA_CHECK(cudaMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, cudaMemcpyDeviceToHost));  \
+    if (!save_host_binary(PATH + "optdepth_" + frame_num(idx_file) + ".dat", optdepth, N_G)) \
+    { std::cerr << "Error: failed to save optdepth frame " << idx_file << std::endl; }         \
 } while(0)
-#endif
+#endif // RADIATION
 
-#define SAVE_DUSTDENS_TO_FILE(IDX)                                                              \
-do {                                                                                            \
-    CUDA_CHECK(cudaMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
-    if (!save_binary(PATH + "dustdens_" + frame_num(IDX) + ".dat", dustdens, N_G))              \
-    { std::cerr << "Error: failed to save dustdens frame " << IDX << "\n"; }                    \
-} while(0)
-
-#define SAVE_DUST_VEL_TO_FILE(IDX)                                                              \
-do {                                                                                            \
-    CUDA_CHECK(cudaMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
-    CUDA_CHECK(cudaMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
-    CUDA_CHECK(cudaMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, cudaMemcpyDeviceToHost));   \
-    save_sam_as_velocity(dustvelx, dustvelz);                                                   \
-    if (!save_binary(PATH + "dustvelx_" + frame_num(IDX) + ".dat", dustvelx, N_G))              \
-    { std::cerr << "Error: failed to save dustvelx frame " << IDX << "\n"; }                    \
-    if (!save_binary(PATH + "dustvely_" + frame_num(IDX) + ".dat", dustvely, N_G))              \
-    { std::cerr << "Error: failed to save dustvely frame " << IDX << "\n"; }                    \
-    if (!save_binary(PATH + "dustvelz_" + frame_num(IDX) + ".dat", dustvelz, N_G))              \
-    { std::cerr << "Error: failed to save dustvelz frame " << IDX << "\n"; }                    \
+#define SAVE_DUSTDENS_TO_FILE(idx_file)                                                        \
+do {                                                                                           \
+    CUDA_CHECK(cudaMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost));  \
+    if (!save_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G)) \
+    { std::cerr << "Error: failed to save dustdens frame " << idx_file << std::endl; }         \
 } while(0)
 
-#define LOAD_DUSTDATA_TO_VRAM(IDX)                                                              \
-do {                                                                                            \
-    if (!load_binary(PATH + "dustdens_" + frame_num(IDX) + ".dat", dustdens, N_G))              \
-    { std::cerr << "Error: failed to load dustdens frame " << IDX << "\n"; return 1; }          \
-    if (!load_binary(PATH + "dustvelx_" + frame_num(IDX) + ".dat", dustvelx, N_G))              \
-    { std::cerr << "Error: failed to load dustvelx frame " << IDX << "\n"; return 1; }          \
-    if (!load_binary(PATH + "dustvely_" + frame_num(IDX) + ".dat", dustvely, N_G))              \
-    { std::cerr << "Error: failed to load dustvely frame " << IDX << "\n"; return 1; }          \
-    if (!load_binary(PATH + "dustvelz_" + frame_num(IDX) + ".dat", dustvelz, N_G))              \
-    { std::cerr << "Error: failed to load dustvelz frame " << IDX << "\n"; return 1; }          \
-    load_velocity_as_sam(dustvelx, dustvelz);                                                   \
-    CUDA_CHECK(cudaMemcpy(dev_dustdens, dustdens, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
-    CUDA_CHECK(cudaMemcpy(dev_dustvelx, dustvelx, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
-    CUDA_CHECK(cudaMemcpy(dev_dustvely, dustvely, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
-    CUDA_CHECK(cudaMemcpy(dev_dustvelz, dustvelz, sizeof(real)*N_G, cudaMemcpyHostToDevice));   \
+#define SAVE_DUST_VEL_TO_FILE(idx_file)                                                        \
+do {                                                                                           \
+    CUDA_CHECK(cudaMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, cudaMemcpyDeviceToHost));  \
+    CUDA_CHECK(cudaMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, cudaMemcpyDeviceToHost));  \
+    CUDA_CHECK(cudaMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, cudaMemcpyDeviceToHost));  \
+    save_sam_as_velocity(dustvelx, dustvelz);                                                  \
+    if (!save_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G)) \
+    { std::cerr << "Error: failed to save dustvelx frame " << idx_file << std::endl; }         \
+    if (!save_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G)) \
+    { std::cerr << "Error: failed to save dustvely frame " << idx_file << std::endl; }         \
+    if (!save_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G)) \
+    { std::cerr << "Error: failed to save dustvelz frame " << idx_file << std::endl; }         \
+} while(0)
+
+#define LOAD_DUSTDATA_TO_VRAM(idx_file)                                                        \
+do {                                                                                           \
+    if (!load_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G)) \
+    { std::cerr << "Error: failed to load dustdens frame " << idx_file << std::endl; return 1; } \
+    if (!load_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G)) \
+    { std::cerr << "Error: failed to load dustvelx frame " << idx_file << std::endl; return 1; } \
+    if (!load_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G)) \
+    { std::cerr << "Error: failed to load dustvely frame " << idx_file << std::endl; return 1; } \
+    if (!load_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G)) \
+    { std::cerr << "Error: failed to load dustvelz frame " << idx_file << std::endl; return 1; } \
+    load_velocity_as_sam(dustvelx, dustvelz);                                                  \
+    CUDA_CHECK(cudaMemcpy(dev_dustdens, dustdens, sizeof(real)*N_G, cudaMemcpyHostToDevice));  \
+    CUDA_CHECK(cudaMemcpy(dev_dustvelx, dustvelx, sizeof(real)*N_G, cudaMemcpyHostToDevice));  \
+    CUDA_CHECK(cudaMemcpy(dev_dustvely, dustvely, sizeof(real)*N_G, cudaMemcpyHostToDevice));  \
+    CUDA_CHECK(cudaMemcpy(dev_dustvelz, dustvelz, sizeof(real)*N_G, cudaMemcpyHostToDevice));  \
 } while(0)
 
 // =========================================================================================================================

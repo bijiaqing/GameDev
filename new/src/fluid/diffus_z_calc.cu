@@ -34,15 +34,15 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real y = _get_ycent(iy);
 
     // load dust density along one polar column
-    real dens[N_Z];
+    real rhod[N_Z];
     for (int iz = 0; iz < N_Z; iz++)
     {
         int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-        dens[iz] = dev_dustdens[idx_cell];
+        rhod[iz] = dev_dustdens[idx_cell];
     }
 
     // assemble full-step Crank-Nicolson face couplings and measure the largest local coefficient sum
-    real cn_lower[N_Z], cn_diag[N_Z], cn_upper[N_Z], dens_rhs[N_Z];
+    real cn_lower[N_Z], cn_diag[N_Z], cn_upper[N_Z];
     real max_cn_sum = 0.0;
 
     for (int iz = 0; iz < N_Z; iz++)
@@ -53,26 +53,26 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real vol_z  = _get_vol_z(iz);
         real dz_len = y*dz;
 
-        real diff_z_i = 0.0;
+        real diff_zi = 0.0;
         if (iz > 0)
         {
             real R_i = y*sin(z_i);
 
-            real h_i = _get_hg(R_i);
-            diff_z_i = _get_nu(R_i, h_i) / SCHMIDT_Z;
+            real h_gi = _get_hg(R_i);
+            diff_zi = _get_nu(R_i, h_gi) / SCHMIDT_Z;
         }
 
-        real diff_z_o = 0.0;
+        real diff_zo = 0.0;
         if (iz < N_Z - 1)
         {
             real R_o = y*sin(z_o);
 
-            real h_o = _get_hg(R_o);
-            diff_z_o = _get_nu(R_o, h_o) / SCHMIDT_Z;
+            real h_go = _get_hg(R_o);
+            diff_zo = _get_nu(R_o, h_go) / SCHMIDT_Z;
         }
 
-        real cn_i = (iz > 0)       ? (0.5*dt*sin(z_i)*diff_z_i / (y*dz_len*vol_z)) : 0.0;
-        real cn_o = (iz < N_Z - 1) ? (0.5*dt*sin(z_o)*diff_z_o / (y*dz_len*vol_z)) : 0.0;
+        real cn_i = (iz > 0)       ? (0.5*dt*sin(z_i)*diff_zi / (y*dz_len*vol_z)) : 0.0;
+        real cn_o = (iz < N_Z - 1) ? (0.5*dt*sin(z_o)*diff_zo / (y*dz_len*vol_z)) : 0.0;
 
         cn_lower[iz] = -cn_i;
         cn_upper[iz] = -cn_o;
@@ -81,144 +81,152 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     }
 
     // choose positivity-controlled substeps and rescale the implicit matrix coefficients
-    int n_sub = static_cast<int>(ceil(max_cn_sum / POS_LIMIT));
-    if (n_sub < 1) n_sub = 1;
+    int sub_count = static_cast<int>(ceil(max_cn_sum / POS_LIMIT));
+    if (sub_count < 1) sub_count = 1;
 
-    real dt_sub = dt / static_cast<real>(n_sub);
-    real inv_n_sub = 1.0 / static_cast<real>(n_sub);
+    real dt_sub = dt / static_cast<real>(sub_count);
+    real inv_sub_count = 1.0 / static_cast<real>(sub_count);
     for (int iz = 0; iz < N_Z; iz++)
     {
-        cn_lower[iz] *= inv_n_sub;
-        cn_upper[iz] *= inv_n_sub;
+        cn_lower[iz] *= inv_sub_count;
+        cn_upper[iz] *= inv_sub_count;
         cn_diag[iz] = 1.0 - cn_lower[iz] - cn_upper[iz];
     }
 
     // advance density and momentum through each diffusion substep
-    real upper_work[N_Z], dens_work[N_Z];
-    for (int i_sub = 0; i_sub < n_sub; i_sub++)
+    real rhod_work[N_Z];
+    for (int idx_sub = 0; idx_sub < sub_count; idx_sub++)
     {
-        // build the explicit Crank-Nicolson right-hand side with zero boundary gradients
-        for (int iz = 0; iz < N_Z; iz++)
         {
-            real cn_i = -cn_lower[iz];
-            real cn_o = -cn_upper[iz];
+            real upper_work[N_Z], rhod_rhs[N_Z];
 
-            real dens_prev = (iz > 0)       ? dens[iz - 1] : dens[iz];
-            real dens_next = (iz < N_Z - 1) ? dens[iz + 1] : dens[iz];
-
-            dens_rhs[iz] = cn_i*dens_prev + (1.0 - cn_i - cn_o)*dens[iz] + cn_o*dens_next;
-        }
-
-        // initialize the Thomas forward elimination
-        upper_work[0] = cn_upper[0]  / cn_diag[0];
-        dens_work[0] = dens_rhs[0] / cn_diag[0];
-
-        // eliminate the lower diagonal of the implicit system
-        for (int iz = 1; iz < N_Z; iz++)
-        {
-            real pivot = cn_diag[iz] - cn_lower[iz]*upper_work[iz - 1];
-
-            upper_work[iz] = (iz < N_Z - 1) ? (cn_upper[iz] / pivot) : 0.0;
-            dens_work[iz] = (dens_rhs[iz] - cn_lower[iz]*dens_work[iz - 1]) / pivot;
-        }
-
-        // back-substitute the density solution
-        for (int iz = N_Z - 2; iz >= 0; iz--)
-        {
-            dens_work[iz] -= upper_work[iz]*dens_work[iz + 1];
-        }
-
-        // reconstruct time-centred outward diffusive mass fluxes with zero boundary fluxes
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            if (iz == N_Z - 1)
+            // build the explicit Crank-Nicolson right-hand side with zero boundary gradients
+            for (int iz = 0; iz < N_Z; iz++)
             {
-                upper_work[iz] = 0.0;
-                continue;
+                real cn_i = -cn_lower[iz];
+                real cn_o = -cn_upper[iz];
+
+                real rhod_prev = (iz > 0)       ? rhod[iz - 1] : rhod[iz];
+                real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] : rhod[iz];
+
+                rhod_rhs[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] + cn_o*rhod_next;
             }
 
-            real vol_z = _get_vol_z(iz);
+            // initialize the Thomas forward elimination
+            upper_work[0] = cn_upper[0]  / cn_diag[0];
+            rhod_work[0] = rhod_rhs[0] / cn_diag[0];
 
-            real cn_o = -cn_upper[iz];
+            // eliminate the lower diagonal of the implicit system
+            for (int iz = 1; iz < N_Z; iz++)
+            {
+                real pivot = cn_diag[iz] - cn_lower[iz]*upper_work[iz - 1];
 
-            upper_work[iz]  = -(cn_o*y*vol_z / dt_sub);
-            upper_work[iz] *= (dens[iz + 1] - dens[iz]) + (dens_work[iz + 1] - dens_work[iz]);
+                upper_work[iz] = (iz < N_Z - 1) ? (cn_upper[iz] / pivot) : 0.0;
+                rhod_work[iz] = (rhod_rhs[iz] - cn_lower[iz]*rhod_work[iz - 1]) / pivot;
+            }
+
+            // back-substitute the density solution
+            for (int iz = N_Z - 2; iz >= 0; iz--)
+            {
+                rhod_work[iz] -= upper_work[iz]*rhod_work[iz + 1];
+            }
         }
 
-        // combine each face mass flux with the donor azimuthal primitive quantity
-        for (int iz = 0; iz < N_Z; iz++)
         {
-            int iz_up = (upper_work[iz] >= 0.0) ? iz : iz + 1;
-            if (iz == N_Z - 1) iz_up = iz;
+            real mass_flux[N_Z], moment_flux[N_Z];
 
-            real z_up = _get_zcent(iz_up);
-            real R_up = y*sin(z_up);
-            real dens_up = dens[iz_up];
+            // reconstruct time-centred outward diffusive mass fluxes with zero boundary fluxes
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                if (iz == N_Z - 1)
+                {
+                    mass_flux[iz] = 0.0;
+                    continue;
+                }
 
-            int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real lx_up = (dens_up >= RHO_VAC) ? dev_dustmomx[idx_cell_up] / dens_up : sqrt(G*M_S*fmax(R_up, 0.0));
+                real vol_z = _get_vol_z(iz);
 
-            dens_rhs[iz] = upper_work[iz]*lx_up;
-        }
+                real cn_o = -cn_upper[iz];
 
-        // update azimuthal momentum from the spherical conservative flux divergence
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            real vol_z = _get_vol_z(iz);
-            real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
+                mass_flux[iz]  = -(cn_o*y*vol_z / dt_sub);
+                mass_flux[iz] *= (rhod[iz + 1] - rhod[iz]) + (rhod_work[iz + 1] - rhod_work[iz]);
+            }
 
-            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomx[idx_cell] -= dt_sub*(dens_rhs[iz] - flux_i) / (y*vol_z);
-        }
+            // combine each face mass flux with the donor azimuthal primitive quantity
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                int iz_up = (mass_flux[iz] >= 0.0) ? iz : iz + 1;
+                if (iz == N_Z - 1) iz_up = iz;
 
-        // combine each face mass flux with the donor radial velocity
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            int iz_up = (upper_work[iz] >= 0.0) ? iz : iz + 1;
-            if (iz == N_Z - 1) iz_up = iz;
+                real z_up = _get_zcent(iz_up);
+                real R_up = y*sin(z_up);
+                real rhod_up = rhod[iz_up];
 
-            real dens_up = dens[iz_up];
+                int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
+                real lx_up = (rhod_up >= RHO_VAC) ? dev_dustmomx[idx_cell_up] / rhod_up : sqrt(G*M_S*fmax(R_up, 0.0));
 
-            int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real vy_up = (dens_up >= RHO_VAC) ? dev_dustmomy[idx_cell_up] / dens_up : 0.0;
+                moment_flux[iz] = mass_flux[iz]*lx_up;
+            }
 
-            dens_rhs[iz] = upper_work[iz]*vy_up;
-        }
+            // update azimuthal momentum from the spherical conservative flux divergence
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                real vol_z = _get_vol_z(iz);
+                real flux_i = (iz > 0) ? moment_flux[iz - 1] : 0.0;
 
-        // update radial momentum from the spherical conservative flux divergence
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            real vol_z = _get_vol_z(iz);
-            real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
+                int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                dev_dustmomx[idx_cell] -= dt_sub*(moment_flux[iz] - flux_i) / (y*vol_z);
+            }
 
-            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomy[idx_cell] -= dt_sub*(dens_rhs[iz] - flux_i) / (y*vol_z);
-        }
+            // combine each face mass flux with the donor radial velocity
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                int iz_up = (mass_flux[iz] >= 0.0) ? iz : iz + 1;
+                if (iz == N_Z - 1) iz_up = iz;
 
-        // combine each face mass flux with the donor polar primitive quantity
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            int iz_up = (upper_work[iz] >= 0.0) ? iz : iz + 1;
-            if (iz == N_Z - 1) iz_up = iz;
+                real rhod_up = rhod[iz_up];
 
-            real dens_up = dens[iz_up];
+                int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
+                real vy_up = (rhod_up >= RHO_VAC) ? dev_dustmomy[idx_cell_up] / rhod_up : 0.0;
 
-            int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
-            real lz_up = (dens_up >= RHO_VAC) ? dev_dustmomz[idx_cell_up] / dens_up : 0.0;
+                moment_flux[iz] = mass_flux[iz]*vy_up;
+            }
 
-            dens_rhs[iz] = upper_work[iz]*lz_up;
-        }
+            // update radial momentum from the spherical conservative flux divergence
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                real vol_z = _get_vol_z(iz);
+                real flux_i = (iz > 0) ? moment_flux[iz - 1] : 0.0;
 
-        // update polar momentum and accept the density solution for this substep
-        for (int iz = 0; iz < N_Z; iz++)
-        {
-            real vol_z = _get_vol_z(iz);
-            real flux_i = (iz > 0) ? dens_rhs[iz - 1] : 0.0;
+                int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                dev_dustmomy[idx_cell] -= dt_sub*(moment_flux[iz] - flux_i) / (y*vol_z);
+            }
 
-            int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_dustmomz[idx_cell] -= dt_sub*(dens_rhs[iz] - flux_i) / (y*vol_z);
+            // combine each face mass flux with the donor polar primitive quantity
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                int iz_up = (mass_flux[iz] >= 0.0) ? iz : iz + 1;
+                if (iz == N_Z - 1) iz_up = iz;
 
-            dens[iz] = dens_work[iz];
+                real rhod_up = rhod[iz_up];
+
+                int idx_cell_up = ix + iy*N_X + iz_up*N_X*N_Y;
+                real lz_up = (rhod_up >= RHO_VAC) ? dev_dustmomz[idx_cell_up] / rhod_up : 0.0;
+
+                moment_flux[iz] = mass_flux[iz]*lz_up;
+            }
+
+            // update polar momentum and accept the density solution for this substep
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                real vol_z = _get_vol_z(iz);
+                real flux_i = (iz > 0) ? moment_flux[iz - 1] : 0.0;
+
+                int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                dev_dustmomz[idx_cell] -= dt_sub*(moment_flux[iz] - flux_i) / (y*vol_z);
+
+                rhod[iz] = rhod_work[iz];
+            }
         }
     }
 
@@ -226,7 +234,7 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     for (int iz = 0; iz < N_Z; iz++)
     {
         int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-        dev_dustdens[idx_cell] = dens[iz];
+        dev_dustdens[idx_cell] = rhod[iz];
     }
 }
 

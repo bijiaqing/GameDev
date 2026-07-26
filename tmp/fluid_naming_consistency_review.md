@@ -20,13 +20,13 @@ This began as a naming-only audit and now also tracks the implementation status 
 
 ## Status
 
-The recommended canonical naming table was applied to the production fluid code on 2026-07-24
+The recommended canonical naming table was fully applied to the production fluid code by 2026-07-26
 
 - the encoded invalid-cell value is now `bad_cell` on the host and `dev_bad_cell` on the device
 - index spaces, coordinates, face terminology, physical-quantity base names, source forces, PPM weights, CFL arrays, file names, and element counts follow the applied table below
-- compound suffixes after one-letter physical tags remain pending under finding 25
-- the changes are identifier-only and do not alter formulas, control flow, array layout, or kernel launch geometry
-- the more detailed recommendations below remain pending unless explicitly marked as applied
+- compound suffixes after one-letter physical tags follow finding 25
+- the naming changes do not alter formulas, array layout, or kernel launch geometry
+- diffusion scratch buffers now use non-overlapping lexical scopes so solver arrays and physical flux arrays retain truthful names without increasing their simultaneous live storage
 - a swarm–fluid consistency pass was added after the fluid-only findings, and the adopted swarm-side names are now being applied incrementally
 
 ## Summary
@@ -40,21 +40,21 @@ The persistent dust-field convention distinguishes storage names from local phys
 - evolved primitives: `dev_dustvelx/y/z` and local `lx/vy/lz`
 - initial dust surface-density profile: `initdens` and `dev_initdens`
 
-The canonical inconsistencies identified in the first fluid-only audit have been resolved, while the later cross-model `dens` to `rhod` alignment remains pending
+The canonical inconsistencies identified in the fluid-only and cross-model audits are resolved
 
-The principal remaining detailed inconsistencies are:
+The completed detailed cleanup includes:
 
-1. several reused scratch arrays change physical meaning while retaining names such as `face_lx` or `dens_rhs`
-2. detailed PPM loop and stencil names remain abbreviated
-3. source-stage, drag, boundary, and qualified directional quantities still use ambiguous or isolated one-letter suffixes
-4. convolution loop variables and some main-loop helper names remain generic
-5. several equivalent swarm and fluid quantities still use different names or suffix conventions
+1. role-correct names and lexical scopes for reused advection and diffusion scratch storage
+2. descriptive PPM face, cell, stencil, and augmented-matrix indices
+3. consistent source-stage, drag, boundary, and qualified directional names
+4. physical convolution coordinates and descriptive main-loop helper names
+5. common swarm and fluid names wherever the quantities and interfaces are equivalent
 
-## Pending and partially resolved findings
+## Resolved detailed findings
 
 ### 2. Coordinate values
 
-**Status: applied for `y/z/R/Z` and face or donor coordinate suffixes**
+**Status: applied**
 
 Cell kernels now use `y` and `z` for spherical coordinates and `R` and `Z` for cylindrical coordinates, matching the physical helpers and swarm implementation
 
@@ -66,13 +66,13 @@ Add role suffixes only when multiple locations coexist:
 
 The coordinate forms `R_i`, `R_o`, and `R_up` are applied
 
-The more specific changes `h_i/h_o` to `h_gi/h_go` and `rho_mid` to `rhog_mid` remain pending
+The more specific changes `h_i/h_o` to `h_gi/h_go` and `rho_mid` to `rhog_mid` are applied
 
 Retain the intentional distinction between dimensionless `h_g` and physical `H_g` or `H_d`
 
 ### 3. Cell faces versus edges
 
-**Status: applied for face terminology; detailed PPM loop names remain pending**
+**Status: applied**
 
 The finite-volume interface terminology is now consistently `face`:
 
@@ -86,6 +86,8 @@ Use `idx_face` instead of `iface` and `idx_cell` instead of `icell`
 The left/right suffix convention `_L` and `_R` is already consistent and should remain
 
 ### 4. Arrays whose physical meaning changes
+
+**Status: applied**
 
 Several local arrays are deliberately reused to limit CUDA local-memory demand, but their names become physically incorrect after reuse
 
@@ -122,7 +124,7 @@ This is the highest-value naming cleanup because the current names can lead to d
 
 ### 5. Local dynamical-variable names
 
-**Status: applied in swarm; fluid alignment remains pending**
+**Status: applied in both models**
 
 Use the physical quantity and coordinate directly:
 
@@ -146,7 +148,7 @@ Persistent interfaces such as `dev_gas_velx`, the `swarm::velocity` member, and 
 
 ### 6. Diffusion coefficients and face quantities
 
-**Status: canonical diffusivity names applied; detailed helper and substep names remain pending**
+**Status: applied**
 
 The diffusion kernels and velocity initializer now use descriptive lower-case base names:
 
@@ -174,7 +176,7 @@ Possible replacements are `_get_dr_cent_i` and `_get_dr_cent_o`
 
 ### 7. Source-force and drag names
 
-**Status: base force names applied; fluid time-stage and drag names remain pending**
+**Status: applied**
 
 `source_update.cu` now uses the same base force convention as the swarm transport code:
 
@@ -200,7 +202,7 @@ Reserve `tau` for a dimensionless drag interval and retain `ts` for stopping tim
 
 ### 8. Boundary suffixes
 
-**Status: face-coordinate suffixes applied; boundary-speed and flux suffixes remain pending**
+**Status: applied**
 
 The radial and polar advection kernels use:
 
@@ -222,7 +224,9 @@ Either replace it directly with the conditional flux expression or name it `outf
 
 ### 9. PPM helper parameters and loop indices
 
-The PPM helpers now use `cell_count`, but their remaining loop and stencil names still mix:
+**Status: applied**
+
+The PPM helpers use `cell_count` and the following descriptive loop and stencil names:
 
 - `iface` and `icell`
 - generic `i`, `j`, `k`, `n`, `row`, and `col`
@@ -244,6 +248,8 @@ For the uniform four-cell interpolation stencil, use `q_m1`, `q_0`, `q_p1`, and 
 Use `q_L` and `q_R` instead of `qa` and `qb` in `_ppm_state_L/R`
 
 ### 10. Convolved initial-density profile
+
+**Status: applied**
 
 `convpow_calc` currently mixes generic convolution names with a coordinate that is physically cylindrical radius:
 
@@ -270,7 +276,7 @@ Retain `initdens` because it denotes the initial dust surface-density profile ra
 
 ### 11. CFL, PPM-weight, and invalid-cell arrays
 
-**Status: canonical array names applied using `bad_cell` and `dev_bad_cell`; detailed pointer and scalar names remain pending**
+**Status: applied**
 
 The per-cell array is now `dev_cfl_rates`, while `cfl_rate` remains the scalar rate for one cell
 
@@ -288,7 +294,7 @@ The lambda name `validate_finite_state` and kernel name `inf_cell_flag` describe
 
 ### 12. Host file interfaces
 
-**Status: `idx_file`, `file_name`, and `count` applied; macro and message-format names remain pending**
+**Status: applied**
 
 `fluid_host.cuh` now uses the same host interface convention as the swarm code:
 
@@ -301,6 +307,8 @@ The macro parameter `IDX` should become `idx_file` to match the swarm output mac
 Within `msg_output`, `t_curr` and `len` can become `time_now` and `width`
 
 ### 13. Main-loop helper names
+
+**Status: applied**
 
 The main function contains three advection lambdas named `advance_x/y/z`
 
@@ -316,7 +324,7 @@ Use `sync_dust_state`
 
 Other recommended local names:
 
-- `time_remain` to `time_left`
+- `time_remain` to `remaining`
 - `adv_interval` to `dt_adv`
 - `dt_cfl_begin` to `dt_cfl`
 - raw `taper` to `taper_raw`, retaining `beta_taper` for the smoothed multiplicative factor
@@ -331,13 +339,13 @@ The active swarm implementation is the accepted naming reference for shared phys
 
 A new declaration-and-use scan on 2026-07-26 covered every production swarm and fluid header and CUDA source, including function parameters, kernel locals, host locals, loop indices, scratch arrays, and shared optical-depth kernels
 
-Persistent representation-specific storage names remain intentionally different, but the fluid implementation still contains several older local conventions for density, physical velocity, gas targets, convolution, drag, diffusion substeps, PPM indices, and host utilities
+Persistent representation-specific storage names remain intentionally different, while equivalent density, physical velocity, gas-target, convolution, drag, diffusion-substep, PPM-index, and host-utility conventions are aligned
 
-### Recommended cross-model canonical names
+### Applied cross-model canonical names
 
-Rows already identical in the swarm model, fluid model, and recommended convention are omitted
+The table records the previous fluid spelling and the convention now applied to the production fluid code
 
-| Concept | Swarm name | Fluid name | Recommended common convention |
+| Concept | Swarm name | Previous fluid name | Applied common convention |
 |---|---|---|---|
 | **Physical density and velocity** |  |  |  |
 | local dust density and derived arrays | `rhod`, `log_rhod` | `dens`, `dens_prev/next/up/shift/work/rhs`, `face_dens`, `flux_dens`, `corr_dens` | use the `rhod` base throughout: `rhod`, `rhod_prev`, `rhod_up`, `face_rhod`, `flux_rhod`, `corr_rhod`, and so on |
@@ -407,7 +415,7 @@ Rows already identical in the swarm model, fluid model, and recommended conventi
 | initial CFL-limited timestep | physical timestep base | `dt_cfl_begin` | `dt_cfl` |
 | unsmoothed radiation ramp | qualified physical role | `taper` | `taper_raw`, retaining `beta_taper` for the smoothed factor |
 
-All rows above are now fluid-side work unless the row explicitly describes an intentional overload or representation-specific name; the accepted swarm side already follows the recommended base conventions
+All rows above are resolved unless the row explicitly describes an intentional overload or representation-specific name
 
 `cfl_rates_ptr` remains fluid-only because the swarm model has `dev_dt_rates`, not a fluid transport-only `dev_cfl_rates` array
 
@@ -418,7 +426,7 @@ The same Gaussian-convolved physical profile is currently presented as two diffe
 - swarm: `initdens_calc(std::vector<real> &initdens)`
 - fluid: `convpow_calc(real *initdens)`
 
-The swarm routine has already adopted the action name, while the fluid name still describes the convolution method instead of the resulting physical quantity
+Both routines now use the action name `initdens_calc`
 
 Use `initdens_calc` for both implementations
 
@@ -477,7 +485,7 @@ This would make the grid-helper surface identical without changing any caller na
 
 ### 17. SSA stage suffixes and physical base names
 
-**Status: SSA suffixes and gas-target base names applied; fluid drag base name remains pending**
+**Status: applied**
 
 The swarm SSA implementation deliberately uses `_i`, `_1`, `_2`, and `_j` to match the notation of the reference paper
 
@@ -631,7 +639,7 @@ The swarm-side compound suffixes are applied:
 - diffusion-position quantities: `vR_new`, `vx_new`, `sinz_new`, and `cosz_new`
 - grid-measure helpers: `_get_sy` and `_get_sz`
 
-The remaining fluid-side identifier groups are:
+The following fluid-side identifier groups are applied:
 
 - non-SSA force stages: `grav_y_n/new/tmp`, `cent_y_n/new/tmp`, and `torq_z_n/new` to explicit merged forms such as `grav_yold/ynew/ytmp`
 - face diffusivities: `diff_y_i/o` and `diff_z_i/o` to `diff_yi/yo` and `diff_zi/zo`
@@ -649,21 +657,21 @@ The mathematical notation `delta_v_ij` appears only in a collision comment and i
 
 ## Suggested implementation order
 
-1. normalize index spaces and flattened-cell names — canonical portion applied
-2. normalize `y/z/R/Z` coordinates and local dynamical-variable names — applied in swarm; fluid alignment pending
-3. normalize force and drag names — force names applied; fluid drag name pending; retain paper-defined SSA suffixes
-4. unify PPM `face` terminology and helper interfaces — face terminology applied; detailed loop names pending
-5. repair semantic names for reused advection and diffusion scratch arrays
-6. normalize boundary suffixes
-7. normalize host arrays, file interfaces, and main-loop lambdas
-8. clean up convolution and small local-loop names
-9. align the fluid convolution coordinates, counts, and loop indices with the accepted swarm convention
-10. unify the initial-profile routine, interpolation-helper name, profile array, and local dust-density names
-11. retain resolved `diff_*` names with cylindrical `R/Z` in swarm and spherical `y/z` in fluid
-12. normalize non-SSA temporal suffixes while retaining `_i/_1/_2/_j` in SSA code
-13. rename fluid scalar optical depth to `optdepth`, reserve `tau` for drag, and align binary interfaces, frame locals, and pointer suffixes
-14. move literally identical grid, physics, force, and optical-depth-prefix helpers into shared headers
-15. merge compound suffixes after one-letter physical tags, with directional kernel names handled as a separate length-constrained decision
+1. normalize index spaces and flattened-cell names — applied
+2. normalize `y/z/R/Z` coordinates and local dynamical-variable names — applied
+3. normalize force and drag names while retaining paper-defined SSA suffixes — applied
+4. unify PPM `face` terminology and helper interfaces — applied
+5. repair semantic names for reused advection and diffusion scratch arrays — applied
+6. normalize boundary suffixes — applied
+7. normalize host arrays, file interfaces, and main-loop lambdas — applied
+8. clean up convolution and small local-loop names — applied
+9. align the fluid convolution coordinates, counts, and loop indices with the accepted swarm convention — applied
+10. unify the initial-profile routine, interpolation-helper name, profile array, and local dust-density names — applied
+11. retain `diff_*` names with cylindrical `R/Z` in swarm and spherical `y/z` in fluid — applied
+12. normalize non-SSA temporal suffixes while retaining `_i/_1/_2/_j` in SSA code — applied
+13. rename fluid scalar optical depth to `optdepth`, reserve `tau` for drag, and align binary interfaces, frame locals, and pointer suffixes — applied
+14. move literally identical helpers into shared headers — deferred to the physical branch merge because it changes ownership rather than naming
+15. merge compound suffixes after one-letter physical tags while retaining the length-constrained directional kernel names — applied
 
 Each group should be applied separately with declaration/call-site scans after the change
 
@@ -750,7 +758,7 @@ The following names already match and should not be changed merely to distinguis
 - common timestep parameters: `DT_OUT`, `DT_MAX`, `CFL_DYN`
 - mesh parameters: `N_X/Y/Z`, `X/Y/Z_MIN/MAX`, `N_G`, `NB_G/X/Y`, `TPB`
 - physical helpers: `_get_omegaK`, `_get_hg`, `_get_eta`, `_get_gas_strat`, `_get_sigma_g`, `_get_nu`, `_get_alpha`, `_get_visc_vel`
-- grid helpers: `_get_dx/dy/dz`, `_get_yedge`, `_get_zedge`, `_get_mesh_dim`, `_get_vol_y`, `_get_vol_z`
+- grid helpers: `_get_dx/dy/dz`, `_get_yface`, `_get_zface`, `_get_mesh_dim`, `_get_vol_y`, `_get_vol_z`
 - stored dust variables: `lx`, `vy`, `lz`
 - local forces: `grav_y`, `cent_y`, `torq_z`
 - grid fields: `dustdens/dev_dustdens`, `optdepth/dev_optdepth`
@@ -803,9 +811,9 @@ The following helper names already agree between the fluid and swarm implementat
 - `_get_nu`
 - `_get_alpha`
 - `_get_visc_vel`
-- `_get_yedge`
+- `_get_yface`
 - `_get_ycent`
-- `_get_zedge`
+- `_get_zface`
 - `_get_zcent`
 - `_get_mesh_dim`
 - `_get_vol_y`

@@ -9,7 +9,7 @@ void momentum_getv (const real *dev_dustdens, real *dev_dustmomx, real *dev_dust
     int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_cell >= N_G) return;
 
-    real dens = dev_dustdens[idx_cell];
+    real rhod = dev_dustdens[idx_cell];
 
     int iy = (idx_cell / N_X) % N_Y;
     int iz = idx_cell / (N_X*N_Y);
@@ -24,7 +24,7 @@ void momentum_getv (const real *dev_dustdens, real *dev_dustmomx, real *dev_dust
 
     // recover primitive quantities and repair the conserved fallback state in near-vacuum cells
     real lx, vy, lz;
-    _recover_dust_state(dens, R, mx, my, mz, lx, vy, lz);
+    _recover_dust_state(rhod, R, mx, my, mz, lx, vy, lz);
 
     // write the synchronized conserved and primitive states to global memory
     dev_dustmomx[idx_cell] = mx;

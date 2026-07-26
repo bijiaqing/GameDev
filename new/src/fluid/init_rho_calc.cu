@@ -4,6 +4,21 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
+__device__ __forceinline__
+real initdens_lerp (real R, const real *dev_initdens)
+{
+    if (R < Y_MIN || R > Y_MAX) return 0.0;
+
+    real dR = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
+    int idx_src = static_cast<int>((R - Y_MIN) / dR);
+    if (idx_src >= N_Y) idx_src = N_Y - 1;
+
+    real R_src = Y_MIN + static_cast<real>(idx_src)*dR;
+    real frac_R = (R - R_src) / dR;
+
+    return (1.0 - frac_R)*dev_initdens[idx_src] + frac_R*dev_initdens[idx_src + 1];
+}
+
 __global__
 void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 {
@@ -25,34 +40,25 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
     real H_d = _get_hd(R, h_g);
 
     // interpolate the convolved dust surface density at cylindrical radius
-    real sigma_d = 0.0;
-    if (R >= Y_MIN && R <= Y_MAX)
-    {
-        real du = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
-        int iu = static_cast<int>((R - Y_MIN) / du);
-        if (iu >= N_Y) iu = N_Y - 1;
+    real sigma_d = initdens_lerp(R, dev_initdens);
 
-        real frac_u = (R - (Y_MIN + iu*du)) / du;
-        sigma_d = (1.0 - frac_u)*dev_initdens[iu] + frac_u*dev_initdens[iu + 1];
-    }
-
-    real dens;
+    real rhod;
     if (N_Z == 1)
     {
         // evolve the vertically integrated dust surface density in a 2D disk
-        dens = sigma_d;
+        rhod = sigma_d;
     }
     else
     {
         // embed the surface profile with the density-diffusion equilibrium
-        dens = sigma_d*exp(-0.5*Z*Z/(H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
+        rhod = sigma_d*exp(-0.5*Z*Z/(H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
     }
 
     // apply azimuthal density noise shared across radius and polar angle
-    curandState rng;
-    curand_init(static_cast<unsigned long long>(ix), 0ULL, 0ULL, &rng);
-    real xi = curand_normal_double(&rng);
-    dens = fmax(dens*(1.0 + 0.1*xi), 0.0);
+    curandState rngstate;
+    curand_init(static_cast<unsigned long long>(ix), 0ULL, 0ULL, &rngstate);
+    real noise_x = curand_normal_double(&rngstate);
+    rhod = fmax(rhod*(1.0 + 0.1*noise_x), 0.0);
 
-    dev_dustdens[idx_cell] = dens;
+    dev_dustdens[idx_cell] = rhod;
 }
