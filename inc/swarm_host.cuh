@@ -878,7 +878,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     #endif // VISC_ACCRETION
     #ifdef COLLISION
     #ifdef CODE_UNIT
-    file << "RE_0        = " << std::scientific     << std::setprecision(8) << RE_0         << std::endl;
+    file << "REYNOLDS_0        = " << std::scientific     << std::setprecision(8) << REYNOLDS_0         << std::endl;
     #else  // PHYSICAL_UNIT
     file << "M_MOL       = " << std::scientific     << std::setprecision(8) << M_MOL        << std::endl;
     file << "X_SEC       = " << std::scientific     << std::setprecision(8) << X_SEC        << std::endl;

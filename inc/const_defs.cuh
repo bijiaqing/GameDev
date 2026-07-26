@@ -76,7 +76,7 @@ const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity par
 
 #ifdef COLLISION
 #ifdef CODE_UNIT
-const real  RE_0        = 1.0e+08;          // reference Reynolds number at R_0
+const real  REYNOLDS_0        = 1.0e+08;          // reference Reynolds number at R_0
 #else  // PHYSICAL_UNIT
 const real  M_MOL       = 2.3*1.66054e-24;  // mean molecular weight of the gas in grams
 const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm^2

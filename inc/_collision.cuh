@@ -118,7 +118,7 @@ real _get_re_inv_sqrt (real R, real alpha)
     
     #ifdef CODE_UNIT
     real alpha_0 = _get_alpha(R_0, ASPR_0);
-    reynolds = RE_0*(alpha / alpha_0)*(sigma_g / SIGMA_0);
+    reynolds = REYNOLDS_0*(alpha / alpha_0)*(sigma_g / SIGMA_0);
     #else  // PHYSICAL_UNIT
     reynolds = 0.5*alpha*sigma_g*X_SEC / M_MOL;
     #endif // CODE_UNIT

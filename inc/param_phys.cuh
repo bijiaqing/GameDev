@@ -122,10 +122,10 @@ real _get_visc_vel (real R, real Z, real h_g)
     real grad_rhog_R = IDX_P - 0.5*(IDX_Q + 3.0) + grad_strat_R;
     real grad_rhog_Z = grad_strat_Z;
 
-    real stress_R = 3.0*nu*(grad_nu_R + grad_rhog_R + 0.5);
-    real stress_Z = IDX_Q*nu*(1.0 + grad_rhog_Z);
+    real term_R = 3.0*nu*(grad_nu_R + grad_rhog_R + 0.5);
+    real term_Z = IDX_Q*nu*(1.0 + grad_rhog_Z);
 
-    return -(stress_R - stress_Z) / R;
+    return -(term_R - term_Z) / R;
 }
 #endif // VISC_ACCRETION
 
