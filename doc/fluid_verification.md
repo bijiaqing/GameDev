@@ -2,14 +2,14 @@
 
 ## Purpose
 
-The CUDA models under `new/tst/fluid/` compare production fluid kernels with analytical
+The CUDA models under `tst/fluid/` compare production fluid kernels with analytical
 finite-volume solutions. They are verification models, not production disk setups. Model-local
 files replace a production component only when the test requires a prescribed state that the
 production interface cannot express.
 
 This document records the current verification claim. Detailed formulas implemented by the
-validator remain in `new/tst/fluid/verify_common/TEST_CASES.md`, and machine-readable results remain
-under `new/tst/fluid/out/`.
+validator remain in `tst/fluid/verify_common/TEST_CASES.md`, and machine-readable results remain
+under `tst/fluid/out/`.
 
 ## Measurement protocol
 
@@ -205,9 +205,9 @@ density.
 
 ## Recorded native CUDA results
 
-### Complete `new/`-tree run of 2026-07-26
+### Complete merged-tree run of 2026-07-26
 
-The current JSON files under `new/tst/fluid/out/` contain all 85 records from
+The current JSON files under `tst/fluid/out/` contain all 85 records from
 
 ```bash
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
@@ -309,9 +309,9 @@ formal pass.
 From the repository root:
 
 ```bash
-python3 new/tst/fluid/verify_common/run_suite.py --quick
-python3 new/tst/fluid/verify_common/run_suite.py --group transport --res 32 64 128 256
-python3 new/tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
+python3 tst/fluid/verify_common/run_suite.py --quick
+python3 tst/fluid/verify_common/run_suite.py --group transport --res 32 64 128 256
+python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 The complete `--group all --res 32 64 128 256` matrix performs 85 builds/runs because several
@@ -324,7 +324,7 @@ terminal output together when archiving a run.
 ## Verification still required
 
 - Implement the full coupled 3D manufactured-solution harness specified in
-  `new/tst/fluid/verify_mms_3d/README.md`, including independent forcing and exact boundary data
+  `tst/fluid/verify_mms_3d/README.md`, including independent forcing and exact boundary data
 - Repair the cancellation-prone source reference and rerun it
 - Add production-settling equilibrium tests that quantify the initial polar transient
 - Add explicit boundary, restart-tolerance, and flag-matrix regressions

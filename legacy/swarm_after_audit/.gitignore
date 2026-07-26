@@ -1,0 +1,12 @@
+.github/
+
+.DS_Store
+
+mod/*/gamedev
+mod/*/graffiti
+
+!obj/.gitkeep
+obj/*
+
+!out/.gitkeep
+out/*

@@ -1,8 +1,8 @@
 # CUDA verification models
 
 These model directories implement the analytical tests summarized in
-`doc/fluid_verification.md` as cluster-runnable CUDA cases without changing `new/inc`, `new/src`,
-or production `new/mod`. Model-local `fluid_main.cu` files include the shared driver in this
+`doc/fluid_verification.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
+or production `mod`. Model-local `fluid_main.cu` files include the shared driver in this
 directory. The Makefile still selects production kernels from `src/` unless a test explicitly
 supplies a model-local replacement.
 
@@ -40,10 +40,10 @@ not the disk force calculation.
 Run one complete refinement sequence from the repository root, for example:
 
 ```bash
-python3 new/tst/fluid/verify_x_transport_2d/run.py --res 32 64 128 256
-python3 new/tst/fluid/verify_y_transport_cyl/run.py --cfl 0.05 --res 64 128 256 512
-python3 new/tst/fluid/verify_y_transport_cyl/run.py --cfl 0.5 --res 64 128 256 512
-python3 new/tst/fluid/verify_optdepth/run.py --power -1 --res 32 64 128 256
+python3 tst/fluid/verify_x_transport_2d/run.py --res 32 64 128 256
+python3 tst/fluid/verify_y_transport_cyl/run.py --cfl 0.05 --res 64 128 256 512
+python3 tst/fluid/verify_y_transport_cyl/run.py --cfl 0.5 --res 64 128 256 512
+python3 tst/fluid/verify_optdepth/run.py --power -1 --res 32 64 128 256
 ```
 
 Exercise the FARGO integer/fractional shift cases separately with `--shift 3`, `3.25`, `3.5`, and
@@ -52,7 +52,7 @@ last step is shortened to land exactly at one revolution.
 
 Each wrapper performs `make clean`, builds with the requested `RES`, runs the executable, compares
 the binary output with independently evaluated finite-volume averages, writes tagged
-`new/tst/fluid/out/MODEL/metrics_N*.json` records, and prints an error/order table. Raw data from
+`tst/fluid/out/MODEL/metrics_N*.json` records, and prints an error/order table. Raw data from
 CFL, FARGO-shift, and optical-depth-power sweeps are separated into correspondingly tagged
 subdirectories. Cleaning between resolutions is required because changing a Make variable alone
 does not invalidate existing object files.
@@ -60,9 +60,9 @@ does not invalidate existing object files.
 Run the entire prepared matrix, or a selected group, with:
 
 ```bash
-python3 new/tst/fluid/verify_common/run_suite.py --quick
-python3 new/tst/fluid/verify_common/run_suite.py --group diffusion --res 32 64 128 256
-python3 new/tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
+python3 tst/fluid/verify_common/run_suite.py --quick
+python3 tst/fluid/verify_common/run_suite.py --group diffusion --res 32 64 128 256
+python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 Only NumPy is required by the validator. The d=2/d=3 shell references are independently integrated
@@ -71,9 +71,9 @@ with a fine-grid RK4 solve; they do not use the CUDA helpers or the production d
 For the optical-depth test, repeat powers `0`, `-1`, and another non-degenerate value such as `1`:
 
 ```bash
-python3 new/tst/fluid/verify_optdepth/run.py --power 0  --res 32 64 128 256
-python3 new/tst/fluid/verify_optdepth/run.py --power -1 --res 32 64 128 256
-python3 new/tst/fluid/verify_optdepth/run.py --power 1  --res 32 64 128 256
+python3 tst/fluid/verify_optdepth/run.py --power 0  --res 32 64 128 256
+python3 tst/fluid/verify_optdepth/run.py --power -1 --res 32 64 128 256
+python3 tst/fluid/verify_optdepth/run.py --power 1  --res 32 64 128 256
 ```
 
 ## Expected outcomes
@@ -104,4 +104,4 @@ These directories do not yet implement the full 3D manufactured-solution matrix.
 
 Creating nominal `flags.mk` files without those pieces would produce ordinary disk simulations,
 not MMS verification. The detailed implementation contract is recorded in
-`new/tst/fluid/verify_mms_3d/README.md`.
+`tst/fluid/verify_mms_3d/README.md`.

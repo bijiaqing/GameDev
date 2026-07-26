@@ -8,7 +8,7 @@ This directory contains all test-only fluid material:
 - `out/`: generated verification metrics and environment records, grouped by model and swept
   parameter configuration.
 
-From `new/`, run the complete CUDA verification matrix with:
+From the repository root, run the complete CUDA verification matrix with:
 
 ```bash
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256

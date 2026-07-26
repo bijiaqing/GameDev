@@ -1,12 +1,18 @@
-.github/
-
-.DS_Store
+__pycache__/
+*.pyc
 
 mod/*/gamedev
+tst/*/*/gamedev
+
+# pre-GameDev build artifacts
 mod/*/graffiti
+tst/*/*/graffiti
 
-!obj/.gitkeep
 obj/*
+!obj/.gitkeep
 
-!out/.gitkeep
 out/*
+!out/.gitkeep
+
+tst/*/out/*
+!tst/*/out/.gitkeep

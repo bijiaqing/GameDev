@@ -4,15 +4,15 @@
 
 This review covers the active production fluid code in:
 
-- `new/inc/fluid/*.cuh`
-- `new/src/fluid/*.cu`
-- `new/src/share/optdepth_calc.cu`
-- `new/src/share/optdepth_csum.cu`
+- `inc/fluid/*.cuh`
+- `src/fluid/*.cu`
+- `src/share/optdepth_calc.cu`
+- `src/share/optdepth_csum.cu`
 
 It also compares names with the active swarm code in:
 
-- `inc/*.cuh`
-- `src/*.cu`
+- `inc/swarm/*.cuh`
+- `src/swarm/*.cu`
 
 Generated objects, production-model overrides, verification models, mock scripts, and test overrides are excluded except when a production-interface rename requires a matching test-harness update
 

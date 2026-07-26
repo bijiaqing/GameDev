@@ -12,20 +12,20 @@ The two representations solve related physical models but require different data
 drivers, numerical operators, and tests. A single executable should select one representation at
 build time; it should not carry both main loops behind a large forest of preprocessor branches.
 
-Migration is incomplete:
+The merged layout is active at the repository root:
 
-- the root `inc/`, `src/`, and `Makefile` are the active swarm reference
-- `new/inc/fluid/` and `new/src/fluid/` contain the migrated fluid solver
-- `new/src/share/` currently contains two optical-depth files
-- `new/inc/swarm/` and `new/src/swarm/` are placeholders
-- `new/Makefile` rejects `DUST_REPR=swarm` until migration is complete
+- `inc/fluid/` and `src/fluid/` contain the Eulerian solver
+- `inc/swarm/` and `src/swarm/` contain the Lagrangian solver
+- `src/share/` contains the shared fluid optical-depth kernels
+- `mod/` contains production models and `tst/` contains representation-specific tests
+- the root `Makefile` builds either representation according to the selected model's `DUST_REPR`
 
-The root swarm tree and `new/` fluid tree must therefore remain independently buildable until the
-swarm is migrated and cross-representation tests pass.
+The two standalone swarm generations remain frozen under `legacy/` as recovery references, not as
+active build trees.
 
 ## Build and driver design
 
-Every model directory in `new/mod/`, `new/tst/fluid/`, or `new/tst/swarm/` provides `flags.mk`
+Every model directory in `mod/`, `tst/fluid/`, or `tst/swarm/` provides `flags.mk`
 containing exactly one
 
 ```make
@@ -45,19 +45,17 @@ The build selects:
 - shared sources
 - one driver
 
-`src/fluid/fluid_main.cu` and the future `src/swarm/swarm_main.cu` may both define the C++ function
+`src/fluid/fluid_main.cu` and `src/swarm/swarm_main.cu` may both define the C++ function
 `main`. They are separate translation units and only the selected one is linked into a target.
 This keeps representation-specific allocations, time integration, restart behavior, and optional
 physics legible.
 
-Current commands are:
+Current commands from the repository root are:
 
 ```bash
-make -C new MODEL=fluid_fiducial
-make MODEL=<root-swarm-model>
+make MODEL=fluid_fiducial
+make MODEL=swarm_fiducial
 ```
-
-The second command remains temporary until the swarm branch is available under `new/`.
 
 ## Common physical contract
 
@@ -197,7 +195,7 @@ The monodisperse Stokes equation can share a common core. The swarm must retain 
 size and imported gas.
 
 The local optical-depth increment should remain representation-specific unless both branches first
-construct the same intermediate extinction-density field. `new/src/share/optdepth_calc.cu` is
+construct the same intermediate extinction-density field. `src/share/optdepth_calc.cu` is
 currently fluid-specific because it includes `fluid_kern.cuh` and consumes fluid density directly.
 `optdepth_csum.cu` contains the genuinely common radial prefix-sum calculation but its declaration
 also needs to move to a shared interface.
@@ -219,7 +217,7 @@ Shared headers must not include a representation header. Representation headers 
 headers. Model constants should enter through an explicit selected configuration header rather
 than by putting both branches' headers on the same include path.
 
-The current root and fluid `param_grid.cuh` and `param_phys.cuh` files reuse the same include-guard
+The current swarm and fluid `param_grid.cuh` and `param_phys.cuh` files reuse the same include-guard
 names. They cannot safely appear in one translation unit: the first include would silently suppress
 the second. Migration should replace their common layer and give any remaining adapter a
 representation-qualified guard.
@@ -263,8 +261,8 @@ multiple swarm seeds or enough particles to quantify the expected $N_P^{-1/2}$ u
 
 ### Validation parity
 
-The fluid has operator and coupled analytical tests. `new/tst/swarm/` is still empty. The swarm
-migration is not complete until it has:
+The fluid has operator and coupled analytical tests. `tst/swarm/` is still empty. Validation parity
+is not complete until the swarm has:
 
 - single-particle orbit and stiff-drag tests
 - smooth ensemble advection projected onto the common grid
@@ -274,18 +272,17 @@ migration is not complete until it has:
 - constant, additive, product, and physical collision tests
 - matched fluid–swarm tests with sampling uncertainty
 
-## Migration sequence
+## Remaining integration sequence
 
-1. Keep the root swarm and `new/` fluid references frozen except for correctness fixes
+1. Keep both active representation branches numerically unchanged while establishing the merged
+   build as the recovery point
 2. Add the selected shared base/configuration interface without changing either numerical method
 3. Move common grid, coordinate, gas, file, and CUDA utilities behind that interface
-4. Copy the current swarm headers, kernels, and driver into `new/inc/swarm/` and `new/src/swarm/`
-5. Make `DUST_REPR=swarm` build without model-local source duplication
-6. Reproduce root swarm output and analytical tests in `new/tst/swarm/`
-7. Add cross-representation tests for the common physical contract
-8. Remove the root reference only after the migrated branch passes those gates
-9. Remove `legacy/` only after the user confirms that the migrated project is the accepted
-   recovery point
+4. Reproduce standalone swarm behavior with analytical tests under `tst/swarm/`
+5. Add cross-representation tests for the common physical contract
+6. Remove duplicated representation utilities only after both test families pass
+7. Remove `legacy/` only after the user confirms that the merged project is the accepted recovery
+   point
 
 The old spatial-hashing proposal is not part of this migration contract. The current cuKD
 implementation should first be profiled at representative scale; any alternative must demonstrate

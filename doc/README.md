@@ -1,7 +1,7 @@
 # GameDev documentation
 
 This directory is the canonical documentation for the current GameDev dust solvers as of
-2026-07-24. It replaces the historical audits, correction diaries, merge proposals, and duplicated
+2026-07-26. It replaces the historical audits, correction diaries, merge proposals, and duplicated
 method notes that previously accumulated under `.github/`.
 
 ## Canonical documents
@@ -18,23 +18,23 @@ method notes that previously accumulated under `.github/`.
 
 ## Current repository state
 
-The repository is in a staged migration:
+The merged project is active at the repository root:
 
-- `inc/`, `src/`, and the root `Makefile` contain the active swarm reference implementation
-- `new/inc/fluid/` and `new/src/fluid/` contain the migrated fluid implementation
-- `new/tst/fluid/` contains the fluid CUDA verification suite and its recorded outputs
-- `new/inc/swarm/` and `new/src/swarm/` are reserved for the future swarm migration
-- `legacy/` is a frozen recovery copy and is not an active implementation
+- `inc/fluid/` and `src/fluid/` contain the Eulerian fluid implementation
+- `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
+- `inc/share/` and `src/share/` contain the currently shared infrastructure
+- `tst/fluid/` contains the fluid CUDA verification suite and its recorded outputs
+- `legacy/swarm_before_audit/` and `legacy/swarm_after_audit/` are frozen recovery snapshots
 
-The `new/` build already selects a representation through `DUST_REPR`, but only
-`DUST_REPR=fluid` is implemented there. The root build remains the way to compile the swarm.
+The root build selects exactly one representation through `DUST_REPR` in the chosen model's
+`flags.mk`.
 
 ## Authority and maintenance
 
 When statements disagree, use this order of authority:
 
 1. current source and model flags
-2. recorded native test metrics under `new/tst/fluid/out/`
+2. recorded native test metrics under `tst/fluid/out/`
 3. these documents
 4. Git history and the historical swarm patch
 

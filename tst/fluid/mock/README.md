@@ -5,7 +5,7 @@ This directory contains one supplementary regression program:
 NumPy so their intermediate values can be inspected without a CUDA compiler or
 GPU.
 
-From `new/`, run:
+From the repository root, run:
 
 ```bash
 python3 tst/fluid/mock/algorithm_checks.py

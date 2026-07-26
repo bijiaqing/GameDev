@@ -2,7 +2,7 @@
 
 ## Scope
 
-The current Eulerian implementation is under `new/inc/fluid/` and `new/src/fluid/`. It supports:
+The current Eulerian implementation is under `inc/fluid/` and `src/fluid/`. It supports:
 
 - a two-dimensional radial–azimuthal disk with `N_Z == 1`
 - a full three-dimensional spherical grid with `N_Z > 1`

@@ -68,7 +68,7 @@ def run(model: str) -> None:
     parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args()
 
-    # Starting from verify_common/run_model.py, parents[3] is new/, where the
+    # Starting from verify_common/run_model.py, parents[3] is the repository root, where the
     # Makefile lives, and parents[1] is tst/fluid/, where the models live.
     project_root = Path(__file__).resolve().parents[3]
     test_root = Path(__file__).resolve().parents[1]
