@@ -170,7 +170,7 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
     // map radial faces to the volume coordinate used by the radial finite-volume operator
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_s_y(_get_yedge(iy));
+        y_face_s[iy] = _get_s_y(_get_yface(iy));
     }
 
     _ppm_nonuniform_weights(y_face_s, ppm_weight_y);
@@ -180,7 +180,7 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
     // map polar faces to the spherical volume coordinate minus cosine theta
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_s_z(_get_zedge(iz));
+        z_face_s[iz] = _get_s_z(_get_zface(iz));
     }
 
     _ppm_nonuniform_weights(z_face_s, ppm_weight_z);

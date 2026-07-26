@@ -47,8 +47,8 @@ void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
     for (int iz = 0; iz < N_Z; iz++)
     {
-        real z_i = _get_zedge(iz);
-        real z_o = _get_zedge(iz + 1);
+        real z_i = _get_zface(iz);
+        real z_o = _get_zface(iz + 1);
 
         real vol_z  = _get_vol_z(iz);
         real dz_len = y*dz;

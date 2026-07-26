@@ -1,6 +1,6 @@
 
 
-#include <graffiti_kern.cuh>
+#include <swarm_kern.cuh>
 #include <helpers_paramphys.cuh>  // for _get_grain_mass
 
 // =========================================================================================================================

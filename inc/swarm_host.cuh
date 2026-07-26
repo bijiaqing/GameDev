@@ -239,13 +239,13 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
     std::vector<real> y_face_s(N_Y + 1);
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_sy(_get_yedge(iy));
+        y_face_s[iy] = _get_sy(_get_yface(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_sz(_get_zedge(iz));
+        z_face_s[iz] = _get_sz(_get_zface(iz));
     }
 
     for (int idx = 0; idx < count; idx++)
@@ -381,13 +381,13 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
     std::vector<real> y_face_s(N_Y + 1);
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_sy(_get_yedge(iy));
+        y_face_s[iy] = _get_sy(_get_yface(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_sz(_get_zedge(iz));
+        z_face_s[iz] = _get_sz(_get_zface(iz));
     }
 
     for (int idx = 0; idx < count; idx++)
@@ -529,13 +529,13 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
     std::vector<real> y_face_s(N_Y + 1);
     for (int iy = 0; iy <= N_Y; iy++)
     {
-        y_face_s[iy] = _get_sy(_get_yedge(iy));
+        y_face_s[iy] = _get_sy(_get_yface(iy));
     }
 
     std::vector<real> z_face_s(N_Z + 1);
     for (int iz = 0; iz <= N_Z; iz++)
     {
-        z_face_s[iz] = _get_sz(_get_zedge(iz));
+        z_face_s[iz] = _get_sz(_get_zface(iz));
     }
     
     // select cells by inverse transform sampling

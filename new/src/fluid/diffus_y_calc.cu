@@ -49,8 +49,8 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real max_cn_sum = 0.0;
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real y_i = _get_yedge(iy);
-        real y_o = _get_yedge(iy + 1);
+        real y_i = _get_yface(iy);
+        real y_o = _get_yface(iy + 1);
 
         real vol_y = _get_vol_y(iy);
 

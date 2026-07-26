@@ -16,4 +16,4 @@ ROOTDIR="/u/jibi/graffiti"
 
 cd "${ROOTDIR}"
 make MODEL="${JOBNAME}"
-"${ROOTDIR}/mod/${JOBNAME}/graffiti"
+"${ROOTDIR}/mod/${JOBNAME}/gamedev"

@@ -1,4 +1,6 @@
-# Merged GRAFFITI development tree
+# Merged GameDev development tree
+
+**GameDev: GPU-Accelerated ModEl for Dust EVolution**
 
 This tree is the staged merge of the Eulerian dust-fluid and Lagrangian dust-swarm solvers.
 Each model selects one representation through `DUST_REPR` in its `flags.mk`.

@@ -36,7 +36,7 @@ endif
 
 $(info Using model setup: $(MODEL) from $(MOD_DIR))
 
-EXEC = $(MOD_DIR)/graffiti
+EXEC = $(MOD_DIR)/gamedev
 endif
 
 _INC =						\

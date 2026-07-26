@@ -53,7 +53,7 @@ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
     real dz = _get_dz();
     int iy = static_cast<int>(log(y / Y_MIN) / log(dy));
     iy = (iy >= N_Y) ? N_Y - 1 : iy;
-    real dr = _get_yedge(iy)*(dy - 1.0);
+    real dr = _get_yface(iy)*(dy - 1.0);
 
     // limit orbital phase evolution and particle crossing of every active mesh direction
     // the radial scale is the exact width of the logarithmic cell containing the particle

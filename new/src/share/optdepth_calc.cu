@@ -12,7 +12,7 @@ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens)
 
     int iy = (idx_cell / N_X) % N_Y;
 
-    real dr = _get_yedge(iy)*(_get_dy() - 1.0);
+    real dr = _get_yface(iy)*(_get_dy() - 1.0);
 
     real extinction_dens = dev_dustdens[idx_cell];
     if (N_Z == 1)

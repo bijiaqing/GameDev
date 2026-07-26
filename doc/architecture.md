@@ -2,7 +2,7 @@
 
 ## Objective and present state
 
-Graffiti will contain two dust representations in one project:
+GameDev will contain two dust representations in one project:
 
 - `fluid`: an Eulerian pressureless dust fluid
 - `swarm`: Lagrangian representative particles

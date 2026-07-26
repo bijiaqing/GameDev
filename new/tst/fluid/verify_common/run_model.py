@@ -114,7 +114,7 @@ def run(model: str) -> None:
         # The executable writes binary fields and a small metadata file into
         # data_dir through PATH_OUT.  analyze then constructs the analytical
         # cell averages and compares them with those files.
-        subprocess.run([str(model_dir / "graffiti")], cwd=project_root, check=True)
+        subprocess.run([str(model_dir / "gamedev")], cwd=project_root, check=True)
         record = analyze(data_dir, resolution)
 
         # Keep a machine-readable result per resolution so cluster output can be

@@ -131,8 +131,8 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
         // apply the spherical-geometry low-order update to the innermost polar cell
         {
-            real z_i = _get_zedge(0);
-            real z_o = _get_zedge(1);
+            real z_i = _get_zface(0);
+            real z_o = _get_zface(1);
             real vol_z = _get_vol_z(0);
 
             dens[0] -= dt*(sin(z_o)*flux_dens[0] - sin(z_i)*flux_dens_ib) / (y*vol_z);
@@ -146,8 +146,8 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         // apply the spherical-geometry low-order update to the remaining polar cells
         for (int iz = 1; iz < N_Z; iz++)
         {
-            real z_i = _get_zedge(iz);
-            real z_o = _get_zedge(iz + 1);
+            real z_i = _get_zface(iz);
+            real z_o = _get_zface(iz + 1);
             real vol_z = _get_vol_z(iz);
 
             dens[iz] -= dt*(sin(z_o)*flux_dens[iz] - sin(z_i)*flux_dens[iz - 1]) / (y*vol_z);
@@ -161,7 +161,7 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         // apply volume-scaled antidiffusive transfers across interior polar faces
         for (int iz = 0; iz < N_Z - 1; iz++)
         {
-            real z_face = _get_zedge(iz + 1);
+            real z_face = _get_zface(iz + 1);
             real area_f = sin(z_face);
             real vol_L = _get_vol_z(iz);
             real vol_R = _get_vol_z(iz + 1);

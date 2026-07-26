@@ -30,8 +30,8 @@ void cfl_rate_calc (
 
     if (N_Z > 1)
     {
-        real z_i = _get_zedge(iz);
-        real z_o = _get_zedge(iz + 1);
+        real z_i = _get_zface(iz);
+        real z_o = _get_zface(iz + 1);
 
         real vol_z = _get_vol_z(iz);
         real sin_max = fmax(sin(z_i), sin(z_o));

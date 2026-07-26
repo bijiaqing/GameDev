@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 
+mod/*/gamedev
+tst/*/*/gamedev
+
+# pre-GameDev build artifacts
 mod/*/graffiti
 tst/*/*/graffiti
 

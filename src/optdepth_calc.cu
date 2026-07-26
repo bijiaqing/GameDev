@@ -18,7 +18,7 @@ void optdepth_calc (real *dev_optdepth)
     int iz = idx_cell / (N_X*N_Y);
 
     real cell_measure = _get_vol_x()*_get_vol_y(iy)*_get_vol_z(iz);
-    real dr = _get_yedge(iy)*(_get_dy() - 1.0);
+    real dr = _get_yface(iy)*(_get_dy() - 1.0);
     dev_optdepth[idx_cell] /= cell_measure;
 
     dev_optdepth[idx_cell] *= dr; // integrate extinction density across the logarithmic radial cell

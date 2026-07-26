@@ -1,10 +1,8 @@
-# GRAFFITI
+# GameDev
 
-![GRAFFITI Banner](doc/banner.png)
+**GameDev: GPU-Accelerated ModEl for Dust EVolution**
 
-**GRAFFITI: <u>G</u>PU-pa<u>r</u>allelized numeric<u>a</u>l <u>f</u>ramework <u>f</u>or dust evolution <u>i</u>n as<u>t</u>rophysical d<u>i</u>sks**
-
-GRAFFITI is a high-performance CUDA-based simulation framework for modeling dust evolution in astrophysical disks. It leverages GPU parallelization to simulate millions of dust particles using the Lagrangian super-particle approach, including dynamics, collisions, diffusion, and radiative processes.
+GameDev is a high-performance CUDA-based simulation framework for modeling dust evolution in astrophysical disks. It leverages GPU parallelization to simulate millions of dust particles using the Lagrangian super-particle approach, including dynamics, collisions, diffusion, and radiative processes.
 
 ## Features
 
@@ -30,7 +28,7 @@ GRAFFITI is a high-performance CUDA-based simulation framework for modeling dust
 
 ### Build
 
-GRAFFITI uses a model-based build system. You must specify a `MODEL` when building:
+GameDev uses a model-based build system. You must specify a `MODEL` when building:
 
 ```bash
 # Example: Build the linear_kernel_test model
@@ -50,7 +48,7 @@ _OBJ_MOD = custom_kernel.o
 
 **Model-Specific File Overriding:**
 
-GRAFFITI's build system allows models to selectively override default implementations:
+GameDev's build system allows models to selectively override default implementations:
 - If a `.cu` file exists in `mod/<MODEL>/`, it will be compiled instead of the corresponding file in `src/`
 - This enables testing different implementations without modifying the core codebase
 - For example, placing `col_rate_calc.cu` in `mod/linear_kernel_test/` will use that custom collision kernel instead of `src/col_rate_calc.cu`
@@ -61,23 +59,23 @@ GRAFFITI's build system allows models to selectively override default implementa
 
 ```bash
 # Fresh start
-./mod/<MODEL>/graffiti
+./mod/<MODEL>/gamedev
 
 # Resume from saved frame
-./mod/<MODEL>/graffiti <frame-number>
+./mod/<MODEL>/gamedev <frame-number>
 ```
 
 Output files are written to `out/<MODEL>/`.
 
 **Resuming Simulations:**
 
-GRAFFITI supports resuming simulations from saved checkpoints, allowing you to continue interrupted runs or extend completed simulations:
+GameDev supports resuming simulations from saved checkpoints, allowing you to continue interrupted runs or extend completed simulations:
 
 1. **Finding Available Frames**: Saved particle data files in `out/<MODEL>/` are named with frame numbers (e.g., `particles_00000.bin`, `particles_00001.bin`). Use these numbers to resume.
 
 2. **Resume Command**: To resume from a specific frame, provide the frame number as a command-line argument:
    ```bash
-   ./mod/<MODEL>/graffiti 42  # Resume from frame 42
+   ./mod/<MODEL>/gamedev 42  # Resume from frame 42
    ```
 
 3. **What Happens on Resume**:
@@ -130,7 +128,7 @@ Control simulation features via compilation flags in `mod/<MODEL>/flags.mk`:
 
 ### Importing Gas Disk Data
 
-When `-DIMPORTGAS` is enabled, GRAFFITI reads gas disk parameters from external binary files instead of using analytical profiles:
+When `-DIMPORTGAS` is enabled, GameDev reads gas disk parameters from external binary files instead of using analytical profiles:
 
 **Required Gas Files:**
 
@@ -174,10 +172,10 @@ With `-DIMPORTGAS`, the following calculations use imported data instead of anal
 ## Project Structure
 
 ```
-graffiti/
+gamedev/
 ├── inc/                      # Header files
 │   ├── const.cuh            # Default simulation constants
-│   ├── graffiti_kern.cuh    # Kernel declarations
+│   ├── swarm_kern.cuh       # Kernel declarations
 │   ├── host_rand.cuh        # Host initialization and random sampling
 │   ├── host_file.cuh        # Host file, output, and timing utilities
 │   ├── collision.cuh        # Collision device utilities
@@ -229,7 +227,7 @@ This representation differs from imported gas data (`gasvelx/y/z`), which stores
 
 ### Coding Conventions
 
-- **Declarations**: Kernels in `inc/graffiti_kern.cuh`, host utilities in `inc/host_rand.cuh` and `inc/host_file.cuh`, and device utilities in the remaining topical headers
+- **Declarations**: Kernels in `inc/swarm_kern.cuh`, host utilities in `inc/swarm_host.cuh`, and device utilities in the remaining topical headers
 - **Implementations**: In corresponding `src/*.cu` files
 - **Memory**: Host uses `cudaMallocHost` (pinned), device uses `cudaMalloc`
 - **Grid Indexing**: Cells computed from positions; respect `N_X/N_Y/N_Z` constants

@@ -21,10 +21,10 @@ real _get_dz() { return (Z_MAX - Z_MIN) / static_cast<real>(N_Z); }
 // =========================================================================================================================
 
 __host__ __device__ __forceinline__
-real _get_yedge (int iy) { return Y_MIN*pow(_get_dy(), static_cast<real>(iy)); }
+real _get_yface (int iy) { return Y_MIN*pow(_get_dy(), static_cast<real>(iy)); }
 
 __host__ __device__ __forceinline__
-real _get_zedge (int iz) { return Z_MIN + _get_dz()*static_cast<real>(iz); }
+real _get_zface (int iz) { return Z_MIN + _get_dz()*static_cast<real>(iz); }
 
 // =========================================================================================================================
 
@@ -46,7 +46,7 @@ __host__ __device__ __forceinline__
 real _get_vol_y (int iy)
 {
     real mesh_dim = _get_mesh_dim();
-    real vol_y = pow(_get_yedge(iy), mesh_dim)*(pow(_get_dy(), mesh_dim) - 1.0) / mesh_dim;
+    real vol_y = pow(_get_yface(iy), mesh_dim)*(pow(_get_dy(), mesh_dim) - 1.0) / mesh_dim;
 
     return vol_y;
 }
@@ -55,7 +55,7 @@ real _get_vol_y (int iy)
 __host__ __device__ __forceinline__
 real _get_vol_z (int iz)
 {
-    real vol_z = cos(_get_zedge(iz)) - cos(_get_zedge(iz + 1));
+    real vol_z = cos(_get_zface(iz)) - cos(_get_zface(iz + 1));
 
     return (N_Z > 1) ? vol_z : 1.0;
 }

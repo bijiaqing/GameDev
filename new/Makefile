@@ -70,7 +70,7 @@ else
 OUT_DIR = $(OUT_ROOT)/$(MODEL)
 endif
 
-EXEC = $(MODEL_DIR)/graffiti
+EXEC = $(MODEL_DIR)/gamedev
 endif
 
 _OBJ_SHARE =      \

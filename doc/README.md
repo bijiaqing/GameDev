@@ -1,6 +1,6 @@
-# Graffiti documentation
+# GameDev documentation
 
-This directory is the canonical documentation for the current Graffiti dust solvers as of
+This directory is the canonical documentation for the current GameDev dust solvers as of
 2026-07-24. It replaces the historical audits, correction diaries, merge proposals, and duplicated
 method notes that previously accumulated under `.github/`.
 
