@@ -64,7 +64,7 @@ real get_mass_norm (const real *randsize, real total_dust_mass)
 
 // sample a probability density proportional to p raised to power_idx
 inline __host__
-void rand_powerlaw (real *randsize, int number, real p_min, real p_max, real power_idx)
+void rand_powerlaw (real *randsize, int count, real p_min, real p_max, real power_idx)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
@@ -72,7 +72,7 @@ void rand_powerlaw (real *randsize, int number, real p_min, real p_max, real pow
     real tmp_max = std::pow(p_max, power_idx + 1.0);
 
     // invert the cumulative distribution for dN proportional to p^power_idx dp
-    for (int idx = 0; idx < number; idx++)
+    for (int idx = 0; idx < count; idx++)
     {
         randsize[idx] = std::pow((tmp_max - tmp_min)*random(rand_generator) + tmp_min, 1.0 / (power_idx + 1.0));
     }
@@ -93,47 +93,47 @@ void initdens_calc (std::vector <real> &initdens)
     const real dR = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
     const real kernel_norm = 1.0 / (std::sqrt(2.0*M_PI)*kernel_std);
 
-    std::vector <real> R_axis(N_Y + 1);
+    std::vector <real> conv_u(N_Y + 1);
     initdens.assign(N_Y + 1, 0.0);
 
-    for (int idx_R = 0; idx_R <= N_Y; idx_R++)
+    for (int idx_dst = 0; idx_dst <= N_Y; idx_dst++)
     {
-        R_axis[idx_R] = Y_MIN + static_cast<real>(idx_R)*dR;
+        conv_u[idx_dst] = Y_MIN + static_cast<real>(idx_dst)*dR;
     }
 
     for (int idx_src = 0; idx_src <= N_Y; idx_src++)
     {
-        real R_src = R_axis[idx_src];
+        real R_src = conv_u[idx_src];
         if (R_src < R_src_min || R_src > R_src_max) continue;
 
         real sigma_d = METAL_Z*SIGMA_0*std::pow(R_src / R_0, IDX_P);
 
-        for (int idx_R = 0; idx_R <= N_Y; idx_R++)
+        for (int idx_dst = 0; idx_dst <= N_Y; idx_dst++)
         {
-            real delta_R = R_axis[idx_R] - R_src;
+            real delta_R = conv_u[idx_dst] - R_src;
             real kernel_weight = kernel_norm*std::exp(-0.5*delta_R*delta_R / (kernel_std*kernel_std));
-            initdens[idx_R] += sigma_d*kernel_weight*dR;
+            initdens[idx_dst] += sigma_d*kernel_weight*dR;
         }
     }
 }
 
 // interpolate a tabulated convolved profile on its uniform axis
 inline static __host__
-real _interp_convpow_profile (real R, const std::vector <real> &profile, real R_min, real R_max)
+real initdens_lerp (real R, const std::vector <real> &initdens, real R_min, real R_max)
 {
     if (R < R_min || R > R_max) return 0.0;
 
-    int bins = static_cast<int>(profile.size()) - 1;
-    real loc = (R - R_min)*static_cast<real>(bins) / (R_max - R_min);
-    int idx_bin = std::min(static_cast<int>(loc), bins - 1);
+    int bin_count = static_cast<int>(initdens.size()) - 1;
+    real loc = (R - R_min)*static_cast<real>(bin_count) / (R_max - R_min);
+    int idx_bin = std::min(static_cast<int>(loc), bin_count - 1);
     real frac = loc - static_cast<real>(idx_bin);
 
-    return (1.0 - frac)*profile[idx_bin] + frac*profile[idx_bin + 1];
+    return (1.0 - frac)*initdens[idx_bin] + frac*initdens[idx_bin + 1];
 }
 
 // evaluate the physical initialized dust density for one cylindrical position and grain size
 inline static __host__
-real _get_init_density (real sigma_d, real R, real Z, real size)
+real _get_init_rhod (real sigma_d, real R, real Z, real size)
 {
     if (N_Z == 1 || sigma_d <= 0.0) return sigma_d;
 
@@ -174,8 +174,8 @@ real get_total_dust_mass ()
             real R = y*std::sin(z);
             real Z = y*std::cos(z);
 
-            real sigma_d = _interp_convpow_profile(R, initdens, Y_MIN, Y_MAX);
-            real rhod = _get_init_density(sigma_d, R, Z, S_0);
+            real sigma_d = initdens_lerp(R, initdens, Y_MIN, Y_MAX);
+            real rhod = _get_init_rhod(sigma_d, R, Z, S_0);
             real vol_y = _get_vol_y(iy);
 
             total_dust_mass += rhod*vol_x*vol_y*vol_z;
@@ -194,7 +194,7 @@ real get_total_dust_mass ()
 // draw y and z together because R = y sin(z) and Z = y cos(z) jointly determine radial and vertical dust density
 // when diffusion is enabled use size to calculate the Stokes-dependent scale height before drawing the shared cell
 inline __host__
-void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, int number)
+void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, int count)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
@@ -218,8 +218,8 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
             real R = y*std::sin(z);
             real Z = y*std::cos(z);
 
-            real sigma_d = _interp_convpow_profile(R, initdens, Y_MIN, Y_MAX);
-            real rhod = _get_init_density(sigma_d, R, Z, size);
+            real sigma_d = initdens_lerp(R, initdens, Y_MIN, Y_MAX);
+            real rhod = _get_init_rhod(sigma_d, R, Z, size);
 
             real vol_y = _get_vol_y(iy);
             int idx_cell = iy + iz*N_Y;
@@ -248,7 +248,7 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
         z_face_s[iz] = _get_sz(_get_zedge(iz));
     }
 
-    for (int idx = 0; idx < number; idx++)
+    for (int idx = 0; idx < count; idx++)
     {
         real cdf_sample = random(rand_generator);
         auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), cdf_sample);
@@ -283,12 +283,12 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
 #if defined(MULTISIZE) && defined(DIFFUSION)
 // precompute one normalized spatial CDF for a selected grain size
 inline static __host__
-void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &initdens, real size)
+void disk_cdf_calc (std::vector <real> &cdf, const std::vector <real> &initdens, real size)
 {
-    int cells = N_Y*N_Z;
+    int cell_count = N_Y*N_Z;
     real log_zero = -std::numeric_limits<real>::infinity();
-    std::vector <real> log_mass(cells, log_zero);
-    cdf.assign(cells + 1, 0.0);
+    std::vector <real> log_mass(cell_count, log_zero);
+    cdf.assign(cell_count + 1, 0.0);
 
     for (int iz = 0; iz < N_Z; iz++)
     {
@@ -300,7 +300,7 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &initdens,
             real y = _get_ycent(iy);
             real R = y*std::sin(z);
             real Z = y*std::cos(z);
-            real sigma_d = _interp_convpow_profile(R, initdens, Y_MIN, Y_MAX);
+            real sigma_d = initdens_lerp(R, initdens, Y_MIN, Y_MAX);
             real log_rhod = (sigma_d > 0.0) ? std::log(sigma_d) : log_zero;
 
             if (N_Z > 1 && sigma_d > 0.0)
@@ -329,12 +329,12 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &initdens,
 
     // remove the largest logarithm before exponentiation to preserve highly settled distributions
     real max_log_mass = *std::max_element(log_mass.begin(), log_mass.end());
-    for (int idx = 0; idx < cells; idx++)
+    for (int idx = 0; idx < cell_count; idx++)
     {
         cdf[idx + 1] = cdf[idx] + std::exp(log_mass[idx] - max_log_mass);
     }
 
-    real total_mass = cdf[cells];
+    real total_mass = cdf[cell_count];
     for (real &value : cdf) 
     {
         value /= total_mass;
@@ -344,35 +344,35 @@ void _get_disk_cdf (std::vector <real> &cdf, const std::vector <real> &initdens,
 // sample polydisperse dust from the joint y-z distribution conditioned on each previously assigned grain size
 // interpolate log-size CDFs because size changes the Stokes number and therefore the coupled vertical distribution
 inline __host__
-void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real *randsize, int number)
+void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real *randsize, int count)
 {
-    auto [size_min_ptr, size_max_ptr] = std::minmax_element(randsize, randsize + number);
+    auto [size_min_ptr, size_max_ptr] = std::minmax_element(randsize, randsize + count);
     real size_min = *size_min_ptr;
     real size_max = *size_max_ptr;
 
     if (N_Z == 1 || size_min == size_max)
     {
-        rand_disk_mono(randposx, randposy, randposz, size_min, number);
+        rand_disk_mono(randposx, randposy, randposz, size_min, count);
         return;
     }
 
     // tabulate conditional CDFs uniformly in log size and interpolate their normalized probabilities
-    int size_bins = std::max(2, std::min(128, std::max(N_Y, N_Z)));
-    int cells = N_Y*N_Z;
+    int size_bin_count = std::max(2, std::min(128, std::max(N_Y, N_Z)));
+    int cell_count = N_Y*N_Z;
     real log_size_min = std::log(size_min);
     real log_size_max = std::log(size_max);
-    real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bins - 1);
+    real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bin_count - 1);
 
     std::vector <real> initdens;
     initdens_calc(initdens);
 
     std::vector <real> cdf;
-    std::vector <real> cdf_bank(static_cast<size_t>(size_bins)*static_cast<size_t>(cells + 1));
-    for (int idx_size = 0; idx_size < size_bins; idx_size++)
+    std::vector <real> cdf_bank(static_cast<size_t>(size_bin_count)*static_cast<size_t>(cell_count + 1));
+    for (int idx_size = 0; idx_size < size_bin_count; idx_size++)
     {
         real size = std::exp(log_size_min + static_cast<real>(idx_size)*dlog_size);
-        _get_disk_cdf(cdf, initdens, size);
-        std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(idx_size)*static_cast<size_t>(cells + 1));
+        disk_cdf_calc(cdf, initdens, size);
+        std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(idx_size)*static_cast<size_t>(cell_count + 1));
     }
 
     real mesh_dim = _get_mesh_dim();
@@ -390,17 +390,17 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
         z_face_s[iz] = _get_sz(_get_zedge(iz));
     }
 
-    for (int idx = 0; idx < number; idx++)
+    for (int idx = 0; idx < count; idx++)
     {
         real loc_size = (std::log(randsize[idx]) - log_size_min) / dlog_size;
-        int size_lo = std::min(static_cast<int>(loc_size), size_bins - 2);
+        int size_lo = std::min(static_cast<int>(loc_size), size_bin_count - 2);
         real frac_size = loc_size - static_cast<real>(size_lo);
-        const real *cdf_lo = cdf_bank.data() + static_cast<size_t>(size_lo)*static_cast<size_t>(cells + 1);
-        const real *cdf_hi = cdf_lo + cells + 1;
+        const real *cdf_lo = cdf_bank.data() + static_cast<size_t>(size_lo)*static_cast<size_t>(cell_count + 1);
+        const real *cdf_hi = cdf_lo + cell_count + 1;
 
         real cdf_sample = random(rand_generator);
         int idx_lo = 0;
-        int idx_hi = cells;
+        int idx_hi = cell_count;
         while (idx_lo < idx_hi)
         {
             int idx_mid = idx_lo + (idx_hi - idx_lo) / 2;
@@ -448,7 +448,7 @@ real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
     // initialize from the asymptotic form of the negative branch
     double val = std::log(-z);
 
-    for (int i = 0; i < max_iter; ++i)
+    for (int idx_iter = 0; idx_iter < max_iter; ++idx_iter)
     {
         double exp_val = std::exp(val);
         double d_val = (val*exp_val - z) / (exp_val*(val + 1.0));
@@ -463,11 +463,11 @@ real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
 
 // sample the analytic initial distribution used by the linear-kernel collision test
 inline __host__
-void rand_gamma_k2 (real *randsize, int number)
+void rand_gamma_k2 (real *randsize, int count)
 {
     std::uniform_real_distribution <real> random(0.0, 1.0);
 
-    for (int idx = 0; idx < number; idx++)
+    for (int idx = 0; idx < count; idx++)
     {
         randsize[idx] = -(_get_lambertW_m1((random(rand_generator) - 1.0) / std::exp(1.0)) + 1.0);
     }
@@ -481,7 +481,7 @@ void rand_gamma_k2 (real *randsize, int number)
 #ifdef IMPORTGAS
 // sample positions from imported gas density times dust-to-gas ratio and exact cell measure
 inline __host__
-void rand_from_file (real *randposx, real *randposy, real *randposz, int number, const real *gas_dens, const real *epsilon)
+void rand_from_file (real *randposx, real *randposy, real *randposz, int count, const real *gas_dens, const real *epsilon)
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
     
@@ -539,7 +539,7 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int number,
     }
     
     // select cells by inverse transform sampling
-    for (int idx = 0; idx < number; idx++)
+    for (int idx = 0; idx < count; idx++)
     {
         real cdf_sample = random(rand_generator);
         
@@ -615,7 +615,7 @@ real int_pow (int base, int power)
 {
     real result = 1.0;
 
-    for (int i = 0; i < power; i++)
+    for (int idx_pow = 0; idx_pow < power; idx_pow++)
     {
         result *= static_cast<real>(base);
     }

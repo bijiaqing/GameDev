@@ -66,9 +66,9 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     real target = col_rate_i*curand_uniform_double(&rngstate);
     real cumulative = 0.0;
     int idx_old_j = -1;
-    for (int j = 0; j < N_K; j++)
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
-        int idx_query = query_result.returnIndex(j);
+        int idx_query = query_result.returnIndex(idx_neighbor);
         if (idx_query < 0) continue;
 
         int idx_candidate = dev_col_tree[idx_query].index_old;

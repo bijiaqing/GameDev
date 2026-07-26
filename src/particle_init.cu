@@ -97,7 +97,7 @@ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *d
     real v_K = R*omega;
     real eta = _get_eta(R, Z, h_g);
     real vx_g = v_K*sqrt(fmax(1.0 - 2.0*eta, 0.0));
-    real stokes = _get_stokes(R, Z, size, h_g
+    real stokes = _get_stokes(R, Z, h_g, size
         #ifdef IMPORTGAS
         , dev_particle[idx].position.x, y, z, dev_gas_dens
         #endif // IMPORTGAS

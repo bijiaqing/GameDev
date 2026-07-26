@@ -507,26 +507,23 @@ The collision-only `rate_ptr` and `max_rate` are local to a different reduction 
 
 ### 21. Gas-density naming
 
+**Status: retain swarm `rhog_0` by design**
+
 Both physical helper sets use `rhog` for a local gas volume density, but the fluid `_get_rhog` helper currently names its local midplane density `rho_mid`
 
 Use `rhog_mid`
 
-The swarm imported-gas Stokes calibration uses `rhog_0` for the analytical density anchor at `R_0`
-
-Because that quantity is a fixed reference rather than the possibly evolved local density at index zero, `rhog_ref` is more informative than `rhog_0`
+The swarm imported-gas Stokes calibration uses `rhog_0` for the analytical density anchor at `R_0`, consistently with the reference-value notation used by `STOKES_0` and `SIGMA_0`
 
 Retain `gas_dens/dev_gas_dens` for imported grid arrays unless the external-gas interface is redesigned; they are persistent field names rather than local physical scalars
 
 ### 22. Helper action prefixes
 
+**Status: applied to the swarm helpers**
+
 Across both models, `_get_*` is most readable when a function directly returns one value without filling an output container
 
-Current output-mutating exceptions include:
-
-- swarm `_get_initdens_profile`
-- swarm `_get_disk_cdf`
-
-Use an action suffix for output-filling routines:
+The output-filling swarm routines now use action suffixes:
 
 - `initdens_calc`
 - `disk_cdf_calc`
@@ -535,14 +532,11 @@ Retain `_get_*` for returned physical or geometric values such as `_get_hg`, `_g
 
 ### 23. Common parameter ordering
 
-The shared portion of `_get_stokes` is ordered differently:
+**Status: applied to the swarm `_get_stokes` declaration and all call sites**
 
-- swarm: `(R, Z, size, h_g, ...)`
-- fluid: `(R, Z, h_g)`
+Both forms now use the common physical prefix `(R, Z, h_g)`, followed by representation-specific inputs
 
-Use the common physical prefix `(R, Z, h_g)` in both models, then append representation-specific inputs
-
-The swarm form would become:
+The swarm form is:
 
 ```cpp
 _get_stokes(R, Z, h_g, size, ...)

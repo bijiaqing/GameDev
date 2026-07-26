@@ -135,7 +135,7 @@ real _get_visc_vel (real R, real Z, real h_g)
 
 // calculate the local Stokes number from grain size and the analytic or imported gas density
 __device__ __forceinline__
-real _get_stokes (real R, real Z, real size, real h_g
+real _get_stokes (real R, real Z, real h_g, real size
     #ifdef IMPORTGAS
     , real x, real y, real z, const real *dev_gas_dens
     #endif // IMPORTGAS

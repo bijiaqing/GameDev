@@ -63,9 +63,9 @@ real _get_ball_measure (real y, real z, real radius)
     }
 
     int bounds = (N_Z > 1) ? 4 : 2;
-    for (int k = 0; k < bounds; k++)
+    for (int idx_bound = 0; idx_bound < bounds; idx_bound++)
     {
-        real d = fmax(0.0, distances[k]);
+        real d = fmax(0.0, distances[idx_bound]);
         if (d >= radius) continue;
 
         if (dim == 1)
@@ -280,12 +280,12 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     real h_gi = _get_hg(R_i);
     real h_gj = _get_hg(R_j);
 
-    real stokes_i = _get_stokes(R_i, Z_i, size_i, h_gi
+    real stokes_i = _get_stokes(R_i, Z_i, h_gi, size_i
         #ifdef IMPORTGAS
         , x_i, y_i, z_i, dev_gas_dens
         #endif // IMPORTGAS
     );
-    real stokes_j = _get_stokes(R_j, Z_j, size_j, h_gj
+    real stokes_j = _get_stokes(R_j, Z_j, h_gj, size_j
         #ifdef IMPORTGAS
         , x_j, y_j, z_j, dev_gas_dens
         #endif // IMPORTGAS

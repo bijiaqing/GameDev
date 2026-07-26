@@ -58,10 +58,10 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     real col_rate_i = 0.0; // total collision rate for the representative particle
     float max_dist_sq = 0.0f;
 
-    for(int j = 0; j < N_K; j++)
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         real col_rate_ij = 0.0;
-        int idx_query = query_result.returnIndex(j);
+        int idx_query = query_result.returnIndex(idx_neighbor);
 
         if (idx_query != -1)
         {
@@ -71,7 +71,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
                 dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
             )) continue;
 
-            float dist_sq = query_result.returnDist2(j);
+            float dist_sq = query_result.returnDist2(idx_neighbor);
             max_dist_sq = fmaxf(max_dist_sq, dist_sq);
 
             col_rate_ij = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
