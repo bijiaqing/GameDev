@@ -183,7 +183,7 @@ $$
 The four two-dimensional end-to-end models use
 
 $$
-\frac{\rho_d(R,x,0)}{\rho_0(R)}=1+0.1\cos(2x),
+\frac{\Sigma_d(R,x,0)}{\Sigma_g(R)}=1+0.1\cos(2x),
 \qquad
 \Omega_\beta(R)=\sqrt{\frac{1-\beta}{R^3}},
 $$
@@ -192,22 +192,32 @@ with gas pressure support chosen so drag vanishes and radial forces balance. Whe
 diffusion is enabled,
 
 $$
-\frac{\rho_d(R,x,t)}{\rho_0(R)}
+\frac{\Sigma_d(R,x,t)}{\Sigma_g(R)}
 =1+0.1
 \exp\left(-\frac{4D_xt}{R^2}\right)
 \cos\left(2[x-\Omega_\beta(R)t]\right).
 $$
 
 These cases cover transport-only, transport plus diffusion, transport plus radiation, and all
-three together.
+three together. Because these are two-dimensional radial-azimuthal models, their stored density is
+the vertically integrated dust surface density rather than a reconstructed midplane volume
+density.
 
 ## Recorded native CUDA results
 
-The current `new/tst/fluid/out/output1.txt` and JSON files contain the recorded native matrix.
-There are 73 JSON metric records even though the complete run performed 85 builds: low- and
-production-CFL Y/Z sweeps used the same metric filenames, so the later sweep overwrote 12 JSON
-files. Their complete tables remain in `output1.txt`. Future reruns should include CFL in the
-variant tag before relying on the JSON count alone.
+### Complete `new/`-tree run of 2026-07-26
+
+The current JSON files under `new/tst/fluid/out/` contain all 85 records from
+
+```bash
+python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
+```
+
+The run completed all 85 builds and simulations without a compilation failure, runtime failure,
+Python traceback, or non-finite JSON metric. Unlike the earlier archive, the current output layout
+includes the CFL value in radial and polar transport filenames, so the 12 low-CFL records are no
+longer overwritten. All 22 parameter variants have an `environment.txt` file recording CUDA 12.1
+with `nvcc` 12.1.105 and an NVIDIA A100-SXM4-40GB using driver 580.159.04.
 
 The following density $L_1$ orders use $N=32,64,128,256$ and list the three successive refinement
 intervals.
@@ -217,27 +227,72 @@ intervals.
 | FARGO shift 3.25 | 2.3067, 2.4063, 2.4158 | pass |
 | FARGO shift 3.50 | 2.3079, 2.3029, 2.4658 | pass |
 | FARGO shift 3.75 | 2.0579, 2.4278, 2.4282 | pass |
-| radial transport, $d=2$ | 1.5915, 2.4017, 2.7952 | pass; coarsest compact profile is under-resolved |
-| radial transport, $d=3$ | 1.5428, 2.3757, 2.8012 | pass; same qualification |
-| polar transport | 1.6813, 2.3623, 2.4999 | pass |
+| radial transport, $d=2$, CFL 0.05 | 1.6429, 2.2371, 2.6991 | pass; coarsest compact profile is under-resolved |
+| radial transport, $d=2$, CFL 0.5 | 1.5555, 2.4004, 2.7963 | pass; same qualification |
+| radial transport, $d=3$, CFL 0.05 | 1.5876, 2.2031, 2.7182 | pass; same qualification |
+| radial transport, $d=3$, CFL 0.5 | 1.5235, 2.3568, 2.8012 | pass; same qualification |
+| polar transport, CFL 0.05 | 1.6737, 2.3601, 2.4601 | pass |
+| polar transport, CFL 0.5 | 1.6813, 2.3623, 2.4999 | pass |
 | azimuthal diffusion | 1.9952, 1.9988, 1.9997 | pass |
 | radial diffusion, $d=2$ | 1.9903, 1.9937, 1.9993 | pass |
 | radial diffusion, $d=3$ | 1.9796, 1.9969, 1.9980 | pass |
 | polar diffusion | 1.9974, 1.9997, 1.9999 | pass |
 | optical depth, $p=-1$ | 2.0148, 2.0076, 2.0038 | pass |
 | optical depth, $p=1$ | 2.0374, 2.0192, 2.0097 | pass |
-| coupled transport | 2.1291, 2.2277, 2.2622 | pass |
-| coupled transport + diffusion | 3.1899, 3.1469, 2.7400 | pass; pre-asymptotic superconvergence is not a third-order claim |
-| coupled transport + radiation | 2.1363, 2.2206, 2.2732 | pass |
-| coupled all physics | 3.1581, 3.0878, 2.5825 | pass; same qualification |
+| coupled transport | 2.1396, 2.2254, 2.2565 | pass |
+| coupled transport + diffusion | 3.2074, 3.1870, 2.8243 | pass; pre-asymptotic superconvergence is not a third-order claim |
+| coupled transport + radiation | 2.1483, 2.2076, 2.2699 | pass |
+| coupled all physics | 3.1804, 3.1817, 2.6870 | pass; same qualification |
 
-The final invariant-domain-limiter rerun restored the expected radial step sequences:
+The low- and production-CFL transport step sequences are:
 
-| Case | Steps at $N=32,64,128,256$ | Maximum recorded relative mass change |
-|---|---|---:|
-| radial transport, $d=2$ | 3, 5, 9, 16 | $6.57\times10^{-16}$ |
-| radial transport, $d=3$ | 3, 5, 9, 16 | $8.63\times10^{-16}$ |
-| polar transport | 4, 7, 13, 26 | $1.14\times10^{-15}$ |
+| Case | CFL | Steps at $N=32,64,128,256$ | Maximum recorded relative mass change |
+|---|---:|---|---:|
+| radial transport, $d=2$ | 0.05 | 21, 41, 81, 160 | $1.16\times10^{-12}$ |
+| radial transport, $d=2$ | 0.5 | 3, 5, 9, 16 | $9.77\times10^{-14}$ |
+| radial transport, $d=3$ | 0.05 | 22, 42, 81, 160 | $1.82\times10^{-12}$ |
+| radial transport, $d=3$ | 0.5 | 3, 5, 9, 16 | $4.93\times10^{-16}$ |
+| polar transport | 0.05 | 33, 65, 128, 254 | $1.08\times10^{-14}$ |
+| polar transport | 0.5 | 4, 7, 13, 26 | $1.14\times10^{-15}$ |
+
+The larger low-CFL mass roundoff in the two radial tests accumulates over roughly ten times as many
+steps and remains below $2\times10^{-12}$.
+
+### Comparison with the previous `mod/rpi_fluid` results
+
+All 73 records retained by the previous archive have a matching current record, and every matched
+case uses the same accepted step count. Fractional FARGO transport, polar transport, every isolated
+diffusion operator, optical depth, and the source update reproduce their earlier primary errors to
+the displayed precision. Radial-transport density errors differ only in the pre-asymptotic coarse
+meshes: the largest change is approximately 7.5 percent, while the $N=256$ density errors agree to
+better than $3\times10^{-7}$ relatively and retain the same asymptotic orders.
+
+Some coarse-grid radial-velocity norms change more strongly, by as much as approximately 50 percent
+in one `vely` norm, but the $N=256$ values are unchanged to the displayed precision. This is retained
+as a pre-asymptotic limiter sensitivity rather than interpreted as a converged-regime regression.
+
+The ring tests are not directly comparable through absolute density error because the previous
+models reconstructed a midplane volume density,
+
+$$
+\rho_g=\frac{\Sigma_g}{\sqrt{2\pi}h_gR},
+$$
+
+whereas the current two-dimensional models correctly evolve $\Sigma_g$. This changes both the
+normalization and radial profile, making the current absolute ring $L_1$ errors approximately
+1.9--2.2 times larger. After dividing each finest-grid $L_1$ error by the volume-weighted mean of
+its own analytical density, the comparison is:
+
+| Ring case | Previous relative $L_1$ | Current relative $L_1$ | Change |
+|---|---:|---:|---:|
+| transport | $1.3340\times10^{-5}$ | $1.2406\times10^{-5}$ | $-7.0\%$ |
+| transport + diffusion | $1.2670\times10^{-6}$ | $1.1566\times10^{-6}$ | $-8.7\%$ |
+| transport + radiation | $1.3375\times10^{-5}$ | $1.2103\times10^{-5}$ | $-9.5\%$ |
+| all physics | $1.3781\times10^{-6}$ | $1.1999\times10^{-6}$ | $-12.9\%$ |
+
+The changed ring normalization therefore does not indicate a regression; the normalized errors and
+the observed orders are slightly improved. The current 85-record result set should replace the old
+archive as the regression baseline.
 
 The integer FARGO case remains near machine roundoff. Its negative reported orders are ratios of
 roundoff noise, not a failed transport test. The $p=0$ optical-depth case can likewise be integrated
