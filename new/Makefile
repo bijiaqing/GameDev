@@ -93,20 +93,49 @@ _OBJ_FLUID =      \
     source_update.o \
     init_vel_calc.o
 
+_OBJ_SWARM =       \
+    col_event_run.o  \
+    col_rate_calc.o  \
+    col_snap_save.o  \
+    col_tree_init.o  \
+    diffusion_pos.o  \
+    dt_rates_calc.o  \
+    dustdens_calc.o  \
+    dustdens_depo.o  \
+    dustdens_init.o  \
+    gas_lerp_calc.o  \
+    optdepth_calc.o  \
+    optdepth_csum.o  \
+    optdepth_depo.o  \
+    optdepth_init.o  \
+    optdepth_mean.o  \
+    particle_init.o  \
+    rngstate_init.o  \
+    ssa_substep_1.o  \
+    ssa_substep_2.o  \
+    ssa_transport.o  \
+    swarm_main.o
+
 ifdef MODEL
 ifeq ($(DUST_REPR),fluid)
 NVCC += -DDUST_FLUID
 SRC_BRANCH_DIR = $(SRC_FLUID_DIR)
 INC_BRANCH_DIR = $(INC_FLUID_DIR)
 _OBJ = $(_OBJ_SHARE) $(_OBJ_FLUID)
+SRC_SEARCH_DIRS = $(MODEL_DIR):$(SRC_BRANCH_DIR):$(SRC_SHARE_DIR)
+INC_SEARCH_FLAGS = -I $(MODEL_DIR) -I $(INC_BRANCH_DIR) -I $(INC_SHARE_DIR)
 else ifeq ($(DUST_REPR),swarm)
-$(error DUST_REPR=swarm is reserved, but the swarm sources have not been migrated yet)
+SRC_BRANCH_DIR = $(SRC_SWARM_DIR)
+INC_BRANCH_DIR = $(INC_SWARM_DIR)
+_OBJ = $(_OBJ_SWARM)
+SRC_SEARCH_DIRS = $(MODEL_DIR):$(SRC_BRANCH_DIR)
+INC_SEARCH_FLAGS = -I $(MODEL_DIR) -I $(INC_BRANCH_DIR)
 endif
 
 _OBJ += $(_OBJ_MOD)
 OBJ = $(foreach file,$(strip $(_OBJ)),$(OBJ_DIR)/$(strip $(file)))
 
-vpath %.cu $(MODEL_DIR):$(SRC_BRANCH_DIR):$(SRC_SHARE_DIR)
+vpath %.cu $(SRC_SEARCH_DIRS)
 
 $(info Using model setup: $(MODEL) from $(MODEL_DIR))
 $(info Using dust representation: $(DUST_REPR))
@@ -125,9 +154,7 @@ $(OBJ_DIR)/%.o: %.cu $(MODEL_DIR)/flags.mk
 	@mkdir -p $(dir $@)
 	@printf "%-12s %40s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
 	@$(NVCC) --device-c -o $@ $< \
-		-I $(MODEL_DIR) \
-		-I $(INC_BRANCH_DIR) \
-		-I $(INC_SHARE_DIR) \
+		$(INC_SEARCH_FLAGS) \
 		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \
 		-MMD -MP -MF $(patsubst %.o,%.d,$@)
 
