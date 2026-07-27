@@ -1,7 +1,7 @@
 # CUDA verification models
 
 These model directories implement the analytical tests summarized in
-`doc/fluid_verification.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
+`doc/verification_fluid.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
 or production `mod`. Model-local `fluid_runtime.cu` files include the shared driver in this
 directory. The Makefile still selects production kernels from `src/` unless a test explicitly
 supplies a model-local replacement.
@@ -102,8 +102,8 @@ python3 tst/fluid/verify_optdepth/run.py --power 1  --res 32 64 128 256
 - X transport should be at least second order and conserve periodic mass to roundoff.
 - Y and Z transport use SSPRK(3,3), whose native CFL=0.5 conservative-field convergence passes on
   the finer intervals. Judge formal order from the complete sequence rather than the under-resolved
-  $N=32$ interval. Also inspect step counts: the current mass-only positivity limiter can create
-  large $m/\rho$ in nearly empty radial cells and trigger excessive CFL substeps.
+  $N=32$ interval. Also inspect step counts to confirm that the conservative invariant-domain
+  limiter prevents nearly empty cells from collapsing the global CFL timestep.
 - The source test should agree with the analytical result near roundoff over all stiffness ratios.
 - Ring cases should approach second order in density and stored momenta. Mass should remain at
   roundoff for transport-only/radiation-only rings; diffusion conservation may accumulate ordinary

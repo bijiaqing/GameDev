@@ -124,6 +124,20 @@ Density and all three momenta are transported conservatively. Each directional o
 3. a first-order cell-centred HLL flux as a robust invariant-domain base
 4. one conservative face coefficient that limits the high-minus-low correction
 
+The uniform azimuthal reconstruction uses the bounded four-cell Colella–Woodward face value. On
+the logarithmic radial mesh and spherical polar mesh, face weights are precomputed from exact cubic
+moment constraints in the finite-volume coordinates
+
+$$
+s_y=\frac{y^d}{d},
+\qquad
+s_z=-\cos z.
+$$
+
+Boundary-adjacent internal faces use a two-cell linear interpolation where a complete four-cell
+stencil is unavailable. The pressureless HLL flux retains its proper left-going, right-going, and
+two-wave branches.
+
 The limiter enforces nonnegative density and local bounds on every momentum-to-density ratio. The
 same face flux enters neighboring cells with opposite signs, so it does not repair vacuum states by
 post-update clipping or by discarding momentum.
@@ -173,8 +187,14 @@ s=\operatorname{clip}(t/T_\beta,0,1).
 $$
 
 Optical depth is reconstructed at the source midpoint. Cumulative values live at radial outer
-faces and are interpolated to logarithmic cell centers before the force update. In 2D, the
-well-mixed closure converts surface density to midplane extinction density using
+faces and are interpolated to logarithmic cell centers with
+
+$$
+\tau_c=\tau_i+\frac{\tau_o-\tau_i}{\sqrt{\Delta y}+1},
+$$
+
+which is exact when optical depth is linear in physical radius within the logarithmic cell. In 2D,
+the well-mixed closure converts surface density to midplane extinction density using
 $\sqrt{2\pi}H_g$, without a Stokes-dependent scale height.
 
 ## Density diffusion
@@ -244,6 +264,43 @@ $$
 `DT_MAX` supplies an independent ceiling. Diffusion is not placed in this explicit CFL bound
 because it is solved implicitly with positivity subcycling.
 
+## Directional CUDA implementations
+
+The same PPM/HLL and Crank–Nicolson discretizations have two compile-time CUDA implementations:
+
+- `FLUID_SWEEP := thread` selects `advection_[xyz]th` and `diffusion_[xyz]th`, assigning one CUDA
+  thread to each complete directional line
+- `FLUID_SWEEP := block` selects `advection_[xyz]bl` and `diffusion_[xyz]bl`, assigning one CUDA
+  block to each line and distributing cellwise work among its threads
+
+The thread implementation is the reference transcription and stores its line work in thread-local
+arrays. In particular, `advection_xth` contains 21 arrays of length `N_X`, a source-level footprint
+of approximately 172 KiB per thread at `N_X = 1024` if all arrays remain distinct. Compiler lifetime
+reuse can reduce that footprint, so `ptxas` resource reports and profiler local-memory traffic are
+the authoritative measures.
+
+The block implementation replaces those advection arrays with 11 persistent full-grid workspace
+fields and places four azimuthal or six radial/polar diffusion work arrays in dynamic shared
+memory. Cellwise reconstruction and flux work are cooperative, while the face-ordered
+invariant-domain correction and Thomas or Sherman–Morrison recurrence remain serial within each
+line to preserve the verified numerical ordering. This is an implementation and memory-layout
+choice, not a different numerical method.
+
+Performance is grid dependent. Development comparisons found the block method faster for a
+`1024^2` transport model but slower for a `128^3` diffusion model. The intended production grid
+should therefore be benchmarked before selecting a default; neither implementation is universally
+preferred. The matched comparison procedure and the status of its archived evidence are recorded
+in `verification_fluid.md`.
+
+## Output and restart state
+
+The driver clips accepted steps to land exactly on each `DT_OUT` boundary. It writes density and
+physical linear velocity, leaving the internal angular-momentum primitives unchanged on the GPU.
+On restart, the saved linear velocities are converted back to $(\ell_\phi,v_r,\ell_\theta)$,
+conserved momenta are rebuilt from the loaded density, and optical depth is reconstructed when
+radiation is active. Nonfinite density, momentum, primitive, and optical-depth values are checked
+at the documented synchronization points.
+
 ## Open numerical work
 
 - The diffusion-momentum closure is provisional. A complete density-diffusion momentum equation
@@ -251,13 +308,13 @@ because it is solved implicitly with positivity subcycling.
   clumping claims rely on momentum transport by diffusion. The Huang–Bai formulation is relevant
   structure but cannot be copied directly because it diffuses concentration rather than the
   selected density.
-- Directional PPM and CN kernels provide two compile-time implementations. `FLUID_SWEEP := thread`
-  uses the reference one-thread-per-line kernels with line-sized local arrays; `FLUID_SWEEP := block`
-  uses one block per line, an explicit 11-field advection workspace, and shared-memory diffusion
-  work arrays. The block method was faster at `1024^2` but slower at `128^3`, so model flags must
-  select the method appropriate to the grid rather than assuming one universal default.
 - The 3D initializer balances diffusion only to discretization error and can produce a small
   initial polar transient.
+- The block diffusion kernels still execute each Thomas or Sherman–Morrison recurrence serially
+  within its line, and the block advection kernels retain a serial face-ordered correction pass.
+  Further parallelization should use a conservation- and positivity-preserving face-budget limiter
+  and a batched Thomas/PCR-style tridiagonal solve, with the full analytical suite and profiler
+  evidence required after each change; an FFT is not required.
 - Pressureless dust cannot represent multistreaming after caustic formation. A swarm or another
   kinetic representation is required in that regime.
 - `--use_fast_math` trades correctly rounded division/square root and subnormal handling for speed.

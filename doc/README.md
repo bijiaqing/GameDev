@@ -1,20 +1,22 @@
 # GameDev documentation
 
 This directory is the canonical documentation for the current GameDev dust solvers as of
-2026-07-26. It replaces the historical audits, correction diaries, merge proposals, and duplicated
+2026-07-27. It replaces the historical audits, correction diaries, merge proposals, and duplicated
 method notes that previously accumulated under `.github/`.
 
 ## Canonical documents
 
-- [`fluid_numerics.md`](fluid_numerics.md) describes the Eulerian dust-fluid equations,
+- [`numerics_fluid.md`](numerics_fluid.md) describes the Eulerian dust-fluid equations,
   discretization, operator ordering, boundaries, and current limitations
-- [`fluid_verification.md`](fluid_verification.md) defines the analytical CUDA verification suite,
+- [`verification_fluid.md`](verification_fluid.md) defines the analytical CUDA verification suite,
   records the available native results, and separates verified claims from unfinished tests
-- [`swarm_numerics.md`](swarm_numerics.md) describes the Lagrangian representative-particle
+- [`numerics_swarm.md`](numerics_swarm.md) describes the Lagrangian representative-particle
   solver, including transport, stochastic diffusion, radiation, collisions, and outstanding
   validation
-- [`architecture.md`](architecture.md) records the fluid–swarm consistency contract, the current
+- [`ref_file_architecture.md`](ref_file_architecture.md) records the fluid–swarm consistency contract, the current
   migration state, what can be shared, and what must remain representation-specific
+- [`ref_naming_variables.md`](ref_naming_variables.md) records the canonical naming rules and
+  intentional differences between the two representations
 
 ## Current repository state
 
@@ -22,7 +24,7 @@ The merged project is active at the repository root:
 
 - `inc/fluid/` and `src/fluid/` contain the Eulerian fluid implementation
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
-- `inc/share/` and `src/share/` contain the currently shared infrastructure
+- `inc/share/` and `src/share/` are reserved for future representation-independent infrastructure
 - `tst/fluid/` contains the fluid CUDA verification suite and its recorded outputs
 - `legacy/swarm_before_audit/` and `legacy/swarm_after_audit/` are frozen recovery snapshots
 
@@ -43,6 +45,19 @@ Resolved bug narratives are intentionally omitted unless they explain a current 
 regression test. New numerical changes should update the appropriate canonical document and add or
 update a test; they should not create another standalone audit diary.
 
+## Review and evidence baseline
+
+The 2026-07-26 merged-tree review independently re-derived the production fluid and swarm formulas
+and found no additional production correctness defect in its inspected scope. Its resolved
+documentation, flag-combination, and Python-reference findings have been incorporated into the
+canonical documents above. The review inspected the vendored cuKD library only through GameDev's
+call sites and could not perform a local native CUDA build.
+
+The authoritative native fluid evidence remains the 85 analytical records and 22 environment
+records under `tst/fluid/out/`. The automated thread/block comparison branch exists, but its
+benchmark JSON and profiler artifacts are not currently archived in the repository. The swarm
+branch still has source-review evidence only because `tst/swarm/` has no runnable analytical suite.
+
 The source uses spherical coordinates
 
 $$
@@ -56,4 +71,5 @@ R=y\sin z,\qquad Z=y\cos z.
 $$
 
 Both representations store internal angular variables but write physical linear velocity to
-science files. The detailed state contract is in [`architecture.md`](architecture.md).
+science files. The detailed state contract is in
+[`ref_file_architecture.md`](ref_file_architecture.md).

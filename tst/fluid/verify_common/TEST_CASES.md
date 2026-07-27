@@ -89,7 +89,7 @@ $$
 \rho_d(y,0)=B(y),\qquad v_y(y,0)=a y,\qquad a=0.2.
 $$
 
-Constant transverse specific momenta $ell_x=0.7$ and $ell_z=0.11$ are included to verify that
+Constant transverse specific momenta $\ell_x=0.7$ and $\ell_z=0.11$ are included to verify that
 every conservative component follows the same mass transport. Before characteristic crossing,
 
 $$

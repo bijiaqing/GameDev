@@ -1,15 +1,13 @@
-# Fluid variable-naming consistency review
+# Variable-naming reference
 
 ## Scope
 
-This review covers the active production fluid code in:
+This reference covers the active production fluid code in:
 
 - `inc/fluid/*.cuh`
 - `src/fluid/*.cu`
-- `src/share/optdepth_calc.cu`
-- `src/share/optdepth_csum.cu`
 
-It also compares names with the active swarm code in:
+It also defines corresponding names in the active swarm code in:
 
 - `inc/swarm/*.cuh`
 - `src/swarm/*.cu`
@@ -18,11 +16,12 @@ Generated objects, production-model overrides, verification models, mock scripts
 
 ## Status
 
-The production-fluid naming audit is complete as of 2026-07-26
+The production naming audit is complete as of 2026-07-27
 
 - all accepted fluid-only naming changes are applied
 - all accepted cross-model names are aligned where the quantities have the same physical or numerical meaning
 - representation-specific names remain different where the algorithms or stored states differ
+- fluid and swarm optical-depth translation units are owned by their respective source branches
 - no unresolved naming inconsistency remains in the audited production paths
 - moving equivalent helpers into shared headers remains deferred because it changes code ownership rather than identifier spelling
 
@@ -33,7 +32,8 @@ The changes preserve the numerical formulas, field layout, kernel launch geometr
 ### Physical fields and local quantities
 
 - persistent dust-density arrays use `dustdens` and `dev_dustdens`
-- local dust and gas volume densities use `rhod` and `rhog`
+- local dust and gas density variables use `rhod` and `rhog`; in a vertically integrated 2D fluid
+  kernel, `rhod` stores the evolved surface density even though the local variable spelling is retained
 - dust and gas surface densities use `sigma_d` and `sigma_g`
 - the initial dust surface-density profile uses `initdens` and `dev_initdens`
 - conserved fluid momentum uses `dev_dustmomx/y/z` and local `mx/my/mz`
@@ -207,9 +207,10 @@ Do not unify the following names because they encode real representation or algo
 
 The directional kernel and file names `advection_[xyz]{th,bl}` and `diffusion_[xyz]{th,bl}` retain their isolated direction letter and two-letter sweep suffix to satisfy the exact 13-character kernel-name convention
 
-## Names already suitable for future sharing
+## Names suitable for common infrastructure
 
-The following common names should be retained when the swarm and fluid branches are physically merged:
+The following common names should be retained when representation-independent infrastructure is
+extracted from the already merged project:
 
 - grid helpers: `_get_dx/dy/dz`, `_get_yface`, `_get_zface`, `_get_ycent`, `_get_zcent`, `_get_mesh_dim`, `_get_vol_y`, `_get_vol_z`
 - physical helpers: `_get_omegaK`, `_get_hg`, `_get_eta`, `_get_gas_strat`, `_get_sigma_g`, `_get_nu`, `_get_alpha`, `_get_visc_vel`
@@ -225,8 +226,8 @@ These are structural merge tasks rather than naming defects:
 1. move the swarm host-only `_get_ycent` and `_get_zcent` definitions into the eventual shared grid header
 2. separate representation-specific code from the common portions of `param_grid.cuh` and `param_phys.cuh`
 3. place the equivalent `_get_force_term` implementation in one shared physics header
-4. share `optdepth_csum`, whose interface and calculation already match
-5. retain branch-specific `optdepth_calc` kernels because their inputs and preprocessing differ
+4. retain branch-specific `optdepth_calc` kernels because their inputs and preprocessing differ
+5. retain branch-local `optdepth_csum` translation units until a representation-neutral kernel interface exists
 
 No identifier rename is required before undertaking these ownership changes
 

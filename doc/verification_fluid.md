@@ -42,6 +42,12 @@ Spatial and temporal conclusions must not be mixed. A smooth spatial refinement 
 measures the combined space–time method; a separate fixed-grid CFL refinement is needed for a pure
 temporal-order claim.
 
+The CUDA initializer uses eight-point Gauss–Legendre cell averages, while the Python validator
+independently evaluates sixteen-point averages. Radial diffusion references come from an
+independent RK4 integration of the Sturm–Liouville problem rather than the production CN matrix.
+Distinct transverse specific momenta $(0.7,-0.15,0.11)$ make component swaps visible instead of
+allowing every momentum field to share one indistinguishable value.
+
 ## Prepared analytical cases
 
 | Model | Production calculation exercised | Analytical solution |
@@ -239,6 +245,11 @@ relative L2 differences from `5.261644e-16` to `3.552797e-13`, and finite-volume
 making the block method approximately 3.41 times slower. These results justify retaining both
 implementations and benchmarking the intended grid rather than selecting one globally.
 
+The build logs, profiler reports, and `sweep_comparison_*.json` summaries for those development
+measurements are not present in the current repository. The numbers are therefore historical
+evidence rather than the canonical benchmark baseline. Rerun the automated sweep branch on the
+target GPU before making a production performance claim.
+
 The run completed all 85 builds and simulations without a compilation failure, runtime failure,
 Python traceback, or non-finite JSON metric. Unlike the earlier archive, the current output layout
 includes the CFL value in radial and polar transport filenames, so the 12 low-CFL records are no
@@ -351,13 +362,20 @@ terminal output together when archiving a run.
 - Implement the full coupled 3D manufactured-solution harness specified in
   `tst/fluid/verify_mms_3d/README.md`, including independent forcing and exact boundary data
 - Add production-settling equilibrium tests that quantify the initial polar transient
-- Add explicit boundary, restart-tolerance, and flag-matrix regressions
+- Add radial and polar cases whose nonzero support actually crosses an outflow boundary, plus a
+  `HALFDISK` midplane-reflection case; current compact profiles remain away from those boundaries
+- Add restart-tolerance and flag-matrix regressions
+- Add a CUDA diffusion case that forces `POS_LIMIT` to select more than one CN positivity substep;
+  this path currently has only the supplementary CPU mock
+- Add finite, spatially varying radiation attenuation; current ring radiation cases deliberately
+  use zero opacity and therefore isolate force composition rather than $e^{-\tau}$ coupling
+- Archive matched thread/block comparison JSON, build logs, `ptxas` resource reports, and profiler
+  local-memory traffic for the production grids used in performance claims
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
 - Define automated pass thresholds only after identifying the asymptotic range on the target GPU
 
 The directional 3D radial and polar tests do not establish complete 3D transport–diffusion–
-radiation coupling. The radiation ring tests deliberately use zero opacity to isolate the force
-composition; finite, spatially varying attenuation still belongs in the 3D manufactured suite.
+radiation coupling; that claim requires the manufactured-solution suite above.
 
 ## References
 

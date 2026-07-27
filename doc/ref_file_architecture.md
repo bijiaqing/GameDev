@@ -2,7 +2,7 @@
 
 ## Objective and present state
 
-GameDev will contain two dust representations in one project:
+GameDev contains two dust representations in one project:
 
 - `fluid`: an Eulerian pressureless dust fluid
 - `swarm`: Lagrangian representative particles
@@ -16,7 +16,8 @@ The merged layout is active at the repository root:
 
 - `inc/fluid/` and `src/fluid/` contain the Eulerian solver
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian solver
-- `src/share/` contains the shared fluid optical-depth kernels
+- `inc/share/` is reserved for representation-independent interfaces and currently contains no active interface
+- `src/share/` is reserved for representation-independent kernels and currently contains no production source
 - `mod/` contains production models and `tst/` contains representation-specific tests
 - the root `Makefile` builds either representation according to the selected model's `DUST_REPR`
 
@@ -47,8 +48,11 @@ The build selects:
 
 - one representation include directory
 - one representation source/object list
-- shared sources
 - one driver
+
+Fluid models additionally select `FLUID_SWEEP := thread` or `FLUID_SWEEP := block`. The choice
+changes only the CUDA line-kernel implementation and object directory; both variants use the same
+fluid state, driver composition, and numerical equations.
 
 `src/fluid/fluid_runtime.cu` and `src/swarm/swarm_runtime.cu` may both define the C++ function
 `main`. They are separate translation units and only the selected one is linked into a target.
@@ -199,11 +203,15 @@ The following components are safe candidates once their model-parameter inputs a
 The monodisperse Stokes equation can share a common core. The swarm must retain adapters for grain
 size and imported gas.
 
-The local optical-depth increment should remain representation-specific unless both branches first
-construct the same intermediate extinction-density field. `src/share/optdepth_calc.cu` is
-currently fluid-specific because it includes `fluid_kern.cuh` and consumes fluid density directly.
-`optdepth_csum.cu` contains the genuinely common radial prefix-sum calculation but its declaration
-also needs to move to a shared interface.
+The local optical-depth increment remains representation-specific. The fluid kernel consumes the
+Eulerian density field directly, whereas the swarm kernel normalizes extinction weight previously
+deposited by representative particles. Both implementations therefore reside in their respective
+`src/fluid/` and `src/swarm/` branches.
+
+The two `optdepth_csum.cu` kernels currently perform the same radial prefix sum, but they remain
+branch-local because their declarations belong to the representation kernel interfaces. They
+should only be consolidated after a representation-neutral kernel interface exists; duplicating
+this small kernel is clearer than labeling a branch-dependent translation unit as shared.
 
 ## Dependency rules
 
@@ -223,9 +231,10 @@ headers. Model constants should enter through an explicit selected configuration
 than by putting both branches' headers on the same include path.
 
 The current swarm and fluid `param_grid.cuh` and `param_phys.cuh` files reuse the same include-guard
-names. They cannot safely appear in one translation unit: the first include would silently suppress
-the second. Migration should replace their common layer and give any remaining adapter a
-representation-qualified guard.
+names. This is harmless in the present one-representation-per-build design because the Makefile
+places only the selected branch on the include path. A future shared translation unit must first
+extract their common layer or give the remaining adapters representation-qualified guards; it must
+not include both current headers directly.
 
 Both builds now explicitly request C++17. Keep one common NVCC base configuration after migration.
 The launch-count formulas should eventually use exact ceiling division,
@@ -277,17 +286,17 @@ is not complete until the swarm has:
 - constant, additive, product, and physical collision tests
 - matched fluid–swarm tests with sampling uncertainty
 
-## Remaining integration sequence
+## Remaining consolidation sequence
 
-1. Keep both active representation branches numerically unchanged while establishing the merged
-   build as the recovery point
-2. Add the selected shared base/configuration interface without changing either numerical method
-3. Move common grid, coordinate, gas, file, and CUDA utilities behind that interface
-4. Reproduce standalone swarm behavior with analytical tests under `tst/swarm/`
-5. Add cross-representation tests for the common physical contract
-6. Remove duplicated representation utilities only after both test families pass
-7. Remove `legacy/` only after the user confirms that the merged project is the accepted recovery
-   point
+The merged one-representation-per-build structure is complete. Remaining work should proceed in
+this order:
+
+1. add a representation-neutral base/configuration interface without changing either numerical method
+2. move common grid, coordinate, gas, file, and CUDA utilities behind that interface
+3. reproduce standalone swarm behavior with analytical tests under `tst/swarm/`
+4. add cross-representation tests for the common physical contract
+5. remove duplicated representation utilities only after both test families pass
+6. remove `legacy/` only after the user confirms that the active tree is the accepted recovery point
 
 The old spatial-hashing proposal is not part of this migration contract. The current cuKD
 implementation should first be profiled at representative scale; any alternative must demonstrate

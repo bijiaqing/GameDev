@@ -5,9 +5,10 @@
 This project combines the Eulerian dust-fluid and Lagrangian dust-swarm solvers.
 Each model selects one representation through `DUST_REPR` in its `flags.mk`.
 
-Both the fluid and swarm solvers are available. At the current development stage, the swarm branch
-keeps a private copy of every dependency, including cuKD and its optical-depth kernels; it does not
-consume code from `inc/share` or `src/share` yet.
+Both the fluid and swarm solvers are active at the repository root. Each representation owns its
+current headers, kernels, runtime, and optical-depth pipeline. `inc/share/` and `src/share/` are
+reserved for future representation-independent interfaces and currently provide no production
+implementation.
 
 Build a fluid model from the repository root with, for example:
 
@@ -15,20 +16,22 @@ Build a fluid model from the repository root with, for example:
 make MODEL=fluid_fiducial
 ```
 
-Build the migrated swarm model with:
+Build the swarm model with:
 
 ```bash
 make MODEL=swarm_fiducial
 ```
 
 All test models, test scripts, generated test results, and standalone algorithm mocks live below
-`tst/`, separately from production models in `mod/`. Run the complete migrated fluid verification
+`tst/`, separately from production models in `mod/`. Run the complete fluid verification
 suite with:
 
 ```bash
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
-For fluid models, the source search order is model override, fluid branch, then `share`. For swarm
-models, it is model override followed by the swarm branch, with no `share` fallback. All fluid
-headers remain in `inc/fluid`; the swarm headers and cuKD dependency remain in `inc/swarm`.
+For both representations, the source search order is model override followed by the selected
+representation branch. Fluid compilation additionally places the reserved `inc/share/` after
+`inc/fluid/` on the include path; swarm compilation uses `inc/swarm/` only. See
+[`doc/README.md`](doc/README.md) for the canonical numerical, verification, architecture, and
+naming references.

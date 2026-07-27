@@ -7,10 +7,11 @@ It supports analytic or imported gas, semi-analytic particle transport, stochast
 diffusion, radiation pressure, particle-to-grid diagnostics, and representative-particle
 coagulation/fragmentation.
 
-The serious source-level defects identified by the 2026-07-22 and 2026-07-23 audits, plus the
-follow-up A1–B4 and C3 findings, have been corrected in the active tree. Those corrections have
-not yet received the native CUDA analytical and convergence campaign already available for the
-fluid solver. Source inspection is therefore stronger than runtime validation for this branch.
+The active tree includes the corrected axisymmetric measure, well-mixed two-dimensional vertical
+closures, imported-gas Stokes calibration, frozen collision snapshots, and random-state restart
+semantics described below. These implementations have been checked by source inspection but have
+not yet received the native CUDA analytical and convergence campaign available for the fluid
+solver. Source inspection is therefore stronger than runtime validation for this branch.
 
 ## Coordinates and particle state
 
