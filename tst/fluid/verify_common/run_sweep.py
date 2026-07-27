@@ -18,6 +18,7 @@ def build_and_run(
     project_root: Path,
     test_root: Path,
     model: str,
+    sweep: str,
     resolution: int,
     save_max: int,
     output_time: float,
@@ -25,14 +26,17 @@ def build_and_run(
     """Clean-build one model, save its logs, execute it, and return wall seconds"""
 
     model_dir = test_root/model
-    out_dir = test_root/"out"/model
+    out_dir = test_root/"out"/sweep/model
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Model constants are compile-time values, so clean before applying a new benchmark configuration
-    subprocess.run(["make", "-C", str(project_root), f"MODEL={model}", "clean"], check=True)
+    subprocess.run([
+        "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}", "clean"
+    ], check=True)
     build = subprocess.run(
         [
             "make", "-C", str(project_root), f"MODEL={model}",
+            f"FLUID_SWEEP={sweep}",
             f"RES={resolution}", f"SAVE={save_max}", f"OUT_TIME={output_time:.17g}",
         ],
         check=True,
@@ -77,10 +81,10 @@ def run_pair(
     print(f"\n=== sweep comparison {dimension} at N={resolution} ===", flush=True)
 
     thread_time = build_and_run(
-        project_root, test_root, thread_model, resolution, save_max, output_time
+        project_root, test_root, thread_model, "thread", resolution, save_max, output_time
     )
     block_time = build_and_run(
-        project_root, test_root, block_model, resolution, save_max, output_time
+        project_root, test_root, block_model, "block", resolution, save_max, output_time
     )
 
     if dimension == "2d":
@@ -92,8 +96,8 @@ def run_pair(
         z_max = 1.7207963267948966
 
     result = compare_pair(
-        test_root/"out"/thread_model,
-        test_root/"out"/block_model,
+        test_root/"out"/"thread"/thread_model,
+        test_root/"out"/"block"/block_model,
         save_max,
         nx, ny, nz, z_min, z_max,
     )

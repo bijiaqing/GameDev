@@ -37,7 +37,7 @@ The root build selects exactly one representation through `DUST_REPR` in the cho
 When statements disagree, use this order of authority:
 
 1. current source, model constants, and model flags
-2. recorded native test metrics under `tst/fluid/out/`
+2. recorded native test metrics under the sweep-specific directories in `tst/fluid/out/`
 3. these documents
 4. Git history and the historical swarm patch
 
@@ -54,7 +54,8 @@ canonical documents above. The review inspected the vendored cuKD library only t
 call sites and could not perform a local native CUDA build.
 
 The authoritative native fluid evidence remains the 85 analytical records and 22 environment
-records under `tst/fluid/out/`. The automated thread/block comparison branch exists, but its
+records under `tst/fluid/out/thread/`. Block analytical results are written independently under
+`tst/fluid/out/block/`. The automated thread/block comparison branch exists, but its
 benchmark JSON and profiler artifacts are not currently archived in the repository. The swarm
 branch still has source-review evidence only because `tst/swarm/` has no runnable analytical suite.
 

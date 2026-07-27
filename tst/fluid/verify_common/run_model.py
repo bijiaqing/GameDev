@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -56,6 +57,15 @@ def output_tag(model: str, cfl: float, power: float, shift: float) -> str:
     return ""
 
 
+def selected_sweep() -> str:
+    """Return the fluid line-kernel implementation selected for this run"""
+
+    sweep = os.environ.get("FLUID_SWEEP", "thread")
+    if sweep not in {"thread", "block"}:
+        raise SystemExit("FLUID_SWEEP must be thread or block")
+    return sweep
+
+
 def run(model: str) -> None:
     """Build and run one named verification model for all requested resolutions"""
 
@@ -73,14 +83,15 @@ def run(model: str) -> None:
     project_root = Path(__file__).resolve().parents[3]
     test_root = Path(__file__).resolve().parents[1]
     model_dir = test_root / model
-    out_dir = test_root / "out" / model
+    sweep = selected_sweep()
+    out_dir = test_root / "out" / sweep / model
     if not model_dir.is_dir():
         raise SystemExit(f"Unknown model directory: {model_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Parameter variants receive separate data directories, for example
-    # out/verify_x_transport_2d/shift3.25, while their metrics JSON files remain
-    # in the model's top-level output directory with the same tag in the name.
+    # out/thread/verify_x_transport_2d/shift3.25, while their metrics JSON files
+    # remain in the model's top-level output directory with the same tag in the name.
     variant = output_tag(model, args.cfl, args.power, args.shift)
     data_dir = out_dir / variant if variant else out_dir
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -102,9 +113,12 @@ def run(model: str) -> None:
         # Grid sizes and verification parameters are compile-time constants in
         # the CUDA tests.  Cleaning before every resolution prevents an object
         # compiled with an earlier N or parameter value from being reused.
-        subprocess.run(["make", "-C", str(project_root), f"MODEL={model}", "clean"], check=True)
         subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", f"RES={resolution}",
+            "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}", "clean"
+        ], check=True)
+        subprocess.run([
+            "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}",
+            f"RES={resolution}",
             f"CFL={args.cfl:.17g}", f"POWER={args.power:.17g}", f"SHIFT={args.shift:.17g}",
             f"OUT_TAG={variant}",
         ], check=True)

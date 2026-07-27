@@ -96,9 +96,11 @@ endif
 OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)
 
 ifneq ($(filter $(TST_ROOT)/%,$(MODEL_DIR)),)
-OUT_DIR = $(TST_ROOT)/$(DUST_REPR)/out/$(MODEL)
-ifneq ($(strip $(OUT_TAG)),)
-OUT_DIR := $(OUT_DIR)/$(OUT_TAG)
+OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
+ifeq ($(DUST_REPR),fluid)
+OUT_DIR = $(TST_ROOT)/$(DUST_REPR)/out/$(FLUID_SWEEP)/$(MODEL)$(OUT_TAG_DIR)
+else
+OUT_DIR = $(TST_ROOT)/$(DUST_REPR)/out/$(MODEL)$(OUT_TAG_DIR)
 endif
 else
 OUT_DIR = $(OUT_ROOT)/$(MODEL)

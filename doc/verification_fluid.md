@@ -9,7 +9,7 @@ production interface cannot express.
 
 This document records the current verification claim. Detailed formulas implemented by the
 validator remain in `tst/fluid/verify_common/TEST_CASES.md`, and machine-readable results remain
-under `tst/fluid/out/`.
+under sweep-specific directories in `tst/fluid/out/`.
 
 ## Measurement protocol
 
@@ -213,7 +213,7 @@ density.
 
 ### Complete merged-tree run of 2026-07-26
 
-The current JSON files under `tst/fluid/out/` contain all 85 records from
+The current JSON files under `tst/fluid/out/thread/` contain all 85 records from
 
 ```bash
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
@@ -221,7 +221,9 @@ python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 
 The suite uses the reference thread sweep by default. Prefix the same command with
 `FLUID_SWEEP=block` to compile and validate the block implementation through the identical
-analytical cases; the Makefile stores the two builds in separate object directories.
+analytical cases. The Makefile stores the builds in separate object directories, and the runner
+stores their fields, metrics, and environment records under `out/thread/` and `out/block/` so the
+two evidence sets coexist.
 
 For a direct matched-output and timing comparison, use the dedicated fixed-work branch:
 
@@ -355,7 +357,8 @@ models sweep CFL values, FARGO shifts, or optical-depth powers. Each resolution 
 rebuilt so model-local compile-time constants cannot reuse stale objects.
 
 Only NumPy is required by the Python validator. Keep the JSON metrics, `environment.txt`, and full
-terminal output together when archiving a run.
+terminal output together when archiving a run. Analytical results are namespaced as
+`tst/fluid/out/SWEEP/MODEL/`, where `SWEEP` is `thread` or `block`.
 
 ## Verification still required
 

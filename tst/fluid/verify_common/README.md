@@ -52,7 +52,8 @@ last step is shortened to land exactly at one revolution.
 
 Each wrapper performs `make clean`, builds with the requested `RES`, runs the executable, compares
 the binary output with independently evaluated finite-volume averages, writes tagged
-`tst/fluid/out/MODEL/metrics_N*.json` records, and prints an error/order table. Raw data from
+`tst/fluid/out/SWEEP/MODEL/metrics_N*.json` records, and prints an error/order table. `SWEEP` is
+`thread` by default and `block` when selected through `FLUID_SWEEP`. Raw data from
 CFL, FARGO-shift, and optical-depth-power sweeps are separated into correspondingly tagged
 subdirectories. Cleaning between resolutions is required because changing a Make variable alone
 does not invalidate existing object files.
@@ -66,7 +67,8 @@ python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 Prefix any suite command with `FLUID_SWEEP=block` to validate the block sweep; omitting it selects
-the reference thread sweep.
+the reference thread sweep. Their artifacts are stored independently under `out/block/` and
+`out/thread/`, so a block run cannot overwrite the thread baseline.
 
 The separate implementation-comparison branch builds both methods and checks their outputs directly:
 

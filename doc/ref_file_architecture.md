@@ -51,8 +51,9 @@ The build selects:
 - one driver
 
 Fluid models additionally select `FLUID_SWEEP := thread` or `FLUID_SWEEP := block`. The choice
-changes only the CUDA line-kernel implementation and object directory; both variants use the same
-fluid state, driver composition, and numerical equations.
+changes the CUDA line-kernel implementation and object directory; fluid tests also use it to
+separate their output artifacts. Both variants use the same fluid state, driver composition, and
+numerical equations.
 
 `src/fluid/fluid_runtime.cu` and `src/swarm/swarm_runtime.cu` may both define the C++ function
 `main`. They are separate translation units and only the selected one is linked into a target.
