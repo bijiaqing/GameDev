@@ -66,7 +66,7 @@ The changes preserve the numerical formulas, field layout, kernel launch geometr
 - directional grid indices use `ix`, `iy`, and `iz`
 - other indices use the `idx_*` prefix, such as `idx_face`, `idx_stencil`, `idx_aug`, and `idx_sub`
 - counts use a descriptive `_count` suffix, such as `cell_count`, `bin_count`, `sub_count`, and `shift_count`
-- pointer wrappers place the object before `_ptr`, such as `dt_rates_ptr`, `cfl_rates_ptr`, and `lx_ptr`
+- pointer wrappers place the object before `_ptr`, such as `dt_rate_ptr`, `cfl_rate_ptr`, and `lx_ptr`
 
 The flattened fluid-grid order remains:
 
@@ -140,7 +140,8 @@ ix + iy*N_X + iz*N_X*N_Y
 | `qm1`, `q0`, `qp1`, `qp2` | `q_m1`, `q_0`, `q_p1`, `q_p2` |
 | `qa`, `qb` | `q_L`, `q_R` |
 | `_get_s_y`, `_get_s_z` | `_get_sy`, `_get_sz` |
-| `_get_dr_cc_i`, `_get_dr_cc_o` | `_get_dr_cent_i`, `_get_dr_cent_o` |
+| `_get_dr_cc_i`, `_get_dr_cc_o` | `_thread_dr_cent_i/o` and `_block_dr_cent_i/o` |
+| `_ppm_faces_nonuniform`, `_ppm_face_value` | `_thread_ppm_faces`, `_thread_ppm_state` |
 
 The standard PPM quantities `dq` and `q6` retain their conventional mathematical names
 
@@ -164,8 +165,8 @@ The host-vector and device-pointer forms of `initdens_lerp` use the same physica
 
 | Previous fluid spelling | Applied spelling |
 |---|---|
-| `ptr_cfl`, `ptr_lx` | `cfl_rates_ptr`, `lx_ptr` |
-| `max_rate`, `max_it`, `idx_max` | `max_cfl_rates`, `cfl_rates_max_ptr`, `idx_cfl_max` |
+| `ptr_cfl`, `ptr_lx` | `cfl_rate_ptr`, `lx_ptr` |
+| `max_rate`, `max_it`, `idx_max` | `max_cfl_rate`, `max_cfl_rate_ptr`, `idx_cfl_max` |
 | `save_binary`, `load_binary` | `save_host_binary`, `load_host_binary` |
 | template `T`, integer `count` | `DataType`, `std::size_t count` |
 | macro parameter `IDX` | `idx_file` |
@@ -181,8 +182,8 @@ The host-vector and device-pointer forms of `initdens_lerp` use the same physica
 
 Scratch arrays retain the existing memory-conscious reuse while avoiding names that claim the wrong physical dimensions
 
-- `advect_x_calc` uses `work_rhod` and `work_x/y/z` for arrays that change from unshifted state to antidiffusive flux differences
-- `advect_y_calc` and `advect_z_calc` use `face_work_rhod` and `face_work_x/y/z` for face-indexed storage that changes from reconstructed primitives to correction fluxes
+- `advection_xth` uses `work_rhod` and `work_x/y/z` for arrays that change from unshifted state to antidiffusive flux differences
+- `advection_yth` and `advection_zth` use `face_work_rhod` and `face_work_x/y/z` for face-indexed storage that changes from reconstructed primitives to correction fluxes
 - diffusion solvers keep `rhod_rhs`, `upper_work`, and `cycle_work` inside solver-only lexical scopes
 - diffusion transport uses separate `mass_flux` and `moment_flux` arrays inside non-overlapping flux scopes
 
@@ -195,16 +196,16 @@ Do not unify the following names because they encode real representation or algo
 - swarm particle index `idx` versus fluid grid index `idx_cell`
 - `particle/dev_particle` versus fluid fields `dustdens`, `dustvel*`, and `dustmom*`
 - swarm cylindrical diffusion suffixes `R/Z` versus fluid spherical diffusion suffixes `y/z`
-- swarm `dev_dt_rates` versus fluid `dev_cfl_rates`
+- swarm `dev_dt_rate` versus fluid `dev_cfl_rate`
 - swarm `particle_init` versus fluid `init_rho_calc` and `init_vel_calc`
-- swarm `diffusion_pos` versus fluid `diffus_x/y/z_calc`
+- swarm `diffusion_pos` versus fluid `diffusion_[xyz]{th,bl}`
 - swarm `total_dust_mass`, `mass_norm`, `size`, and represented grain number, which have no single-species fluid counterparts
 - fluid conserved `mx/my/mz`, which have no density-weighted particle-state equivalents
 - fluid `RHO_VAC` and `POS_LIMIT`, which belong to Eulerian recovery and implicit diffusion
 - swarm `rhog_0`, which is the analytical imported-gas calibration anchor at `R_0`
 - persistent array names such as `dev_gas_velx`, the `swarm::velocity` member, and external labels `velocity_x/y/z`
 
-The directional kernel and file names `advect_x/y/z_calc` and `diffus_x/y/z_calc` retain their isolated direction letter because they were selected to satisfy the exact 13-character kernel-name convention
+The directional kernel and file names `advection_[xyz]{th,bl}` and `diffusion_[xyz]{th,bl}` retain their isolated direction letter and two-letter sweep suffix to satisfy the exact 13-character kernel-name convention
 
 ## Names already suitable for future sharing
 

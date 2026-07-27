@@ -9,45 +9,103 @@
 
 // =========================================================================================================================
 
-__global__ void advect_x_calc (
+#ifdef FLUID_BLOCK_SWEEP
+
+enum BlockAdvField
+{
+    BLOCK_RHOD = 0,
+    BLOCK_MX,
+    BLOCK_MY,
+    BLOCK_MZ,
+    BLOCK_LX,
+    BLOCK_VY,
+    BLOCK_LZ,
+    BLOCK_ANTI_RHOD,
+    BLOCK_ANTI_MX,
+    BLOCK_ANTI_MY,
+    BLOCK_ANTI_MZ,
+    BLOCK_ADV_FIELDS
+};
+
+__global__ void advection_xbl (
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+    real *dev_adv_work, real dt
+);
+
+__global__ void advection_ybl (
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+    const real *dev_ppm_weight_y, real *dev_adv_work, real dt
+);
+
+__global__ void advection_zbl (
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+    const real *dev_ppm_weight_z, real *dev_adv_work, real dt
+);
+
+#else // !FLUID_BLOCK_SWEEP
+
+__global__ void advection_xth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real dt
 );
 
-__global__ void advect_y_calc (
+__global__ void advection_yth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     const real *dev_ppm_weight_y, real dt
 );
 
-__global__ void advect_z_calc (
+__global__ void advection_zth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     const real *dev_ppm_weight_z, real dt
 );
 
+#endif // FLUID_BLOCK_SWEEP
+
 // =========================================================================================================================
 
 __global__ void cfl_rate_calc (
-    real *dev_cfl_rates, const real *dev_dustdens,
+    real *dev_cfl_rate, const real *dev_dustdens,
     const real *dev_dustmomx, const real *dev_dustmomy, const real *dev_dustmomz,
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz
 );
 
 // =========================================================================================================================
 
-__global__ void diffus_x_calc (
+#ifdef FLUID_BLOCK_SWEEP
+
+__global__ void diffusion_xbl (
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+    real dt
+);
+
+__global__ void diffusion_ybl (
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+    real dt
+);
+
+__global__ void diffusion_zbl (
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+    real dt
+);
+
+#else // !FLUID_BLOCK_SWEEP
+
+__global__ void diffusion_xth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
     real dt
 );
 
-__global__ void diffus_y_calc (
+__global__ void diffusion_yth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
     real dt
 );
 
-__global__ void diffus_z_calc (
+__global__ void diffusion_zth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
     real dt
 );
+
+#endif // FLUID_BLOCK_SWEEP
 
 // =========================================================================================================================
 

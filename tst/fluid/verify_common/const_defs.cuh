@@ -5,23 +5,30 @@
 
 using real = double;
 
-// The Makefile normally supplies these VERIFY_* macros from run_model.py.  Defaults keep a model directly buildable when a
-// particular command-line parameter is omitted.
-#ifndef VERIFY_RES
-#define VERIFY_RES 64
-#endif
+// Test runners may override these nonphysical verification controls while each model keeps its constants in this header
+#ifdef TEST_RES
+constexpr int VERIFY_RES = TEST_RES;
+#else
+constexpr int VERIFY_RES = 64;
+#endif // TEST_RES
 
-#ifndef VERIFY_CFL
-#define VERIFY_CFL 0.5
-#endif
+#ifdef TEST_CFL
+constexpr real VERIFY_CFL = TEST_CFL;
+#else
+constexpr real VERIFY_CFL = 0.5;
+#endif // TEST_CFL
 
-#ifndef VERIFY_POWER
-#define VERIFY_POWER -1.0
-#endif
+#ifdef TEST_POWER
+constexpr real VERIFY_POWER = TEST_POWER;
+#else
+constexpr real VERIFY_POWER = -1.0;
+#endif // TEST_POWER
 
-#ifndef VERIFY_SHIFT
-#define VERIFY_SHIFT 3.25
-#endif
+#ifdef TEST_SHIFT
+constexpr real VERIFY_SHIFT = TEST_SHIFT;
+#else
+constexpr real VERIFY_SHIFT = 3.25;
+#endif // TEST_SHIFT
 
 const real G   = 1.0;
 const real M_S = 1.0;

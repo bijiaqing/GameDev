@@ -130,8 +130,10 @@ post-update clipping or by discarding momentum.
 
 Azimuthal transport uses FARGO orbital advection. For each ring, the arithmetic mean
 $\ell_\phi$ defines a nearest-integer periodic shift. PPM transports the residual, including the
-fractional part of the ring-mean displacement. The CFL calculation uses the same ring mean and
-therefore bounds the velocity actually seen by the residual solver.
+fractional part of the ring-mean displacement. The CFL calculation bounds each cell's displacement
+relative to the ring mean by `CFL_DYN`. The nearest-integer shift frame can differ from that mean by
+at most half a cell per step, so the actual PPM tracing fraction is bounded by
+`CFL_DYN + 0.5 <= 1` rather than by `CFL_DYN` alone.
 
 The radial and polar method-of-lines operators use the three-stage Shu–Osher SSPRK(3,3) method.
 PPM provides spatial reconstruction; SSPRK supplies temporal integration. The radial boundaries
@@ -249,10 +251,11 @@ because it is solved implicitly with positivity subcycling.
   clumping claims rely on momentum transport by diffusion. The Huang–Bai formulation is relevant
   structure but cannot be copied directly because it diffuses concentration rather than the
   selected density.
-- Directional PPM and CN kernels allocate line-sized thread-local arrays. They are a correct
-  reference implementation but can spill heavily to CUDA local memory at large 3D resolution.
-  A block-parallel line implementation should be benchmarked against this reference before
-  replacement.
+- Directional PPM and CN kernels provide two compile-time implementations. `FLUID_SWEEP := thread`
+  uses the reference one-thread-per-line kernels with line-sized local arrays; `FLUID_SWEEP := block`
+  uses one block per line, an explicit 11-field advection workspace, and shared-memory diffusion
+  work arrays. The block method was faster at `1024^2` but slower at `128^3`, so model flags must
+  select the method appropriate to the grid rather than assuming one universal default.
 - The 3D initializer balances diffusion only to discretization error and can produce a small
   initial polar transient.
 - Pressureless dust cannot represent multistreaming after caustic formation. A swarm or another

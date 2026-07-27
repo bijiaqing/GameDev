@@ -27,13 +27,14 @@ The merged project is active at the repository root:
 - `legacy/swarm_before_audit/` and `legacy/swarm_after_audit/` are frozen recovery snapshots
 
 The root build selects exactly one representation through `DUST_REPR` in the chosen model's
-`flags.mk`.
+`flags.mk`. An optional model-local `const_defs.cuh` has include priority over `inc/fluid/` or
+`inc/swarm/`; models without one inherit the representation defaults.
 
 ## Authority and maintenance
 
 When statements disagree, use this order of authority:
 
-1. current source and model flags
+1. current source, model constants, and model flags
 2. recorded native test metrics under `tst/fluid/out/`
 3. these documents
 4. Git history and the historical swarm patch

@@ -3,7 +3,7 @@
 #include <param_grid.cuh>
 
 // =========================================================================================================================
-// kernel: advect_z_calc
+// kernel: advection_zth
 // purpose: polar transport with nonuniform PPM, pressureless HLL fluxes, boundary fluxes, and invariant-domain limiting
 //
 // parallelization: one thread per azimuthal-radial column with a serial loop over N_Z polar cells
@@ -16,7 +16,7 @@
 // =========================================================================================================================
 
 __global__
-void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
+void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     const real *dev_ppm_weight_z, real dt)
 {
     int idx_col = threadIdx.x + blockDim.x*blockIdx.x;
@@ -56,10 +56,10 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         // reconstruct PPM face values in the spherical polar finite-volume coordinate
         real face_work_rhod[N_Z + 1], face_work_x[N_Z + 1], face_work_y[N_Z + 1], face_work_z[N_Z + 1];
 
-        _ppm_faces_nonuniform(rhod, dev_ppm_weight_z, face_work_rhod, N_Z);
-        _ppm_faces_nonuniform(lx, dev_ppm_weight_z, face_work_x, N_Z);
-        _ppm_faces_nonuniform(vy, dev_ppm_weight_z, face_work_y, N_Z);
-        _ppm_faces_nonuniform(lz, dev_ppm_weight_z, face_work_z, N_Z);
+        _thread_ppm_faces(rhod, dev_ppm_weight_z, face_work_rhod, N_Z);
+        _thread_ppm_faces(lx, dev_ppm_weight_z, face_work_x, N_Z);
+        _thread_ppm_faces(vy, dev_ppm_weight_z, face_work_y, N_Z);
+        _thread_ppm_faces(lz, dev_ppm_weight_z, face_work_z, N_Z);
 
         // compute interior face fluxes and the configured outer boundary flux
         real flux_rhod[N_Z], flux_mx[N_Z], flux_my[N_Z], flux_mz[N_Z];
@@ -85,14 +85,14 @@ void advect_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
             // reconstruct high-order PPM states at the interior polar face
             // use zero PPM tracing fraction because SSPRK supplies temporal integration
-            real rhod_L = fmax(_ppm_face_value(face_work_rhod, rhod, iz,     iz + 1, true,  0.0), 0.0);
-            real rhod_R = fmax(_ppm_face_value(face_work_rhod, rhod, iz + 1, iz + 2, false, 0.0), 0.0);
-            real lx_L =      _ppm_face_value(face_work_x, lx, iz,     iz + 1, true,  0.0);
-            real lx_R =      _ppm_face_value(face_work_x, lx, iz + 1, iz + 2, false, 0.0);
-            real vy_L =      _ppm_face_value(face_work_y, vy, iz,     iz + 1, true,  0.0);
-            real vy_R =      _ppm_face_value(face_work_y, vy, iz + 1, iz + 2, false, 0.0);
-            real lz_L =      _ppm_face_value(face_work_z, lz, iz,     iz + 1, true,  0.0);
-            real lz_R =      _ppm_face_value(face_work_z, lz, iz + 1, iz + 2, false, 0.0);
+            real rhod_L = fmax(_thread_ppm_state(face_work_rhod, rhod, iz,     iz + 1, true,  0.0), 0.0);
+            real rhod_R = fmax(_thread_ppm_state(face_work_rhod, rhod, iz + 1, iz + 2, false, 0.0), 0.0);
+            real lx_L =      _thread_ppm_state(face_work_x, lx, iz,     iz + 1, true,  0.0);
+            real lx_R =      _thread_ppm_state(face_work_x, lx, iz + 1, iz + 2, false, 0.0);
+            real vy_L =      _thread_ppm_state(face_work_y, vy, iz,     iz + 1, true,  0.0);
+            real vy_R =      _thread_ppm_state(face_work_y, vy, iz + 1, iz + 2, false, 0.0);
+            real lz_L =      _thread_ppm_state(face_work_z, lz, iz,     iz + 1, true,  0.0);
+            real lz_R =      _thread_ppm_state(face_work_z, lz, iz + 1, iz + 2, false, 0.0);
 
             _pressureless_hll_flux(
                 lz_L / y, lz_R / y,

@@ -213,6 +213,32 @@ The current JSON files under `tst/fluid/out/` contain all 85 records from
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
+The suite uses the reference thread sweep by default. Prefix the same command with
+`FLUID_SWEEP=block` to compile and validate the block implementation through the identical
+analytical cases; the Makefile stores the two builds in separate object directories.
+
+For a direct matched-output and timing comparison, use the dedicated fixed-work branch:
+
+```bash
+python3 tst/fluid/verify_common/run_suite.py --group sweep --quick
+python3 tst/fluid/verify_common/run_suite.py --group sweep --sweep-dim all
+```
+
+The full branch runs a transport-only `1024^2` pair and a diffusion-enabled `128^3` pair, with
+radiation disabled in both. It requires byte-identical initial states, finite and nonnegative final
+density, relative density and velocity tolerances, and a finite-volume mass mismatch below `1e-10`;
+accepted-step counts are reported as a diagnostic. It is kept separate from `--group all` because
+its purpose and runtime differ from convergence testing.
+
+The development cross-comparisons motivating this branch found configuration-dependent performance.
+At `1024^2`, the stable thread and block runs took `132.93 s` and `77.82 s`, respectively, so the
+block method was approximately 1.71 times faster. In the vacuum-corrected `128^3` diffusion run,
+frame 0 was byte-identical and frame 10 had density relative L2 difference `1.476936e-12`, velocity
+relative L2 differences from `5.261644e-16` to `3.552797e-13`, and finite-volume mass mismatch
+`1.88686857e-16`. The corresponding thread and block wall times were `346.65 s` and `1182.99 s`,
+making the block method approximately 3.41 times slower. These results justify retaining both
+implementations and benchmarking the intended grid rather than selecting one globally.
+
 The run completed all 85 builds and simulations without a compilation failure, runtime failure,
 Python traceback, or non-finite JSON metric. Unlike the earlier archive, the current output layout
 includes the CFL value in radial and polar transport filenames, so the 12 low-CFL records are no
@@ -298,11 +324,10 @@ The integer FARGO case remains near machine roundoff. Its negative reported orde
 roundoff noise, not a failed transport test. The $p=0$ optical-depth case can likewise be integrated
 exactly or nearly exactly by the logarithmic midpoint rule, so its order is not meaningful.
 
-The source metric currently records componentwise maximum differences up to
-$2.22\times10^{-5}$. The discrepancy was traced to cancellation in the Python analytical
-evaluator at $h=10^{-6}$, while the CUDA kernel uses a stable small-$h$ series. The reference
-evaluator still needs an `expm1`/series correction and a rerun before the source case receives a
-formal pass.
+The source reference now uses the same cancellation-safe endpoint-weight series as the CUDA kernel
+for $h<10^{-4}$. Reanalysis of the unchanged native output reduces the largest componentwise error
+from $2.22\times10^{-5}$ to $2.22\times10^{-16}$. Density and total mass are exact to the recorded
+precision, so the source case passes.
 
 ## Running the suite
 
@@ -325,7 +350,6 @@ terminal output together when archiving a run.
 
 - Implement the full coupled 3D manufactured-solution harness specified in
   `tst/fluid/verify_mms_3d/README.md`, including independent forcing and exact boundary data
-- Repair the cancellation-prone source reference and rerun it
 - Add production-settling equilibrium tests that quantify the initial polar transient
 - Add explicit boundary, restart-tolerance, and flag-matrix regressions
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect

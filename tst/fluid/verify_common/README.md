@@ -2,7 +2,7 @@
 
 These model directories implement the analytical tests summarized in
 `doc/fluid_verification.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
-or production `mod`. Model-local `fluid_main.cu` files include the shared driver in this
+or production `mod`. Model-local `fluid_runtime.cu` files include the shared driver in this
 directory. The Makefile still selects production kernels from `src/` unless a test explicitly
 supplies a model-local replacement.
 
@@ -65,8 +65,28 @@ python3 tst/fluid/verify_common/run_suite.py --group diffusion --res 32 64 128 2
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
+Prefix any suite command with `FLUID_SWEEP=block` to validate the block sweep; omitting it selects
+the reference thread sweep.
+
+The separate implementation-comparison branch builds both methods and checks their outputs directly:
+
+```bash
+python3 tst/fluid/verify_common/run_suite.py --group sweep --quick
+python3 tst/fluid/verify_common/run_suite.py --group sweep --sweep-dim 2d
+python3 tst/fluid/verify_common/run_suite.py --group sweep --sweep-dim 3d
+```
+
+Full defaults are a transport-only `1024^2` pair and a diffusion-enabled `128^3` pair, both without
+radiation. Override the resolutions with `--sweep-res-2d` and `--sweep-res-3d`. This fixed-work
+branch is intentionally not included in `--group all`.
+
 Only NumPy is required by the validator. The d=2/d=3 shell references are independently integrated
 with a fine-grid RK4 solve; they do not use the CUDA helpers or the production diffusion matrix.
+
+Each test model owns a local `const_defs.cuh` that selects its analytical case before including the
+shared verification constants. Its `flags.mk` contains only include routing, sweep selection, and
+active-physics flags. The runner passes resolution, CFL, profile power, and shift as `TEST_*`
+controls through the root Makefile rather than defining physical constants in `flags.mk`.
 
 For the optical-depth test, repeat powers `0`, `-1`, and another non-degenerate value such as `1`:
 

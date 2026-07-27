@@ -51,12 +51,25 @@ do {                                                                            
     { cuda_fail(cuda_status_, #OPERATION, __FILE__, __LINE__); }                    \
 } while (0)
 
+#ifdef CUDA_SYNC_TRACE
+#define CUDA_KERNEL_CHECK(KERNEL_NAME)                                                \
+do {                                                                                  \
+    cudaError_t cuda_status_ = cudaGetLastError();                                    \
+    if (cuda_status_ != cudaSuccess)                                                  \
+    { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }    \
+    cuda_status_ = cudaDeviceSynchronize();                                           \
+    if (cuda_status_ != cudaSuccess)                                                  \
+    { cuda_fail(cuda_status_, KERNEL_NAME " kernel execution", __FILE__, __LINE__); } \
+    std::cout << "  [CUDA] completed " << KERNEL_NAME << std::endl;                   \
+} while (0)
+#else
 #define CUDA_KERNEL_CHECK(KERNEL_NAME)                                              \
 do {                                                                                \
     cudaError_t cuda_status_ = cudaGetLastError();                                  \
     if (cuda_status_ != cudaSuccess)                                                \
     { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
 } while (0)
+#endif // CUDA_SYNC_TRACE
 
 // =========================================================================================================================
 // precompute geometry-aware PPM face interpolation weights from cell averages
@@ -199,14 +212,15 @@ void initdens_calc (real *initdens)
     const real kernel_std = 0.5*smooth;
 
     const int bin_count = N_Y;
-    const real dR = (Y_MAX - Y_MIN) / static_cast<real>(bin_count);
+    const real R_min = _get_init_Rmin();
+    const real dR = (Y_MAX - R_min) / static_cast<real>(bin_count);
 
     std::vector<real> conv_u(bin_count + 1);
     std::fill(initdens, initdens + bin_count + 1, 0.0);
 
     for (int idx_dst = 0; idx_dst <= bin_count; idx_dst++)
     {
-        conv_u[idx_dst] = Y_MIN + static_cast<real>(idx_dst)*dR;
+        conv_u[idx_dst] = R_min + static_cast<real>(idx_dst)*dR;
     }
 
     // normalization factor for the Gaussian kernel
@@ -234,16 +248,16 @@ void initdens_calc (real *initdens)
 // and print information about the cell with the maximum rate if verbose is true
 
 inline __host__
-real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
+real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
     bool verbose = true)
 {
-    thrust::device_ptr <const real> cfl_rates_ptr(dev_cfl_rates);
-    auto cfl_rates_max_ptr = thrust::max_element(cfl_rates_ptr, cfl_rates_ptr + N_G);
-    real max_cfl_rates = *cfl_rates_max_ptr;
+    thrust::device_ptr <const real> cfl_rate_ptr(dev_cfl_rate);
+    auto max_cfl_rate_ptr = thrust::max_element(cfl_rate_ptr, cfl_rate_ptr + N_G);
+    real max_cfl_rate = *max_cfl_rate_ptr;
 
-    if (!std::isfinite(max_cfl_rates))
+    if (!std::isfinite(max_cfl_rate))
     {
-        int idx_bad = static_cast<int>(cfl_rates_max_ptr - cfl_rates_ptr);
+        int idx_bad = static_cast<int>(max_cfl_rate_ptr - cfl_rate_ptr);
 
         int ix_bad = idx_bad % N_X;
         int iy_bad = (idx_bad / N_X) % N_Y;
@@ -257,13 +271,13 @@ real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real
         std::exit(EXIT_FAILURE);
     }
 
-    if (max_cfl_rates <= 0.0) return DT_MAX;
+    if (max_cfl_rate <= 0.0) return DT_MAX;
 
-    real dt_cfl = std::fmin(CFL_DYN / max_cfl_rates, DT_MAX);
+    real dt_cfl = std::fmin(CFL_DYN / max_cfl_rate, DT_MAX);
     if (!verbose) return dt_cfl;
 
     // print the cell with the maximum CFL rate and its corresponding velocity components
-    int idx_cfl_max = static_cast<int>(cfl_rates_max_ptr - cfl_rates_ptr);
+    int idx_cfl_max = static_cast<int>(max_cfl_rate_ptr - cfl_rate_ptr);
     int ix = idx_cfl_max % N_X;
     int iy = (idx_cfl_max / N_X) % N_Y;
     int iz = idx_cfl_max / (N_X*N_Y);
@@ -293,8 +307,8 @@ real get_dt_cfl (const real *dev_cfl_rates, const real *dev_dustvelx, const real
     << "  dvx="  << std::setw(8) << vx_res
     << "  vy="   << std::setw(8) << vy
     << "  vz="   << std::setw(8) << vz
-    << "  rate=" << std::setw(8) << max_cfl_rates
-    << "  dt="   << std::setw(8) << CFL_DYN / max_cfl_rates
+    << "  rate=" << std::setw(8) << max_cfl_rate
+    << "  dt="   << std::setw(8) << CFL_DYN / max_cfl_rate
     << std::endl;
 
     return dt_cfl;

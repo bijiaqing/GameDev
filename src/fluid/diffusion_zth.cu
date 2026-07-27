@@ -5,7 +5,7 @@
 #include <param_phys.cuh>
 
 // =========================================================================================================================
-// kernel: diffus_z_calc
+// kernel: diffusion_zth
 // purpose: polar diffusion of dust density with spherical-geometry conservative momentum transport
 //
 // parallelization: one thread per azimuthal-radial column with a serial loop over N_Z polar cells
@@ -18,7 +18,7 @@
 // =========================================================================================================================
 
 __global__
-void diffus_z_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
+void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real *dev_dustmomz, real dt)
 {
     int idx_col = threadIdx.x + blockDim.x*blockIdx.x;

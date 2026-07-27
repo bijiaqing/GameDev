@@ -5,7 +5,7 @@
 #include <param_phys.cuh>
 
 // =========================================================================================================================
-// kernel: diffus_y_calc
+// kernel: diffusion_yth
 // purpose: radial diffusion of dust density with geometry-aware conservative momentum transport
 //
 // parallelization: one thread per azimuthal-polar column with a serial loop over N_Y radial cells
@@ -18,13 +18,13 @@
 // =========================================================================================================================
 
 __device__ __forceinline__
-real _get_dr_cent_i (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0) / _get_dy(); }
+real _thread_dr_cent_i (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0) / _get_dy(); }
 
 __device__ __forceinline__
-real _get_dr_cent_o (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0); }
+real _thread_dr_cent_o (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0); }
 
 __global__
-void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
+void diffusion_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real *dev_dustmomz, real dt)
 {
     int idx_col = threadIdx.x + blockDim.x*blockIdx.x;
@@ -54,8 +54,8 @@ void diffus_y_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
         real vol_y = _get_vol_y(iy);
 
-        real dr_i = _get_dr_cent_i(iy);
-        real dr_o = _get_dr_cent_o(iy);
+        real dr_i = _thread_dr_cent_i(iy);
+        real dr_o = _thread_dr_cent_o(iy);
 
         real R_i = y_i*sin(z);
         real h_gi = _get_hg(R_i);

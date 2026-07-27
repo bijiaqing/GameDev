@@ -25,8 +25,13 @@ active build trees.
 
 ## Build and driver design
 
-Every model directory in `mod/`, `tst/fluid/`, or `tst/swarm/` provides `flags.mk`
-containing exactly one
+Every model directory in `mod/`, `tst/fluid/`, or `tst/swarm/` provides `flags.mk`. A model that
+changes numerical or physical constants may additionally provide `const_defs.cuh`; otherwise it
+inherits the selected representation's header. The model directory is the first include-search
+location, so an optional local header overrides the representation defaults without `MODEL_*`
+compiler macros.
+
+Each `flags.mk` contains exactly one
 
 ```make
 DUST_REPR = fluid
@@ -45,7 +50,7 @@ The build selects:
 - shared sources
 - one driver
 
-`src/fluid/fluid_main.cu` and `src/swarm/swarm_main.cu` may both define the C++ function
+`src/fluid/fluid_runtime.cu` and `src/swarm/swarm_runtime.cu` may both define the C++ function
 `main`. They are separate translation units and only the selected one is linked into a target.
 This keeps representation-specific allocations, time integration, restart behavior, and optional
 physics legible.

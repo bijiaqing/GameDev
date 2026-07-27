@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-The active representative-particle implementation is under the root `inc/` and `src/` directories.
+The active representative-particle implementation is under `inc/swarm/` and `src/swarm/`.
 It supports analytic or imported gas, semi-analytic particle transport, stochastic turbulent
 diffusion, radiation pressure, particle-to-grid diagnostics, and representative-particle
 coagulation/fragmentation.
@@ -106,6 +106,7 @@ $$
 The imported density is assumed to have been calibrated from that $\Sigma_0,H_{g,0}$ reference
 disk. A gap or other subsequent density depletion therefore increases the local Stokes number
 above `STOKES_0` rather than resetting the depleted midplane to the reference value.
+`CONST_ST` is therefore an analytic-gas-only option and is rejected when `IMPORTGAS` is enabled.
 
 ## Semi-analytic transport
 

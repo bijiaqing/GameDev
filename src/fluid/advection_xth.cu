@@ -3,7 +3,7 @@
 #include <param_grid.cuh>
 
 // =========================================================================================================================
-// kernel: advect_x_calc
+// kernel: advection_xth
 // purpose: periodic azimuthal transport with FARGO, PPM, pressureless HLL fluxes, and invariant-domain limiting
 //
 // parallelization: one thread per radial-polar ring with a serial loop over N_X azimuthal cells
@@ -16,7 +16,7 @@
 // =========================================================================================================================
 
 __global__
-void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt)
+void advection_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt)
 {
     int idx_ring = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_ring >= N_Y*N_Z) return;
@@ -115,14 +115,14 @@ void advect_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         real cfl_R = fabs(lx_res[ixp1]/(R*R))*dt / dx;
 
         // clamp reconstructed density nonnegative while preserving the signs of the reconstructed primitive quantities
-        real rhod_L = fmax(_ppm_face_value(face_rhod, rhod_shift, ix,   ixp1, true,  cfl_L), 0.0);
-        real rhod_R = fmax(_ppm_face_value(face_rhod, rhod_shift, ixp1, ixp2, false, cfl_R), 0.0);
-        real lx_L =      _ppm_face_value(face_lx, lx_shift, ix,   ixp1, true,  cfl_L);
-        real lx_R =      _ppm_face_value(face_lx, lx_shift, ixp1, ixp2, false, cfl_R);
-        real vy_L =      _ppm_face_value(face_vy, vy_shift, ix,   ixp1, true,  cfl_L);
-        real vy_R =      _ppm_face_value(face_vy, vy_shift, ixp1, ixp2, false, cfl_R);
-        real lz_L =      _ppm_face_value(face_lz, lz_shift, ix,   ixp1, true,  cfl_L);
-        real lz_R =      _ppm_face_value(face_lz, lz_shift, ixp1, ixp2, false, cfl_R);
+        real rhod_L = fmax(_thread_ppm_state(face_rhod, rhod_shift, ix,   ixp1, true,  cfl_L), 0.0);
+        real rhod_R = fmax(_thread_ppm_state(face_rhod, rhod_shift, ixp1, ixp2, false, cfl_R), 0.0);
+        real lx_L =      _thread_ppm_state(face_lx, lx_shift, ix,   ixp1, true,  cfl_L);
+        real lx_R =      _thread_ppm_state(face_lx, lx_shift, ixp1, ixp2, false, cfl_R);
+        real vy_L =      _thread_ppm_state(face_vy, vy_shift, ix,   ixp1, true,  cfl_L);
+        real vy_R =      _thread_ppm_state(face_vy, vy_shift, ixp1, ixp2, false, cfl_R);
+        real lz_L =      _thread_ppm_state(face_lz, lz_shift, ix,   ixp1, true,  cfl_L);
+        real lz_R =      _thread_ppm_state(face_lz, lz_shift, ixp1, ixp2, false, cfl_R);
 
         // convert reconstructed specific angular momentum to residual angular transport speed
         real omega_L = (lx_L - lx_frame) / (R*R);

@@ -5,7 +5,7 @@
 #include <param_phys.cuh>
 
 // =========================================================================================================================
-// kernel: diffus_x_calc
+// kernel: diffusion_xth
 // purpose: periodic azimuthal diffusion of dust density with conservative momentum transport
 //
 // parallelization: one thread per radial-polar ring with a serial loop over N_X azimuthal cells
@@ -18,7 +18,7 @@
 // =========================================================================================================================
 
 __global__
-void diffus_x_calc (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
+void diffusion_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     real *dev_dustmomz, real dt)
 {
     int idx_ring = threadIdx.x + blockDim.x*blockIdx.x;

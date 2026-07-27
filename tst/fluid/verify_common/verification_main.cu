@@ -1,4 +1,5 @@
 #include <cmath>          // cos, exp, fmin, pow, sin, sqrt, std::cyl_bessel_j, std::cyl_neumann
+#include <cstddef>        // std::size_t
 #include <cstdlib>        // std::exit, EXIT_FAILURE
 #include <filesystem>     // std::filesystem::create_directories
 #include <fstream>        // std::ofstream
@@ -379,6 +380,30 @@ int main ()
     CUDA_CHECK(cudaMemcpy(dev_weight_y, weight_y.data(), sizeof(real)*4*(N_Y + 1), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(dev_weight_z, weight_z.data(), sizeof(real)*4*(N_Z + 1), cudaMemcpyHostToDevice));
 
+    #ifdef FLUID_BLOCK_SWEEP
+    // The block sweep shares one persistent 11-field advection workspace across all directions
+    real *dev_adv_work;
+    CUDA_CHECK(cudaMalloc(
+        (void**)&dev_adv_work,
+        sizeof(real)*static_cast<std::size_t>(BLOCK_ADV_FIELDS)*static_cast<std::size_t>(N_G)
+    ));
+
+    #ifdef DIFFUSION
+    CUDA_CHECK(cudaFuncSetAttribute(
+        diffusion_xbl, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        sizeof(real)*4*N_X
+    ));
+    CUDA_CHECK(cudaFuncSetAttribute(
+        diffusion_ybl, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        sizeof(real)*6*N_Y
+    ));
+    CUDA_CHECK(cudaFuncSetAttribute(
+        diffusion_zbl, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        sizeof(real)*6*N_Z
+    ));
+    #endif // DIFFUSION
+    #endif // FLUID_BLOCK_SWEEP
+
     // The transport tests that use velocity-dependent timesteps share the production CFL-rate kernel and host reduction.
     real *dev_cfl_rate;
     CUDA_CHECK(cudaMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
@@ -415,6 +440,88 @@ int main ()
         CUDA_CHECK(cudaDeviceSynchronize());
         return get_dt_cfl(dev_cfl_rate, dev_velx, dev_vely, dev_velz, false);
     };
+
+    // Select one-thread-per-line or one-block-per-line transport without changing the test cases below
+    auto apply_advection_x = [&](real dt)
+    {
+        #ifdef FLUID_BLOCK_SWEEP
+        advection_xbl <<< N_Y*N_Z, TPB >>> (
+            dev_dens, dev_momx, dev_momy, dev_momz, dev_adv_work, dt
+        );
+        CUDA_KERNEL_CHECK("advection_xbl");
+        #else // !FLUID_BLOCK_SWEEP
+        advection_xth <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
+        CUDA_KERNEL_CHECK("advection_xth");
+        #endif // FLUID_BLOCK_SWEEP
+    };
+
+    auto apply_advection_y = [&](real dt)
+    {
+        #ifdef FLUID_BLOCK_SWEEP
+        advection_ybl <<< N_X*N_Z, TPB >>> (
+            dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_y, dev_adv_work, dt
+        );
+        CUDA_KERNEL_CHECK("advection_ybl");
+        #else // !FLUID_BLOCK_SWEEP
+        advection_yth <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_y, dt);
+        CUDA_KERNEL_CHECK("advection_yth");
+        #endif // FLUID_BLOCK_SWEEP
+    };
+
+    auto apply_advection_z = [&](real dt)
+    {
+        #ifdef FLUID_BLOCK_SWEEP
+        advection_zbl <<< N_X*N_Y, TPB >>> (
+            dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_z, dev_adv_work, dt
+        );
+        CUDA_KERNEL_CHECK("advection_zbl");
+        #else // !FLUID_BLOCK_SWEEP
+        advection_zth <<< NB_Z, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_z, dt);
+        CUDA_KERNEL_CHECK("advection_zth");
+        #endif // FLUID_BLOCK_SWEEP
+    };
+
+    #ifdef DIFFUSION
+    // Select the matching line solver while preserving each test's timestep and operator order
+    auto apply_diffusion_x = [&](real dt)
+    {
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
+            dev_dens, dev_momx, dev_momy, dev_momz, dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_xbl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_xth <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
+        CUDA_KERNEL_CHECK("diffusion_xth");
+        #endif // FLUID_BLOCK_SWEEP
+    };
+
+    auto apply_diffusion_y = [&](real dt)
+    {
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
+            dev_dens, dev_momx, dev_momy, dev_momz, dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_ybl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_yth <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
+        CUDA_KERNEL_CHECK("diffusion_yth");
+        #endif // FLUID_BLOCK_SWEEP
+    };
+
+    auto apply_diffusion_z = [&](real dt)
+    {
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+            dev_dens, dev_momx, dev_momy, dev_momz, dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_zbl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_zth <<< NB_Z, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
+        CUDA_KERNEL_CHECK("diffusion_zth");
+        #endif // FLUID_BLOCK_SWEEP
+    };
+    #endif // DIFFUSION
 
     real clock = 0.0;
     int steps = 0;
@@ -460,19 +567,15 @@ int main ()
 
         #ifdef DIFFUSION
         // Opening diffusion half-step in y then x; z is absent in these 2D ring models.
-        diffus_y_calc <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, 0.5*dt);
-        CUDA_KERNEL_CHECK("diffus_y_calc");
-        diffus_x_calc <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, 0.5*dt);
-        CUDA_KERNEL_CHECK("diffus_x_calc");
+        apply_diffusion_y(0.5*dt);
+        apply_diffusion_x(0.5*dt);
         recover_velocity();
         #endif
 
         // Opening transport half-step in x then y, recovering primitives after each conservative sweep.
-        advect_x_calc <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, 0.5*dt);
-        CUDA_KERNEL_CHECK("advect_x_calc");
+        apply_advection_x(0.5*dt);
         recover_velocity();
-        advect_y_calc <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_y, 0.5*dt);
-        CUDA_KERNEL_CHECK("advect_y_calc");
+        apply_advection_y(0.5*dt);
         recover_velocity();
 
         #ifdef RADIATION
@@ -495,19 +598,15 @@ int main ()
         CUDA_KERNEL_CHECK("momentum_setv");
 
         // Closing transport half-step reverses the opening directional order for a symmetric composition.
-        advect_y_calc <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_y, 0.5*dt);
-        CUDA_KERNEL_CHECK("advect_y_calc");
+        apply_advection_y(0.5*dt);
         recover_velocity();
-        advect_x_calc <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, 0.5*dt);
-        CUDA_KERNEL_CHECK("advect_x_calc");
+        apply_advection_x(0.5*dt);
         recover_velocity();
 
         #ifdef DIFFUSION
         // Closing diffusion half-step also reverses its opening order.
-        diffus_x_calc <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, 0.5*dt);
-        CUDA_KERNEL_CHECK("diffus_x_calc");
-        diffus_y_calc <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, 0.5*dt);
-        CUDA_KERNEL_CHECK("diffus_y_calc");
+        apply_diffusion_x(0.5*dt);
+        apply_diffusion_y(0.5*dt);
         #endif
 
         clock += dt;
@@ -541,23 +640,17 @@ int main ()
 
         // Compile exactly one of these calls into an isolated-kernel test executable.
 #if defined(VERIFY_X_TRANSPORT)
-        advect_x_calc <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
-        CUDA_KERNEL_CHECK("advect_x_calc");
+        apply_advection_x(dt);
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
-        advect_y_calc <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_y, dt);
-        CUDA_KERNEL_CHECK("advect_y_calc");
+        apply_advection_y(dt);
 #elif defined(VERIFY_Z_TRANSPORT)
-        advect_z_calc <<< NB_Z, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_z, dt);
-        CUDA_KERNEL_CHECK("advect_z_calc");
+        apply_advection_z(dt);
 #elif defined(VERIFY_X_DIFFUSION)
-        diffus_x_calc <<< NB_X, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
-        CUDA_KERNEL_CHECK("diffus_x_calc");
+        apply_diffusion_x(dt);
 #elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
-        diffus_y_calc <<< NB_Y, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
-        CUDA_KERNEL_CHECK("diffus_y_calc");
+        apply_diffusion_y(dt);
 #elif defined(VERIFY_Z_DIFFUSION)
-        diffus_z_calc <<< NB_Z, TPB >>> (dev_dens, dev_momx, dev_momy, dev_momz, dt);
-        CUDA_KERNEL_CHECK("diffus_z_calc");
+        apply_diffusion_z(dt);
 #endif
         clock += dt;
         steps++;
@@ -607,6 +700,9 @@ int main ()
     CUDA_CHECK(cudaFree(dev_velz));
     CUDA_CHECK(cudaFree(dev_weight_y));
     CUDA_CHECK(cudaFree(dev_weight_z));
+    #ifdef FLUID_BLOCK_SWEEP
+    CUDA_CHECK(cudaFree(dev_adv_work));
+    #endif // FLUID_BLOCK_SWEEP
     CUDA_CHECK(cudaFree(dev_cfl_rate));
 #ifdef RADIATION
     CUDA_CHECK(cudaFree(dev_optdepth));

@@ -54,8 +54,8 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_particle, sizeof(swarm)*N_P));
 
     #ifdef TRANSPORT
-    real *dev_dt_rates;
-    CUDA_CHECK(cudaMalloc((void**)&dev_dt_rates, sizeof(real)*N_P));
+    real *dev_dt_rate;
+    CUDA_CHECK(cudaMalloc((void**)&dev_dt_rate, sizeof(real)*N_P));
     #endif // TRANSPORT
     
     #ifdef SAVE_DENS
@@ -283,11 +283,11 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("col_rate_calc");
 
             // use the largest total propensity to control every representative's event probability
-            thrust::device_ptr <const real> rate_ptr(dev_col_rate);
-            real max_rate = *thrust::max_element(rate_ptr, rate_ptr + N_P);
+            thrust::device_ptr <const real> col_rate_ptr(dev_col_rate);
+            real max_col_rate = *thrust::max_element(col_rate_ptr, col_rate_ptr + N_P);
             real remaining = duration - elapsed;
 
-            if (!(max_rate > 0.0))
+            if (!(max_col_rate > 0.0))
             {
                 // consume the remaining interval when no collision channel is active
                 dt_col = remaining;
@@ -296,7 +296,7 @@ int main (int argc, char **argv)
             }
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
-            dt_col = fmin(CFL_COL / max_rate, remaining);
+            dt_col = fmin(CFL_COL / max_col_rate, remaining);
             col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, 
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
@@ -337,16 +337,16 @@ int main (int argc, char **argv)
         {
             #ifdef TRANSPORT
             // reduce all local inverse rates to a globally valid dynamics timestep
-            dt_rates_calc <<< NB_P, TPB >>> (dev_dt_rates, dev_particle
+            dyn_rate_calc <<< NB_P, TPB >>> (dev_dt_rate, dev_particle
                 #ifdef IMPORTGAS
                 , dev_gas_velx, dev_gas_vely, dev_gas_velz
                 , dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
                 #endif // IMPORTGAS
             );
-            CUDA_KERNEL_CHECK("dt_rates_calc");
-            thrust::device_ptr <const real> dt_rates_ptr(dev_dt_rates);
-            real max_dt_rates = *thrust::max_element(dt_rates_ptr, dt_rates_ptr + N_P);
-            dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rates, dt_out - clock_out));
+            CUDA_KERNEL_CHECK("dyn_rate_calc");
+            thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rate);
+            real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
+            dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rate, dt_out - clock_out));
 
             #ifdef IMPORTGAS
             // interpolate the working gas fields to the midpoint time of this dynamics step

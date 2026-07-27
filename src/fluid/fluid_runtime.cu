@@ -1,4 +1,5 @@
 #include <cmath>          // std::fmax, std::fmin
+#include <cstddef>        // std::size_t
 #include <cstdlib>        // std::exit, EXIT_FAILURE
 #include <filesystem>     // std::filesystem::create_directories
 #include <iostream>       // std::cerr, std::endl
@@ -35,8 +36,8 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_dustvelz, sizeof(real)*N_G));
     CUDA_CHECK(cudaMalloc((void**)&dev_dustmomz, sizeof(real)*N_G));
 
-    real *dev_cfl_rates;
-    CUDA_CHECK(cudaMalloc((void**)&dev_cfl_rates, sizeof(real)*N_G));
+    real *dev_cfl_rate;
+    CUDA_CHECK(cudaMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
 
     int  *dev_bad_cell;
     CUDA_CHECK(cudaMalloc((void**)&dev_bad_cell, sizeof(int)));
@@ -44,6 +45,29 @@ int main (int argc, char **argv)
     real *dev_ppm_weight_y, *dev_ppm_weight_z;
     CUDA_CHECK(cudaMalloc((void**)&dev_ppm_weight_y, sizeof(real)*4*(N_Y + 1)));
     CUDA_CHECK(cudaMalloc((void**)&dev_ppm_weight_z, sizeof(real)*4*(N_Z + 1)));
+
+    #ifdef FLUID_BLOCK_SWEEP
+    real *dev_adv_work;
+    CUDA_CHECK(cudaMalloc(
+        (void**)&dev_adv_work,
+        sizeof(real)*static_cast<std::size_t>(BLOCK_ADV_FIELDS)*static_cast<std::size_t>(N_G)
+    ));
+
+    #ifdef DIFFUSION
+    CUDA_CHECK(cudaFuncSetAttribute(
+        diffusion_xbl, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        sizeof(real)*4*N_X
+    ));
+    CUDA_CHECK(cudaFuncSetAttribute(
+        diffusion_ybl, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        sizeof(real)*6*N_Y
+    ));
+    CUDA_CHECK(cudaFuncSetAttribute(
+        diffusion_zbl, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        sizeof(real)*6*N_Z
+    ));
+    #endif // DIFFUSION
+    #endif // FLUID_BLOCK_SWEEP
 
     std::vector<real> ppm_weight_y(4*(N_Y + 1));
     std::vector<real> ppm_weight_z(4*(N_Z + 1));
@@ -209,13 +233,13 @@ int main (int argc, char **argv)
     auto recalc_dt_cfl = [&](bool verbose)
     {
         cfl_rate_calc <<< NB_X, TPB >>> (
-            dev_cfl_rates, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         CUDA_KERNEL_CHECK("cfl_rate_calc");
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        return get_dt_cfl(dev_cfl_rates, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
+        return get_dt_cfl(dev_cfl_rate, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
     };
 
     // advance each directional transport operator with fresh CFL-limited substeps
@@ -224,12 +248,25 @@ int main (int argc, char **argv)
         real remaining = duration;
         while (remaining > 0.0)
         {
-            real dt_sub = std::fmin(remaining, recalc_dt_cfl(false));
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(
+                #ifdef CUDA_SYNC_TRACE
+                true
+                #else
+                false
+                #endif
+            ));
 
-            advect_x_calc <<< NB_X, TPB >>> (
+            #ifdef FLUID_BLOCK_SWEEP
+            advection_xbl <<< N_Y*N_Z, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt_sub
+            );
+            CUDA_KERNEL_CHECK("advection_xbl");
+            #else // !FLUID_BLOCK_SWEEP
+            advection_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_sub
             );
-            CUDA_KERNEL_CHECK("advect_x_calc");
+            CUDA_KERNEL_CHECK("advection_xth");
+            #endif // FLUID_BLOCK_SWEEP
 
             sync_dust_state();
             remaining -= dt_sub;
@@ -241,12 +278,25 @@ int main (int argc, char **argv)
         real remaining = duration;
         while (remaining > 0.0)
         {
-            real dt_sub = std::fmin(remaining, recalc_dt_cfl(false));
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(
+                #ifdef CUDA_SYNC_TRACE
+                true
+                #else
+                false
+                #endif
+            ));
 
-            advect_y_calc <<< NB_Y, TPB >>> (
+            #ifdef FLUID_BLOCK_SWEEP
+            advection_ybl <<< N_X*N_Z, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dev_adv_work, dt_sub
+            );
+            CUDA_KERNEL_CHECK("advection_ybl");
+            #else // !FLUID_BLOCK_SWEEP
+            advection_yth <<< NB_Y, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dt_sub
             );
-            CUDA_KERNEL_CHECK("advect_y_calc");
+            CUDA_KERNEL_CHECK("advection_yth");
+            #endif // FLUID_BLOCK_SWEEP
 
             sync_dust_state();
             remaining -= dt_sub;
@@ -258,12 +308,25 @@ int main (int argc, char **argv)
         real remaining = duration;
         while (remaining > 0.0)
         {
-            real dt_sub = std::fmin(remaining, recalc_dt_cfl(false));
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(
+                #ifdef CUDA_SYNC_TRACE
+                true
+                #else
+                false
+                #endif
+            ));
 
-            advect_z_calc <<< NB_Z, TPB >>> (
+            #ifdef FLUID_BLOCK_SWEEP
+            advection_zbl <<< N_X*N_Y, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dev_adv_work, dt_sub
+            );
+            CUDA_KERNEL_CHECK("advection_zbl");
+            #else // !FLUID_BLOCK_SWEEP
+            advection_zth <<< NB_Z, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt_sub
             );
-            CUDA_KERNEL_CHECK("advect_z_calc");
+            CUDA_KERNEL_CHECK("advection_zth");
+            #endif // FLUID_BLOCK_SWEEP
 
             sync_dust_state();
             remaining -= dt_sub;
@@ -281,20 +344,59 @@ int main (int argc, char **argv)
 
         // apply the opening half of the symmetric diffusion composition
         #ifdef DIFFUSION
-        diffus_y_calc <<< NB_Y, TPB >>> (
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
-        CUDA_KERNEL_CHECK("diffus_y_calc");
+        CUDA_KERNEL_CHECK("diffusion_ybl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_yth <<< NB_Y, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_yth");
+        #endif // FLUID_BLOCK_SWEEP
 
-        diffus_x_calc <<< NB_X, TPB >>> (
-            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
-        );
-        CUDA_KERNEL_CHECK("diffus_x_calc");
+        #ifdef CUDA_SYNC_TRACE
+        sync_dust_state();
+        std::cout << "  [TRACE] state after diffusion y" << std::endl;
+        recalc_dt_cfl(true);
+        #endif // CUDA_SYNC_TRACE
 
-        diffus_z_calc <<< NB_Z, TPB >>> (
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
-        CUDA_KERNEL_CHECK("diffus_z_calc");
+        CUDA_KERNEL_CHECK("diffusion_xbl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_xth <<< NB_X, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_xth");
+        #endif // FLUID_BLOCK_SWEEP
+
+        #ifdef CUDA_SYNC_TRACE
+        sync_dust_state();
+        std::cout << "  [TRACE] state after diffusion x" << std::endl;
+        recalc_dt_cfl(true);
+        #endif // CUDA_SYNC_TRACE
+
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_zbl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_zth <<< NB_Z, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_zth");
+        #endif // FLUID_BLOCK_SWEEP
+
+        #ifdef CUDA_SYNC_TRACE
+        sync_dust_state();
+        std::cout << "  [TRACE] state after diffusion z" << std::endl;
+        recalc_dt_cfl(true);
+        #endif // CUDA_SYNC_TRACE
 
         momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
@@ -357,20 +459,37 @@ int main (int argc, char **argv)
 
         // close the symmetric diffusion composition in reverse order
         #ifdef DIFFUSION
-        diffus_z_calc <<< NB_Z, TPB >>> (
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
-        CUDA_KERNEL_CHECK("diffus_z_calc");
+        CUDA_KERNEL_CHECK("diffusion_zbl");
 
-        diffus_x_calc <<< NB_X, TPB >>> (
+        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
-        CUDA_KERNEL_CHECK("diffus_x_calc");
+        CUDA_KERNEL_CHECK("diffusion_xbl");
 
-        diffus_y_calc <<< NB_Y, TPB >>> (
+        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
-        CUDA_KERNEL_CHECK("diffus_y_calc");
+        CUDA_KERNEL_CHECK("diffusion_ybl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_zth <<< NB_Z, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_zth");
+
+        diffusion_xth <<< NB_X, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_xth");
+
+        diffusion_yth <<< NB_Y, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        CUDA_KERNEL_CHECK("diffusion_yth");
+        #endif // FLUID_BLOCK_SWEEP
 
         momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
@@ -417,10 +536,13 @@ int main (int argc, char **argv)
     // release all persistent host and device allocations
     CUDA_CHECK(cudaFreeHost(dustdens));
     CUDA_CHECK(cudaFree(dev_dustdens));
-    CUDA_CHECK(cudaFree(dev_cfl_rates));
+    CUDA_CHECK(cudaFree(dev_cfl_rate));
     CUDA_CHECK(cudaFree(dev_bad_cell));
     CUDA_CHECK(cudaFree(dev_ppm_weight_y));
     CUDA_CHECK(cudaFree(dev_ppm_weight_z));
+    #ifdef FLUID_BLOCK_SWEEP
+    CUDA_CHECK(cudaFree(dev_adv_work));
+    #endif // FLUID_BLOCK_SWEEP
     CUDA_CHECK(cudaFreeHost(dustvelx));
     CUDA_CHECK(cudaFree(dev_dustvelx));
     CUDA_CHECK(cudaFree(dev_dustmomx));

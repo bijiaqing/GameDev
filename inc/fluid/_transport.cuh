@@ -29,6 +29,18 @@ void _recover_dust_state (real rhod, real R, real &mx, real &my, real &mz, real 
 }
 
 // =========================================================================================================================
+// block-sweep workspace access
+
+#ifdef FLUID_BLOCK_SWEEP
+
+// select one line from one full-grid block-advection workspace field
+__device__ __forceinline__
+real *_block_field (real *dev_adv_work, int field, int idx_line, int line_size)
+{ return dev_adv_work + field*N_G + idx_line*line_size; }
+
+#endif // FLUID_BLOCK_SWEEP
+
+// =========================================================================================================================
 // PPM face reconstruction
 
 // reconstruct a bounded PPM face value on a uniform grid from four neighboring cells (for x direction)
@@ -41,9 +53,11 @@ static real _ppm_face_uniform (real q_m1, real q_0, real q_p1, real q_p2)
     return fmax(lo, fmin(hi, qe));
 }
 
-// reconstruct bounded face values on a nonuniform grid using precomputed PPM weights (for y and z directions)
+#ifndef FLUID_BLOCK_SWEEP
+
+// reconstruct and store bounded PPM faces along one nonuniform thread-owned line
 __device__ __forceinline__
-static void _ppm_faces_nonuniform (const real *cell_val, const real *face_weight, real *face, int cell_count)
+static void _thread_ppm_faces (const real *cell_val, const real *face_weight, real *face, int cell_count)
 {
     face[0] = cell_val[0];
 
@@ -68,6 +82,8 @@ static void _ppm_faces_nonuniform (const real *cell_val, const real *face_weight
 
     face[cell_count] = cell_val[cell_count - 1];
 }
+
+#endif // !FLUID_BLOCK_SWEEP
 
 // =========================================================================================================================
 // PPM profile limiting and upwind tracing
@@ -112,9 +128,11 @@ __device__ __forceinline__
 static real _ppm_state_L (real q_L, real dq, real q6, real cfl)
 { return q_L + 0.5*cfl*(dq + (1.0 - 2.0*cfl/3.0)*q6); }
 
-// produce the time-averaged upwind face state for the Riemann solver
+#ifndef FLUID_BLOCK_SWEEP
+
+// produce one time-averaged upwind state from the stored faces of a thread-owned line
 __device__ __forceinline__
-static real _ppm_face_value (const real *face, const real *cell_val,
+static real _thread_ppm_state (const real *face, const real *cell_val,
     int idx_up_L, int idx_up_R, bool upwind_on_left, real cfl)
 {
     real val_L = face[idx_up_L];
@@ -127,6 +145,49 @@ static real _ppm_face_value (const real *face, const real *cell_val,
         _ppm_state_R(val_R, dval, coeff_curv, cfl) :
         _ppm_state_L(val_L, dval, coeff_curv, cfl) ;
 }
+
+#else // FLUID_BLOCK_SWEEP
+
+// reconstruct one bounded PPM face on demand from a nonuniform block-owned line
+__device__ __forceinline__
+real _block_ppm_face (const real *value, const real *face_weight, int idx_face, int cell_count)
+{
+    if (idx_face == 0) return value[0];
+    if (idx_face == cell_count) return value[cell_count - 1];
+
+    const real *weight = face_weight + 4*idx_face;
+    real face;
+    if (idx_face >= 2 && idx_face <= cell_count - 2)
+    {
+        face  = weight[0]*value[idx_face - 2] + weight[1]*value[idx_face - 1];
+        face += weight[2]*value[idx_face]     + weight[3]*value[idx_face + 1];
+    }
+    else
+    {
+        face = weight[0]*value[idx_face - 1] + weight[1]*value[idx_face];
+    }
+
+    real face_min = fmin(value[idx_face - 1], value[idx_face]);
+    real face_max = fmax(value[idx_face - 1], value[idx_face]);
+    return fmax(face_min, fmin(face_max, face));
+}
+
+// reconstruct one limited upwind state on demand from a nonuniform block-owned line
+__device__ __forceinline__
+real _block_ppm_state (const real *value, const real *face_weight,
+    int idx_cell, int cell_count, bool upwind_on_left)
+{
+    real value_L = _block_ppm_face(value, face_weight, idx_cell,     cell_count);
+    real value_R = _block_ppm_face(value, face_weight, idx_cell + 1, cell_count);
+    real dvalue, coeff_curv;
+
+    _ppm_limit(value[idx_cell], value_L, value_R, dvalue, coeff_curv);
+    return upwind_on_left ?
+        _ppm_state_R(value_R, dvalue, coeff_curv, 0.0) :
+        _ppm_state_L(value_L, dvalue, coeff_curv, 0.0);
+}
+
+#endif // FLUID_BLOCK_SWEEP
 
 // =========================================================================================================================
 // invariant-domain correction limiting

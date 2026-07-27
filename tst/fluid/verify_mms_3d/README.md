@@ -13,7 +13,7 @@ and label it as verification.
 - `mms_residuals.cuh`: generated algebraic expressions only. It must not call production geometry,
   gas, force, or optical-depth helpers when constructing the reference.
 - `f_mms_source.cu`: test-only density and momentum forcing evaluated at the required substep times.
-- `fluid_main.cu`: model-local symmetric forcing composition and exact manufactured boundary
+- `fluid_runtime.cu`: model-local symmetric forcing composition and exact manufactured boundary
   updates. A forward-Euler density source is not acceptable.
 - `validate.py`: independent high-order finite-volume averages, L1/L2/Linf errors for density,
   ratio, all momenta and physical velocities, and the exact continuum optical depth.

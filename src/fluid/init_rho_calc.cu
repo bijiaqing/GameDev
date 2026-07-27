@@ -7,13 +7,14 @@
 __device__ __forceinline__
 real initdens_lerp (real R, const real *dev_initdens)
 {
-    if (R < Y_MIN || R > Y_MAX) return 0.0;
+    real R_min = _get_init_Rmin();
+    if (R < R_min || R > Y_MAX) return 0.0;
 
-    real dR = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
-    int idx_src = static_cast<int>((R - Y_MIN) / dR);
+    real dR = (Y_MAX - R_min) / static_cast<real>(N_Y);
+    int idx_src = static_cast<int>((R - R_min) / dR);
     if (idx_src >= N_Y) idx_src = N_Y - 1;
 
-    real R_src = Y_MIN + static_cast<real>(idx_src)*dR;
+    real R_src = R_min + static_cast<real>(idx_src)*dR;
     real frac_R = (R - R_src) / dR;
 
     return (1.0 - frac_R)*dev_initdens[idx_src] + frac_R*dev_initdens[idx_src + 1];

@@ -6,7 +6,7 @@
 
 __global__
 void cfl_rate_calc (
-    real *dev_cfl_rates, const real *dev_dustdens,
+    real *dev_cfl_rate, const real *dev_dustdens,
     const real *dev_dustmomx, const real *dev_dustmomy, const real *dev_dustmomz,
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz)
 {
@@ -72,7 +72,7 @@ void cfl_rate_calc (
         for (int ix = 0; ix < N_X; ix++)
         {
             int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
-            dev_cfl_rates[idx_cell] = INFINITY;
+            dev_cfl_rate[idx_cell] = INFINITY;
         }
         return;
     }
@@ -84,7 +84,7 @@ void cfl_rate_calc (
 
         if (dev_dustdens[idx_cell] < RHO_VAC)
         {
-            dev_cfl_rates[idx_cell] = 0.0;
+            dev_cfl_rate[idx_cell] = 0.0;
             continue;
         }
 
@@ -111,6 +111,6 @@ void cfl_rate_calc (
         cfl_rate = fmax(cfl_rate, fabs(vR_g*cos(z))*cfl_invlen_z);
         #endif // VISC_ACCRETION
 
-        dev_cfl_rates[idx_cell] = isfinite(cfl_rate) ? cfl_rate : INFINITY;
+        dev_cfl_rate[idx_cell] = isfinite(cfl_rate) ? cfl_rate : INFINITY;
     }
 }

@@ -14,6 +14,22 @@ From the repository root, run the complete CUDA verification matrix with:
 python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
 ```
 
+Use `FLUID_SWEEP=block python3 tst/fluid/verify_common/run_suite.py ...` to run the same cases with
+the one-block-per-line kernels instead of the default one-thread-per-line reference kernels.
+
+Run the matched thread-versus-block branch with:
+
+```bash
+python3 tst/fluid/verify_common/run_suite.py --group sweep --quick
+python3 tst/fluid/verify_common/run_suite.py --group sweep --sweep-dim all
+```
+
+The quick command uses small grids and one short output interval. The full command runs the
+transport-only `1024^2` and diffusion-enabled `128^3` comparisons, applies automatic field and mass
+checks, reports accepted-step counts, and records timing ratios. Radiation is disabled in both pairs.
+Because this branch is substantially more expensive, `--group all` continues to mean all analytical
+convergence cases and does not implicitly run `--group sweep`.
+
 Run the supplementary CPU algorithm checks with:
 
 ```bash

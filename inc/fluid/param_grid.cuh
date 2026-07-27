@@ -1,7 +1,7 @@
 #ifndef PARAM_GRID_CUH
 #define PARAM_GRID_CUH
 
-#include <cmath> // cos, pow
+#include <cmath> // cos, fmin, pow, sin
 
 #include <const_defs.cuh>
 
@@ -20,6 +20,15 @@ real _get_dy() { return pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y)); }
 
 __host__ __device__ __forceinline__
 real _get_dz() { return (Z_MAX - Z_MIN) / static_cast<real>(N_Z); }
+
+// smallest cylindrical radius covered by the spherical domain
+__host__ __device__ __forceinline__
+real _get_init_Rmin()
+{
+    if (N_Z == 1) return Y_MIN;
+
+    return Y_MIN*fmin(sin(Z_MIN), sin(Z_MAX));
+}
 
 // active geometry
 // -------------------------------------------------------------------------------------------------------------------------

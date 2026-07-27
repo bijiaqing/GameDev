@@ -27,8 +27,12 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
-        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring"), default="all"
+        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep"),
+        default="all",
     )
+    parser.add_argument("--sweep-dim", choices=("all", "2d", "3d"), default="all")
+    parser.add_argument("--sweep-res-2d", type=int, default=1024)
+    parser.add_argument("--sweep-res-3d", type=int, default=128)
     args = parser.parse_args()
 
     resolutions = args.res[:2] if args.quick else args.res
@@ -37,6 +41,20 @@ def main() -> None:
     # is the directory containing both verify_common and every model directory.
     common = Path(__file__).resolve().parent
     model_root = common.parent
+
+    # Sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence.  It remains a
+    # separate branch because the full 128^3 pair is substantially more expensive than the 85 analytical configurations.
+    if args.group == "sweep":
+        command = [
+            sys.executable, str(common/"run_sweep.py"),
+            "--dimension", args.sweep_dim,
+            "--res-2d", str(args.sweep_res_2d),
+            "--res-3d", str(args.sweep_res_3d),
+        ]
+        if args.quick:
+            command.append("--quick")
+        subprocess.run(command, check=True)
+        return
 
     # Each entry contains the model directory name and model-specific command
     # line options.  Keeping variants as separate entries gives each one an

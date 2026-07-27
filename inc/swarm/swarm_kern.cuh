@@ -17,6 +17,10 @@
 #error "VISC_ACCRETION cannot be combined with imported gas velocities"
 #endif // VISC_ACCRETION && IMPORTGAS
 
+#if defined(IMPORTGAS) && defined(CONST_ST)
+#error "CONST_ST cannot be combined with IMPORTGAS because imported gas density determines the local Stokes number"
+#endif // IMPORTGAS && CONST_ST
+
 #if defined(COLLISION) && !defined(MULTISIZE)
 #error "COLLISION requires MULTISIZE because collision outcomes evolve grain size and represented grain number"
 #endif // COLLISION && !MULTISIZE
@@ -106,7 +110,7 @@ __global__ void rngstate_init (curs *dev_rngstate, int seed = 1);
 // =========================================================================================================================
 
 #ifdef TRANSPORT
-__global__ void dt_rates_calc (real *dev_dt_rates, const swarm *dev_particle
+__global__ void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
     #ifdef IMPORTGAS
     , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz
     , const real *dev_gas_velx_next, const real *dev_gas_vely_next, const real *dev_gas_velz_next

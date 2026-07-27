@@ -90,7 +90,8 @@ void initdens_calc (std::vector <real> &initdens)
     const real R_src_min = Y_MIN + 2.0*smooth;
     const real R_src_max = Y_MAX - 2.0*smooth;
     const real kernel_std = 0.5*smooth;
-    const real dR = (Y_MAX - Y_MIN) / static_cast<real>(N_Y);
+    const real R_min = _get_init_Rmin();
+    const real dR = (Y_MAX - R_min) / static_cast<real>(N_Y);
     const real kernel_norm = 1.0 / (std::sqrt(2.0*M_PI)*kernel_std);
 
     std::vector <real> conv_u(N_Y + 1);
@@ -98,7 +99,7 @@ void initdens_calc (std::vector <real> &initdens)
 
     for (int idx_dst = 0; idx_dst <= N_Y; idx_dst++)
     {
-        conv_u[idx_dst] = Y_MIN + static_cast<real>(idx_dst)*dR;
+        conv_u[idx_dst] = R_min + static_cast<real>(idx_dst)*dR;
     }
 
     for (int idx_src = 0; idx_src <= N_Y; idx_src++)
@@ -119,12 +120,13 @@ void initdens_calc (std::vector <real> &initdens)
 
 // interpolate a tabulated convolved profile on its uniform axis
 inline static __host__
-real initdens_lerp (real R, const std::vector <real> &initdens, real R_min, real R_max)
+real initdens_lerp (real R, const std::vector <real> &initdens)
 {
-    if (R < R_min || R > R_max) return 0.0;
+    real R_min = _get_init_Rmin();
+    if (R < R_min || R > Y_MAX) return 0.0;
 
     int bin_count = static_cast<int>(initdens.size()) - 1;
-    real loc = (R - R_min)*static_cast<real>(bin_count) / (R_max - R_min);
+    real loc = (R - R_min)*static_cast<real>(bin_count) / (Y_MAX - R_min);
     int idx_bin = std::min(static_cast<int>(loc), bin_count - 1);
     real frac = loc - static_cast<real>(idx_bin);
 
@@ -174,7 +176,7 @@ real get_total_dust_mass ()
             real R = y*std::sin(z);
             real Z = y*std::cos(z);
 
-            real sigma_d = initdens_lerp(R, initdens, Y_MIN, Y_MAX);
+            real sigma_d = initdens_lerp(R, initdens);
             real rhod = _get_init_rhod(sigma_d, R, Z, S_0);
             real vol_y = _get_vol_y(iy);
 
@@ -218,7 +220,7 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
             real R = y*std::sin(z);
             real Z = y*std::cos(z);
 
-            real sigma_d = initdens_lerp(R, initdens, Y_MIN, Y_MAX);
+            real sigma_d = initdens_lerp(R, initdens);
             real rhod = _get_init_rhod(sigma_d, R, Z, size);
 
             real vol_y = _get_vol_y(iy);
@@ -300,7 +302,7 @@ void disk_cdf_calc (std::vector <real> &cdf, const std::vector <real> &initdens,
             real y = _get_ycent(iy);
             real R = y*std::sin(z);
             real Z = y*std::cos(z);
-            real sigma_d = initdens_lerp(R, initdens, Y_MIN, Y_MAX);
+            real sigma_d = initdens_lerp(R, initdens);
             real log_rhod = (sigma_d > 0.0) ? std::log(sigma_d) : log_zero;
 
             if (N_Z > 1 && sigma_d > 0.0)
