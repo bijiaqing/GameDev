@@ -9,9 +9,9 @@ coagulation/fragmentation.
 
 The active tree includes the corrected axisymmetric measure, well-mixed two-dimensional vertical
 closures, imported-gas Stokes calibration, frozen collision snapshots, and random-state restart
-semantics described below. These implementations have been checked by source inspection but have
-not yet received the native CUDA analytical and convergence campaign available for the fluid
-solver. Source inspection is therefore stronger than runtime validation for this branch.
+semantics described below. The ten-model native CUDA suite has passed all 25 configured cases.
+That evidence covers the isolated operations listed in [`testset_swarm.md`](testset_swarm.md), not
+every coupled production path.
 
 ## Coordinates and particle state
 
@@ -59,7 +59,7 @@ $$
 \Sigma_d(R)=Z_{\rm metal}\Sigma_g(R)
 $$
 
-before the shared-style Gaussian edge convolution. `get_total_dust_mass()` integrates that initialized
+before the Gaussian edge convolution. `get_total_dust_mass()` integrates that initialized
 profile over the configured domain. Representative grain counts, opacity, diagnostics, and
 dimensionless collision normalizations use this runtime mass; there is no independent arbitrary
 dust-mass parameter.
@@ -89,7 +89,8 @@ $$
 
 An active vertical dimension also receives terminal settling
 $v_Z=-\mathrm{St}\,\Omega_K Z$. `VISC_FLOW` replaces the zero gas radial velocity with the
-analytic viscous prescription and requires `DIFFUSION`.
+analytic viscous prescription, requires `DIFFUSION`, and cannot be combined with `IMPORTGAS` because
+imported gas velocities already prescribe the gas flow.
 
 Imported gas initialization samples the imported $\rho_g\epsilon$ field using the same exact
 cell-measure construction. Active azimuthal cells are sampled with `_get_dx()`; an inactive
@@ -375,13 +376,12 @@ restore it on resume. The companion file contains one raw `curandState` per repr
 resumed stochastic run continues the same random streams as an uninterrupted run built with the
 same CUDA state layout.
 
-## Current limitations and required tests
+## Current limitations
 
-- The prepared CUDA suite in `qav/swarm/` now covers circular orbits, frozen stiff drag,
-  one-step diffusion moments, optical-depth reconstruction, radiation and P-R response algebra,
-  accessible collision measures, and constant, additive, and product kernel numerators. Native
-  cluster results have not yet been archived, so these remain prepared tests rather than passed
-  evidence; see `testset_swarm.md`
+- The passed CUDA suite covers circular orbits, frozen stiff drag, one-step diffusion moments,
+  optical-depth reconstruction, radiation and P-R response algebra, accessible collision measures,
+  and constant, additive, and product kernel numerators. It does not establish long-time coupled
+  production evolution; see [`testset_swarm.md`](testset_swarm.md)
 - P-R validation still needs secular optically thin circular-orbit decay with a fixed orbital-plane
   direction beyond the prepared constant-coefficient one-step response
 - Collision validation still needs physical $\sigma\Delta v/V$ scaling, brute-force KNN
@@ -395,9 +395,9 @@ same CUDA state layout.
   not a scientifically meaningful configuration and is not fully guarded
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection
-- Replacing the KD tree with the adaptive Morton-cell method described in `future_bestknn.md` is
-  only a future performance option. It must reproduce neighbor identities, collision rates, and
-  statistical size evolution before adoption
+- The adaptive Morton method in [`future_knnalgorithm.md`](future_knnalgorithm.md) has passed
+  standalone exact-neighbor tests but remains a laboratory backend. Production collision rates,
+  events, and size evolution must agree before adoption
 
 ## References
 

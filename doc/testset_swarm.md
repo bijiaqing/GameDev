@@ -14,7 +14,7 @@ Robertson drag, collision-neighborhood measures, and the three dimensionless coa
 It does not yet validate initialization sampling, imported gas, KD-tree neighbor selection,
 stochastic collision events, boundaries, restart reproducibility, or long-term coupled evolution.
 
-This document defines what each prepared test proves, what it does not prove, and what result is
+This document defines what each test proves, what it does not prove, and what result is
 expected. Machine-readable results are written under `qav/swarm/out/`. The shorter implementation
 index in `qav/swarm/test_common/TEST_CASES.md` should remain consistent with this document.
 
@@ -50,7 +50,7 @@ p=\log_2\left(\frac{E_N}{E_{2N}}\right),
 $$
 
 where $N$ is the number of timesteps in one orbit and therefore $\Delta t\propto N^{-1}$. However,
-the prepared circular orbit is an exactly preserved equilibrium of the staggered update. Its error
+the circular-orbit case is an exactly preserved equilibrium of the staggered update. Its error
 is consequently dominated by floating-point roundoff rather than temporal truncation, so the
 formal values of $p$ are not convergence orders and no fitted-order threshold is imposed. A future
 non-equilibrium trajectory test is needed to measure the transport scheme's temporal order.
@@ -101,7 +101,7 @@ $$
 and multisize tests additionally write grain size and represented grain number. The Python
 validator constructs all reference values independently from these raw outputs and test metadata.
 
-## Prepared analytical and statistical cases
+## Analytical and statistical cases
 
 | Model | Production calculation exercised | Reference result |
 |---|---|---|
@@ -492,12 +492,8 @@ python3 qav/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The run completed all 25 required builds. Eight models completed in the main invocation; after a
-test-driver include-order fix, the two final collision models were rerun with
-`--group collision --res 32`. All ten models passed their validators. The earlier
-`_get_mass_weight` and collision-helper compilation errors preserved in the combined terminal
-transcript occurred before their preprocessor guards were corrected and are superseded by the
-successful builds below.
+The completed archive contains all 25 required builds, and all ten models passed their validators.
+Resolved development compilation errors are not part of the current verification claim.
 
 | Model | Requested $N$ | Recorded $L_2$ errors | Result |
 |---|---:|---|---|
@@ -613,8 +609,9 @@ directory and full terminal log together when archiving a native run.
 
 ## Verification still required
 
-- Compare KD-tree neighbor identities, distances, and periodic-image behavior with an independent
-  brute-force nearest-neighbor calculation in 2D, axisymmetry, partial wedges, and full 3D
+- Connect the exact cuKD, adaptive-Morton, and brute-force comparisons already exercised under
+  `lab/` to the production collision-rate and collision-event paths, including axisymmetry, partial
+  wedges, and full 3D; standalone KNN agreement does not yet validate production integration
 - Test complete frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
   with `CFL_COL`, $N_K$, and $N_P$

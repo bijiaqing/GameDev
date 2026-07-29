@@ -1,80 +1,76 @@
 # GameDev documentation
 
-This directory is the canonical documentation for the current GameDev dust solvers as of
-2026-07-27. It replaces the historical audits, correction diaries, merge proposals, and duplicated
-method notes that previously accumulated under `.github/`.
+This directory is the canonical documentation for the current merged GameDev project. It describes the active source tree, the verified numerical methods, the evidence retained in the repository, and future work that has not yet been promoted into production
 
-## Canonical documents
+Resolved audit diaries and rename histories are not canonical documents. Durable findings from the 2026-07-27 merged-code audit and the 2026-07-29 swarm-test audit have been incorporated into the documents below
 
-- [`numerics_fluid.md`](numerics_fluid.md) describes the Eulerian dust-fluid equations,
-  discretization, operator ordering, boundaries, and current limitations
-- [`testset_fluid.md`](testset_fluid.md) defines the analytical CUDA verification suite,
-  records the available native results, and separates verified claims from unfinished tests
-- [`numerics_swarm.md`](numerics_swarm.md) describes the Lagrangian representative-particle
-  solver, including transport, stochastic diffusion, radiation, collisions, and outstanding
-  validation
-- [`testset_swarm.md`](testset_swarm.md) defines the analytical and statistical CUDA swarm test
-  suite, its expected results, current evidence status, and unfinished coverage
-- [`ref_file_architecture.md`](ref_file_architecture.md) records the fluid–swarm consistency contract, the current
-  migration state, what can be shared, and what must remain representation-specific
-- [`ref_naming_variables.md`](ref_naming_variables.md) records the canonical naming rules and
-  intentional differences between the two representations
+## Document map
 
-## Current repository state
+| Document | Responsibility |
+|---|---|
+| [`numerics_fluid.md`](numerics_fluid.md) | Eulerian dust-fluid equations, discretization, operator composition, state semantics, and unresolved numerical limitations |
+| [`testset_fluid.md`](testset_fluid.md) | Fluid analytical cases, measurement protocol, historical native results, commands, and missing verification |
+| [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian representative-particle transport, diffusion, radiation, collisions, state semantics, and scientific limitations |
+| [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
+| [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
+| [`future_knnalgorithm.md`](future_knnalgorithm.md) | Validated adaptive-Morton KNN prototype, measurements, production-integration plan, and multi-GPU halo design |
+| [`future_rocm_support.md`](future_rocm_support.md) | CUDA-to-ROCm portability assessment and implementation sequence |
 
-The merged project is active at the repository root:
+Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior
+
+## Repository and build layout
+
+The active merged project is at the repository root:
 
 - `inc/fluid/` and `src/fluid/` contain the Eulerian fluid implementation
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
-- `inc/share/` and `src/share/` are reserved for future representation-independent infrastructure
-- `qav/fluid/` contains the fluid CUDA verification suite and its recorded outputs
-- `qav/swarm/` contains the prepared swarm CUDA verification suite
-- `legacy/swarm_before_audit/` and `legacy/swarm_after_audit/` are frozen recovery snapshots
+- `mod/` contains production model configurations
+- `qav/fluid/` and `qav/swarm/` contain verification models and validators
+- `lab/` contains the isolated adaptive-Morton KNN experiment
 
-The root build selects exactly one representation through `DUST_REPR` in the chosen model's
-`flags.mk`. An optional model-local `const_defs.cuh` has include priority over `inc/fluid/` or
-`inc/swarm/`; models without one inherit the representation defaults.
+The root Makefile requires `MODEL` and reads that model's `flags.mk`. `DUST_REPR := fluid` or `DUST_REPR := swarm` selects exactly one source branch. Fluid builds additionally select `FLUID_SWEEP := thread` or `FLUID_SWEEP := block`. A model-local `const_defs.cuh` has include priority; models without one inherit the selected representation's defaults
+
+Model-local source files override same-named production translation units. Verification models use this mechanism only when an analytical setup cannot be expressed through the production interface
+
+The branches do not share headers or translation units. Related algorithms, including optical-depth construction, remain independently implemented and tested
+
+## Evidence status
+
+| Area | Current repository evidence | Interpretation |
+|---|---|---|
+| fluid analytical suite | `qav/fluid/out/` is currently empty | the 85-case A100 result table in `testset_fluid.md` is a retained historical baseline, not a presently archived machine-readable result set |
+| fluid thread/block comparison | harness exists; no comparison JSON, build log, or profiler artifact is archived | implementation equivalence and timing claims should be regenerated on the target GPU before publication |
+| swarm analytical suite | 25 metrics, 25 metadata files, and 10 environment records under `qav/swarm/out/` | all ten models passed natively on the recorded A100 environment |
+| adaptive-Morton KNN | source and test harness exist under `lab/`; `lab/results/` is currently empty | the numerical tables in `future_knnalgorithm.md` are transcribed cluster results and should be rerun and archived before promotion |
+
+The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files
+
+## Current cross-representation conventions
+
+Both branches use spherical computational coordinates and the same cylindrical conversions, gas profiles, initial dust surface-density prescription, physical linear-velocity file convention, and model-selection mechanism. They intentionally differ in:
+
+- Eulerian conserved fields versus Lagrangian representative states
+- spherical fluid diffusion versus cylindrical swarm diffusion
+- conservative fluid transport versus semi-analytic particle trajectories
+- fluid density-diffusion momentum closure versus velocity-preserving stochastic particle displacement
+- fluid pressureless Riemann evolution versus swarm KNN collision sampling
+
+These are parallel scientific and naming conventions, not shared-code interfaces. The exact ownership rules are maintained in [`format_variablename.md`](format_variablename.md)
 
 ## Authority and maintenance
 
-When statements disagree, use this order of authority:
+When statements disagree, use this order:
 
-1. current source, model constants, and model flags
-2. recorded native test metrics under the sweep-specific directories in `qav/fluid/out/`
-3. these documents
-4. Git history and the historical swarm patch
+1. current production source, model constants, and model flags
+2. current machine-readable native results retained under `qav/`
+3. the canonical documents in this directory
+4. transcribed historical results, laboratory notes, and Git history
 
-Resolved bug narratives are intentionally omitted unless they explain a current invariant or
-regression test. New numerical changes should update the appropriate canonical document and add or
-update a test; they should not create another standalone audit diary.
+After a numerical change:
 
-## Review and evidence baseline
+1. update the appropriate numerical-method document
+2. add or update an analytical, statistical, or regression test
+3. archive the metrics and environment needed to support the new claim
+4. update the evidence status here
 
-The 2026-07-26 merged-tree review independently re-derived the production fluid and swarm formulas
-and found no additional production correctness defect in its inspected scope. Its resolved
-documentation, flag-combination, and Python-reference findings have been incorporated into the
-canonical documents above. The review inspected the vendored cuKD library only through GameDev's
-call sites and could not perform a local native CUDA build.
-
-The authoritative native fluid evidence remains the 85 analytical records and 22 environment
-records under `qav/fluid/out/thread/`. Block analytical results are written independently under
-`qav/fluid/out/block/`. The automated thread/block comparison branch exists, but its
-benchmark JSON and profiler artifacts are not currently archived in the repository. The swarm
-branch now has a runnable analytical and statistical suite under `qav/swarm/`, but no native result
-set has yet been archived, so its current evidence remains source review plus test preparation.
-
-The source uses spherical coordinates
-
-$$
-x=\phi,\qquad y=r,\qquad z=\theta,
-$$
-
-with cylindrical coordinates
-
-$$
-R=y\sin z,\qquad Z=y\cos z.
-$$
-
-Both representations store internal angular variables but write physical linear velocity to
-science files. The detailed state contract is in
-[`ref_file_architecture.md`](ref_file_architecture.md).
+Do not create a new standalone audit diary for a resolved issue. Add the surviving invariant, limitation, or regression-test requirement to its canonical document

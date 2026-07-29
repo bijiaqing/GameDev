@@ -95,6 +95,18 @@ $$
 \Sigma_d(R)=Z_{\rm metal}\Sigma_g(R).
 $$
 
+The convolution is evaluated on a temporary uniform cylindrical-radius axis. In 3D its lower bound
+is the smallest cylindrical radius covered by the spherical domain,
+
+$$
+R_{\min,\mathrm{init}}
+=
+Y_{\min}\min[\sin(Z_{\min}),\sin(Z_{\max})],
+$$
+
+rather than \(Y_{\min}\). This prevents high-latitude cells with \(R<Y_{\min}\) from being clipped
+to an unrelated radial profile value. In 2D, \(R_{\min,\mathrm{init}}=Y_{\min}\).
+
 The edge convolution is not renormalized. In 2D the convolved surface density is evolved directly
 and its unresolved vertical profile is assumed to be well mixed with the gas. In 3D it is embedded
 in a Gaussian dust layer using the density-diffusion scale height
@@ -286,7 +298,7 @@ invariant-domain correction and Thomas or Sherman–Morrison recurrence remain s
 line to preserve the verified numerical ordering. This is an implementation and memory-layout
 choice, not a different numerical method.
 
-Performance is grid dependent. Development comparisons found the block method faster for a
+Performance is grid dependent. Historical development comparisons found the block method faster for a
 `1024^2` transport model but slower for a `128^3` diffusion model. The intended production grid
 should therefore be benchmarked before selecting a default; neither implementation is universally
 preferred. The matched comparison procedure and the status of its archived evidence are recorded

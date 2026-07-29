@@ -7,9 +7,10 @@ finite-volume solutions. They are verification models, not production disk setup
 files replace a production component only when the test requires a prescribed state that the
 production interface cannot express.
 
-This document records the current verification claim. Detailed formulas implemented by the
-validator remain in `qav/fluid/test_common/TEST_CASES.md`, and machine-readable results remain
-under sweep-specific directories in `qav/fluid/out/`.
+This document records the verification design and the retained historical CUDA baseline. Detailed
+validator formulas remain in `qav/fluid/test_common/TEST_CASES.md`. The current local
+`qav/fluid/out/` directory is empty, so the historical table below is not backed by machine-readable
+artifacts in this checkout and must be regenerated before publication or release.
 
 ## Measurement protocol
 
@@ -48,7 +49,7 @@ independent RK4 integration of the Sturm–Liouville problem rather than the pro
 Distinct transverse specific momenta $(0.7,-0.15,0.11)$ make component swaps visible instead of
 allowing every momentum field to share one indistinguishable value.
 
-## Prepared analytical cases
+## Analytical cases
 
 | Model | Production calculation exercised | Analytical solution |
 |---|---|---|
@@ -209,11 +210,11 @@ three together. Because these are two-dimensional radial-azimuthal models, their
 the vertically integrated dust surface density rather than a reconstructed midplane volume
 density.
 
-## Recorded native CUDA results
+## Historical native CUDA baseline
 
 ### Complete merged-tree run of 2026-07-26
 
-The current JSON files under `qav/fluid/out/thread/` contain all 85 records from
+The complete 85-case thread-sweep run was recorded on 2026-07-26 with
 
 ```bash
 python3 qav/fluid/test_common/run_suite.py --group all --res 32 64 128 256
@@ -252,11 +253,11 @@ measurements are not present in the current repository. The numbers are therefor
 evidence rather than the canonical benchmark baseline. Rerun the automated sweep branch on the
 target GPU before making a production performance claim.
 
-The run completed all 85 builds and simulations without a compilation failure, runtime failure,
-Python traceback, or non-finite JSON metric. Unlike the earlier archive, the current output layout
-includes the CFL value in radial and polar transport filenames, so the 12 low-CFL records are no
-longer overwritten. All 22 parameter variants have an `environment.txt` file recording CUDA 12.1
-with `nvcc` 12.1.105 and an NVIDIA A100-SXM4-40GB using driver 580.159.04.
+The historical run completed all 85 builds and simulations without a compilation failure, runtime
+failure, Python traceback, or non-finite metric. The corrected output naming included CFL values in
+radial and polar transport filenames, preventing the 12 low-CFL records from being overwritten.
+The recorded environment was CUDA 12.1 with `nvcc` 12.1.105 and an NVIDIA A100-SXM4-40GB using
+driver 580.159.04.
 
 The following density $L_1$ orders use $N=32,64,128,256$ and list the three successive refinement
 intervals.
@@ -297,50 +298,14 @@ The low- and production-CFL transport step sequences are:
 The larger low-CFL mass roundoff in the two radial tests accumulates over roughly ten times as many
 steps and remains below $2\times10^{-12}$.
 
-### Comparison with the previous `mod/rpi_fluid` results
-
-All 73 records retained by the previous archive have a matching current record, and every matched
-case uses the same accepted step count. Fractional FARGO transport, polar transport, every isolated
-diffusion operator, optical depth, and the source update reproduce their earlier primary errors to
-the displayed precision. Radial-transport density errors differ only in the pre-asymptotic coarse
-meshes: the largest change is approximately 7.5 percent, while the $N=256$ density errors agree to
-better than $3\times10^{-7}$ relatively and retain the same asymptotic orders.
-
-Some coarse-grid radial-velocity norms change more strongly, by as much as approximately 50 percent
-in one `vely` norm, but the $N=256$ values are unchanged to the displayed precision. This is retained
-as a pre-asymptotic limiter sensitivity rather than interpreted as a converged-regime regression.
-
-The ring tests are not directly comparable through absolute density error because the previous
-models reconstructed a midplane volume density,
-
-$$
-\rho_g=\frac{\Sigma_g}{\sqrt{2\pi}h_gR},
-$$
-
-whereas the current two-dimensional models correctly evolve $\Sigma_g$. This changes both the
-normalization and radial profile, making the current absolute ring $L_1$ errors approximately
-1.9--2.2 times larger. After dividing each finest-grid $L_1$ error by the volume-weighted mean of
-its own analytical density, the comparison is:
-
-| Ring case | Previous relative $L_1$ | Current relative $L_1$ | Change |
-|---|---:|---:|---:|
-| transport | $1.3340\times10^{-5}$ | $1.2406\times10^{-5}$ | $-7.0\%$ |
-| transport + diffusion | $1.2670\times10^{-6}$ | $1.1566\times10^{-6}$ | $-8.7\%$ |
-| transport + radiation | $1.3375\times10^{-5}$ | $1.2103\times10^{-5}$ | $-9.5\%$ |
-| all physics | $1.3781\times10^{-6}$ | $1.1999\times10^{-6}$ | $-12.9\%$ |
-
-The changed ring normalization therefore does not indicate a regression; the normalized errors and
-the observed orders are slightly improved. The current 85-record result set should replace the old
-archive as the regression baseline.
-
 The integer FARGO case remains near machine roundoff. Its negative reported orders are ratios of
 roundoff noise, not a failed transport test. The $p=0$ optical-depth case can likewise be integrated
 exactly or nearly exactly by the logarithmic midpoint rule, so its order is not meaningful.
 
-The source reference now uses the same cancellation-safe endpoint-weight series as the CUDA kernel
-for $h<10^{-4}$. Reanalysis of the unchanged native output reduces the largest componentwise error
-from $2.22\times10^{-5}$ to $2.22\times10^{-16}$. Density and total mass are exact to the recorded
-precision, so the source case passes.
+The source reference uses the same cancellation-safe endpoint-weight series as the CUDA kernel for
+$h<10^{-4}$. Reanalysis of the unchanged native state reduced the largest componentwise discrepancy
+from $2.22\times10^{-5}$ to $2.22\times10^{-16}$; the former value was cancellation in the Python
+reference, not a production-kernel error. Density and total mass are exact to the recorded precision.
 
 ## Running the suite
 
