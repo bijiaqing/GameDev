@@ -6,9 +6,9 @@ INC_SWARM_DIR = $(ROOT_DIR)/inc/swarm
 MOD_ROOT       = $(ROOT_DIR)/mod
 OBJ_ROOT       = $(ROOT_DIR)/obj
 OUT_ROOT       = $(ROOT_DIR)/out
-TST_ROOT       = $(ROOT_DIR)/tst
-TST_FLUID_DIR  = $(TST_ROOT)/fluid
-TST_SWARM_DIR  = $(TST_ROOT)/swarm
+QAV_ROOT       = $(ROOT_DIR)/qav
+QAV_FLUID_DIR  = $(QAV_ROOT)/fluid
+QAV_SWARM_DIR  = $(QAV_ROOT)/swarm
 SRC_FLUID_DIR = $(ROOT_DIR)/src/fluid
 SRC_SWARM_DIR = $(ROOT_DIR)/src/swarm
 
@@ -27,11 +27,11 @@ endif
 ifdef MODEL
 MODEL_MATCHES := $(wildcard \
     $(MOD_ROOT)/$(MODEL) \
-    $(TST_FLUID_DIR)/$(MODEL) \
-    $(TST_SWARM_DIR)/$(MODEL))
+    $(QAV_FLUID_DIR)/$(MODEL) \
+    $(QAV_SWARM_DIR)/$(MODEL))
 
 ifeq ($(strip $(MODEL_MATCHES)),)
-$(error MODEL=$(MODEL) was not found under mod/, tst/fluid/, or tst/swarm/)
+$(error MODEL=$(MODEL) was not found under mod/, qav/fluid/, or qav/swarm/)
 endif
 
 ifneq ($(words $(MODEL_MATCHES)),1)
@@ -48,7 +48,7 @@ include $(MODEL_DIR)/flags.mk
 
 MODEL_CONST := $(wildcard $(MODEL_DIR)/const_defs.cuh)
 
-ifneq ($(filter $(TST_ROOT)/%,$(MODEL_DIR)),)
+ifneq ($(filter $(QAV_ROOT)/%,$(MODEL_DIR)),)
 ifneq ($(strip $(RES)),)
 NVCC += -DTEST_RES=$(RES)
 endif
@@ -95,12 +95,12 @@ endif
 
 OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)
 
-ifneq ($(filter $(TST_ROOT)/%,$(MODEL_DIR)),)
+ifneq ($(filter $(QAV_ROOT)/%,$(MODEL_DIR)),)
 OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
 ifeq ($(DUST_REPR),fluid)
-OUT_DIR = $(TST_ROOT)/$(DUST_REPR)/out/$(FLUID_SWEEP)/$(MODEL)$(OUT_TAG_DIR)
+OUT_DIR = $(QAV_ROOT)/$(DUST_REPR)/out/$(FLUID_SWEEP)/$(MODEL)$(OUT_TAG_DIR)
 else
-OUT_DIR = $(TST_ROOT)/$(DUST_REPR)/out/$(MODEL)$(OUT_TAG_DIR)
+OUT_DIR = $(QAV_ROOT)/$(DUST_REPR)/out/$(MODEL)$(OUT_TAG_DIR)
 endif
 else
 OUT_DIR = $(OUT_ROOT)/$(MODEL)

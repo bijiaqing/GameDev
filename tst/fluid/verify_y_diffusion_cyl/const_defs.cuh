@@ -1,3 +1,0 @@
-#define VERIFY_Y_DIFFUSION_CYL
-#define VERIFY_CONSTANT_DIFFUSIVITY
-#include "../verify_common/const_defs.cuh"

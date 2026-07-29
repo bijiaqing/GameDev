@@ -23,11 +23,11 @@ make MODEL=swarm_fiducial
 ```
 
 All test models, test scripts, generated test results, and standalone algorithm mocks live below
-`tst/`, separately from production models in `mod/`. Run the complete fluid verification
+`qav/`, separately from production models in `mod/`. Run the complete fluid verification
 suite with:
 
 ```bash
-python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
+python3 qav/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 For both representations, the source search order is model override followed by the selected

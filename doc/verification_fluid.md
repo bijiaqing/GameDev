@@ -2,14 +2,14 @@
 
 ## Purpose
 
-The CUDA models under `tst/fluid/` compare production fluid kernels with analytical
+The CUDA models under `qav/fluid/` compare production fluid kernels with analytical
 finite-volume solutions. They are verification models, not production disk setups. Model-local
 files replace a production component only when the test requires a prescribed state that the
 production interface cannot express.
 
 This document records the current verification claim. Detailed formulas implemented by the
-validator remain in `tst/fluid/verify_common/TEST_CASES.md`, and machine-readable results remain
-under sweep-specific directories in `tst/fluid/out/`.
+validator remain in `qav/fluid/test_common/TEST_CASES.md`, and machine-readable results remain
+under sweep-specific directories in `qav/fluid/out/`.
 
 ## Measurement protocol
 
@@ -52,20 +52,20 @@ allowing every momentum field to share one indistinguishable value.
 
 | Model | Production calculation exercised | Analytical solution |
 |---|---|---|
-| `verify_x_transport_2d` | periodic FARGO, PPM/HLL, conservative limiter | rotating Fourier mode after one revolution |
-| `verify_y_transport_cyl` | radial PPM/HLL with $d=2$ geometry | compact homologous expansion |
-| `verify_y_transport_sph` | radial PPM/HLL with $d=3$ geometry | compact homologous expansion |
-| `verify_z_transport_3d` | polar PPM/HLL and $\sin z$ geometry | translation of $\rho\sin z$ at constant $\ell_\theta$ |
-| `verify_x_diffusion_2d` | cyclic Crank–Nicolson and diffusive momentum flux | Fourier decay on each ring |
-| `verify_y_diffusion_cyl` | $d=2$ radial Crank–Nicolson | Neumann shell eigenmode |
-| `verify_y_diffusion_sph` | $d=3$ radial Crank–Nicolson | Neumann shell eigenmode |
-| `verify_z_diffusion_3d` | polar Crank–Nicolson | $P_2(\cos z)$ decay |
-| `verify_source_drag` | exponential endpoint-force weights | linear-force drag relaxation over eight stiffness ratios |
-| `verify_optdepth` | optical-depth quadrature and radial prefix sum | radial power-law integral |
-| `verify_ring_transport_2d` | full transport/source composition | force-balanced Keplerian Fourier rings |
-| `verify_ring_diffusion_2d` | transport plus diffusion | rotating, exponentially damped rings |
-| `verify_ring_radiation_2d` | transport plus radiation | optically thin reduced-gravity rings |
-| `verify_ring_all_2d` | transport, diffusion, radiation, drag, gravity | damped reduced-gravity rings |
+| `test_x_transport_2d` | periodic FARGO, PPM/HLL, conservative limiter | rotating Fourier mode after one revolution |
+| `test_y_transport_cyl` | radial PPM/HLL with $d=2$ geometry | compact homologous expansion |
+| `test_y_transport_sph` | radial PPM/HLL with $d=3$ geometry | compact homologous expansion |
+| `test_z_transport_3d` | polar PPM/HLL and $\sin z$ geometry | translation of $\rho\sin z$ at constant $\ell_\theta$ |
+| `test_x_diffusion_2d` | cyclic Crank–Nicolson and diffusive momentum flux | Fourier decay on each ring |
+| `test_y_diffusion_cyl` | $d=2$ radial Crank–Nicolson | Neumann shell eigenmode |
+| `test_y_diffusion_sph` | $d=3$ radial Crank–Nicolson | Neumann shell eigenmode |
+| `test_z_diffusion_3d` | polar Crank–Nicolson | $P_2(\cos z)$ decay |
+| `test_source_drag` | exponential endpoint-force weights | linear-force drag relaxation over eight stiffness ratios |
+| `test_optdepth` | optical-depth quadrature and radial prefix sum | radial power-law integral |
+| `test_ring_transport_2d` | full transport/source composition | force-balanced Keplerian Fourier rings |
+| `test_ring_diffusion_2d` | transport plus diffusion | rotating, exponentially damped rings |
+| `test_ring_radiation_2d` | transport plus radiation | optically thin reduced-gravity rings |
+| `test_ring_all_2d` | transport, diffusion, radiation, drag, gravity | damped reduced-gravity rings |
 
 The cylindrical and spherical radial tests isolate the Jacobian:
 
@@ -213,10 +213,10 @@ density.
 
 ### Complete merged-tree run of 2026-07-26
 
-The current JSON files under `tst/fluid/out/thread/` contain all 85 records from
+The current JSON files under `qav/fluid/out/thread/` contain all 85 records from
 
 ```bash
-python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
+python3 qav/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 The suite uses the reference thread sweep by default. Prefix the same command with
@@ -228,8 +228,8 @@ two evidence sets coexist.
 For a direct matched-output and timing comparison, use the dedicated fixed-work branch:
 
 ```bash
-python3 tst/fluid/verify_common/run_suite.py --group sweep --quick
-python3 tst/fluid/verify_common/run_suite.py --group sweep --sweep-dim all
+python3 qav/fluid/test_common/run_suite.py --group sweep --quick
+python3 qav/fluid/test_common/run_suite.py --group sweep --sweep-dim all
 ```
 
 The full branch runs a transport-only `1024^2` pair and a diffusion-enabled `128^3` pair, with
@@ -347,9 +347,9 @@ precision, so the source case passes.
 From the repository root:
 
 ```bash
-python3 tst/fluid/verify_common/run_suite.py --quick
-python3 tst/fluid/verify_common/run_suite.py --group transport --res 32 64 128 256
-python3 tst/fluid/verify_common/run_suite.py --group all --res 32 64 128 256
+python3 qav/fluid/test_common/run_suite.py --quick
+python3 qav/fluid/test_common/run_suite.py --group transport --res 32 64 128 256
+python3 qav/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 The complete `--group all --res 32 64 128 256` matrix performs 85 builds/runs because several
@@ -358,12 +358,12 @@ rebuilt so model-local compile-time constants cannot reuse stale objects.
 
 Only NumPy is required by the Python validator. Keep the JSON metrics, `environment.txt`, and full
 terminal output together when archiving a run. Analytical results are namespaced as
-`tst/fluid/out/SWEEP/MODEL/`, where `SWEEP` is `thread` or `block`.
+`qav/fluid/out/SWEEP/MODEL/`, where `SWEEP` is `thread` or `block`.
 
 ## Verification still required
 
 - Implement the full coupled 3D manufactured-solution harness specified in
-  `tst/fluid/verify_mms_3d/README.md`, including independent forcing and exact boundary data
+  `qav/fluid/test_mms_3d/README.md`, including independent forcing and exact boundary data
 - Add production-settling equilibrium tests that quantify the initial polar transient
 - Add radial and polar cases whose nonzero support actually crosses an outflow boundary, plus a
   `HALFDISK` midplane-reflection case; current compact profiles remain away from those boundaries

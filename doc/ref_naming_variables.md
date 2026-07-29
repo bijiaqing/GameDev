@@ -239,6 +239,6 @@ The completed implementation was checked by:
 - checking declaration and call-site consistency after public helper renames
 - updating the verification harness only where the production `save_host_binary` interface required it
 - running `git diff --check`
-- running Makefile dry runs for `fluid_fiducial`, `verify_x_transport_2d`, and `verify_source_drag`
+- running Makefile dry runs for `fluid_fiducial`, `test_x_transport_2d`, and `test_source_drag`
 
 A native CUDA compilation was not available in the local environment because `nvcc` is not installed

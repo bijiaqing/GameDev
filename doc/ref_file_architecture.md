@@ -18,7 +18,7 @@ The merged layout is active at the repository root:
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian solver
 - `inc/share/` is reserved for representation-independent interfaces and currently contains no active interface
 - `src/share/` is reserved for representation-independent kernels and currently contains no production source
-- `mod/` contains production models and `tst/` contains representation-specific tests
+- `mod/` contains production models and `qav/` contains representation-specific tests
 - the root `Makefile` builds either representation according to the selected model's `DUST_REPR`
 
 The two standalone swarm generations remain frozen under `legacy/` as recovery references, not as
@@ -26,7 +26,7 @@ active build trees.
 
 ## Build and driver design
 
-Every model directory in `mod/`, `tst/fluid/`, or `tst/swarm/` provides `flags.mk`. A model that
+Every model directory in `mod/`, `qav/fluid/`, or `qav/swarm/` provides `flags.mk`. A model that
 changes numerical or physical constants may additionally provide `const_defs.cuh`; otherwise it
 inherits the selected representation's header. The model directory is the first include-search
 location, so an optional local header overrides the representation defaults without `MODEL_*`
@@ -276,7 +276,7 @@ multiple swarm seeds or enough particles to quantify the expected $N_P^{-1/2}$ u
 
 ### Validation parity
 
-The fluid has operator and coupled analytical tests. `tst/swarm/` is still empty. Validation parity
+The fluid has operator and coupled analytical tests. `qav/swarm/` is still empty. Validation parity
 is not complete until the swarm has:
 
 - single-particle orbit and stiff-drag tests
@@ -294,7 +294,7 @@ this order:
 
 1. add a representation-neutral base/configuration interface without changing either numerical method
 2. move common grid, coordinate, gas, file, and CUDA utilities behind that interface
-3. reproduce standalone swarm behavior with analytical tests under `tst/swarm/`
+3. reproduce standalone swarm behavior with analytical tests under `qav/swarm/`
 4. add cross-representation tests for the common physical contract
 5. remove duplicated representation utilities only after both test families pass
 6. remove `legacy/` only after the user confirms that the active tree is the accepted recovery point

@@ -2,11 +2,11 @@ __pycache__/
 *.pyc
 
 mod/*/gamedev
-tst/*/*/gamedev
+qav/*/*/gamedev
 
 # pre-GameDev build artifacts
 mod/*/graffiti
-tst/*/*/graffiti
+qav/*/*/graffiti
 
 obj/*
 !obj/.gitkeep
@@ -14,5 +14,5 @@ obj/*
 out/*
 !out/.gitkeep
 
-tst/*/out/*
-!tst/*/out/.gitkeep
+qav/*/out/*
+!qav/*/out/.gitkeep

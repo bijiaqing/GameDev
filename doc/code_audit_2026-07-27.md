@@ -1,10 +1,10 @@
-# Merged fluid–swarm code audit: `inc/`, `src/`, `tst/` (2026-07-27)
+# Merged fluid–swarm code audit: `inc/`, `src/`, `qav/` (2026-07-27)
 
 Date: 2026-07-27
 
 Scope: line-by-line review of the current merged tree after the thread/block sweep consolidation —
 `inc/fluid/`, `inc/swarm/`, `src/fluid/`, `src/swarm/`, the root `Makefile`, and the complete
-`tst/fluid/` harness (analytical suite, thread/block sweep branch, Python validators, mock
+`qav/fluid/` harness (analytical suite, thread/block sweep branch, Python validators, mock
 checks, recorded outputs). The vendored `inc/swarm/cukd/` library was checked only at call sites.
 `legacy/` and `mod/` were treated as frozen/configuration material. The review asked: (1) whether
 the calculations are numerically, mathematically, and physically correct; (2) whether the
@@ -12,14 +12,14 @@ thread/block merge and the renaming rework introduced code errors; (3) whether c
 agree; (4) whether the tests are complete and test the right things.
 
 Post-audit harness correction: analytical outputs are now namespaced under
-`tst/fluid/out/thread/` and `tst/fluid/out/block/`. This fixes an artifact-management omission in
+`qav/fluid/out/thread/` and `qav/fluid/out/block/`. This fixes an artifact-management omission in
 the audited version, where a block analytical run would have overwritten the archived thread
 fields, metrics, and environment records. The production calculations were unaffected.
 
 Method: source inspection plus independent algebraic re-derivation of every changed numerical
 formula, and direct comparison of the merged block kernels against the previously validated
 `mod/vram_optimize` implementations. No CUDA compiler is available on this machine; runtime
-claims rely on the recorded artifacts under `tst/fluid/out/thread/`, per the authority order in
+claims rely on the recorded artifacts under `qav/fluid/out/thread/`, per the authority order in
 `doc/README.md`. Recorded artifacts were spot-checked against the documents (85 metrics, 22
 environments, source-case machine-epsilon errors, zero archived sweep-comparison JSONs — all
 consistent).
@@ -109,7 +109,7 @@ Everything checked agrees:
   weights otherwise), algebraically exact; the recorded `momz L∞` is `2.22e-16` as documented.
   The stated evidence boundary (no archived sweep benchmark/profiler artifacts) matches the
   repository (zero `sweep_comparison_*.json` present). The 85-record table, step sequences, mass
-  figures, and environment records remain consistent with `tst/fluid/out/thread/`.
+  figures, and environment records remain consistent with `qav/fluid/out/thread/`.
 - `doc/ref_naming_variables.md`: every applied spelling in its record tables matches the code
   (`_thread_dr_cent_i/o`, `_block_dr_cent_i/o`, `_thread_ppm_faces/_thread_ppm_state`,
   `dev_cfl_rate`, `dev_dt_rate`, the `{th,bl}` kernel names, the 13-character rule).
@@ -143,7 +143,7 @@ The "verification still required" list is accurate and complete with respect to 
 findings: full-3D MMS, boundary-crossing cases and a `HALFDISK` midplane case, restart-tolerance
 and flag-matrix regressions, a CUDA case that actually triggers CN positivity subcycling, finite
 attenuation, archived sweep benchmark artifacts, fast_math-off reruns, and automated pass
-thresholds. `tst/swarm/` remains empty, so the swarm branch still has source-review evidence
+thresholds. `qav/swarm/` remains empty, so the swarm branch still has source-review evidence
 only — the largest validation asymmetry, unchanged and documented.
 
 Two small additions to that list, in priority order:
@@ -171,14 +171,14 @@ Two small additions to that list, in priority order:
 
 ## E. Recommendations (priority order)
 
-1. Run `python3 tst/fluid/verify_common/run_suite.py --group sweep --sweep-dim all` once on the
+1. Run `python3 qav/fluid/test_common/run_suite.py --group sweep --sweep-dim all` once on the
    target GPU and commit `sweep_comparison_*.json`, build logs, `ptxas -v` reports for the
    thread kernels, and a profiler local-traffic comparison — this closes the only evidence gap
    the documents themselves flag.
 2. Run the full analytical suite once with `FLUID_SWEEP=block` so the block implementation has
    the same 85-record convergence evidence as the thread implementation. Its artifacts will be
-   retained separately under `tst/fluid/out/block/`.
-3. Create `tst/swarm/` (orbit/stiff-drag, cylindrical diffusion, optical-depth/β attenuation,
+   retained separately under `qav/fluid/out/block/`.
+3. Create `qav/swarm/` (orbit/stiff-drag, cylindrical diffusion, optical-depth/β attenuation,
    constant-kernel collision) — still the largest missing validation surface.
 4. Work through the already-documented verification list (boundary-crossing, restart tolerance,
    CN subcycling trigger, finite attenuation) when the MMS harness lands.
@@ -186,7 +186,7 @@ Two small additions to that list, in priority order:
 ## Review limitations
 
 - No CUDA compilation or execution was possible here; runtime evidence is the recorded
-  `tst/fluid/out/thread/` artifact set, verified for internal consistency and against the documents but
+  `qav/fluid/out/thread/` artifact set, verified for internal consistency and against the documents but
   not regenerated.
 - `inc/swarm/cukd/` internals were not re-audited (unchanged).
 - `mod/fluid_fiducial` (thread sweep, RADIATION) and `mod/swarm_fiducial` (TRANSPORT, RADIATION,
