@@ -1,0 +1,300 @@
+#include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include <cuda_runtime.h>
+
+#ifdef COLLISION
+#include <_collision.cuh>
+#endif // COLLISION
+#include <param_grid.cuh>
+#include <swarm_kern.cuh>
+
+namespace
+{
+
+const std::string output_path = PATH_OUT;
+
+void cuda_check (cudaError_t status, const char *operation)
+{
+    if (status == cudaSuccess) return;
+    std::cerr << operation << ": " << cudaGetErrorString(status) << std::endl;
+    std::exit(EXIT_FAILURE);
+}
+
+void kernel_check (const char *kernel)
+{
+    cuda_check(cudaGetLastError(), kernel);
+    cuda_check(cudaDeviceSynchronize(), kernel);
+}
+
+std::string suffix ()
+{
+    return "_N" + std::to_string(VERIFY_RES) + ".dat";
+}
+
+const char *case_name ()
+{
+#if defined(TEST_GRID_2D)
+    return "grid_2d";
+#elif defined(TEST_GRID_3D)
+    return "grid_3d";
+#elif defined(TEST_ORBIT_2D)
+    return "orbit_2d";
+#elif defined(TEST_DRAG_2D)
+    return "drag_2d";
+#elif defined(TEST_DIFFUSION_2D)
+    return "diffusion_2d";
+#elif defined(TEST_DIFFUSION_3D)
+    return "diffusion_3d";
+#elif defined(TEST_RADIATION_2D)
+    return "radiation_2d";
+#elif defined(TEST_PRDRAG_2D)
+    return "prdrag_2d";
+#elif defined(TEST_COLLISION_2D)
+    return "collision_2d";
+#elif defined(TEST_COLLISION_3D)
+    return "collision_3d";
+#else
+    return "unknown";
+#endif
+}
+
+void write_binary (const std::string &name, const std::vector<real> &values)
+{
+    std::ofstream file(output_path + name + suffix(), std::ios::binary);
+    file.write(reinterpret_cast<const char *>(values.data()), sizeof(real)*values.size());
+}
+
+void write_state (const std::vector<swarm> &particle)
+{
+    std::vector<real> state(6*N_P);
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        state[idx]         = particle[idx].position.x;
+        state[N_P + idx]   = particle[idx].position.y;
+        state[2*N_P + idx] = particle[idx].position.z;
+        state[3*N_P + idx] = particle[idx].velocity.x;
+        state[4*N_P + idx] = particle[idx].velocity.y;
+        state[5*N_P + idx] = particle[idx].velocity.z;
+    }
+    write_binary("state", state);
+
+#ifdef MULTISIZE
+    std::vector<real> species(2*N_P);
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        species[idx] = particle[idx].par_size;
+        species[N_P + idx] = particle[idx].par_numr;
+    }
+    write_binary("species", species);
+#endif
+}
+
+void write_meta (real dt, real time)
+{
+    std::ofstream file(output_path + "meta_N" + std::to_string(VERIFY_RES) + ".txt");
+    file << "case=" << case_name() << '\n';
+    file << "resolution=" << VERIFY_RES << '\n';
+    file << "np=" << N_P << '\n';
+    file << "nx=" << N_X << '\n';
+    file << "ny=" << N_Y << '\n';
+    file << "nz=" << N_Z << '\n';
+    file << "dt=" << dt << '\n';
+    file << "time=" << time << '\n';
+}
+
+void copy_state_from_device (std::vector<swarm> &particle, const swarm *dev_particle)
+{
+    cuda_check(cudaMemcpy(particle.data(), dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost), "copy state");
+}
+
+real radial_centroid_offset ()
+{
+    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    real dimension = 2.0 + static_cast<real>(N_Z > 1);
+    return log((dimension / (dimension + 1.0))*(pow(dy, dimension + 1.0) - 1.0)
+        / (pow(dy, dimension) - 1.0)) / log(dy);
+}
+
+void initialize_grid_particles (std::vector<swarm> &particle)
+{
+    real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
+    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    real dz = (N_Z > 1) ? (Z_MAX - Z_MIN) / static_cast<real>(N_Z) : 0.0;
+    real radial_offset = radial_centroid_offset();
+
+    for (int iz = 0; iz < N_Z; iz++)
+    {
+        for (int iy = 0; iy < N_Y; iy++)
+        {
+            for (int ix = 0; ix < N_X; ix++)
+            {
+                int idx = ix + iy*N_X + iz*N_X*N_Y;
+                particle[idx].position.x = X_MIN + (static_cast<real>(ix) + 0.5)*dx;
+                particle[idx].position.y = Y_MIN*pow(dy, static_cast<real>(iy) + radial_offset);
+                particle[idx].position.z = (N_Z > 1)
+                    ? Z_MIN + (static_cast<real>(iz) + 0.5)*dz : 0.5*M_PI;
+                particle[idx].velocity = make_double3(0.0, 0.0, 0.0);
+            }
+        }
+    }
+}
+
+#if defined(TEST_COLLISION_2D) || defined(TEST_COLLISION_3D)
+__global__ void collision_math (real *result, const swarm *particle, const real *size, const real *number)
+{
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+
+    constexpr real radius = 0.2;
+    result[0] = _get_ball_measure(1.0, 0.5*M_PI, radius);
+    result[1] = _get_ball_measure(Y_MIN + 0.25*radius, 0.5*M_PI, radius);
+    result[2] = (N_Z > 1)
+        ? _get_ball_measure(1.0, Z_MIN + 0.25*radius, radius)
+        : _get_ball_measure(1.0, 0.5*M_PI, radius);
+    result[3] = _get_col_rate_ij<CONSTANT_KERNEL>(particle, size, number, 0, 1, 0.3);
+    result[4] = _get_col_rate_ij<LINEAR_KERNEL>(particle, size, number, 0, 1, 0.3);
+    result[5] = _get_col_rate_ij<PRODUCT_KERNEL>(particle, size, number, 0, 1, 0.3);
+}
+#endif
+
+}
+
+int main ()
+{
+    std::vector<swarm> particle(N_P);
+    swarm *dev_particle = nullptr;
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(swarm)*N_P), "allocate particles");
+
+#if defined(TEST_GRID_2D) || defined(TEST_GRID_3D)
+    initialize_grid_particles(particle);
+    cuda_check(cudaMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, cudaMemcpyHostToDevice), "upload particles");
+
+    real *dev_dustdens = nullptr;
+    real *dev_optdepth = nullptr;
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_dustdens), sizeof(real)*N_G), "allocate density");
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_optdepth), sizeof(real)*N_G), "allocate optical depth");
+
+    dustdens_init <<< NB_G, TPB >>> (dev_dustdens);
+    optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
+    dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, 1.0);
+    optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, 1.0);
+    dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);
+    optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);
+    optdepth_csum <<< (N_X*N_Z)/TPB + 1, TPB >>> (dev_optdepth);
+    optdepth_mean <<< (N_Y*N_Z)/TPB + 1, TPB >>> (dev_optdepth);
+    kernel_check("grid diagnostics");
+
+    std::vector<real> dustdens(N_G);
+    std::vector<real> optdepth(N_G);
+    cuda_check(cudaMemcpy(dustdens.data(), dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost), "copy density");
+    cuda_check(cudaMemcpy(optdepth.data(), dev_optdepth, sizeof(real)*N_G, cudaMemcpyDeviceToHost), "copy optical depth");
+    write_binary("dustdens", dustdens);
+    write_binary("optdepth", optdepth);
+    write_state(particle);
+    cuda_check(cudaFree(dev_dustdens), "free density");
+    cuda_check(cudaFree(dev_optdepth), "free optical depth");
+    write_meta(0.0, 0.0);
+
+#elif defined(TEST_ORBIT_2D)
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        particle[idx].position = make_double3(X_MIN + (idx + 0.5)*(X_MAX - X_MIN)/N_P, 1.0, 0.5*M_PI);
+        particle[idx].velocity = make_double3(1.0, 0.0, 0.0);
+    }
+    cuda_check(cudaMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, cudaMemcpyHostToDevice), "upload particles");
+    real time_end = 2.0*M_PI;
+    real dt = time_end / static_cast<real>(VERIFY_RES);
+    for (int step = 0; step < VERIFY_RES; step++)
+    {
+        ssa_transport <<< NB_P, TPB >>> (dev_particle, dt);
+    }
+    kernel_check("ssa_transport");
+    copy_state_from_device(particle, dev_particle);
+    write_state(particle);
+    write_meta(dt, time_end);
+
+#elif defined(TEST_DRAG_2D) || defined(TEST_RADIATION_2D) || defined(TEST_PRDRAG_2D)
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
+        particle[idx].velocity = make_double3(1.2, 0.0, 0.0);
+        particle[idx].par_size = 0.05*pow(2.0, static_cast<real>(idx));
+        particle[idx].par_numr = 1.0;
+    }
+    cuda_check(cudaMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, cudaMemcpyHostToDevice), "upload particles");
+    real dt = 0.1;
+
+#ifdef RADIATION
+    real *dev_optdepth = nullptr;
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_optdepth), sizeof(real)*N_G), "allocate optical depth");
+    cuda_check(cudaMemset(dev_optdepth, 0, sizeof(real)*N_G), "zero optical depth");
+    ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt);
+    ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth, 1.0, dt);
+    kernel_check("radiation drag response");
+    cuda_check(cudaFree(dev_optdepth), "free optical depth");
+#else
+    ssa_transport <<< NB_P, TPB >>> (dev_particle, dt);
+    kernel_check("drag response");
+#endif
+    copy_state_from_device(particle, dev_particle);
+    write_state(particle);
+    write_meta(dt, dt);
+
+#elif defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
+        particle[idx].velocity = make_double3(0.7, 0.2, 0.0);
+    }
+    cuda_check(cudaMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, cudaMemcpyHostToDevice), "upload particles");
+    curs *dev_rngstate = nullptr;
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_rngstate), sizeof(curs)*N_P), "allocate random states");
+    rngstate_init <<< NB_P, TPB >>> (dev_rngstate, 17);
+    real dt = 0.02;
+    diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, dt);
+    kernel_check("diffusion_pos");
+    copy_state_from_device(particle, dev_particle);
+    write_state(particle);
+    write_meta(dt, dt);
+    cuda_check(cudaFree(dev_rngstate), "free random states");
+
+#elif defined(TEST_COLLISION_2D) || defined(TEST_COLLISION_3D)
+    particle[0].position = make_double3(0.0, 1.0, 0.5*M_PI);
+    particle[1].position = make_double3(0.1, 1.0, 0.5*M_PI);
+    particle[0].velocity = make_double3(1.0, 0.0, 0.0);
+    particle[1].velocity = make_double3(1.0, 0.0, 0.0);
+    particle[0].par_size = 1.0;
+    particle[1].par_size = 2.0;
+    particle[0].par_numr = 5.0;
+    particle[1].par_numr = 7.0;
+    cuda_check(cudaMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, cudaMemcpyHostToDevice), "upload particles");
+
+    real size[2] = {1.0, 2.0};
+    real number[2] = {5.0, 7.0};
+    real *dev_size = nullptr;
+    real *dev_number = nullptr;
+    real *dev_result = nullptr;
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_size), 2*sizeof(real)), "allocate sizes");
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_number), 2*sizeof(real)), "allocate numbers");
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_result), 6*sizeof(real)), "allocate results");
+    cuda_check(cudaMemcpy(dev_size, size, 2*sizeof(real), cudaMemcpyHostToDevice), "upload sizes");
+    cuda_check(cudaMemcpy(dev_number, number, 2*sizeof(real), cudaMemcpyHostToDevice), "upload numbers");
+    collision_math <<< 1, 1 >>> (dev_result, dev_particle, dev_size, dev_number);
+    kernel_check("collision_math");
+    std::vector<real> result(6);
+    cuda_check(cudaMemcpy(result.data(), dev_result, 6*sizeof(real), cudaMemcpyDeviceToHost), "copy collision results");
+    write_binary("collision", result);
+    write_meta(0.0, 0.0);
+    cuda_check(cudaFree(dev_size), "free sizes");
+    cuda_check(cudaFree(dev_number), "free numbers");
+    cuda_check(cudaFree(dev_result), "free results");
+#endif
+
+    cuda_check(cudaFree(dev_particle), "free particles");
+    std::cout << "swarm verification case " << case_name() << " completed at N=" << VERIFY_RES << std::endl;
+    return 0;
+}

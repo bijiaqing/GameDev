@@ -104,7 +104,7 @@ Everything checked agrees:
 - `doc/numerics_fluid.md` now states the FARGO residual bound correctly (`CFL_DYN + 0.5 ≤ 1`),
   documents both sweep implementations honestly (including "block faster at 1024², slower at
   128³"), and its thread-local-footprint discussion matches `advection_xth` (21 arrays × N_X).
-- `doc/verification_fluid.md`: the recorded source-case fix is real — `validate_case.py`'s
+- `doc/testset_fluid.md`: the recorded source-case fix is real — `validate_case.py`'s
   `source_exact` now mirrors the CUDA branch (`-expm1`, series for `h < 1e-4`, closed-form
   weights otherwise), algebraically exact; the recorded `momz L∞` is `2.22e-16` as documented.
   The stated evidence boundary (no archived sweep benchmark/profiler artifacts) matches the
@@ -137,7 +137,7 @@ Everything checked agrees:
 - The validator's `source_exact` fix (B above) is algebraically identical to the CUDA kernel,
   not an approximation of it.
 
-### Remaining gaps (all already recorded in `doc/verification_fluid.md`)
+### Remaining gaps (all already recorded in `doc/testset_fluid.md`)
 
 The "verification still required" list is accurate and complete with respect to my previous
 findings: full-3D MMS, boundary-crossing cases and a `HALFDISK` midplane case, restart-tolerance
@@ -164,7 +164,7 @@ Two small additions to that list, in priority order:
 - `verification_main.cu` duplicates the block workspace/attribute setup from
   `fluid_runtime.cu` (acceptable for a test harness; flagged only as future consolidation
   material if a shared driver helper ever exists).
-- The historical development numbers quoted in `verification_fluid.md` (1.71× faster at 1024²,
+- The historical development numbers quoted in `testset_fluid.md` (1.71× faster at 1024²,
   3.41× slower at 128³) are not reproducible from the repository (no committed logs); the
   document already says so. The automated sweep branch is the correct replacement once run on
   the target GPU.

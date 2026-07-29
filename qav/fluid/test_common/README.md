@@ -1,7 +1,7 @@
 # CUDA verification models
 
 These model directories implement the analytical tests summarized in
-`doc/verification_fluid.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
+`doc/testset_fluid.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
 or production `mod`. Model-local `fluid_runtime.cu` files include the shared driver in this
 directory. The Makefile still selects production kernels from `src/` unless a test explicitly
 supplies a model-local replacement.

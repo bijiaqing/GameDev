@@ -290,7 +290,7 @@ Performance is grid dependent. Development comparisons found the block method fa
 `1024^2` transport model but slower for a `128^3` diffusion model. The intended production grid
 should therefore be benchmarked before selecting a default; neither implementation is universally
 preferred. The matched comparison procedure and the status of its archived evidence are recorded
-in `verification_fluid.md`.
+in `testset_fluid.md`.
 
 ## Output and restart state
 

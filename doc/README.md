@@ -8,11 +8,13 @@ method notes that previously accumulated under `.github/`.
 
 - [`numerics_fluid.md`](numerics_fluid.md) describes the Eulerian dust-fluid equations,
   discretization, operator ordering, boundaries, and current limitations
-- [`verification_fluid.md`](verification_fluid.md) defines the analytical CUDA verification suite,
+- [`testset_fluid.md`](testset_fluid.md) defines the analytical CUDA verification suite,
   records the available native results, and separates verified claims from unfinished tests
 - [`numerics_swarm.md`](numerics_swarm.md) describes the Lagrangian representative-particle
   solver, including transport, stochastic diffusion, radiation, collisions, and outstanding
   validation
+- [`testset_swarm.md`](testset_swarm.md) defines the analytical and statistical CUDA swarm test
+  suite, its expected results, current evidence status, and unfinished coverage
 - [`ref_file_architecture.md`](ref_file_architecture.md) records the fluid–swarm consistency contract, the current
   migration state, what can be shared, and what must remain representation-specific
 - [`ref_naming_variables.md`](ref_naming_variables.md) records the canonical naming rules and
@@ -26,6 +28,7 @@ The merged project is active at the repository root:
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
 - `inc/share/` and `src/share/` are reserved for future representation-independent infrastructure
 - `qav/fluid/` contains the fluid CUDA verification suite and its recorded outputs
+- `qav/swarm/` contains the prepared swarm CUDA verification suite
 - `legacy/swarm_before_audit/` and `legacy/swarm_after_audit/` are frozen recovery snapshots
 
 The root build selects exactly one representation through `DUST_REPR` in the chosen model's
@@ -57,7 +60,8 @@ The authoritative native fluid evidence remains the 85 analytical records and 22
 records under `qav/fluid/out/thread/`. Block analytical results are written independently under
 `qav/fluid/out/block/`. The automated thread/block comparison branch exists, but its
 benchmark JSON and profiler artifacts are not currently archived in the repository. The swarm
-branch still has source-review evidence only because `qav/swarm/` has no runnable analytical suite.
+branch now has a runnable analytical and statistical suite under `qav/swarm/`, but no native result
+set has yet been archived, so its current evidence remains source review plus test preparation.
 
 The source uses spherical coordinates
 

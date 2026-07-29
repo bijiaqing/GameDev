@@ -5,6 +5,7 @@
 // represented grain-number normalization
 // =========================================================================================================================
 
+#ifdef MULTISIZE
 // calculate the physical grain count represented by one normalized equal-mass or equal-area swarm
 __device__ __forceinline__
 real _get_grain_number (real size, real mass_norm)
@@ -54,6 +55,7 @@ real _get_grain_number (real size, real mass_norm)
 
     return mass_norm*_get_mass_weight(size) / static_cast<real>(N_P) / _get_grain_mass(size);
 }
+#endif // MULTISIZE
 
 // =========================================================================================================================
 // kernel: particle_init

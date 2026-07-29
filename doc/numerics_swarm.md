@@ -377,14 +377,18 @@ same CUDA state layout.
 
 ## Current limitations and required tests
 
-- Native CUDA analytical tests are still required for particle orbits, stiff drag, diffusion
-  Green's functions, settling equilibrium, optical depth, radiation acceleration, boundaries, and
-  all flag combinations
-- P-R validation must compare the combined gas-plus-radiation exponential response with its
-  constant-coefficient solution, verify the factor-of-two radial damping, and recover secular
-  optically thin circular-orbit decay with a fixed orbital-plane direction
-- Collision tests must cover constant, additive, and product kernels; physical
-  $\sigma\Delta v/V$ scaling; `CFL_COL`; neighbor count; and particle-number convergence
+- The prepared CUDA suite in `qav/swarm/` now covers circular orbits, frozen stiff drag,
+  one-step diffusion moments, optical-depth reconstruction, radiation and P-R response algebra,
+  accessible collision measures, and constant, additive, and product kernel numerators. Native
+  cluster results have not yet been archived, so these remain prepared tests rather than passed
+  evidence; see `testset_swarm.md`
+- P-R validation still needs secular optically thin circular-orbit decay with a fixed orbital-plane
+  direction beyond the prepared constant-coefficient one-step response
+- Collision validation still needs physical $\sigma\Delta v/V$ scaling, brute-force KNN
+  comparisons, complete event statistics, and convergence with `CFL_COL`, neighbor count, and
+  particle number
+- Settling equilibrium, initialization CDFs, imported gas, boundary behavior, restart
+  reproducibility, timestep rates, and complete flag/operator combinations remain untested
 - The current fluid and swarm diffusion-momentum closures differ and should not be compared as the
   same velocity equation
 - A zero integrated dust mass, `N_K == 1`, or a polar domain reaching a coordinate singularity is

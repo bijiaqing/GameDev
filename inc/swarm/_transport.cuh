@@ -128,18 +128,19 @@ void _apply_diffusion_boundary (real &x, real &y, real &z)
     }
     if (y >= Y_MAX) y = Y_MAX - 1.0e-12*(Y_MAX - Y_MIN);
 
-    if (N_Z == 1)
+    if constexpr (N_Z == 1)
     {
         z = 0.5*M_PI;
-        return;
     }
-
-    while (z < Z_MIN || z > Z_MAX)
+    else
     {
-        if (z < Z_MIN) z = 2.0*Z_MIN - z;
-        if (z > Z_MAX) z = 2.0*Z_MAX - z;
+        while (z < Z_MIN || z > Z_MAX)
+        {
+            if (z < Z_MIN) z = 2.0*Z_MIN - z;
+            if (z > Z_MAX) z = 2.0*Z_MAX - z;
+        }
+        if (z >= Z_MAX) z = Z_MAX - 1.0e-12*(Z_MAX - Z_MIN);
     }
-    if (z >= Z_MAX) z = Z_MAX - 1.0e-12*(Z_MAX - Z_MIN);
 }
 
 // =========================================================================================================================
