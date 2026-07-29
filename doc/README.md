@@ -13,6 +13,7 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian representative-particle transport, diffusion, radiation, collisions, state semantics, and scientific limitations |
 | [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
+| [`future_radial_model.md`](future_radial_model.md) | Planned vertically integrated radial-only swarm model, required corrections, isolation rules, and verification criteria |
 | [`future_knnalgorithm.md`](future_knnalgorithm.md) | Validated adaptive-Morton KNN prototype, measurements, production-integration plan, and multi-GPU halo design |
 | [`future_rocm_support.md`](future_rocm_support.md) | CUDA-to-ROCm portability assessment and implementation sequence |
 
@@ -41,7 +42,7 @@ The branches do not share headers or translation units. Related algorithms, incl
 | fluid analytical suite | `qav/fluid/out/` is currently empty | the 85-case A100 result table in `testset_fluid.md` is a retained historical baseline, not a presently archived machine-readable result set |
 | fluid thread/block comparison | harness exists; no comparison JSON, build log, or profiler artifact is archived | implementation equivalence and timing claims should be regenerated on the target GPU before publication |
 | swarm analytical suite | 25 metrics, 25 metadata files, and 10 environment records under `qav/swarm/out/` | all ten models passed natively on the recorded A100 environment |
-| adaptive-Morton KNN | source and test harness exist under `lab/`; `lab/results/` is currently empty | the numerical tables in `future_knnalgorithm.md` are transcribed cluster results and should be rerun and archived before promotion |
+| adaptive-Morton KNN | one clean ordinary, wedge, adversarial, and four-case copied-runtime matrix is archived under `lab/out/`, including exact topology at $N_P=10^6$ | correctness validation is complete for the tested laboratory scope; the recorded worktree was not immutable, and integrated Morton rate queries and full-disk persistent storage still do not outperform cuKD |
 
 The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files
 

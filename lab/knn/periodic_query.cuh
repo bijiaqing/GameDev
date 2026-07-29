@@ -4,6 +4,7 @@
 #include <climits>
 
 #include <cuda_runtime.h>
+#include <math_constants.h>  // CUDART_INF_F, CUDART_PI_F
 
 #include "adaptive_morton.cuh"
 

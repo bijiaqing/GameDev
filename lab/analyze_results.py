@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Summarize correctness, speed, memory, and clumping behavior from lab results"""
+"""Summarize correctness, speed, memory, and clumping behavior from lab output"""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    result_root = Path(__file__).resolve().parent / "results"
+    result_root = Path(__file__).resolve().parent / "out"
     manifest_path = result_root / "manifest.json"
 
     # A completed matrix records its canonical files in the manifest. Reading
@@ -39,7 +39,7 @@ def main() -> None:
         records.append((path.name, record))
 
     if not records:
-        raise SystemExit("no benchmark JSON files found under lab/results")
+        raise SystemExit("no benchmark JSON files found under lab/out")
 
     print(
         f"{'case':32s} {'ok':>4s} {'KD ms':>10s} {'Morton ms':>11s} "

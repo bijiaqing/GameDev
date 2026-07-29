@@ -29,6 +29,10 @@
 #error "COLLISION requires MULTISIZE because collision outcomes evolve grain size and represented grain number"
 #endif // COLLISION && !MULTISIZE
 
+#if defined(COLLISION) && (defined(COLLISION_KDTREE) == defined(COLLISION_MORTON))
+#error "COLLISION requires exactly one of COLLISION_KDTREE or COLLISION_MORTON"
+#endif // COLLISION backend selection
+
 #if !defined(TRANSPORT) && !defined(COLLISION)
 #error "No evolution module is enabled"
 #endif // !TRANSPORT && !COLLISION
@@ -46,6 +50,10 @@
 #endif // LOGTIMING && SAVE_DENS
 
 #include <const_defs.cuh>
+
+#ifdef COLLISION_MORTON
+#include <morton_types.cuh>
+#endif // COLLISION_MORTON
 
 // =========================================================================================================================
 // particle initialization
@@ -86,12 +94,15 @@ __global__ void dustdens_calc (real *dev_dustdens);
 
 #ifdef COLLISION
 __global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
-__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
+
+#ifdef COLLISION_KDTREE
+__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist,
+    unsigned long long *dev_col_hash, unsigned int *dev_col_count, const swarm *dev_particle,
     const real *dev_size_old, const real *dev_numr_old, const tree *dev_col_tree, const bbox *dev_boundbox,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
-    real lambda_0
+    real lambda_0, bool make_probe
 );
 __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
     const real *dev_col_dist, const real *dev_size_old, const real *dev_numr_old,
@@ -103,6 +114,28 @@ __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const re
     real dt_col
 );
 __global__ void col_tree_init (tree *dev_col_tree, const swarm *dev_particle);
+#else  // COLLISION_MORTON
+__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist,
+    unsigned long long *dev_col_hash, unsigned int *dev_col_count, unsigned int *dev_col_overflow,
+    const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
+    const float3 *dev_col_point, adaptive_morton_view col_morton,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0, bool make_probe
+);
+__global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
+    const real *dev_col_dist, unsigned int *dev_col_overflow,
+    const real *dev_size_old, const real *dev_numr_old,
+    const float3 *dev_col_point, adaptive_morton_view col_morton,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0,
+    real dt_col
+);
+__global__ void col_tree_init (float3 *dev_col_point, const swarm *dev_particle);
+#endif // COLLISION_KDTREE
 #endif // COLLISION
 
 #if defined(COLLISION) || defined(DIFFUSION)

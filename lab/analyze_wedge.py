@@ -9,10 +9,10 @@ from pathlib import Path
 
 
 def main() -> None:
-    result_root = Path(__file__).resolve().parent / "results" / "wedge"
+    result_root = Path(__file__).resolve().parent / "out" / "wedge"
     manifest_path = result_root / "manifest.json"
     if not manifest_path.exists():
-        raise SystemExit("missing lab/results/wedge/manifest.json")
+        raise SystemExit("missing lab/out/wedge/manifest.json")
     manifest = json.loads(manifest_path.read_text())
 
     print(

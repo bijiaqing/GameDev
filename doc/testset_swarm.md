@@ -611,7 +611,8 @@ directory and full terminal log together when archiving a native run.
 
 - Connect the exact cuKD, adaptive-Morton, and brute-force comparisons already exercised under
   `lab/` to the production collision-rate and collision-event paths, including axisymmetry, partial
-  wedges, and full 3D; standalone KNN agreement does not yet validate production integration
+  wedges, and full 3D; the copied-runtime comparisons validate the laboratory integration but not
+  the active production source
 - Test complete frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
   with `CFL_COL`, $N_K$, and $N_P$

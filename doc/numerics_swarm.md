@@ -378,6 +378,12 @@ same CUDA state layout.
 
 ## Current limitations
 
+- **TODO — radial-only 1D swarm:** support `N_X == 1` and `N_Z == 1` with radius as the only
+  spatial coordinate, while retaining the azimuthal orbital velocity and angular momentum as
+  dynamical particle properties. Audit initialization, radial transport and diffusion, CFL rates,
+  boundaries, deposition and optical depth, collision-volume normalization, and inactive-coordinate
+  handling, then add dedicated analytical and convergence tests before declaring this geometry
+  supported
 - The passed CUDA suite covers circular orbits, frozen stiff drag, one-step diffusion moments,
   optical-depth reconstruction, radiation and P-R response algebra, accessible collision measures,
   and constant, additive, and product kernel numerators. It does not establish long-time coupled
@@ -396,8 +402,10 @@ same CUDA state layout.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection
 - The adaptive Morton method in [`future_knnalgorithm.md`](future_knnalgorithm.md) has passed
-  standalone exact-neighbor tests but remains a laboratory backend. Production collision rates,
-  events, and size evolution must agree before adoption
+  standalone exact-neighbor tests and individual copied-runtime comparisons through $N_P=10^6$
+  under `lab/`. The archived runs span debugging revisions and need one clean full rerun. It remains
+  a laboratory backend because the current integrated all-particle rate query is slower than cuKD
+  and its full-disk owner allocates more persistent memory
 
 ## References
 

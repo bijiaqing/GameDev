@@ -90,7 +90,7 @@ Two realistic policies are:
 1. port cuKD conservatively, retaining it as a CUDA-reference-compatible backend
 2. finish the adaptive Morton backend described in [`future_knnalgorithm.md`](future_knnalgorithm.md), then implement its radix, scan, and cooperative selection operations with rocThrust and rocPRIM
 
-The Morton path is the preferable long-term ROCm target because its data are compact arrays and its operations have direct CUDA and ROCm analogues. It is not yet production-ready: collision-rate equality, event sampling, location-dependent halos, peak memory, and build integration remain unfinished.
+The Morton path is the preferable long-term ROCm target because its data are compact arrays and its operations have direct CUDA and ROCm analogues. A selectable copied-swarm implementation now exercises collision-rate and event kernels with location-dependent query radii under `lab/`. Its individual CUDA comparisons pass through $N_P=10^6$, although the archived files still need a clean rerun from one source revision. It is not yet production-ready: the boundary-ghost and radially binned halo policies, peak-memory evidence, GPU-native hierarchy construction, performance tuning, and root-build integration remain unfinished.
 
 Equal-key sorting need not create identical internal trees on CUDA and ROCm. Verification should compare exact physical neighbor identifiers outside defined distance ties, followed by collision rates and statistical evolution.
 

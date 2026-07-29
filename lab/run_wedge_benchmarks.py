@@ -31,7 +31,7 @@ def main() -> None:
 
     lab_root = Path(__file__).resolve().parent
     executable = lab_root / "bin" / "knn_wedge_benchmark"
-    result_root = lab_root / "results" / "wedge"
+    result_root = lab_root / "out" / "wedge"
     result_root.mkdir(parents=True, exist_ok=True)
     distributions = args.distribution or ["smooth", "ring", "interior_clump", "seam_clump"]
 

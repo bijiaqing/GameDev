@@ -3,6 +3,7 @@
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
 #include <sstream>          // std::stringstream
+#include <stdexcept>        // std::runtime_error
 
 #if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // thrust::device_ptr
@@ -11,6 +12,10 @@
 
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
+
+#ifdef COLLISION_MORTON
+#include <adaptive_morton.cuh>
+#endif // COLLISION_MORTON
 
 std::mt19937 rand_generator;
 
@@ -95,17 +100,29 @@ int main (int argc, char **argv)
     #endif // RADIATION
 
     #ifdef COLLISION
+    #ifdef COLLISION_KDTREE
     bbox *dev_boundbox;
     CUDA_CHECK(cudaMalloc((void**)&dev_boundbox, sizeof(bbox)));
 
     tree *dev_col_tree;
     CUDA_CHECK(cudaMalloc((void**)&dev_col_tree, sizeof(tree)*N_T));
+    #else  // COLLISION_MORTON
+    float3 *dev_col_point;
+    unsigned int *dev_col_overflow;
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_point, sizeof(float3)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_overflow, sizeof(unsigned int)*N_P));
+    adaptive_morton_index col_morton;
+    #endif // COLLISION_KDTREE
 
     real *dev_size_old, *dev_numr_old, *dev_col_rate, *dev_col_dist;
+    unsigned long long *dev_col_hash;
+    unsigned int *dev_col_count;
     CUDA_CHECK(cudaMalloc((void**)&dev_size_old, sizeof(real)*N_P));
     CUDA_CHECK(cudaMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
     CUDA_CHECK(cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
     CUDA_CHECK(cudaMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_hash, sizeof(unsigned long long)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_count, sizeof(unsigned int)*N_P));
     #endif // COLLISION
 
     #if defined(COLLISION) || defined(DIFFUSION)
@@ -258,14 +275,48 @@ int main (int argc, char **argv)
     #endif // LOGTIMING
 
     #ifdef COLLISION
+    bool save_knn_probe = true;
+
     // evolve collisions over a fixed-position interval with controlled frozen-rate Bernoulli batches
-    auto evolve_collisions = [&] (real duration)
+    auto evolve_collisions = [&] (real duration, real time_start)
     {
-        // collisions change grain properties but not positions, so one KD tree serves the full interval
+        // collisions change grain properties but not positions, so one search structure serves the full interval
+        auto knn_start = std::chrono::steady_clock::now();
+        #ifdef COLLISION_KDTREE
         col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
         CUDA_KERNEL_CHECK("col_tree_init");
         cukd::buildTree <tree, tree_traits> (dev_col_tree, N_T, dev_boundbox);
         CUDA_KERNEL_CHECK("cukd::buildTree");
+        #else  // COLLISION_MORTON
+        col_tree_init <<< NB_P, TPB >>> (dev_col_point, dev_particle);
+        CUDA_KERNEL_CHECK("col_tree_init");
+
+        float root_width = 2.0002f*static_cast<float>(Y_MAX);
+        float3 root_origin = make_float3(
+            -0.5f*root_width, -0.5f*root_width, -0.5f*root_width
+        );
+        col_morton.build(
+            dev_col_point, N_P, root_origin, root_width,
+            (N_Z > 1) ? 3 : 2, MORTON_LEAF, MORTON_LEVEL
+        );
+        #endif // COLLISION_KDTREE
+        CUDA_CHECK(cudaDeviceSynchronize());
+        double knn_build_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - knn_start
+        ).count();
+
+        #ifdef COLLISION_KDTREE
+        std::size_t knn_bytes = sizeof(tree)*static_cast<std::size_t>(N_T) + sizeof(bbox);
+        std::cout << "[KNN] backend=kdtree";
+        #else  // COLLISION_MORTON
+        std::size_t knn_bytes = col_morton.persistent_bytes()
+            + (sizeof(float3) + sizeof(unsigned int))*static_cast<std::size_t>(N_P);
+        std::cout << "[KNN] backend=morton";
+        #endif // COLLISION_KDTREE
+        std::cout
+            << " build_ms=" << knn_build_ms
+            << " persistent_bytes=" << knn_bytes
+            << std::endl;
 
         real elapsed = 0.0;
         while (elapsed < duration)
@@ -273,18 +324,55 @@ int main (int argc, char **argv)
             // freeze only the species fields changed by collisions while positions and velocities remain fixed
             col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
             CUDA_KERNEL_CHECK("col_snap_save");
-            col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
+            CUDA_CHECK(cudaDeviceSynchronize());
+            knn_start = std::chrono::steady_clock::now();
+            #ifdef COLLISION_KDTREE
+            col_rate_calc <<< NB_T, TPB >>> (
+                dev_col_rate, dev_col_dist, dev_col_hash, dev_col_count, dev_particle,
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / total_dust_mass
+                N_P / (N_K - 1.0) / total_dust_mass, save_knn_probe
             );
+            #else  // COLLISION_MORTON
+            col_rate_calc <<< N_P, MORTON_TPB >>> (
+                dev_col_rate, dev_col_dist, dev_col_hash, dev_col_count, dev_col_overflow, dev_particle,
+                dev_size_old, dev_numr_old, dev_col_point, col_morton.view(),
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass, save_knn_probe
+            );
+            #endif // COLLISION_KDTREE
             CUDA_KERNEL_CHECK("col_rate_calc");
+
+            #ifdef COLLISION_MORTON
+            thrust::device_ptr <const unsigned int> col_overflow_ptr(dev_col_overflow);
+            unsigned int max_col_overflow = *thrust::max_element(
+                col_overflow_ptr, col_overflow_ptr + N_P
+            );
+            if (max_col_overflow != 0)
+                throw std::runtime_error("adaptive Morton traversal stack overflow in col_rate_calc");
+            #endif // COLLISION_MORTON
 
             // use the largest total propensity to control every representative's event probability
             thrust::device_ptr <const real> col_rate_ptr(dev_col_rate);
             real max_col_rate = *thrust::max_element(col_rate_ptr, col_rate_ptr + N_P);
+            double knn_rate_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - knn_start
+            ).count();
+
+            if (save_knn_probe)
+            {
+                if (!save_device_binary(PATH + "col_rate_probe.dat", dev_col_rate, N_P)
+                    || !save_device_binary(PATH + "col_dist_probe.dat", dev_col_dist, N_P)
+                    || !save_device_binary(PATH + "col_hash_probe.dat", dev_col_hash, N_P)
+                    || !save_device_binary(PATH + "col_count_probe.dat", dev_col_count, N_P))
+                    throw std::runtime_error("failed to save the first collision-rate probe");
+                save_knn_probe = false;
+            }
+
             real remaining = duration - elapsed;
 
             if (!(max_col_rate > 0.0))
@@ -292,12 +380,24 @@ int main (int argc, char **argv)
                 // consume the remaining interval when no collision channel is active
                 dt_col = remaining;
                 elapsed = duration;
+                clock_dyn = elapsed;
+                std::cout
+                    << "[PROGRESS] phase=collision"
+                    << " time=" << std::scientific << std::setprecision(6) << time_start + elapsed
+                    << " dt=" << dt_col
+                    << " batch=" << count_col
+                    << " operator_elapsed=" << elapsed
+                    << " operator_duration=" << duration
+                    << " status=no_active_rate"
+                    << std::endl;
                 break;
             }
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
             dt_col = fmin(CFL_COL / max_col_rate, remaining);
-            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, 
+            knn_start = std::chrono::steady_clock::now();
+            #ifdef COLLISION_KDTREE
+            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -305,12 +405,45 @@ int main (int argc, char **argv)
                 N_P / (N_K - 1.0) / total_dust_mass,
                 dt_col
             );
+            #else  // COLLISION_MORTON
+            col_event_run <<< N_P, MORTON_TPB >>> (
+                dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, dev_col_overflow,
+                dev_size_old, dev_numr_old, dev_col_point, col_morton.view(),
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass,
+                dt_col
+            );
+            #endif // COLLISION_KDTREE
             CUDA_KERNEL_CHECK("col_event_run");
             CUDA_CHECK(cudaDeviceSynchronize());
+
+            #ifdef COLLISION_MORTON
+            max_col_overflow = *thrust::max_element(col_overflow_ptr, col_overflow_ptr + N_P);
+            if (max_col_overflow != 0)
+                throw std::runtime_error("adaptive Morton traversal stack overflow in col_event_run");
+            #endif // COLLISION_MORTON
+            double knn_event_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - knn_start
+            ).count();
+            std::cout
+                << "[KNN] rate_ms=" << knn_rate_ms
+                << " event_ms=" << knn_event_ms
+                << " max_rate=" << max_col_rate
+                << std::endl;
 
             elapsed += dt_col;
             clock_dyn = elapsed;
             count_col++;
+            std::cout
+                << "[PROGRESS] phase=collision"
+                << " time=" << std::scientific << std::setprecision(6) << time_start + elapsed
+                << " dt=" << dt_col
+                << " batch=" << count_col
+                << " operator_elapsed=" << elapsed
+                << " operator_duration=" << duration
+                << std::endl;
         }
     };
     #endif // COLLISION
@@ -347,6 +480,13 @@ int main (int argc, char **argv)
             thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rate);
             real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
             dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rate, dt_out - clock_out));
+            std::cout
+                << "[PROGRESS] phase=dynamics"
+                << " time=" << std::scientific << std::setprecision(6) << clock_sim
+                << " dt=" << dt_dyn
+                << " target=" << clock_sim + dt_dyn
+                << " step=" << count_dyn + 1
+                << std::endl;
 
             #ifdef IMPORTGAS
             // interpolate the working gas fields to the midpoint time of this dynamics step
@@ -364,7 +504,7 @@ int main (int argc, char **argv)
             // begin the symmetric composition with half a collision interval
             count_col = 0;
             clock_dyn = 0.0;
-            evolve_collisions(0.5*dt_dyn);
+            evolve_collisions(0.5*dt_dyn, clock_sim);
             #endif // COLLISION
 
             #ifdef DIFFUSION
@@ -417,7 +557,7 @@ int main (int argc, char **argv)
 
             #ifdef COLLISION
             // close the symmetric composition with half a collision interval
-            evolve_collisions(0.5*dt_dyn);
+            evolve_collisions(0.5*dt_dyn, clock_sim + 0.5*dt_dyn);
             #endif // COLLISION
 
             CUDA_CHECK(cudaDeviceSynchronize());
@@ -444,7 +584,7 @@ int main (int argc, char **argv)
             gas_frac = gas_target;
             #endif // IMPORTGAS
             
-            evolve_collisions(duration);
+            evolve_collisions(duration, clock_sim);
             clock_out += duration;
             clock_sim += duration;
             PRINT_VALUE_TO_SCREEN();

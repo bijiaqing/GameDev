@@ -916,6 +916,14 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
     file << "CFL_COL     = " << std::defaultfloat   << std::setprecision(8) << CFL_COL      << std::endl;
+    #ifdef COLLISION_KDTREE
+    file << "COLLISION_SEARCH = kdtree"                                                     << std::endl;
+    #else  // COLLISION_MORTON
+    file << "COLLISION_SEARCH = morton"                                                     << std::endl;
+    file << "MORTON_TPB  = " << std::defaultfloat   << std::setprecision(8) << MORTON_TPB   << std::endl;
+    file << "MORTON_LEAF = " << std::defaultfloat   << std::setprecision(8) << MORTON_LEAF  << std::endl;
+    file << "MORTON_LEVEL= " << std::defaultfloat   << std::setprecision(8) << MORTON_LEVEL << std::endl;
+    #endif // COLLISION_KDTREE
     #endif // COLLISION
     file                                                                                    << std::endl;
 

@@ -36,13 +36,13 @@ const real  S_0         = 1.0;              // reference grain diameter, indepen
 // mesh domain size and resolution
 // =========================================================================================================================
 
-const int   N_P         = 1e+07;            // total number of representative particles
+const int   N_P         = 100000;            // total number of representative particles
 
-const int   N_X         = 100;              // number of grid cells in X direction (azimuth)
+const int   N_X         = 128;              // number of grid cells in X direction (azimuth)
 const real  X_MIN       = -M_PI;            // minimum X boundary (azimuth)
 const real  X_MAX       = +M_PI;            // maximum X boundary (azimuth)
 
-const int   N_Y         = 100;              // number of grid cells in Y direction (radius)
+const int   N_Y         = 128;              // number of grid cells in Y direction (radius)
 const real  Y_MIN       = 0.5;              // minimum Y boundary (radius)
 const real  Y_MAX       = 1.5;              // maximum Y boundary (radius)
 
@@ -116,7 +116,7 @@ const int   N_K         = 200;              // number of candidate slots returne
 
 const real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
-const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
+const real  CFL_COL     = 0.02;             // maximum collision propensity per representative and batch
 
 #ifdef COLLISION_MORTON
 const int   MORTON_TPB   = 256;             // cooperative threads assigned to one Morton query
@@ -131,17 +131,17 @@ static_assert(N_K <= 256, "The current cooperative Morton workspace supports N_K
 // =========================================================================================================================
 
 #ifdef MULTISIZE
-const real INIT_SMIN    = 1.0e+00;          // minimum grain size for particle initialization
-const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle initialization
+const real INIT_SMIN    = 5.0e-01;          // minimum grain size for particle initialization
+const real INIT_SMAX    = 2.0e+00;          // maximum grain size for particle initialization
 #endif // MULTISIZE
 
 // =========================================================================================================================
 // time step and output parameters
 // =========================================================================================================================
 
-const int  SAVE_MAX     = 100;                // total number of outputs for mesh fields
+const int  SAVE_MAX     = 1;                // total number of outputs for mesh fields
 
-const real DT_OUT       = 1.0;
+const real DT_OUT       = 1.0e-04;
 
 #ifdef TRANSPORT
 const real DT_MAX       = 0.1;

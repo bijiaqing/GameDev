@@ -10,9 +10,90 @@
 #include <param_phys.cuh>
 #include <swarm_grid.cuh>
 
-#include "cukd/knn.h"   // cukd::cct::knn, cukd::HeapCandidateList
+#ifdef COLLISION_KDTREE
+#include "cukd/knn.h"   // cukd::cct::knn
 
-using candidatelist = cukd::HeapCandidateList<N_K>;
+// cuKD's stock heap orders equal-distance entries by their mutable tree slot.
+// Retain the slot for traversal lookup but order ties by the stable particle ID
+// so cuKD and Morton implement the same exact-neighbor contract.
+template<int K>
+struct stable_heap
+{
+    const tree *nodes;
+    unsigned long long key[K];
+    int node[K];
+
+    __device__ explicit stable_heap (float cutoff_radius, const tree *tree_nodes)
+        : nodes(tree_nodes)
+    {
+        unsigned long long empty = encode(cutoff_radius*cutoff_radius, 0xffffffffU);
+        #pragma unroll
+        for (int idx = 0; idx < K; idx++)
+        {
+            key[idx] = empty;
+            node[idx] = -1;
+        }
+    }
+
+    __device__ __forceinline__
+    unsigned long long encode (float distance_sq, unsigned int stable_id) const
+    {
+        return (static_cast<unsigned long long>(__float_as_uint(distance_sq)) << 32) | stable_id;
+    }
+
+    __device__ __forceinline__
+    float decode_distance (unsigned long long value) const
+    {
+        return __uint_as_float(static_cast<unsigned int>(value >> 32));
+    }
+
+    __device__ __forceinline__ float returnValue () const { return maxRadius2(); }
+    __device__ __forceinline__ float returnDist2 (int idx) const { return decode_distance(key[idx]); }
+    __device__ __forceinline__ int returnIndex (int idx) const { return node[idx]; }
+    __device__ __forceinline__ float initialCullDist2 () const { return expandedCullDist2(); }
+    __device__ __forceinline__ float maxRadius2 () const { return decode_distance(key[0]); }
+    __device__ __forceinline__
+    float expandedCullDist2 () const
+    {
+        return nextafterf(maxRadius2(), __uint_as_float(0x7f800000U));
+    }
+
+    __device__ __forceinline__
+    float processCandidate (int node_id, float distance_sq)
+    {
+        unsigned int stable_id = static_cast<unsigned int>(nodes[node_id].index_old);
+        unsigned long long candidate = encode(distance_sq, stable_id);
+        if (candidate >= key[0]) return expandedCullDist2();
+
+        int position = 0;
+        while (true)
+        {
+            int first_child = 2*position + 1;
+            int largest_child = -1;
+            if (first_child < K) largest_child = first_child;
+            int second_child = first_child + 1;
+            if (second_child < K && key[second_child] > key[largest_child])
+                largest_child = second_child;
+
+            if (largest_child < 0 || key[largest_child] < candidate)
+            {
+                key[position] = candidate;
+                node[position] = node_id;
+                break;
+            }
+
+            key[position] = key[largest_child];
+            node[position] = node[largest_child];
+            position = largest_child;
+        }
+        // cuKD prunes on equality, so expand by one ulp to visit candidates
+        // tied in distance that may have a smaller stable physical ID
+        return expandedCullDist2();
+    }
+};
+
+using candidatelist = stable_heap<N_K>;
+#endif // COLLISION_KDTREE
 
 enum KernelType { 
     CONSTANT_KERNEL = 0, 

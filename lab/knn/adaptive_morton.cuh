@@ -13,31 +13,13 @@
 #include <vector>
 
 #include <cuda_runtime.h>
+#include <math_constants.h>  // CUDART_INF_F
 
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
 #include <thrust/sort.h>
 
-#include "knn_types.cuh"
-
-struct adaptive_morton_node
-{
-    float3 lower;
-    float width;
-    int begin;
-    int count;
-    int child[8];
-    int child_number;
-};
-
-struct adaptive_morton_view
-{
-    const morton_point *points;
-    const adaptive_morton_node *nodes;
-    int point_count;
-    int node_count;
-    int dimension;
-};
+#include "morton_types.cuh"
 
 inline void _lab_cuda_check (cudaError_t status, const char *operation)
 {
@@ -45,7 +27,7 @@ inline void _lab_cuda_check (cudaError_t status, const char *operation)
     throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
 }
 
-__global__
+static __global__
 void adaptive_key_init (std::uint64_t *keys, morton_point *points, const float3 *source,
     const int *source_ids, int point_count, float3 origin, float root_width, int max_level, int dimension)
 {

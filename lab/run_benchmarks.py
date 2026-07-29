@@ -45,7 +45,7 @@ def main() -> None:
 
     lab_root = Path(__file__).resolve().parent
     executable = lab_root / "bin" / "knn_benchmark"
-    result_root = lab_root / "results"
+    result_root = lab_root / "out"
     result_root.mkdir(parents=True, exist_ok=True)
 
     distributions = args.distribution or ["smooth", "ring", "clump"]
