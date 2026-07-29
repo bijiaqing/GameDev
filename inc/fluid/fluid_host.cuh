@@ -531,9 +531,9 @@ bool save_variable (const std::string &file_name)
     file << "NU          = " << std::scientific   << std::setprecision(8) << NU        << "\n";
     #endif // CONST_NU
     #endif // DIFFUSION
-    #ifdef VISC_ACCRETION
-    file << "VISC_ACCRETION = " << std::defaultfloat << 1                            << "\n";
-    #endif // VISC_ACCRETION
+    #ifdef VISC_FLOW
+    file << "VISC_FLOW   = " << std::defaultfloat << 1                                << "\n";
+    #endif // VISC_FLOW
     file                                                                               << "\n";
 
     file << "STOKES_0    = " << std::scientific   << std::setprecision(8) << STOKES_0  << "\n";

@@ -84,11 +84,16 @@ ix + iy*N_X + iz*N_X*N_Y
 
 ### Drag, radiation, and forces
 
+- nine-character physics flags use `RADIATION`, `VISC_FLOW`, and `PR_EFFECT`
 - stopping time uses `ts`
 - the dimensionless drag interval `dt/ts` uses `tau`
 - its powers use `tau_sq` and `tau_cb`
 - optical depth uses `optdepth`, including `optdepth_i` and `optdepth_o` at faces
 - radiation ramp variables use `taper_raw` and `beta_taper`
+- Poynting-Robertson damping uses `pr_rate` and the code-unit light speed `C_LIGHT`
+- directional damping rates use `rate_x`, `rate_y`, and `rate_z` even though the P-R contribution is identical in \(x\) and \(z\)
+- their exponential complements use `relax_x/y/z`, while `resp_x/y/z` are the corresponding source-response times
+- SSA stage suffixes remain merged with these names, as in `pr_rate1`, `rate_x1`, `relax_zj`, and `resp_yj`
 - spherical source terms use `grav_y`, `cent_y`, and `torq_z`
 - viscous-accretion algebraic components use `term_R` and `term_Z`
 

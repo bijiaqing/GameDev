@@ -7,7 +7,7 @@
 
 // =========================================================================================================================
 // kernel: ssa_substep_2
-// apply attenuated radiation, gravity, and gas drag at midpoint and complete the transport step
+// apply attenuated radiation, gravity, gas drag, and optional P-R drag at midpoint and complete the transport step
 //
 // parallelization: one thread per representative particle after midpoint optical-depth reconstruction
 // =========================================================================================================================

@@ -9,13 +9,17 @@
 #error "RADIATION requires TRANSPORT"
 #endif // RADIATION && !TRANSPORT
 
-#if defined(VISC_ACCRETION) && !defined(DIFFUSION)
-#error "VISC_ACCRETION requires DIFFUSION"
-#endif // VISC_ACCRETION && !DIFFUSION
+#if defined(PR_EFFECT) && !defined(RADIATION)
+#error "PR_EFFECT requires RADIATION"
+#endif // PR_EFFECT && !RADIATION
 
-#if defined(VISC_ACCRETION) && defined(IMPORTGAS)
-#error "VISC_ACCRETION cannot be combined with imported gas velocities"
-#endif // VISC_ACCRETION && IMPORTGAS
+#if defined(VISC_FLOW) && !defined(DIFFUSION)
+#error "VISC_FLOW requires DIFFUSION"
+#endif // VISC_FLOW && !DIFFUSION
+
+#if defined(VISC_FLOW) && defined(IMPORTGAS)
+#error "VISC_FLOW cannot be combined with imported gas velocities"
+#endif // VISC_FLOW && IMPORTGAS
 
 #if defined(IMPORTGAS) && defined(CONST_ST)
 #error "CONST_ST cannot be combined with IMPORTGAS because imported gas density determines the local Stokes number"

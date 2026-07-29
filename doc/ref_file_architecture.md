@@ -159,8 +159,9 @@ $$
 They represent different anisotropic tensors in 3D unless meridional diffusion is isotropic.
 Cross-representation tests must either select an isotropic tensor or account for this distinction.
 
-Imported time-dependent gas, multisize grains, and collisions are swarm-only capabilities at this
-stage. Their absence from the fluid branch is not a consistency bug.
+Imported time-dependent gas, multisize grains, collisions, and optional Poynting-Robertson drag
+are swarm-only capabilities at this stage. Their absence from the fluid branch is not a
+consistency bug.
 
 ## Boundary and coupling contract
 
@@ -172,9 +173,11 @@ boundaries. The implementations differ:
   CN matrix coefficients
 - the swarm absorbs transport exits and reflects stochastic diffusion steps
 
-The radiation force in both branches uses the same smoothstep startup and the same cumulative
+Radiation pressure in both branches uses the same smoothstep startup and the same cumulative
 outer-face optical-depth convention. The fluid samples at a cell center; the swarm continuously
-interpolates to a particle.
+interpolates to a particle. When `PR_EFFECT` is enabled, only the swarm additionally applies
+first-order velocity-dependent Poynting-Robertson damping using that same attenuated radiation
+strength.
 
 For analytic gas, both initialize the no-backreaction steady radial/azimuthal drift. In 3D, their
 settling state reflects their different diffusion coordinate bases. Imported-gas swarm
@@ -299,9 +302,10 @@ this order:
 5. remove duplicated representation utilities only after both test families pass
 6. remove `legacy/` only after the user confirms that the active tree is the accepted recovery point
 
-The old spatial-hashing proposal is not part of this migration contract. The current cuKD
+The future adaptive Morton-cell proposal is not part of this migration contract. The current cuKD
 implementation should first be profiled at representative scale; any alternative must demonstrate
-equivalent neighbor statistics and collision rates before performance claims matter.
+equivalent neighbor identities, collision rates, and statistical evolution before performance
+claims matter.
 
 ## References
 

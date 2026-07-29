@@ -110,7 +110,7 @@ void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
         rate = fmax(rate, sqrt(accel_z / (2.0*CFL_DYN*y*dz)));
     }
 
-    #ifdef VISC_ACCRETION
+    #ifdef VISC_FLOW
     {
         // include the analytic gas target velocity before drag can transfer it to the dust
         real h_g = _get_hg(R);
@@ -119,7 +119,7 @@ void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
         if (N_Y > 1) rate = fmax(rate, abs(vR_g*sin(z)) / (dr*CFL_DYN));
         if (N_Z > 1) rate = fmax(rate, abs(vR_g*cos(z)) / (y*dz*CFL_DYN));
     }
-    #endif // VISC_ACCRETION
+    #endif // VISC_FLOW
 
     #ifdef DIFFUSION
     real h_g = _get_hg(R);

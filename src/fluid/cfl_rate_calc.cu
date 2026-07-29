@@ -1,8 +1,8 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
-#ifdef VISC_ACCRETION
+#ifdef VISC_FLOW
 #include <param_phys.cuh>
-#endif // VISC_ACCRETION
+#endif // VISC_FLOW
 
 __global__
 void cfl_rate_calc (
@@ -102,14 +102,14 @@ void cfl_rate_calc (
         cfl_rate = fmax(cfl_rate, fabs(vy)*cfl_invlen_y);
         cfl_rate = fmax(cfl_rate, fabs(vz)*cfl_invlen_z);
 
-        #ifdef VISC_ACCRETION
+        #ifdef VISC_FLOW
         // include the analytic gas target velocity before a stiff source update transfers it to the dust
         real Z = y*cos(z);
         real h_g = _get_hg(R);
         real vR_g = _get_visc_vel(R, Z, h_g);
         cfl_rate = fmax(cfl_rate, fabs(vR_g*sin(z))*cfl_invlen_y);
         cfl_rate = fmax(cfl_rate, fabs(vR_g*cos(z))*cfl_invlen_z);
-        #endif // VISC_ACCRETION
+        #endif // VISC_FLOW
 
         dev_cfl_rate[idx_cell] = isfinite(cfl_rate) ? cfl_rate : INFINITY;
     }

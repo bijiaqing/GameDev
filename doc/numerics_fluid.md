@@ -111,7 +111,7 @@ amplitude per azimuthal column, so the same perturbation multiplies every radial
 fixed $x$.
 
 The initial velocity is the local no-backreaction drift relative to the pressure-supported gas.
-If `VISC_ACCRETION` is enabled, the prescribed cylindrical gas radial velocity follows the
+If `VISC_FLOW` is enabled, the prescribed cylindrical gas radial velocity follows the
 Kanagawa et al. steady viscous expression. In 3D, the polar primitive also includes the velocity
 needed to approximately balance the initialized polar diffusive flux.
 

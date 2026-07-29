@@ -111,14 +111,14 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real eta = _get_eta(R, Z, h_g);
     real lx_g = R*R*omega*sqrt(fmax(1.0 - 2.0*eta, 0.0));
 
-    #ifdef VISC_ACCRETION
+    #ifdef VISC_FLOW
     real vR_g = _get_visc_vel(R, Z, h_g);
     real vy_g = vR_g*sin(z);
     real lz_g = (N_Z > 1) ? y*vR_g*cos(z) : 0.0;
     #else  // PURE_ROTATION
     real vy_g = 0.0;
     real lz_g = 0.0;
-    #endif // VISC_ACCRETION
+    #endif // VISC_FLOW
 
     // evaluate forces at the old state and relax azimuthal specific angular momentum
     real grav_yold, cent_yold, torq_zold, lx_new;

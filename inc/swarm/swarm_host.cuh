@@ -875,9 +875,9 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "ALPHA       = " << std::scientific     << std::setprecision(8) << ALPHA        << std::endl;
     #endif // CONST_NU
     #endif // DIFFUSION || COLLISION
-    #ifdef VISC_ACCRETION
-    file << "VISC_ACCRETION = " << std::defaultfloat << 1                                << std::endl;
-    #endif // VISC_ACCRETION
+    #ifdef VISC_FLOW
+    file << "VISC_FLOW   = " << std::defaultfloat << 1                                      << std::endl;
+    #endif // VISC_FLOW
     #ifdef COLLISION
     #ifdef CODE_UNIT
     file << "REYNOLDS_0        = " << std::scientific     << std::setprecision(8) << REYNOLDS_0         << std::endl;
@@ -896,6 +896,9 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "BETA_0      = " << std::scientific     << std::setprecision(8) << BETA_0       << std::endl;
     file << "KAPPA_0     = " << std::scientific     << std::setprecision(8) << KAPPA_0      << std::endl;
     file << "T_BETA      = " << std::scientific     << std::setprecision(8) << T_BETA       << std::endl;
+    #ifdef PR_EFFECT
+    file << "C_LIGHT     = " << std::scientific     << std::setprecision(8) << C_LIGHT      << std::endl;
+    #endif // PR_EFFECT
     #endif // RADIATION
     #ifdef DIFFUSION
     file << "SCHMIDT_X   = " << std::scientific     << std::setprecision(8) << SCHMIDT_X    << std::endl;

@@ -96,7 +96,7 @@ real _get_alpha (real R, real h_g)
 }
 #endif // DIFFUSION || COLLISION
 
-#ifdef VISC_ACCRETION
+#ifdef VISC_FLOW
 // calculate the cylindrical radial gas velocity from equation 41 of Kanagawa et al. 2017
 __device__ __forceinline__
 real _get_visc_vel (real R, real Z, real h_g)
@@ -127,7 +127,7 @@ real _get_visc_vel (real R, real Z, real h_g)
 
     return -(term_R - term_Z) / R;
 }
-#endif // VISC_ACCRETION
+#endif // VISC_FLOW
 
 // =========================================================================================================================
 // stopping-time coupling

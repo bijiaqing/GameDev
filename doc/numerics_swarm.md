@@ -88,7 +88,7 @@ v_{\phi,d}=v_{\phi,g}-\frac{\mathrm{St}}{2}v_{R,d}.
 $$
 
 An active vertical dimension also receives terminal settling
-$v_Z=-\mathrm{St}\,\Omega_K Z$. `VISC_ACCRETION` replaces the zero gas radial velocity with the
+$v_Z=-\mathrm{St}\,\Omega_K Z$. `VISC_FLOW` replaces the zero gas radial velocity with the
 analytic viscous prescription and requires `DIFFUSION`.
 
 Imported gas initialization samples the imported $\rho_g\epsilon$ field using the same exact
@@ -119,6 +119,7 @@ stability restriction.
 The analytic force model includes:
 
 - central gravity, optionally reduced by attenuated radiation pressure
+- optional Poynting-Robertson damping when `PR_EFFECT` is enabled
 - pressure-supported gas rotation
 - optional viscous gas radial motion
 - radial centrifugal acceleration
@@ -163,6 +164,86 @@ $$
 
 With radiation enabled, transport first drifts particles to midpoint positions, reconstructs
 optical depth there, and then completes the force/drag step.
+
+When `PR_EFFECT` is enabled, the same attenuated and size-dependent \(\beta\) supplies the
+first-order Poynting-Robertson rate
+
+$$
+\gamma_{\rm PR}=\frac{\beta GM_\star}{C_{\rm LIGHT}y^2}.
+$$
+
+The implemented first-order radiation acceleration is
+
+$$
+\boldsymbol a_{\rm grav+rad}
+=-\frac{GM_\star}{y^2}\boldsymbol e_y
++\beta\frac{GM_\star}{y^2}
+\left[
+\left(1-\frac{v_y}{C_{\rm LIGHT}}\right)\boldsymbol e_y
+-\frac{\boldsymbol v}{C_{\rm LIGHT}}
+\right].
+$$
+
+Equivalently,
+
+$$
+\boldsymbol a_{\rm grav+rad}
+=-(1-\beta)\frac{GM_\star}{y^2}\boldsymbol e_y
+-\gamma_{\rm PR}
+\left(
+v_x\boldsymbol e_x+2v_y\boldsymbol e_y+v_z\boldsymbol e_z
+\right).
+$$
+
+The stored tangential variables \(\ell_\phi\) and \(\ell_\theta\) are damped at
+\(\gamma_{\rm PR}\), while the spherical radial velocity is damped at
+\(2\gamma_{\rm PR}\). Gas and P-R drag are integrated together in the frozen-midpoint
+exponential response:
+
+$$
+k_x=\frac{1}{t_s}+\gamma_{\rm PR},
+\qquad
+k_y=\frac{1}{t_s}+2\gamma_{\rm PR},
+\qquad
+k_z=\frac{1}{t_s}+\gamma_{\rm PR}.
+$$
+
+For any frozen component equation
+
+$$
+\frac{du}{dt}=-ku+\frac{u_g}{t_s}+F,
+$$
+
+the code evaluates
+
+$$
+u(h)
+=e^{-kh}u(0)
++\frac{1-e^{-kh}}{k}
+\left(
+\frac{u_g}{t_s}+F
+\right).
+$$
+
+The half response uses \(h=\Delta t/2\) and forces evaluated from the initial angular momenta.
+Those angular momenta are then used to reevaluate the centrifugal and polar terms, and the full
+response uses \(h=\Delta t\) from the original state with the updated midpoint forces. The
+`expm1` form evaluates \(1-e^{-kh}\) without small-argument cancellation.
+
+The gas targets enter only through \(u_g/t_s\), so P-R drag damps toward the stellar rest frame
+rather than toward the gas. This integration is stable even when either damping rate is large,
+although the trajectory timestep must still resolve spatial motion and coefficient variation.
+No separate P-R stability term is added to `dyn_rate_calc` because the damping is analytic and
+the P-R contribution is dissipative.
+
+The current dynamics always uses orbital code units, including builds without `CODE_UNIT`;
+that flag changes collision microphysics rather than \(G\), \(M_\star\), \(R_0\), position, or
+velocity units. Therefore `C_LIGHT = 10^4` is a code-unit velocity in the present implementation.
+A future fully cgs dynamics branch must instead use
+\(c=2.99792458\times10^{10}\ {\rm cm\,s^{-1}}\).
+
+Models enable this term with `NVCC += -DPR_EFFECT`. Compile-time validation rejects `PR_EFFECT`
+without `RADIATION`.
 
 ## Stochastic density diffusion
 
@@ -299,6 +380,9 @@ same CUDA state layout.
 - Native CUDA analytical tests are still required for particle orbits, stiff drag, diffusion
   Green's functions, settling equilibrium, optical depth, radiation acceleration, boundaries, and
   all flag combinations
+- P-R validation must compare the combined gas-plus-radiation exponential response with its
+  constant-coefficient solution, verify the factor-of-two radial damping, and recover secular
+  optically thin circular-orbit decay with a fixed orbital-plane direction
 - Collision tests must cover constant, additive, and product kernels; physical
   $\sigma\Delta v/V$ scaling; `CFL_COL`; neighbor count; and particle-number convergence
 - The current fluid and swarm diffusion-momentum closures differ and should not be compared as the
@@ -307,9 +391,9 @@ same CUDA state layout.
   not a scientifically meaningful configuration and is not fully guarded
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection
-- Replacing the KD tree with spatial hashing is only a future performance option. It should be
-  considered after profiling and must reproduce neighbor statistics and collision rates before
-  adoption; earlier memory and schedule estimates were speculative
+- Replacing the KD tree with the adaptive Morton-cell method described in `future_bestknn.md` is
+  only a future performance option. It must reproduce neighbor identities, collision rates, and
+  statistical size evolution before adoption
 
 ## References
 
@@ -320,3 +404,4 @@ same CUDA state layout.
 - Gillespie (1977), [stochastic reaction simulation](https://doi.org/10.1021/j100540a008)
 - Nakagawa, Sekiya & Hayashi (1986), [steady dust–gas drift](<https://doi.org/10.1016/0019-1035(86)90121-1>)
 - Kanagawa et al. (2017), [viscous disk velocity](https://arxiv.org/abs/1706.08975)
+- Burns, Lamy & Soter (1979), [radiation forces on small particles](https://doi.org/10.1016/0019-1035(79)90050-2)

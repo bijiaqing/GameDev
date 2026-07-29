@@ -95,6 +95,10 @@ const real  RHO_0       = 1.0;              // compact-grain internal density
 const real  BETA_0      = 1.0e+01;          // the reference ratio between the radiation pressure and the gravity
 const real  KAPPA_0     = 1.0;              // the reference gray opacity of the dust
 const real  T_BETA      = 2.0*M_PI;         // duration of the smooth radiation startup
+
+#ifdef PR_EFFECT
+const real  C_LIGHT     = 1.0e+04;          // speed of light in orbital code velocity units
+#endif // PR_EFFECT
 #endif // RADIATION
 
 #ifdef DIFFUSION

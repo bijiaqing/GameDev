@@ -32,9 +32,9 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     real stokes = _get_stokes(R, Z, h_g);
 
     real vR_g = 0.0;
-    #ifdef VISC_ACCRETION
+    #ifdef VISC_FLOW
     vR_g = _get_visc_vel(R, Z, h_g);
-    #endif // VISC_ACCRETION
+    #endif // VISC_FLOW
 
     real vR = (vR_g + 2.0*stokes*(vx_g - v_K)) / (1.0 + stokes*stokes);
     real vx = vx_g - 0.5*stokes*vR;

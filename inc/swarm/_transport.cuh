@@ -166,7 +166,7 @@ void _get_force_term (real y, real z, real R, real lx, real lz, real beta, real 
     torq_z = (N_Z > 1) ? lx*lx / R / R / sin(z)*cos(z) : 0.0;
 }
 
-// integrate drag analytically at the midpoint and complete the velocity and position update
+// integrate gas and optional P-R drag analytically at the midpoint and complete the velocity and position update
 __device__ __forceinline__
 void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1, 
     real &x_j, real &y_j, real &z_j, real &lx_j, real &vy_j, real &lz_j
@@ -200,17 +200,16 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     #endif // IMPORTGAS
     {
         real eta = _get_eta(R_1, Z_1, h_g);
-        
         lx_g1 = sqrt(fmax(1.0 - 2.0*eta, 0.0))*omega*R_1*R_1;
 
-        #ifdef VISC_ACCRETION
+        #ifdef VISC_FLOW
         real vR_g = _get_visc_vel(R_1, Z_1, h_g);
         vy_g1 = vR_g*sin(z_1);
         lz_g1 = (N_Z > 1) ? y_1*vR_g*cos(z_1) : 0.0;
         #else  // PURE_ROTATION
         vy_g1 = 0.0;
         lz_g1 = 0.0;
-        #endif // VISC_ACCRETION
+        #endif // VISC_FLOW
     }
 
     // convert the local Stokes number to stopping time
@@ -219,25 +218,63 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         , x_1, y_1, z_1, dev_gas_dens
         #endif // IMPORTGAS
     ) / omega;
+    #ifndef PR_EFFECT
     real tau_1 = dt / ts_1;
+    #endif // NO PR_EFFECT
 
     // evaluate midpoint forces with the initial angular momenta
     real grav_y1, cent_y1, torq_z1;
     _get_force_term(y_1, z_1, R_1, lx_i, lz_i, beta, grav_y1, cent_y1, torq_z1);
 
     // obtain a midpoint velocity with the exact frozen-coefficient drag response
+    #ifdef PR_EFFECT
+    // combine gas drag with gamma x/z and 2*gamma y P-R damping
+    real inv_ts1 = 1.0 / ts_1;
+    real pr_rate1 = beta*G*M_S / (C_LIGHT*y_1*y_1);
+
+    real rate_x1 = inv_ts1 + pr_rate1;
+    real rate_y1 = inv_ts1 + 2.0*pr_rate1;
+    real rate_z1 = inv_ts1 + pr_rate1;
+
+    real relax_x1 = -expm1(-0.5*rate_x1*dt);
+    real relax_y1 = -expm1(-0.5*rate_y1*dt);
+    real relax_z1 = -expm1(-0.5*rate_z1*dt);
+
+    real resp_x1 = relax_x1 / rate_x1;
+    real resp_y1 = relax_y1 / rate_y1;
+    real resp_z1 = relax_z1 / rate_z1;
+
+    real lx_1 = (1.0 - relax_x1)*lx_i + resp_x1*inv_ts1*lx_g1;
+    real vy_1 = (1.0 - relax_y1)*vy_i + resp_y1*(inv_ts1*vy_g1 + grav_y1 + cent_y1);
+    real lz_1 = (1.0 - relax_z1)*lz_i + resp_z1*(inv_ts1*lz_g1 + torq_z1);
+    #else  // NO PR_EFFECT
     real lx_1 = lx_i + (lx_g1 - lx_i)*(1.0 - exp(-0.5*tau_1));
     real vy_1 = vy_i + ((grav_y1 + cent_y1)*ts_1 + vy_g1 - vy_i)*(1.0 - exp(-0.5*tau_1));
     real lz_1 = lz_i + (torq_z1*ts_1 + lz_g1 - lz_i)*(1.0 - exp(-0.5*tau_1));
+    #endif // PR_EFFECT
 
     // reevaluate centrifugal terms with the midpoint angular momenta while reusing position-dependent beta
     real grav_y2, cent_y2, torq_z2;
     _get_force_term(y_1, z_1, R_1, lx_1, lz_1, beta, grav_y2, cent_y2, torq_z2);
 
     // complete the full-step frozen-coefficient drag response with midpoint forces
+    #ifdef PR_EFFECT
+    real relax_xj = -expm1(-rate_x1*dt);
+    real relax_yj = -expm1(-rate_y1*dt);
+    real relax_zj = -expm1(-rate_z1*dt);
+
+    real resp_xj = relax_xj / rate_x1;
+    real resp_yj = relax_yj / rate_y1;
+    real resp_zj = relax_zj / rate_z1;
+
+    lx_j = (1.0 - relax_xj)*lx_i + resp_xj*inv_ts1*lx_g1;
+    vy_j = (1.0 - relax_yj)*vy_i + resp_yj*(inv_ts1*vy_g1 + grav_y2 + cent_y2);
+    lz_j = (1.0 - relax_zj)*lz_i + resp_zj*(inv_ts1*lz_g1 + torq_z2);
+    #else  // NO PR_EFFECT
     lx_j = lx_i + (lx_g1 - lx_i)*(1.0 - exp(-tau_1));
     vy_j = vy_i + ((grav_y2 + cent_y2)*ts_1 + vy_g1 - vy_i)*(1.0 - exp(-tau_1));
     lz_j = lz_i + (torq_z2*ts_1 + lz_g1 - lz_i)*(1.0 - exp(-tau_1));
+    #endif // PR_EFFECT
 
     // drift from the midpoint position to the final state j
     y_j = y_1 + 0.5*vy_j*dt;
