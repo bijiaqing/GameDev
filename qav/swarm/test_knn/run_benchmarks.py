@@ -91,15 +91,31 @@ def main() -> None:
                     "--output", str(output),
                 ]
                 print(f"\n=== {name} ===", flush=True)
-                subprocess.run(command, cwd=test_root.parent, check=True)
+                output.unlink(missing_ok=True)
+                result = subprocess.run(command, cwd=test_root.parent, check=False)
+                if not output.exists():
+                    result.check_returncode()
+                    raise RuntimeError(f"ordinary benchmark did not write {output}")
                 record = json.loads(output.read_text())
                 completed.append(record)
                 print(
                     f"quality={record['quality_passed']}  "
-                    f"KD={record['kd_query_ms']:.3f} ms  "
+                    f"query batch: KD={record['kd_query_ms']:.3f} ms  "
                     f"Morton={record['morton_query_ms']:.3f} ms  "
                     f"speedup={record['query_speedup']:.3f}"
                 )
+                if result.returncode != 0:
+                    print(
+                        "failure counters: "
+                        f"KD/brute={record['kd_brute_mismatches']}  "
+                        f"Morton/brute={record['morton_brute_mismatches']}  "
+                        f"KD/disagreements={record['kd_disagreement_brute_mismatches']}  "
+                        f"Morton/disagreements={record['morton_disagreement_brute_mismatches']}  "
+                        f"overflows={record['stack_overflows']}  "
+                        f"max-error={record['maximum_distance_error']:.3e}",
+                        flush=True,
+                    )
+                    result.check_returncode()
 
     manifest = {
         "cases": len(completed),

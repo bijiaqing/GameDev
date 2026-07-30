@@ -26,6 +26,11 @@ def main() -> None:
     project_root = test_dir.parents[2]
     python = sys.executable
 
+    # KNN capacities and backend headers are compile-time inputs that Make
+    # cannot infer from a previously linked executable, so always rebuild the
+    # standalone drivers for a clean, reproducible benchmark run
+    subprocess.run(["make", "-C", str(test_dir), "clean"], check=True)
+
     # Compile the four independent CUDA drivers once.  The ordinary and wedge
     # programs measure both backends, while the edge and periodic programs
     # concentrate on exact topology at difficult geometric boundaries.
@@ -39,12 +44,14 @@ def main() -> None:
     # against one backend's object directory for the other backend's result.
     for backend in ("kdtree", "morton"):
         executable = test_dir/"bin"/f"production_{backend}"
+        build_arguments = [
+            "make", "-C", str(project_root),
+            "MODEL=test_collision_2d", "RES=32",
+            f"COLLISION_SEARCH={backend}", f"EXEC={executable}",
+        ]
+        subprocess.run([*build_arguments, "clean"], check=True)
         subprocess.run(
-            [
-                "make", "-C", str(project_root),
-                "MODEL=test_collision_2d", "RES=32",
-                f"COLLISION_SEARCH={backend}", f"EXEC={executable}",
-            ],
+            build_arguments,
             check=True,
         )
     if args.build_only:

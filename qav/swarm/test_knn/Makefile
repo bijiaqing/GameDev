@@ -27,6 +27,7 @@ wedge: $(WEDGE_TARGET)
 suite: all edge periodic wedge
 
 $(TARGET): $(TEST_DIR)/knn_benchmark.cu $(TEST_DIR)/knn_types.cuh \
+	$(ROOT_DIR)/inc/swarm/kdtree/index_heap.cuh \
 	$(ROOT_DIR)/inc/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/swarm/morton/morton_index.cuh
 	@mkdir -p $(BIN_DIR)
 	@printf "%-12s %s\n" "Compiling" "$@"
@@ -45,6 +46,7 @@ $(PERIODIC_TARGET): $(TEST_DIR)/knn_periodic_tests.cu $(TEST_DIR)/periodic_query
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
 
 $(WEDGE_TARGET): $(TEST_DIR)/knn_wedge_benchmark.cu $(TEST_DIR)/knn_types.cuh \
+	$(ROOT_DIR)/inc/swarm/kdtree/index_heap.cuh \
 	$(TEST_DIR)/periodic_query.cuh $(ROOT_DIR)/inc/swarm/morton/morton_types.cuh \
 	$(ROOT_DIR)/inc/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/swarm/morton/morton_ghost.cuh \

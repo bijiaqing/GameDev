@@ -65,17 +65,39 @@ def main() -> None:
                 if wedge_width is not None:
                     command.extend(("--x-min", str(-0.5*wedge_width), "--x-max", str(0.5*wedge_width)))
                 print(f"\n=== {name} ===", flush=True)
-                subprocess.run(command, cwd=test_root.parent, check=True)
+                output.unlink(missing_ok=True)
+                result = subprocess.run(command, cwd=test_root.parent, check=False)
+                if not output.exists():
+                    result.check_returncode()
+                    raise RuntimeError(f"wedge benchmark did not write {output}")
                 record = json.loads(output.read_text())
                 completed.append((name, record))
                 print(
                     f"quality={record['quality_passed']}  "
-                    f"KD={record['kd_query_ms']:.3f} ms  "
+                    f"query batch: KD={record['kd_query_ms']:.3f} ms  "
                     f"Query={record['morton_query_ms']:.3f} ms  "
                     f"Ghost={record['ghost_query_ms']:.3f} ms  "
-                    f"ghost-speedup={record['ghost_query_speedup']:.3f}  "
-                    f"images={record['mean_query_images']:.3f}"
+                    f"query-speedup={record['query_speedup']:.3f}  "
+                    f"ghost-speedup={record['ghost_query_speedup']:.3f}"
                 )
+                if result.returncode != 0:
+                    print(
+                        "failure counters: "
+                        f"KD/brute={record['kd_brute_mismatches']}  "
+                        f"query/brute={record['morton_brute_mismatches']}  "
+                        f"ghost/brute={record['ghost_brute_mismatches']}  "
+                        f"KD/disagreements={record['kd_disagreement_brute_mismatches']}  "
+                        f"query/disagreements={record['morton_disagreement_brute_mismatches']}  "
+                        f"ghost/disagreements={record['ghost_disagreement_brute_mismatches']}  "
+                        f"query-overflows={record['stack_overflows']}  "
+                        f"ghost-overflows={record['ghost_stack_overflows']}  "
+                        f"max-error={record['maximum_distance_error']:.3e}  "
+                        f"ties: KD={record['kd_tie_equivalent_neighbors']} "
+                        f"Query={record['morton_tie_equivalent_neighbors']} "
+                        f"Ghost={record['ghost_tie_equivalent_neighbors']}",
+                        flush=True,
+                    )
+                    result.check_returncode()
 
     manifest = {
         "cases": len(completed),

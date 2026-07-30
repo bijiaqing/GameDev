@@ -349,6 +349,11 @@ trajectory. During each batch:
 The frozen species snapshot prevents concurrent partner reads from observing partially updated
 sizes or grain counts. Accuracy still depends on convergence with decreasing `CFL_COL`.
 
+For the Morton backend, the block evaluates the individual pair propensities cooperatively after
+the neighbor search. Thread zero then accumulates the stored values and samples the partner in the
+original Morton neighbor order. This preserves the serial floating-point summation and stochastic
+selection rule while avoiding one-thread evaluation of all pair physics.
+
 Coagulation uses
 
 $$
@@ -374,16 +379,21 @@ $$
 q_i=H_{\mathrm{SEARCH}}H_g(R_i)R_i.
 $$
 
-Both backends must return the same stable physical identifiers, squared distances, valid count,
-and farthest valid distance in lexicographic $(d^2,\mathrm{id})$ order. They retain the same
-$N_K$, $q_i$, accessible-ball normalization, pair physics, maximum-rate reduction, event
+Both backends must return the same original particle indices, squared distances, valid count,
+and farthest valid distance under the lexicographic $(d^2,\mathrm{id})$ selection rule. They retain
+the same $N_K$, $q_i$, accessible-ball normalization, pair physics, maximum-rate reduction, event
 probability, partner sampling, and coagulation or fragmentation update. Approximate neighbors or a
 fixed-radius population estimator would be a different numerical model and require a new
 derivation.
 
-The KD-tree candidate heap uses the stable particle identifier as its equal-distance tie breaker
-and expands its culling radius by one floating-point unit. This prevents mutable tree slots from
-changing which member of an exact-distance tie is retained.
+The KD-tree candidate heap uses `index_old` as its equal-distance tie breaker
+and expands its culling radius by one floating-point unit. Each heap slot stores only the encoded
+pair $(d^2,\mathrm{id})$; the shuffled tree slot is not retained because collision physics consumes
+`index_old` directly. This prevents mutable tree slots from changing which member of an
+exact-distance tie is retained while minimizing thread-local storage. For partial wedges, the heap
+checks for repeated physical identifiers only when the minimum separation between adjacent
+periodic images is no larger than twice the current query radius. Wider wedges use the ordinary
+$O(\log N_K)$ heap insertion without an $O(N_K)$ duplicate scan.
 
 ### Adaptive Morton hierarchy
 
@@ -401,10 +411,16 @@ d_{\min}^2=\sum_\alpha
 \left[\max(b_{\min,\alpha}-x_\alpha,0,x_\alpha-b_{\max,\alpha})\right]^2.
 $$
 
-A scale-aware single-precision padding prevents repeated subdivision from overestimating this
-bound. One CUDA block evaluates candidate tiles cooperatively and retains the nearest $N_K$ pairs
-in shared memory. The traversal reports an overflow rather than silently accepting an incomplete
-result.
+A level-aware single-precision padding
+
+$$
+p=2(L_{\max}+2)\epsilon_{\rm float}
+\max\!\left(1,|\boldsymbol b_{\min}|_\infty,|\boldsymbol b_{\max}|_\infty\right)
+$$
+
+prevents accumulated recursive-subdivision roundoff from making the pruning bound too large. One
+CUDA block evaluates candidate tiles cooperatively and retains the nearest $N_K$ pairs in shared
+memory. The traversal reports an overflow rather than silently accepting an incomplete result.
 
 ### Periodic boundary ghosts
 
@@ -417,13 +433,13 @@ $$
 
 Lower-face sources are rotated by one positive wedge width and upper-face sources by one negative
 wedge width. The original and compact ghost records are indexed together, while every record keeps
-the stable identifier of its physical representative. Ghost construction uses GPU `sincosf`, so
+the original index of its physical representative. Ghost construction uses GPU `sincosf`, so
 the periodic isometry follows the same single-precision arithmetic as the search records.
 
 The global maximum is conservative for position-dependent cutoffs: a query still uses its own
 $q_i$, while the larger construction halo guarantees that no eligible source was omitted. If a
 wedge is narrow enough for multiple images of one representative to enter the same query ball, the
-query temporarily retains up to $3N_K$ records, deduplicates by stable identifier, and then selects
+query temporarily retains up to $3N_K$ records, deduplicates by original particle index, and then selects
 the exact nearest $N_K$ physical particles. Ordinary disk wedges use the cheaper disjoint-image
 path.
 

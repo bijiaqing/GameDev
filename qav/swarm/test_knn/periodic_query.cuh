@@ -169,7 +169,7 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
     }
     __syncthreads();
 
-    // group equal stable identifiers and retain the closest periodic image of each particle
+    // group equal original particle indices and retain the closest periodic image of each particle
     _periodic_id_sort<MERGE_SIZE, BLOCK_SIZE>(merge_dist, merge_idx);
     constexpr int slots_per_thread = (MERGE_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE;
     bool duplicate[slots_per_thread];

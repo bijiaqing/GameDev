@@ -1,4 +1,5 @@
 #include <chrono>           // std::chrono::system_clock
+#include <cmath>            // std::fabs, std::fmin, std::sin
 #include <filesystem>       // std::filesystem::create_directories
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
@@ -283,6 +284,14 @@ int main (int argc, char **argv)
         CUDA_KERNEL_CHECK("col_tree_init");
         kdtree::buildTree <kdtree_node, kdtree_traits> (dev_col_tree, N_T, dev_boundbox);
         CUDA_KERNEL_CHECK("kdtree::buildTree");
+        float image_dist_min = -1.0f;
+        if (N_T > N_P)
+        {
+            image_dist_min = static_cast<float>(
+                2.0*Y_MIN*std::fmin(std::sin(Z_MIN), std::sin(Z_MAX))
+                *std::fabs(std::sin(0.5*(X_MAX - X_MIN)))
+            );
+        }
         #else  // COLLISION_MORTON
         col_tree_init <<< NB_P, TPB >>> (dev_col_point, dev_col_x, dev_col_cutoff, dev_particle);
         CUDA_KERNEL_CHECK("col_tree_init");
@@ -310,6 +319,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
+                image_dist_min,
                 N_P / (N_K - 1.0) / total_dust_mass
             );
             #else  // COLLISION_MORTON
@@ -354,6 +364,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
+                image_dist_min,
                 N_P / (N_K - 1.0) / total_dust_mass,
                 dt_col
             );

@@ -28,6 +28,7 @@ struct morton_view
     int point_count;
     int node_count;
     int dimension;
+    int max_level;
 };
 
 __host__ __device__ inline

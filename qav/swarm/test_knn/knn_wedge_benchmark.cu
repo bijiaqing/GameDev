@@ -155,43 +155,43 @@ void ghost_morton_checksum (double *checksum, unsigned int *stack_overflows,
 template<int TOP_K>
 __global__
 void kd_wedge_query (int *neighbor_idx, float *neighbor_dist, const float3 *queries, int query_count,
-    const kd_point *tree, const kd_box *bounds, int tree_count, float radius)
+    const kd_point *tree, const kd_box *bounds, int tree_count, float radius, bool deduplicate)
 {
     int idx_query = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_query >= query_count) return;
 
-    kd_heap<TOP_K, true> result(radius, tree);
-    kdtree::cct::knn<kd_heap<TOP_K, true>, kd_point, kd_traits>(
+    kd_heap<TOP_K> result(radius, tree, deduplicate);
+    kdtree::cct::knn<kd_heap<TOP_K>, kd_point, kd_traits>(
         result, queries[idx_query], *bounds, tree, tree_count
     );
     for (int idx_neighbor = 0; idx_neighbor < TOP_K; idx_neighbor++)
     {
-        int idx_tree = result.returnIndex(idx_neighbor);
+        int idx_old = result.returnIndex(idx_neighbor);
         int idx_out = idx_query*TOP_K + idx_neighbor;
-        neighbor_idx[idx_out] = (idx_tree < 0) ? -1 : tree[idx_tree].index_old;
-        neighbor_dist[idx_out] = (idx_tree < 0) ? CUDART_INF_F : result.returnDist2(idx_neighbor);
+        neighbor_idx[idx_out] = idx_old;
+        neighbor_dist[idx_out] = (idx_old < 0) ? CUDART_INF_F : result.returnDist2(idx_neighbor);
     }
 }
 
 template<int TOP_K>
 __global__
 void kd_wedge_checksum (double *checksum, const float3 *queries, int query_count,
-    const kd_point *tree, const kd_box *bounds, int tree_count, float radius)
+    const kd_point *tree, const kd_box *bounds, int tree_count, float radius, bool deduplicate)
 {
     int idx_query = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_query >= query_count) return;
 
-    kd_heap<TOP_K, true> result(radius, tree);
-    kdtree::cct::knn<kd_heap<TOP_K, true>, kd_point, kd_traits>(
+    kd_heap<TOP_K> result(radius, tree, deduplicate);
+    kdtree::cct::knn<kd_heap<TOP_K>, kd_point, kd_traits>(
         result, queries[idx_query], *bounds, tree, tree_count
     );
     double value = 0.0;
     for (int idx_neighbor = 0; idx_neighbor < TOP_K; idx_neighbor++)
     {
-        int idx_tree = result.returnIndex(idx_neighbor);
-        if (idx_tree < 0) continue;
+        int idx_old = result.returnIndex(idx_neighbor);
+        if (idx_old < 0) continue;
         value += static_cast<double>(result.returnDist2(idx_neighbor))
-            + 1.0e-12*static_cast<double>(tree[idx_tree].index_old);
+            + 1.0e-12*static_cast<double>(idx_old);
     }
     checksum[idx_query] = value;
 }
@@ -356,6 +356,40 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
     int &tie_equivalent_neighbors)
 {
     if (actual.size() != expected.size()) return true;
+
+    std::vector<std::pair<int, float>> actual_by_idx;
+    std::vector<std::pair<int, float>> expected_by_idx;
+    actual_by_idx.reserve(actual.size());
+    expected_by_idx.reserve(expected.size());
+    for (const auto &neighbor : actual)
+    {
+        actual_by_idx.emplace_back(neighbor.second, neighbor.first);
+    }
+    for (const auto &neighbor : expected)
+    {
+        expected_by_idx.emplace_back(neighbor.second, neighbor.first);
+    }
+    std::sort(actual_by_idx.begin(), actual_by_idx.end());
+    std::sort(expected_by_idx.begin(), expected_by_idx.end());
+
+    bool same_indices = true;
+    for (std::size_t idx = 0; idx < actual_by_idx.size(); idx++)
+    {
+        if (actual_by_idx[idx].first == expected_by_idx[idx].first) continue;
+        same_indices = false;
+        break;
+    }
+    if (same_indices)
+    {
+        for (std::size_t idx = 0; idx < actual_by_idx.size(); idx++)
+        {
+            float error = std::fabs(actual_by_idx[idx].second - expected_by_idx[idx].second);
+            maximum_error = std::max(maximum_error, error);
+            if (error > 2.0e-6f) return true;
+        }
+        return false;
+    }
+
     for (std::size_t idx = 0; idx < actual.size(); idx++)
     {
         float error = std::fabs(actual[idx].first - expected[idx].first);
@@ -373,6 +407,58 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
         return true;
     }
     return false;
+}
+
+void report_brute_difference (const char *backend, int idx_query,
+    const std::vector<std::pair<float, int>> &actual,
+    const std::vector<std::pair<float, int>> &expected)
+{
+    std::vector<std::pair<int, float>> actual_by_idx;
+    std::vector<std::pair<int, float>> expected_by_idx;
+    for (const auto &neighbor : actual)
+    {
+        actual_by_idx.emplace_back(neighbor.second, neighbor.first);
+    }
+    for (const auto &neighbor : expected)
+    {
+        expected_by_idx.emplace_back(neighbor.second, neighbor.first);
+    }
+    std::sort(actual_by_idx.begin(), actual_by_idx.end());
+    std::sort(expected_by_idx.begin(), expected_by_idx.end());
+
+    std::cerr << "  " << backend << " query " << idx_query
+        << " actual-count=" << actual.size() << " expected-count=" << expected.size();
+    if (actual_by_idx.size() != expected_by_idx.size())
+    {
+        std::cerr << " count mismatch" << std::endl;
+        return;
+    }
+
+    for (std::size_t idx = 0; idx < actual_by_idx.size(); idx++)
+    {
+        if (actual_by_idx[idx].first != expected_by_idx[idx].first)
+        {
+            std::cerr << " index-set mismatch actual=(" << actual_by_idx[idx].first
+                << ',' << actual_by_idx[idx].second << ") expected=("
+                << expected_by_idx[idx].first << ',' << expected_by_idx[idx].second
+                << ")" << std::endl;
+            return;
+        }
+    }
+
+    float max_error = 0.0f;
+    int idx_error = -1;
+    for (std::size_t idx = 0; idx < actual_by_idx.size(); idx++)
+    {
+        float error = std::fabs(actual_by_idx[idx].second - expected_by_idx[idx].second);
+        if (error <= max_error) continue;
+        max_error = error;
+        idx_error = static_cast<int>(idx);
+    }
+    std::cerr << " distance mismatch idx_old=" << actual_by_idx[idx_error].first
+        << " actual=" << actual_by_idx[idx_error].second
+        << " expected=" << expected_by_idx[idx_error].second
+        << " error=" << max_error << std::endl;
 }
 
 std::vector<std::pair<float, int>> brute_neighbors (
@@ -462,6 +548,7 @@ int main (int argc, char **argv)
                 true, config.dimension, config.leaf_target, config.max_level
             );
         });
+        bool kd_deduplicate = !ghost_morton.duplicate_safe();
 
         std::size_t quality_count = static_cast<std::size_t>(config.queries)*K;
         int *dev_kd_idx = nullptr;
@@ -490,7 +577,7 @@ int main (int argc, char **argv)
 
         kd_wedge_query<K> <<< (config.queries + KD_THREADS - 1) / KD_THREADS, KD_THREADS >>> (
             dev_kd_idx, dev_kd_dist, dev_points, config.queries,
-            dev_kd_tree, dev_kd_bounds, tree_count, config.radius
+            dev_kd_tree, dev_kd_bounds, tree_count, config.radius, kd_deduplicate
         );
         periodic_morton_query<K> <<< config.queries, MORTON_THREADS >>> (
             dev_morton_idx, dev_morton_dist, dev_quality_overflow, dev_quality_images,
@@ -561,22 +648,40 @@ int main (int argc, char **argv)
                     points, points[idx_query], width, config.radius
                 );
                 if (differs_from_brute(kd, brute, maximum_error, kd_tie_equivalent_neighbors))
+                {
                     kd_disagreement_brute_mismatches++;
+                    report_brute_difference("KD", idx_query, kd, brute);
+                }
                 if (differs_from_brute(mt, brute, maximum_error, morton_tie_equivalent_neighbors))
+                {
                     morton_disagreement_brute_mismatches++;
+                    report_brute_difference("query Morton", idx_query, mt, brute);
+                }
                 if (differs_from_brute(gh, brute, maximum_error, ghost_tie_equivalent_neighbors))
+                {
                     ghost_disagreement_brute_mismatches++;
+                    report_brute_difference("ghost Morton", idx_query, gh, brute);
+                }
             }
             if (idx_query >= config.brute_queries) continue;
             std::vector<std::pair<float, int>> brute = brute_neighbors(
                 points, points[idx_query], width, config.radius
             );
             if (differs_from_brute(kd, brute, maximum_error, kd_tie_equivalent_neighbors))
+            {
                 kd_brute_mismatches++;
+                report_brute_difference("KD", idx_query, kd, brute);
+            }
             if (differs_from_brute(mt, brute, maximum_error, morton_tie_equivalent_neighbors))
+            {
                 morton_brute_mismatches++;
+                report_brute_difference("query Morton", idx_query, mt, brute);
+            }
             if (differs_from_brute(gh, brute, maximum_error, ghost_tie_equivalent_neighbors))
+            {
                 ghost_brute_mismatches++;
+                report_brute_difference("ghost Morton", idx_query, gh, brute);
+            }
         }
 
         double *dev_kd_checksum = nullptr;
@@ -602,7 +707,7 @@ int main (int argc, char **argv)
         {
             kd_wedge_checksum<K> <<< (config.particles + KD_THREADS - 1) / KD_THREADS, KD_THREADS >>> (
                 dev_kd_checksum, dev_points, config.particles,
-                dev_kd_tree, dev_kd_bounds, tree_count, config.radius
+                dev_kd_tree, dev_kd_bounds, tree_count, config.radius, kd_deduplicate
             );
         }, config.repeats);
         double morton_query_ms = kernel_time_ms([&]
@@ -645,9 +750,13 @@ int main (int argc, char **argv)
         }
         mean_images /= config.particles;
         double boundary_fraction = static_cast<double>(boundary_queries) / config.particles;
-        bool quality_passed = mismatched_queries == 0 && kd_brute_mismatches == 0
-            && morton_brute_mismatches == 0 && ghost_mismatched_queries == 0
-            && ghost_brute_mismatches == 0 && stack_overflows == 0 && ghost_stack_overflows == 0;
+        // Backend-to-backend differences are diagnostic because independently rotated
+        // single-precision images can exchange distance-equivalent cutoff neighbors
+        bool quality_passed = kd_brute_mismatches == 0 && morton_brute_mismatches == 0
+            && ghost_brute_mismatches == 0 && kd_disagreement_brute_mismatches == 0
+            && morton_disagreement_brute_mismatches == 0
+            && ghost_disagreement_brute_mismatches == 0
+            && stack_overflows == 0 && ghost_stack_overflows == 0;
 
         std::ostream *output = &std::cout;
         std::ofstream file;
@@ -667,6 +776,7 @@ int main (int argc, char **argv)
             << "  \"distribution\": \"" << config.distribution << "\",\n"
             << "  \"x_min\": " << config.x_min << ",\n"
             << "  \"x_max\": " << config.x_max << ",\n"
+            << "  \"kd_deduplicate\": " << (kd_deduplicate ? "true" : "false") << ",\n"
             << "  \"duplicate_safe\": " << (ghost_morton.duplicate_safe() ? "true" : "false") << ",\n"
             << "  \"quality_passed\": " << (quality_passed ? "true" : "false") << ",\n"
             << "  \"mismatched_queries\": " << mismatched_queries << ",\n"

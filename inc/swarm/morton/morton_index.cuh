@@ -177,7 +177,7 @@ public:
 
     morton_view view () const
     {
-        return {points_, nodes_, point_count_, node_count_, dimension_};
+        return {points_, nodes_, point_count_, node_count_, dimension_, max_level_};
     }
 
     std::size_t persistent_bytes () const
@@ -205,7 +205,7 @@ private:
 };
 
 __device__ __forceinline__
-float _get_node_dist_sq (const float3 &query, const morton_node &node, int dimension)
+float _get_node_dist_sq (const float3 &query, const morton_node &node, int dimension, int max_level)
 {
     float3 upper = make_float3(node.lower.x + node.width, node.lower.y + node.width, node.lower.z + node.width);
     float scale = fmaxf(1.0f, fmaxf(
@@ -214,8 +214,8 @@ float _get_node_dist_sq (const float3 &query, const morton_node &node, int dimen
             fmaxf(fabsf(node.lower.z), fabsf(upper.z)))
     ));
 
-    // keep the pruning box conservative after repeated single-precision cell subdivision
-    float pad = 8.0f*FLT_EPSILON*scale;
+    // cover accumulated rounding from every recursive single-precision subdivision
+    float pad = 2.0f*static_cast<float>(max_level + 2)*FLT_EPSILON*scale;
     float dx = fmaxf(fmaxf(node.lower.x - query.x - pad, 0.0f), query.x - upper.x - pad);
     float dy = fmaxf(fmaxf(node.lower.y - query.y - pad, 0.0f), query.y - upper.y - pad);
     float dz = (dimension == 2)
@@ -290,7 +290,7 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
 
         const morton_node &node = view.nodes[idx_node];
         float cutoff_sq = fminf(radius_sq, best_dist[K - 1]);
-        if (_get_node_dist_sq(query, node, view.dimension) > cutoff_sq) continue;
+        if (_get_node_dist_sq(query, node, view.dimension, view.max_level) > cutoff_sq) continue;
 
         if (node.child_number == 0)
         {
@@ -349,7 +349,9 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
             {
                 int child = node.child[child_code];
                 if (child < 0) continue;
-                float dist_sq = _get_node_dist_sq(query, view.nodes[child], view.dimension);
+                float dist_sq = _get_node_dist_sq(
+                    query, view.nodes[child], view.dimension, view.max_level
+                );
                 if (dist_sq > cutoff_sq) continue;
                 int insert = valid;
                 while (insert > 0 && child_dist[insert - 1] > dist_sq)

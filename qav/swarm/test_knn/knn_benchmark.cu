@@ -100,10 +100,10 @@ void kd_query (int *neighbor_idx, float *neighbor_dist, const float3 *queries, i
 
     for (int idx_neighbor = 0; idx_neighbor < TOP_K; idx_neighbor++)
     {
-        int idx_tree = result.returnIndex(idx_neighbor);
+        int idx_old = result.returnIndex(idx_neighbor);
         int idx_out = idx_query*TOP_K + idx_neighbor;
-        neighbor_idx[idx_out] = (idx_tree < 0) ? -1 : tree[idx_tree].index_old;
-        neighbor_dist[idx_out] = (idx_tree < 0) ? CUDART_INF_F : result.returnDist2(idx_neighbor);
+        neighbor_idx[idx_out] = idx_old;
+        neighbor_dist[idx_out] = (idx_old < 0) ? CUDART_INF_F : result.returnDist2(idx_neighbor);
     }
 }
 
@@ -123,10 +123,10 @@ void kd_checksum (double *checksum, const float3 *queries, int query_count,
     double value = 0.0;
     for (int idx_neighbor = 0; idx_neighbor < TOP_K; idx_neighbor++)
     {
-        int idx_tree = result.returnIndex(idx_neighbor);
-        if (idx_tree < 0) continue;
+        int idx_old = result.returnIndex(idx_neighbor);
+        if (idx_old < 0) continue;
         value += static_cast<double>(result.returnDist2(idx_neighbor))
-            + 1.0e-12*static_cast<double>(tree[idx_tree].index_old);
+            + 1.0e-12*static_cast<double>(idx_old);
     }
     checksum[idx_query] = value;
 }

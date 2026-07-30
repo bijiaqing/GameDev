@@ -17,7 +17,7 @@ def main() -> None:
 
     print(
         f"{'case':34s} {'ok':>4s} {'KD ms':>9s} {'Query ms':>10s} {'Ghost ms':>10s} "
-        f"{'Q speed':>8s} {'G speed':>8s} {'Q memory':>9s} {'G memory':>9s} {'ghosts':>8s}"
+        f"{'Q speed':>8s} {'G speed':>8s} {'Q memory':>9s} {'G memory':>9s} {'ghosts':>8s} {'dedup':>6s}"
     )
     for name in manifest["files"]:
         path = result_root / name
@@ -32,7 +32,8 @@ def main() -> None:
             f"{record['ghost_query_speedup']:8.3f} "
             f"{record['persistent_memory_ratio']:9.3f} "
             f"{record['ghost_memory_ratio']:9.3f} "
-            f"{record['ghost_record_ratio']:8.3f}"
+            f"{record['ghost_record_ratio']:8.3f} "
+            f"{str(record.get('kd_deduplicate', True)):>6s}"
         )
 
 

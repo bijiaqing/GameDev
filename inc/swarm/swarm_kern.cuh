@@ -102,6 +102,7 @@ __global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swa
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
+    float image_dist_min,
     real lambda_0
 );
 __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
@@ -110,6 +111,7 @@ __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const re
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
+    float image_dist_min,
     real lambda_0,
     real dt_col
 );

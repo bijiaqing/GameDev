@@ -505,7 +505,12 @@ applies the exact minimum-image wedge geometry, sorts by $(d^2,\mathrm{id})$, an
 $N_K$. If the two GPU methods disagree outside the initially configured brute-force subset, the
 validator also checks every disagreement against exhaustive search. A case fails on an incorrect
 identifier, a distance outside the single-precision tolerance, a missing valid neighbor, or a
-traversal-stack overflow.
+traversal-stack overflow. Backend-to-backend list differences remain diagnostic but do not fail a
+case when each list is independently equivalent to the brute-force result, because separate
+single-precision image rotations can exchange distance-equivalent boundary neighbors.
+When the GPU and brute-force lists contain the same particle indices, the validator compares each
+distance by its matching index rather than by independently rounded distance rank; genuinely
+different index sets retain the stricter boundary-tie adjudication.
 
 The clean A100 validation baseline covered:
 
@@ -532,6 +537,29 @@ The archived JSON, manifests, environment records, and terminal summaries were m
 development laboratory to `qav/swarm/test_knn/out/`. That directory records the clean pre-promotion
 baseline. Because the QA driver now calls the production ghost owner directly, it must be rerun on
 native CUDA before the current source revision is treated as a publication artifact.
+
+The standalone `*_query_ms` fields measure one complete batch of $N_P$ search queries using CUDA
+events after an untimed warm-up and report the mean of the requested repeats. They include tree
+traversal, top-$K$ maintenance, and the checksum write, but exclude index construction, allocation,
+host-device transfers, brute-force validation, collision-rate physics, and collision events. The
+corresponding `*_build_ms` fields report index construction separately. These search-only timings
+must not be presented as end-to-end collision-operator or simulation timings.
+
+The promoted QA benchmark is not performance-identical to the archived laboratory KD-tree driver.
+It now uses the production `index_old` heap, and its periodic-wedge path deduplicates physical
+particles represented by multiple KD-tree images. The archived driver used the stock KD-tree heap
+without that per-candidate deduplication. Consequently, changes in the reported KD/Morton speed
+ratio across promotion reflect a changed KD reference implementation as well as Morton integration;
+only clean runs of the same source revision are suitable for backend performance comparison.
+The current optimized heap stores `index_old` directly and activates its duplicate scan only
+for geometrically overlapping image neighborhoods; the JSON field `kd_deduplicate` records which
+path each wedge case exercises.
+
+The post-audit source also uses level-aware Morton AABB padding and block-parallel pair-propensity
+evaluation with serial ordered accumulation. The standalone QA and production KD paths now include
+the same generic `index_old_heap` from `inc/swarm/kdtree/index_heap.cuh`, eliminating the
+former test transcription. These changes require a new clean native-CUDA archive before their
+correctness and performance are treated as final measurements.
 
 ## Recorded native CUDA results
 
