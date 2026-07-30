@@ -17,7 +17,7 @@ using curs = curandState;
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION_KDTREE
-using bbox = kdtree::box_t<float3>;           // axis-aligned bounding box type for KD-tree
+using kdtree_boxf = kdtree::box_t<float3>;    // axis-aligned float bounding box type for KD-tree
 #endif // COLLISION_KDTREE
 
 using real  = double;                       // code real type
@@ -176,7 +176,7 @@ struct swarm                                // representative-particle state
 struct kdtree_node                         // KD-tree node consumed by kdtree::builder
 {
     float3  cartesian;                      // Cartesian position of the physical particle or periodic image
-    int     index_old;                      // stable particle-array index before KD-tree reordering
+    int     idx_old;                        // stable particle-array index before KD-tree reordering
     int     split_dim;                      // splitting dimension of the tree node
     int     image;                          // zero for a physical node and nonzero for a periodic image
 };

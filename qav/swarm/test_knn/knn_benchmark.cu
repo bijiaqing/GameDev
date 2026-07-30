@@ -31,10 +31,10 @@ namespace
 {
 
 constexpr int K = QAV_KNN_K;
-constexpr int KD_THREADS = 64;
-constexpr int MORTON_THREADS = 256;
+constexpr int KDTREE_TPB = 64;
+constexpr int MORTON_TPB = 256;
 
-using kd_box = kdtree::box_t<float3>;
+using kdtree_boxf = kdtree::box_t<float3>;
 
 struct options
 {
@@ -42,7 +42,7 @@ struct options
     int queries = 4096;
     int repeats = 5;
     int brute_queries = 32;
-    int dimension = 2;
+    int dim = 2;
     int seed = 17;
     int leaf_target = 128;
     int max_level = 20;
@@ -66,10 +66,10 @@ struct quality_stats
 {
     int mismatched_queries = 0;
     long long mismatched_neighbors = 0;
-    int kd_brute_mismatches = 0;
+    int kdtree_brute_mismatches = 0;
     int morton_brute_mismatches = 0;
     int disagreement_queries_checked = 0;
-    int kd_disagreement_brute_mismatches = 0;
+    int kdtree_disagreement_brute_mismatches = 0;
     int morton_disagreement_brute_mismatches = 0;
     int morton_record_mismatches = 0;
     int record_geometry_mismatches = 0;
@@ -79,60 +79,63 @@ struct quality_stats
 };
 
 __global__
-void kd_point_init (kd_point *tree, const float3 *source, int point_count)
+void kdtree_point_init (kdtree_point *dev_kdtree_node, const float3 *dev_source_point, int point_count)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= point_count) return;
-    tree[idx].cartesian = source[idx];
-    tree[idx].index_old = idx;
-    tree[idx].split_dim = 0;
-    tree[idx].image = 0;
+    dev_kdtree_node[idx].cartesian = dev_source_point[idx];
+    dev_kdtree_node[idx].idx_old = idx;
+    dev_kdtree_node[idx].split_dim = 0;
+    dev_kdtree_node[idx].image = 0;
 }
 
 template<int TOP_K>
 __global__
-void kd_query (int *neighbor_idx, float *neighbor_dist, const float3 *queries, int query_count,
-    const kd_point *tree, const kd_box *bounds, int point_count, float radius)
+void kdtree_query (int *dev_near_idx_old, float *dev_near_dist_sq,
+    const float3 *dev_query_point, int query_count,
+    const kdtree_point *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
+    int point_count, float search_dist)
 {
     int idx_query = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_query >= query_count) return;
 
-    kd_heap<TOP_K> result(radius, tree);
-    kdtree::cct::knn<kd_heap<TOP_K>, kd_point, kd_traits>(
-        result, queries[idx_query], *bounds, tree, point_count
+    kdtree_heap<TOP_K> near_result(search_dist, dev_kdtree_node);
+    kdtree::cct::knn<kdtree_heap<TOP_K>, kdtree_point, kdtree_traits>(
+        near_result, dev_query_point[idx_query], *dev_kdtree_box, dev_kdtree_node, point_count
     );
 
     for (int idx_neighbor = 0; idx_neighbor < TOP_K; idx_neighbor++)
     {
-        int idx_old = result.returnIndex(idx_neighbor);
+        int idx_old = near_result.returnIndex(idx_neighbor);
         int idx_out = idx_query*TOP_K + idx_neighbor;
-        neighbor_idx[idx_out] = idx_old;
-        neighbor_dist[idx_out] = (idx_old < 0) ? CUDART_INF_F : result.returnDist2(idx_neighbor);
+        dev_near_idx_old[idx_out] = idx_old;
+        dev_near_dist_sq[idx_out] = (idx_old < 0) ? CUDART_INF_F : near_result.returnDist2(idx_neighbor);
     }
 }
 
 template<int TOP_K>
 __global__
-void kd_checksum (double *checksum, const float3 *queries, int query_count,
-    const kd_point *tree, const kd_box *bounds, int point_count, float radius)
+void kdtree_checksum (double *dev_checksum, const float3 *dev_query_point, int query_count,
+    const kdtree_point *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
+    int point_count, float search_dist)
 {
     int idx_query = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx_query >= query_count) return;
 
-    kd_heap<TOP_K> result(radius, tree);
-    kdtree::cct::knn<kd_heap<TOP_K>, kd_point, kd_traits>(
-        result, queries[idx_query], *bounds, tree, point_count
+    kdtree_heap<TOP_K> near_result(search_dist, dev_kdtree_node);
+    kdtree::cct::knn<kdtree_heap<TOP_K>, kdtree_point, kdtree_traits>(
+        near_result, dev_query_point[idx_query], *dev_kdtree_box, dev_kdtree_node, point_count
     );
 
     double value = 0.0;
     for (int idx_neighbor = 0; idx_neighbor < TOP_K; idx_neighbor++)
     {
-        int idx_old = result.returnIndex(idx_neighbor);
+        int idx_old = near_result.returnIndex(idx_neighbor);
         if (idx_old < 0) continue;
-        value += static_cast<double>(result.returnDist2(idx_neighbor))
+        value += static_cast<double>(near_result.returnDist2(idx_neighbor))
             + 1.0e-12*static_cast<double>(idx_old);
     }
-    checksum[idx_query] = value;
+    dev_checksum[idx_query] = value;
 }
 
 const char *next_argument (int argc, char **argv, int &idx)
@@ -151,7 +154,7 @@ options parse_options (int argc, char **argv)
         else if (argument == "--queries") result.queries = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--repeat") result.repeats = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--brute-queries") result.brute_queries = std::stoi(next_argument(argc, argv, idx));
-        else if (argument == "--dim") result.dimension = std::stoi(next_argument(argc, argv, idx));
+        else if (argument == "--dim") result.dim = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--seed") result.seed = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--leaf-target") result.leaf_target = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--max-level") result.max_level = std::stoi(next_argument(argc, argv, idx));
@@ -166,7 +169,7 @@ options parse_options (int argc, char **argv)
     if (result.particles < K) throw std::invalid_argument("--particles must be at least QAV_KNN_K");
     if (result.queries <= 0 || result.repeats <= 0 || result.brute_queries < 0)
         throw std::invalid_argument("queries and repeats must be positive and brute queries nonnegative");
-    if (result.dimension != 2 && result.dimension != 3) throw std::invalid_argument("--dim must be 2 or 3");
+    if (result.dim != 2 && result.dim != 3) throw std::invalid_argument("--dim must be 2 or 3");
     if (result.leaf_target <= 0) throw std::invalid_argument("--leaf-target must be positive");
     if (result.max_level <= 0 || result.max_level > 20) throw std::invalid_argument("--max-level must be 1 through 20");
     if (result.max_leaf_scan <= 0) throw std::invalid_argument("--max-leaf-scan must be positive");
@@ -195,13 +198,13 @@ std::vector<float3> generate_points (const options &config)
         {
             points[idx].x = 1.0f + 0.01f*normal(generator);
             points[idx].y = 0.01f*normal(generator);
-            points[idx].z = (config.dimension == 3) ? 0.01f*normal(generator) : 0.0f;
+            points[idx].z = (config.dim == 3) ? 0.01f*normal(generator) : 0.0f;
             continue;
         }
 
         if (config.distribution == "ring") R = 1.0f + 0.03f*normal(generator);
         else R = std::sqrt(0.25f + 2.0f*uniform(generator));
-        if (config.dimension == 3)
+        if (config.dim == 3)
             Z = ((config.distribution == "ring") ? 0.02f : 0.05f)*normal(generator);
 
         points[idx] = make_float3(R*std::cos(phi), R*std::sin(phi), Z);
@@ -209,7 +212,7 @@ std::vector<float3> generate_points (const options &config)
     return points;
 }
 
-void get_root (const std::vector<float3> &points, int dimension, float3 &origin, float &root_width)
+void get_root (const std::vector<float3> &points, int dim, float3 &root_origin, float &root_width)
 {
     float3 lower = points.front();
     float3 upper = points.front();
@@ -225,12 +228,12 @@ void get_root (const std::vector<float3> &points, int dimension, float3 &origin,
 
     float extent_x = upper.x - lower.x;
     float extent_y = upper.y - lower.y;
-    float extent_z = (dimension == 2) ? 0.0f : upper.z - lower.z;
+    float extent_z = (dim == 2) ? 0.0f : upper.z - lower.z;
     root_width = 1.0001f*std::max({extent_x, extent_y, extent_z});
     float center_x = 0.5f*(lower.x + upper.x);
     float center_y = 0.5f*(lower.y + upper.y);
-    float center_z = (dimension == 2) ? 0.0f : 0.5f*(lower.z + upper.z);
-    origin = make_float3(
+    float center_z = (dim == 2) ? 0.0f : 0.5f*(lower.z + upper.z);
+    root_origin = make_float3(
         center_x - 0.5f*root_width,
         center_y - 0.5f*root_width,
         center_z - 0.5f*root_width
@@ -240,11 +243,11 @@ void get_root (const std::vector<float3> &points, int dimension, float3 &origin,
 template<typename Function>
 double wall_time_ms (Function operation)
 {
-    auto start = std::chrono::steady_clock::now();
+    auto time_start = std::chrono::steady_clock::now();
     operation();
     _morton_cuda_check(cudaDeviceSynchronize(), "synchronize timed operation");
-    auto finish = std::chrono::steady_clock::now();
-    return std::chrono::duration<double, std::milli>(finish - start).count();
+    auto time_stop = std::chrono::steady_clock::now();
+    return std::chrono::duration<double, std::milli>(time_stop - time_start).count();
 }
 
 template<typename Function>
@@ -253,27 +256,27 @@ double kernel_time_ms (Function operation, int repeats)
     operation();
     _morton_cuda_check(cudaDeviceSynchronize(), "synchronize benchmark warmup");
 
-    cudaEvent_t begin;
-    cudaEvent_t end;
-    _morton_cuda_check(cudaEventCreate(&begin), "create benchmark start event");
-    _morton_cuda_check(cudaEventCreate(&end), "create benchmark end event");
-    _morton_cuda_check(cudaEventRecord(begin), "record benchmark start");
+    cudaEvent_t event_start;
+    cudaEvent_t event_stop;
+    _morton_cuda_check(cudaEventCreate(&event_start), "create benchmark start event");
+    _morton_cuda_check(cudaEventCreate(&event_stop), "create benchmark end event");
+    _morton_cuda_check(cudaEventRecord(event_start), "record benchmark start");
     for (int repeat = 0; repeat < repeats; repeat++)
     {
         operation();
     }
-    _morton_cuda_check(cudaEventRecord(end), "record benchmark end");
-    _morton_cuda_check(cudaEventSynchronize(end), "synchronize benchmark end");
-    float elapsed = 0.0f;
-    _morton_cuda_check(cudaEventElapsedTime(&elapsed, begin, end), "read benchmark duration");
-    cudaEventDestroy(begin);
-    cudaEventDestroy(end);
-    return static_cast<double>(elapsed) / repeats;
+    _morton_cuda_check(cudaEventRecord(event_stop), "record benchmark end");
+    _morton_cuda_check(cudaEventSynchronize(event_stop), "synchronize benchmark end");
+    float elapsed_ms = 0.0f;
+    _morton_cuda_check(cudaEventElapsedTime(&elapsed_ms, event_start, event_stop), "read benchmark duration");
+    cudaEventDestroy(event_start);
+    cudaEventDestroy(event_stop);
+    return static_cast<double>(elapsed_ms) / repeats;
 }
 
-occupancy_stats get_occupancy (const morton_index &index)
+occupancy_stats get_occupancy (const morton_index &morton_owner)
 {
-    std::vector<int> counts = index.leaf_counts();
+    std::vector<int> counts = morton_owner.leaf_counts();
     std::sort(counts.begin(), counts.end());
 
     occupancy_stats result;
@@ -290,35 +293,35 @@ occupancy_stats get_occupancy (const morton_index &index)
     return result;
 }
 
-quality_stats compare_neighbors (const std::vector<int> &kd_idx, const std::vector<float> &kd_dist,
-    const std::vector<int> &morton_idx, const std::vector<float> &morton_dist, int query_count,
+quality_stats compare_neighbors (const std::vector<int> &kdtree_idx_old, const std::vector<float> &kdtree_dist_sq,
+    const std::vector<int> &morton_idx_old, const std::vector<float> &morton_dist_sq, int query_count,
     std::vector<int> &disagreement_queries)
 {
     quality_stats result;
     for (int idx_query = 0; idx_query < query_count; idx_query++)
     {
-        std::vector<std::pair<float, int>> kd_neighbors;
+        std::vector<std::pair<float, int>> kdtree_neighbors;
         std::vector<std::pair<float, int>> morton_neighbors;
         for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
         {
             int idx = idx_query*K + idx_neighbor;
-            if (kd_idx[idx] >= 0) kd_neighbors.emplace_back(kd_dist[idx], kd_idx[idx]);
-            if (morton_idx[idx] >= 0) morton_neighbors.emplace_back(morton_dist[idx], morton_idx[idx]);
+            if (kdtree_idx_old[idx] >= 0) kdtree_neighbors.emplace_back(kdtree_dist_sq[idx], kdtree_idx_old[idx]);
+            if (morton_idx_old[idx] >= 0) morton_neighbors.emplace_back(morton_dist_sq[idx], morton_idx_old[idx]);
         }
-        std::sort(kd_neighbors.begin(), kd_neighbors.end());
+        std::sort(kdtree_neighbors.begin(), kdtree_neighbors.end());
         std::sort(morton_neighbors.begin(), morton_neighbors.end());
 
-        bool query_mismatch = kd_neighbors.size() != morton_neighbors.size();
-        std::size_t common = std::min(kd_neighbors.size(), morton_neighbors.size());
+        bool query_mismatch = kdtree_neighbors.size() != morton_neighbors.size();
+        std::size_t common = std::min(kdtree_neighbors.size(), morton_neighbors.size());
         result.mismatched_neighbors += static_cast<long long>(
-            std::max(kd_neighbors.size(), morton_neighbors.size()) - common
+            std::max(kdtree_neighbors.size(), morton_neighbors.size()) - common
         );
         for (std::size_t idx = 0; idx < common; idx++)
         {
-            float distance_error = std::fabs(kd_neighbors[idx].first - morton_neighbors[idx].first);
+            float distance_error = std::fabs(kdtree_neighbors[idx].first - morton_neighbors[idx].first);
             result.maximum_distance_error = std::max(result.maximum_distance_error, distance_error);
-            float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(kd_neighbors[idx].first));
-            if (kd_neighbors[idx].second != morton_neighbors[idx].second || distance_error > tolerance)
+            float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(kdtree_neighbors[idx].first));
+            if (kdtree_neighbors[idx].second != morton_neighbors[idx].second || distance_error > tolerance)
             {
                 query_mismatch = true;
                 result.mismatched_neighbors++;
@@ -414,7 +417,7 @@ std::vector<std::pair<float, int>> get_record_neighbors (
         float dy = query.y - record.cartesian.y;
         float dz = query.z - record.cartesian.z;
         float dist_sq = dx*dx + dy*dy + dz*dz;
-        if (dist_sq <= radius_sq) result.emplace_back(dist_sq, record.index_old);
+        if (dist_sq <= radius_sq) result.emplace_back(dist_sq, record.idx_old);
     }
     std::sort(result.begin(), result.end());
     if (result.size() > K) result.resize(K);
@@ -445,8 +448,8 @@ void diagnose_morton_failure (quality_stats &quality, int idx_query,
 
 void compare_brute_force (quality_stats &quality, const std::vector<float3> &points,
     const std::vector<morton_point> &records,
-    const std::vector<int> &kd_idx, const std::vector<float> &kd_dist,
-    const std::vector<int> &morton_idx, const std::vector<float> &morton_dist,
+    const std::vector<int> &kdtree_idx_old, const std::vector<float> &kdtree_dist_sq,
+    const std::vector<int> &morton_idx_old, const std::vector<float> &morton_dist_sq,
     int query_count, float radius)
 {
     float radius_sq = radius*radius;
@@ -466,12 +469,12 @@ void compare_brute_force (quality_stats &quality, const std::vector<float3> &poi
         std::sort(expected.begin(), expected.end());
         if (expected.size() > K) expected.resize(K);
 
-        std::vector<std::pair<float, int>> kd_neighbors = get_array_neighbors(kd_idx, kd_dist, idx_query);
+        std::vector<std::pair<float, int>> kdtree_neighbors = get_array_neighbors(kdtree_idx_old, kdtree_dist_sq, idx_query);
         std::vector<std::pair<float, int>> morton_neighbors = get_array_neighbors(
-            morton_idx, morton_dist, idx_query
+            morton_idx_old, morton_dist_sq, idx_query
         );
-        if (differs_from_brute(kd_neighbors, expected, quality.maximum_distance_error))
-            quality.kd_brute_mismatches++;
+        if (differs_from_brute(kdtree_neighbors, expected, quality.maximum_distance_error))
+            quality.kdtree_brute_mismatches++;
         if (differs_from_brute(morton_neighbors, expected, quality.maximum_distance_error))
         {
             quality.morton_brute_mismatches++;
@@ -484,8 +487,8 @@ void compare_brute_force (quality_stats &quality, const std::vector<float3> &poi
 
 void compare_disagreements_brute_force (quality_stats &quality, const std::vector<float3> &points,
     const std::vector<morton_point> &records,
-    const std::vector<int> &kd_idx, const std::vector<float> &kd_dist,
-    const std::vector<int> &morton_idx, const std::vector<float> &morton_dist,
+    const std::vector<int> &kdtree_idx_old, const std::vector<float> &kdtree_dist_sq,
+    const std::vector<int> &morton_idx_old, const std::vector<float> &morton_dist_sq,
     const std::vector<int> &disagreement_queries, float radius)
 {
     float radius_sq = radius*radius;
@@ -507,12 +510,12 @@ void compare_disagreements_brute_force (quality_stats &quality, const std::vecto
         std::sort(expected.begin(), expected.end());
         if (expected.size() > K) expected.resize(K);
 
-        std::vector<std::pair<float, int>> kd_neighbors = get_array_neighbors(kd_idx, kd_dist, idx_query);
+        std::vector<std::pair<float, int>> kdtree_neighbors = get_array_neighbors(kdtree_idx_old, kdtree_dist_sq, idx_query);
         std::vector<std::pair<float, int>> morton_neighbors = get_array_neighbors(
-            morton_idx, morton_dist, idx_query
+            morton_idx_old, morton_dist_sq, idx_query
         );
-        if (differs_from_brute(kd_neighbors, expected, quality.maximum_distance_error))
-            quality.kd_disagreement_brute_mismatches++;
+        if (differs_from_brute(kdtree_neighbors, expected, quality.maximum_distance_error))
+            quality.kdtree_disagreement_brute_mismatches++;
         if (differs_from_brute(morton_neighbors, expected, quality.maximum_distance_error))
         {
             quality.morton_disagreement_brute_mismatches++;
@@ -524,11 +527,11 @@ void compare_disagreements_brute_force (quality_stats &quality, const std::vecto
 }
 
 void write_json (const options &config, float root_width, int node_count, int leaf_count,
-    double kd_build_ms, double morton_build_ms, double kd_query_ms, double morton_query_ms,
-    std::size_t kd_bytes, std::size_t morton_bytes, const occupancy_stats &occupancy,
+    double kdtree_build_ms, double morton_build_ms, double kdtree_query_ms, double morton_query_ms,
+    std::size_t kdtree_bytes, std::size_t morton_bytes, const occupancy_stats &occupancy,
     const quality_stats &quality, double mean_cells, double mean_candidates)
 {
-    double query_speedup = (morton_query_ms > 0.0) ? kd_query_ms / morton_query_ms : 0.0;
+    double query_speedup = (morton_query_ms > 0.0) ? kdtree_query_ms / morton_query_ms : 0.0;
     std::ostream *output = &std::cout;
     std::ofstream file;
     if (!config.output.empty())
@@ -541,8 +544,8 @@ void write_json (const options &config, float root_width, int node_count, int le
     }
 
     bool quality_passed = quality.mismatched_queries == 0
-        && quality.kd_brute_mismatches == 0 && quality.morton_brute_mismatches == 0
-        && quality.kd_disagreement_brute_mismatches == 0
+        && quality.kdtree_brute_mismatches == 0 && quality.morton_brute_mismatches == 0
+        && quality.kdtree_disagreement_brute_mismatches == 0
         && quality.morton_disagreement_brute_mismatches == 0
         && quality.stack_overflows == 0;
 
@@ -551,7 +554,7 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"particles\": " << config.particles << ",\n"
         << "  \"quality_queries\": " << config.queries << ",\n"
         << "  \"brute_force_queries\": " << config.brute_queries << ",\n"
-        << "  \"dimension\": " << config.dimension << ",\n"
+        << "  \"dimension\": " << config.dim << ",\n"
         << "  \"distribution\": \"" << config.distribution << "\",\n"
         << "  \"k\": " << K << ",\n"
         << "  \"radius\": " << config.radius << ",\n"
@@ -565,11 +568,11 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"quality_passed\": " << (quality_passed ? "true" : "false") << ",\n"
         << "  \"mismatched_queries\": " << quality.mismatched_queries << ",\n"
         << "  \"mismatched_neighbors\": " << quality.mismatched_neighbors << ",\n"
-        << "  \"kd_brute_mismatches\": " << quality.kd_brute_mismatches << ",\n"
+        << "  \"kd_brute_mismatches\": " << quality.kdtree_brute_mismatches << ",\n"
         << "  \"morton_brute_mismatches\": " << quality.morton_brute_mismatches << ",\n"
         << "  \"disagreement_queries_checked\": " << quality.disagreement_queries_checked << ",\n"
         << "  \"kd_disagreement_brute_mismatches\": "
-        << quality.kd_disagreement_brute_mismatches << ",\n"
+        << quality.kdtree_disagreement_brute_mismatches << ",\n"
         << "  \"morton_disagreement_brute_mismatches\": "
         << quality.morton_disagreement_brute_mismatches << ",\n"
         << "  \"morton_record_mismatches\": " << quality.morton_record_mismatches << ",\n"
@@ -577,14 +580,14 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"first_failure_query\": " << quality.first_failure_query << ",\n"
         << "  \"stack_overflows\": " << quality.stack_overflows << ",\n"
         << "  \"maximum_distance_error\": " << quality.maximum_distance_error << ",\n"
-        << "  \"kd_build_ms\": " << kd_build_ms << ",\n"
+        << "  \"kd_build_ms\": " << kdtree_build_ms << ",\n"
         << "  \"morton_build_ms\": " << morton_build_ms << ",\n"
-        << "  \"kd_query_ms\": " << kd_query_ms << ",\n"
+        << "  \"kd_query_ms\": " << kdtree_query_ms << ",\n"
         << "  \"morton_query_ms\": " << morton_query_ms << ",\n"
         << "  \"query_speedup\": " << query_speedup << ",\n"
-        << "  \"kd_persistent_bytes\": " << kd_bytes << ",\n"
+        << "  \"kd_persistent_bytes\": " << kdtree_bytes << ",\n"
         << "  \"morton_persistent_bytes\": " << morton_bytes << ",\n"
-        << "  \"persistent_memory_ratio\": " << static_cast<double>(morton_bytes) / kd_bytes << ",\n"
+        << "  \"persistent_memory_ratio\": " << static_cast<double>(morton_bytes) / kdtree_bytes << ",\n"
         << "  \"leaf_occupancy\": {\n"
         << "    \"mean\": " << occupancy.mean << ",\n"
         << "    \"median\": " << occupancy.median << ",\n"
@@ -605,36 +608,36 @@ int main (int argc, char **argv)
     {
         options config = parse_options(argc, argv);
         std::vector<float3> points = generate_points(config);
-        float3 origin;
+        float3 root_origin;
         float root_width;
-        get_root(points, config.dimension, origin, root_width);
+        get_root(points, config.dim, root_origin, root_width);
 
-        float3 *dev_points = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_points, sizeof(float3)*points.size()), "allocate benchmark points");
-        _morton_cuda_check(cudaMemcpy(dev_points, points.data(), sizeof(float3)*points.size(), cudaMemcpyHostToDevice),
+        float3 *dev_point = nullptr;
+        _morton_cuda_check(cudaMalloc((void**)&dev_point, sizeof(float3)*points.size()), "allocate benchmark points");
+        _morton_cuda_check(cudaMemcpy(dev_point, points.data(), sizeof(float3)*points.size(), cudaMemcpyHostToDevice),
             "copy benchmark points");
 
-        kd_point *dev_kd_tree = nullptr;
-        kd_box *dev_kd_bounds = nullptr;
-        double kd_build_ms = wall_time_ms([&]
+        kdtree_point *dev_kdtree_node = nullptr;
+        kdtree_boxf *dev_kdtree_box = nullptr;
+        double kdtree_build_ms = wall_time_ms([&]
         {
-            _morton_cuda_check(cudaMalloc((void**)&dev_kd_tree, sizeof(kd_point)*points.size()), "allocate KD tree");
-            _morton_cuda_check(cudaMalloc((void**)&dev_kd_bounds, sizeof(kd_box)), "allocate KD bounds");
-            int blocks = (config.particles + KD_THREADS - 1) / KD_THREADS;
-            kd_point_init <<< blocks, KD_THREADS >>> (dev_kd_tree, dev_points, config.particles);
-            _morton_cuda_check(cudaGetLastError(), "launch kd_point_init");
-            kdtree::buildTree<kd_point, kd_traits>(dev_kd_tree, config.particles, dev_kd_bounds);
+            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*points.size()), "allocate KD tree");
+            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate KD bounds");
+            int block_count = (config.particles + KDTREE_TPB - 1) / KDTREE_TPB;
+            kdtree_point_init <<< block_count, KDTREE_TPB >>> (dev_kdtree_node, dev_point, config.particles);
+            _morton_cuda_check(cudaGetLastError(), "launch kdtree_point_init");
+            kdtree::buildTree<kdtree_point, kdtree_traits>(dev_kdtree_node, config.particles, dev_kdtree_box);
         });
 
-        morton_index morton;
+        morton_index morton_owner;
         double morton_build_ms = wall_time_ms([&]
         {
-            morton.build(
-                dev_points, config.particles, origin, root_width,
-                config.dimension, config.leaf_target, config.max_level
+            morton_owner.build(
+                dev_point, config.particles, root_origin, root_width,
+                config.dim, config.leaf_target, config.max_level
             );
         });
-        occupancy_stats occupancy = get_occupancy(morton);
+        occupancy_stats occupancy = get_occupancy(morton_owner);
         if (occupancy.maximum > config.max_leaf_scan)
         {
             throw std::runtime_error(
@@ -645,113 +648,113 @@ int main (int argc, char **argv)
         }
 
         std::size_t quality_size = static_cast<std::size_t>(config.queries)*K;
-        int *dev_kd_idx = nullptr;
-        int *dev_morton_idx = nullptr;
-        float *dev_kd_dist = nullptr;
-        float *dev_morton_dist = nullptr;
-        unsigned int *dev_cell_visits = nullptr;
-        unsigned int *dev_candidate_visits = nullptr;
-        unsigned int *dev_quality_overflows = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_kd_idx, sizeof(int)*quality_size), "allocate KD quality indices");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_idx, sizeof(int)*quality_size), "allocate Morton quality indices");
-        _morton_cuda_check(cudaMalloc((void**)&dev_kd_dist, sizeof(float)*quality_size), "allocate KD quality distances");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_dist, sizeof(float)*quality_size), "allocate Morton quality distances");
-        _morton_cuda_check(cudaMalloc((void**)&dev_cell_visits, sizeof(unsigned int)*config.queries), "allocate cell visits");
-        _morton_cuda_check(cudaMalloc((void**)&dev_candidate_visits, sizeof(unsigned int)*config.queries),
+        int *dev_kdtree_idx_old = nullptr;
+        int *dev_morton_idx_old = nullptr;
+        float *dev_kdtree_dist_sq = nullptr;
+        float *dev_morton_dist_sq = nullptr;
+        unsigned int *dev_leaf_visit_count = nullptr;
+        unsigned int *dev_candidate_count = nullptr;
+        unsigned int *dev_quality_stack_overflow = nullptr;
+        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_size), "allocate KD quality indices");
+        _morton_cuda_check(cudaMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_size), "allocate Morton quality indices");
+        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_size), "allocate KD quality distances");
+        _morton_cuda_check(cudaMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_size), "allocate Morton quality distances");
+        _morton_cuda_check(cudaMalloc((void**)&dev_leaf_visit_count, sizeof(unsigned int)*config.queries), "allocate cell visits");
+        _morton_cuda_check(cudaMalloc((void**)&dev_candidate_count, sizeof(unsigned int)*config.queries),
             "allocate candidate visits");
-        _morton_cuda_check(cudaMalloc((void**)&dev_quality_overflows, sizeof(unsigned int)*config.queries),
+        _morton_cuda_check(cudaMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
             "allocate quality stack-overflow flags");
 
-        int kd_quality_blocks = (config.queries + KD_THREADS - 1) / KD_THREADS;
-        kd_query<K> <<< kd_quality_blocks, KD_THREADS >>> (
-            dev_kd_idx, dev_kd_dist, dev_points, config.queries,
-            dev_kd_tree, dev_kd_bounds, config.particles, config.radius
+        int kdtree_quality_block_count = (config.queries + KDTREE_TPB - 1) / KDTREE_TPB;
+        kdtree_query<K> <<< kdtree_quality_block_count, KDTREE_TPB >>> (
+            dev_kdtree_idx_old, dev_kdtree_dist_sq, dev_point, config.queries,
+            dev_kdtree_node, dev_kdtree_box, config.particles, config.radius
         );
-        morton_query<K> <<< config.queries, MORTON_THREADS >>> (
-            dev_morton_idx, dev_morton_dist, dev_cell_visits, dev_candidate_visits, dev_quality_overflows,
-            dev_points, config.queries, morton.view(), config.radius
+        morton_query<K> <<< config.queries, MORTON_TPB >>> (
+            dev_morton_idx_old, dev_morton_dist_sq, dev_leaf_visit_count, dev_candidate_count, dev_quality_stack_overflow,
+            dev_point, config.queries, morton_owner.view(), config.radius
         );
         _morton_cuda_check(cudaDeviceSynchronize(), "run KNN quality queries");
 
-        std::vector<int> kd_idx(quality_size);
-        std::vector<int> morton_idx(quality_size);
-        std::vector<float> kd_dist(quality_size);
-        std::vector<float> morton_dist(quality_size);
-        std::vector<unsigned int> cell_visits(config.queries);
-        std::vector<unsigned int> candidate_visits(config.queries);
-        std::vector<unsigned int> quality_overflows(config.queries);
-        _morton_cuda_check(cudaMemcpy(kd_idx.data(), dev_kd_idx, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
+        std::vector<int> kdtree_idx_old(quality_size);
+        std::vector<int> morton_idx_old(quality_size);
+        std::vector<float> kdtree_dist_sq(quality_size);
+        std::vector<float> morton_dist_sq(quality_size);
+        std::vector<unsigned int> leaf_visit_count(config.queries);
+        std::vector<unsigned int> candidate_count(config.queries);
+        std::vector<unsigned int> quality_stack_overflow(config.queries);
+        _morton_cuda_check(cudaMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
             "copy KD quality indices");
-        _morton_cuda_check(cudaMemcpy(morton_idx.data(), dev_morton_idx, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_cuda_check(cudaMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
             "copy Morton quality indices");
-        _morton_cuda_check(cudaMemcpy(kd_dist.data(), dev_kd_dist, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_cuda_check(cudaMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
             "copy KD quality distances");
-        _morton_cuda_check(cudaMemcpy(morton_dist.data(), dev_morton_dist, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_cuda_check(cudaMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
             "copy Morton quality distances");
-        _morton_cuda_check(cudaMemcpy(cell_visits.data(), dev_cell_visits, sizeof(unsigned int)*config.queries,
+        _morton_cuda_check(cudaMemcpy(leaf_visit_count.data(), dev_leaf_visit_count, sizeof(unsigned int)*config.queries,
             cudaMemcpyDeviceToHost), "copy cell visits");
-        _morton_cuda_check(cudaMemcpy(candidate_visits.data(), dev_candidate_visits,
+        _morton_cuda_check(cudaMemcpy(candidate_count.data(), dev_candidate_count,
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy candidate visits");
-        _morton_cuda_check(cudaMemcpy(quality_overflows.data(), dev_quality_overflows,
+        _morton_cuda_check(cudaMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy quality stack-overflow flags");
-        morton_view morton_data = morton.view();
+        morton_view morton_data = morton_owner.view();
         std::vector<morton_point> morton_records(morton_data.point_count);
-        _morton_cuda_check(cudaMemcpy(morton_records.data(), morton_data.points,
+        _morton_cuda_check(cudaMemcpy(morton_records.data(), morton_data.dev_point,
             sizeof(morton_point)*morton_data.point_count, cudaMemcpyDeviceToHost),
             "copy Morton records for quality diagnosis");
 
         std::vector<int> disagreement_queries;
         quality_stats quality = compare_neighbors(
-            kd_idx, kd_dist, morton_idx, morton_dist, config.queries, disagreement_queries
+            kdtree_idx_old, kdtree_dist_sq, morton_idx_old, morton_dist_sq, config.queries, disagreement_queries
         );
         compare_brute_force(
-            quality, points, morton_records, kd_idx, kd_dist, morton_idx, morton_dist,
+            quality, points, morton_records, kdtree_idx_old, kdtree_dist_sq, morton_idx_old, morton_dist_sq,
             config.brute_queries, config.radius
         );
         compare_disagreements_brute_force(
-            quality, points, morton_records, kd_idx, kd_dist, morton_idx, morton_dist,
+            quality, points, morton_records, kdtree_idx_old, kdtree_dist_sq, morton_idx_old, morton_dist_sq,
             disagreement_queries, config.radius
         );
-        for (unsigned int overflow : quality_overflows)
+        for (unsigned int overflow : quality_stack_overflow)
         {
             quality.stack_overflows += overflow;
         }
 
-        double *dev_kd_checksum = nullptr;
+        double *dev_kdtree_checksum = nullptr;
         double *dev_morton_checksum = nullptr;
-        unsigned int *dev_performance_overflows = nullptr;
-        double kd_query_ms = 0.0;
+        unsigned int *dev_performance_stack_overflow = nullptr;
+        double kdtree_query_ms = 0.0;
         double morton_query_ms = 0.0;
         if (!config.quality_only)
         {
-            _morton_cuda_check(cudaMalloc((void**)&dev_kd_checksum, sizeof(double)*config.particles),
+            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
                 "allocate KD checksum");
             _morton_cuda_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
                 "allocate Morton checksum");
-            _morton_cuda_check(cudaMalloc((void**)&dev_performance_overflows,
+            _morton_cuda_check(cudaMalloc((void**)&dev_performance_stack_overflow,
                 sizeof(unsigned int)*config.particles), "allocate performance stack-overflow flags");
 
-            int kd_blocks = (config.particles + KD_THREADS - 1) / KD_THREADS;
-            kd_query_ms = kernel_time_ms([&]
+            int kdtree_block_count = (config.particles + KDTREE_TPB - 1) / KDTREE_TPB;
+            kdtree_query_ms = kernel_time_ms([&]
             {
-                kd_checksum<K> <<< kd_blocks, KD_THREADS >>> (
-                    dev_kd_checksum, dev_points, config.particles,
-                    dev_kd_tree, dev_kd_bounds, config.particles, config.radius
+                kdtree_checksum<K> <<< kdtree_block_count, KDTREE_TPB >>> (
+                    dev_kdtree_checksum, dev_point, config.particles,
+                    dev_kdtree_node, dev_kdtree_box, config.particles, config.radius
                 );
             }, config.repeats);
             morton_query_ms = kernel_time_ms([&]
             {
-                morton_checksum<K> <<< config.particles, MORTON_THREADS >>> (
-                    dev_morton_checksum, dev_performance_overflows,
-                    dev_points, config.particles, morton.view(), config.radius
+                morton_checksum<K> <<< config.particles, MORTON_TPB >>> (
+                    dev_morton_checksum, dev_performance_stack_overflow,
+                    dev_point, config.particles, morton_owner.view(), config.radius
                 );
             }, config.repeats);
 
-            std::vector<unsigned int> performance_overflows(config.particles);
-            _morton_cuda_check(cudaMemcpy(performance_overflows.data(), dev_performance_overflows,
+            std::vector<unsigned int> performance_stack_overflow(config.particles);
+            _morton_cuda_check(cudaMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
                 sizeof(unsigned int)*config.particles, cudaMemcpyDeviceToHost),
                 "copy performance stack-overflow flags");
-            for (unsigned int overflow : performance_overflows)
+            for (unsigned int overflow : performance_stack_overflow)
             {
                 quality.stack_overflows += overflow;
             }
@@ -760,36 +763,36 @@ int main (int argc, char **argv)
         double mean_candidates = 0.0;
         for (int idx = 0; idx < config.queries; idx++)
         {
-            mean_cells += cell_visits[idx];
-            mean_candidates += candidate_visits[idx];
+            mean_cells += leaf_visit_count[idx];
+            mean_candidates += candidate_count[idx];
         }
         mean_cells /= config.queries;
         mean_candidates /= config.queries;
 
-        std::size_t kd_bytes = sizeof(kd_point)*static_cast<std::size_t>(config.particles) + sizeof(kd_box);
+        std::size_t kdtree_bytes = sizeof(kdtree_point)*static_cast<std::size_t>(config.particles) + sizeof(kdtree_boxf);
         write_json(
-            config, root_width, morton.node_count(), morton.leaf_count(), kd_build_ms, morton_build_ms,
-            kd_query_ms, morton_query_ms, kd_bytes, morton.persistent_bytes(), occupancy,
+            config, root_width, morton_owner.node_count(), morton_owner.leaf_count(), kdtree_build_ms, morton_build_ms,
+            kdtree_query_ms, morton_query_ms, kdtree_bytes, morton_owner.persistent_bytes(), occupancy,
             quality, mean_cells, mean_candidates
         );
 
-        if (dev_kd_checksum) cudaFree(dev_kd_checksum);
+        if (dev_kdtree_checksum) cudaFree(dev_kdtree_checksum);
         if (dev_morton_checksum) cudaFree(dev_morton_checksum);
-        if (dev_performance_overflows) cudaFree(dev_performance_overflows);
-        cudaFree(dev_kd_idx);
-        cudaFree(dev_morton_idx);
-        cudaFree(dev_kd_dist);
-        cudaFree(dev_morton_dist);
-        cudaFree(dev_cell_visits);
-        cudaFree(dev_candidate_visits);
-        cudaFree(dev_quality_overflows);
-        cudaFree(dev_kd_tree);
-        cudaFree(dev_kd_bounds);
-        cudaFree(dev_points);
+        if (dev_performance_stack_overflow) cudaFree(dev_performance_stack_overflow);
+        cudaFree(dev_kdtree_idx_old);
+        cudaFree(dev_morton_idx_old);
+        cudaFree(dev_kdtree_dist_sq);
+        cudaFree(dev_morton_dist_sq);
+        cudaFree(dev_leaf_visit_count);
+        cudaFree(dev_candidate_count);
+        cudaFree(dev_quality_stack_overflow);
+        cudaFree(dev_kdtree_node);
+        cudaFree(dev_kdtree_box);
+        cudaFree(dev_point);
 
         bool quality_passed = quality.mismatched_queries == 0
-            && quality.kd_brute_mismatches == 0 && quality.morton_brute_mismatches == 0
-            && quality.kd_disagreement_brute_mismatches == 0
+            && quality.kdtree_brute_mismatches == 0 && quality.morton_brute_mismatches == 0
+            && quality.kdtree_disagreement_brute_mismatches == 0
             && quality.morton_disagreement_brute_mismatches == 0
             && quality.stack_overflows == 0;
         return quality_passed ? EXIT_SUCCESS : EXIT_FAILURE;

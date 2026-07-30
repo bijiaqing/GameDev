@@ -142,7 +142,7 @@ _OBJ_SWARM =       \
     col_event_run.o  \
     col_rate_calc.o  \
     col_snap_save.o  \
-    col_tree_init.o  \
+    col_site_init.o  \
     diffusion_pos.o  \
     dyn_rate_calc.o  \
     dustdens_calc.o  \

@@ -60,8 +60,8 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_particle, sizeof(swarm)*N_P));
 
     #ifdef TRANSPORT
-    real *dev_dt_rate;
-    CUDA_CHECK(cudaMalloc((void**)&dev_dt_rate, sizeof(real)*N_P));
+    real *dev_dyn_rate;
+    CUDA_CHECK(cudaMalloc((void**)&dev_dyn_rate, sizeof(real)*N_P));
     #endif // TRANSPORT
     
     #ifdef SAVE_DENS
@@ -102,20 +102,20 @@ int main (int argc, char **argv)
 
     #ifdef COLLISION
     #ifdef COLLISION_KDTREE
-    bbox *dev_boundbox;
-    CUDA_CHECK(cudaMalloc((void**)&dev_boundbox, sizeof(bbox)));
+    kdtree_boxf *dev_kdtree_box;
+    CUDA_CHECK(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)));
 
-    kdtree_node *dev_col_tree;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_tree, sizeof(kdtree_node)*N_T));
+    kdtree_node *dev_kdtree_node;
+    CUDA_CHECK(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_node)*N_T));
     #else  // COLLISION_MORTON
-    float3 *dev_col_point;
-    float *dev_col_x, *dev_col_cutoff;
-    unsigned int *dev_col_overflow;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_point, sizeof(float3)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_x, sizeof(float)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_cutoff, sizeof(float)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_overflow, sizeof(unsigned int)*N_P));
-    morton_ghost_index col_morton;
+    float3 *dev_morton_point;
+    float *dev_morton_posx, *dev_search_dist;
+    unsigned int *dev_morton_overflow;
+    CUDA_CHECK(cudaMalloc((void**)&dev_morton_point, sizeof(float3)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_morton_posx, sizeof(float)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_search_dist, sizeof(float)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_morton_overflow, sizeof(unsigned int)*N_P));
+    morton_ghost_index morton_owner;
     #endif // COLLISION_KDTREE
 
     real *dev_size_old, *dev_numr_old, *dev_col_rate, *dev_col_dist;
@@ -280,9 +280,11 @@ int main (int argc, char **argv)
     {
         // collisions change grain properties but not positions, so one search index serves the full interval
         #ifdef COLLISION_KDTREE
-        col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
-        CUDA_KERNEL_CHECK("col_tree_init");
-        kdtree::buildTree <kdtree_node, kdtree_traits> (dev_col_tree, N_T, dev_boundbox);
+        col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_particle);
+        CUDA_KERNEL_CHECK("col_site_init");
+        kdtree::buildTree <kdtree_node, kdtree_traits> (
+            dev_kdtree_node, N_T, dev_kdtree_box
+        );
         CUDA_KERNEL_CHECK("kdtree::buildTree");
         float image_dist_min = -1.0f;
         if (N_T > N_P)
@@ -293,13 +295,15 @@ int main (int argc, char **argv)
             );
         }
         #else  // COLLISION_MORTON
-        col_tree_init <<< NB_P, TPB >>> (dev_col_point, dev_col_x, dev_col_cutoff, dev_particle);
-        CUDA_KERNEL_CHECK("col_tree_init");
+        col_site_init <<< NB_P, TPB >>> (
+            dev_morton_point, dev_morton_posx, dev_search_dist, dev_particle
+        );
+        CUDA_KERNEL_CHECK("col_site_init");
 
-        thrust::device_ptr <const float> col_cutoff_ptr(dev_col_cutoff);
-        float max_col_cutoff = *thrust::max_element(col_cutoff_ptr, col_cutoff_ptr + N_P);
-        col_morton.build(
-            dev_col_point, dev_col_x, N_P, max_col_cutoff,
+        thrust::device_ptr <const float> search_dist_ptr(dev_search_dist);
+        float max_search_dist = *thrust::max_element(search_dist_ptr, search_dist_ptr + N_P);
+        morton_owner.build(
+            dev_morton_point, dev_morton_posx, N_P, max_search_dist,
             static_cast<float>(X_MIN), static_cast<float>(X_MAX),
             static_cast<float>(Y_MIN), static_cast<float>(Y_MAX),
             static_cast<float>(Z_MIN), static_cast<float>(Z_MAX),
@@ -315,7 +319,7 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("col_snap_save");
             #ifdef COLLISION_KDTREE
             col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
-                dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
+                dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
@@ -324,8 +328,9 @@ int main (int argc, char **argv)
             );
             #else  // COLLISION_MORTON
             col_rate_calc <<< N_P, MORTON_TPB >>> (
-                dev_col_rate, dev_col_dist, dev_col_overflow, dev_particle,
-                dev_size_old, dev_numr_old, dev_col_point, col_morton.view(), col_morton.duplicate_safe(),
+                dev_col_rate, dev_col_dist, dev_morton_overflow, dev_particle,
+                dev_size_old, dev_numr_old, dev_morton_point,
+                morton_owner.view(), morton_owner.unique_ids(),
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
@@ -335,11 +340,11 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("col_rate_calc");
 
             #ifdef COLLISION_MORTON
-            thrust::device_ptr <const unsigned int> col_overflow_ptr(dev_col_overflow);
-            unsigned int max_col_overflow = *thrust::max_element(
-                col_overflow_ptr, col_overflow_ptr + N_P
+            thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
+            unsigned int max_morton_overflow = *thrust::max_element(
+                morton_overflow_ptr, morton_overflow_ptr + N_P
             );
-            if (max_col_overflow != 0)
+            if (max_morton_overflow != 0)
                 throw std::runtime_error("Morton traversal stack overflow in col_rate_calc");
             #endif // COLLISION_MORTON
 
@@ -360,7 +365,7 @@ int main (int argc, char **argv)
             dt_col = fmin(CFL_COL / max_col_rate, remaining);
             #ifdef COLLISION_KDTREE
             col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
-                dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
+                dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
@@ -370,8 +375,9 @@ int main (int argc, char **argv)
             );
             #else  // COLLISION_MORTON
             col_event_run <<< N_P, MORTON_TPB >>> (
-                dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, dev_col_overflow,
-                dev_size_old, dev_numr_old, dev_col_point, col_morton.view(), col_morton.duplicate_safe(),
+                dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, dev_morton_overflow,
+                dev_size_old, dev_numr_old, dev_morton_point,
+                morton_owner.view(), morton_owner.unique_ids(),
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
@@ -383,8 +389,10 @@ int main (int argc, char **argv)
             CUDA_CHECK(cudaDeviceSynchronize());
 
             #ifdef COLLISION_MORTON
-            max_col_overflow = *thrust::max_element(col_overflow_ptr, col_overflow_ptr + N_P);
-            if (max_col_overflow != 0)
+            max_morton_overflow = *thrust::max_element(
+                morton_overflow_ptr, morton_overflow_ptr + N_P
+            );
+            if (max_morton_overflow != 0)
                 throw std::runtime_error("Morton traversal stack overflow in col_event_run");
             #endif // COLLISION_MORTON
 
@@ -417,14 +425,14 @@ int main (int argc, char **argv)
         {
             #ifdef TRANSPORT
             // reduce all local inverse rates to a globally valid dynamics timestep
-            dyn_rate_calc <<< NB_P, TPB >>> (dev_dt_rate, dev_particle
+            dyn_rate_calc <<< NB_P, TPB >>> (dev_dyn_rate, dev_particle
                 #ifdef IMPORTGAS
                 , dev_gas_velx, dev_gas_vely, dev_gas_velz
                 , dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
                 #endif // IMPORTGAS
             );
             CUDA_KERNEL_CHECK("dyn_rate_calc");
-            thrust::device_ptr <const real> dt_rate_ptr(dev_dt_rate);
+            thrust::device_ptr <const real> dt_rate_ptr(dev_dyn_rate);
             real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
             dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rate, dt_out - clock_out));
 

@@ -20,7 +20,7 @@ using curs = curandState;
 #endif
 
 #ifdef COLLISION_KDTREE
-using bbox = kdtree::box_t<float3>;
+using kdtree_boxf = kdtree::box_t<float3>;
 #endif
 
 #ifdef TEST_RES
@@ -174,7 +174,7 @@ struct swarm
 struct kdtree_node
 {
     float3 cartesian;
-    int index_old;
+    int idx_old;
     int split_dim;
     int image;
 };

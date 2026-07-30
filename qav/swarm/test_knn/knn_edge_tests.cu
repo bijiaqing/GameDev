@@ -20,14 +20,14 @@ constexpr int QUERY_THREADS = 256;
 struct edge_case
 {
     std::string name;
-    int dimension;
+    int dim;
     float radius;
     int leaf_target;
     std::vector<float3> points;
     std::vector<float3> queries;
 };
 
-void get_root (const std::vector<float3> &points, int dimension, float3 &origin, float &width)
+void get_root (const std::vector<float3> &points, int dim, float3 &root_origin, float &width)
 {
     float3 lower = points.front();
     float3 upper = points.front();
@@ -43,14 +43,14 @@ void get_root (const std::vector<float3> &points, int dimension, float3 &origin,
 
     float extent_x = upper.x - lower.x;
     float extent_y = upper.y - lower.y;
-    float extent_z = (dimension == 2) ? 0.0f : upper.z - lower.z;
+    float extent_z = (dim == 2) ? 0.0f : upper.z - lower.z;
     width = 1.0001f*std::max({extent_x, extent_y, extent_z});
     if (width <= 0.0f) width = 1.0f;
 
     float center_x = 0.5f*(lower.x + upper.x);
     float center_y = 0.5f*(lower.y + upper.y);
-    float center_z = (dimension == 2) ? 0.0f : 0.5f*(lower.z + upper.z);
-    origin = make_float3(
+    float center_z = (dim == 2) ? 0.0f : 0.5f*(lower.z + upper.z);
+    root_origin = make_float3(
         center_x - 0.5f*width,
         center_y - 0.5f*width,
         center_z - 0.5f*width
@@ -75,80 +75,80 @@ std::vector<std::pair<float, int>> brute_neighbors (
     return result;
 }
 
-void append_anchors (std::vector<float3> &points, int dimension)
+void append_anchors (std::vector<float3> &points, int dim)
 {
-    points.push_back(make_float3(-2.0f, -2.0f, (dimension == 2) ? 0.0f : -2.0f));
-    points.push_back(make_float3( 2.0f,  2.0f, (dimension == 2) ? 0.0f :  2.0f));
+    points.push_back(make_float3(-2.0f, -2.0f, (dim == 2) ? 0.0f : -2.0f));
+    points.push_back(make_float3( 2.0f,  2.0f, (dim == 2) ? 0.0f :  2.0f));
 }
 
-edge_case make_ties (int dimension)
+edge_case make_ties (int dim)
 {
-    edge_case test{"equal_distance_" + std::to_string(dimension) + "d", dimension, 1.0f, 2, {}, {}};
+    edge_case test{"equal_distance_" + std::to_string(dim) + "d", dim, 1.0f, 2, {}, {}};
     test.points = {
         make_float3( 1.0f,  0.0f, 0.0f),
         make_float3(-1.0f,  0.0f, 0.0f),
         make_float3( 0.0f,  1.0f, 0.0f),
         make_float3( 0.0f, -1.0f, 0.0f),
     };
-    if (dimension == 3)
+    if (dim == 3)
     {
         test.points.push_back(make_float3(0.0f, 0.0f,  1.0f));
         test.points.push_back(make_float3(0.0f, 0.0f, -1.0f));
     }
-    append_anchors(test.points, dimension);
+    append_anchors(test.points, dim);
     test.queries.push_back(make_float3(0.0f, 0.0f, 0.0f));
     return test;
 }
 
-edge_case make_duplicates (int dimension)
+edge_case make_duplicates (int dim)
 {
-    edge_case test{"coincident_" + std::to_string(dimension) + "d", dimension, 0.25f, 128, {}, {}};
+    edge_case test{"coincident_" + std::to_string(dim) + "d", dim, 0.25f, 128, {}, {}};
 
     // More than one CUDA block of coincident candidates exercises chunked leaf buffering
     for (int idx = 0; idx < 300; idx++)
     {
         test.points.push_back(make_float3(0.0f, 0.0f, 0.0f));
     }
-    append_anchors(test.points, dimension);
+    append_anchors(test.points, dim);
     test.queries.push_back(make_float3(0.0f, 0.0f, 0.0f));
     return test;
 }
 
-edge_case make_radius_boundary (int dimension)
+edge_case make_radius_boundary (int dim)
 {
-    edge_case test{"radius_boundary_" + std::to_string(dimension) + "d", dimension, 1.0f, 2, {}, {}};
+    edge_case test{"radius_boundary_" + std::to_string(dim) + "d", dim, 1.0f, 2, {}, {}};
     test.points = {
         make_float3( 1.0f, 0.0f, 0.0f),
         make_float3(-1.0f, 0.0f, 0.0f),
         make_float3( 0.0f, 1.0f, 0.0f),
         make_float3(std::nextafter(1.0f, 2.0f), 0.0f, 0.0f),
     };
-    append_anchors(test.points, dimension);
+    append_anchors(test.points, dim);
     test.queries.push_back(make_float3(0.0f, 0.0f, 0.0f));
     return test;
 }
 
-edge_case make_sparse (int dimension)
+edge_case make_sparse (int dim)
 {
-    edge_case test{"fewer_than_k_" + std::to_string(dimension) + "d", dimension, 0.75f, 2, {}, {}};
+    edge_case test{"fewer_than_k_" + std::to_string(dim) + "d", dim, 0.75f, 2, {}, {}};
     test.points = {
         make_float3(0.25f, 0.0f, 0.0f),
         make_float3(0.0f, 0.5f, 0.0f),
     };
-    append_anchors(test.points, dimension);
+    append_anchors(test.points, dim);
     test.queries.push_back(make_float3(0.0f, 0.0f, 0.0f));
     return test;
 }
 
-edge_case make_split_planes (int dimension)
+edge_case make_split_planes (int dim)
 {
-    edge_case test{"split_planes_" + std::to_string(dimension) + "d", dimension, 0.9f, 4, {}, {}};
+    edge_case test{"split_planes_" + std::to_string(dim) + "d", dim, 0.9f, 4, {}, {}};
     const float values[] = {-1.0f, -0.5f, 0.0f, 0.5f, 1.0f};
     for (float x : values)
     {
         for (float y : values)
         {
-            if (dimension == 2)
+            if (dim == 2)
             {
                 test.points.push_back(make_float3(x, y, 0.0f));
                 continue;
@@ -161,54 +161,54 @@ edge_case make_split_planes (int dimension)
     }
     test.queries = {
         make_float3(0.0f, 0.0f, 0.0f),
-        make_float3(0.25f, -0.25f, (dimension == 2) ? 0.0f : 0.25f),
+        make_float3(0.25f, -0.25f, (dim == 2) ? 0.0f : 0.25f),
     };
     return test;
 }
 
 bool run_case (const edge_case &test)
 {
-    float3 origin;
+    float3 root_origin;
     float root_width;
-    get_root(test.points, test.dimension, origin, root_width);
+    get_root(test.points, test.dim, root_origin, root_width);
 
-    float3 *dev_points = nullptr;
-    float3 *dev_queries = nullptr;
-    int *dev_indices = nullptr;
-    float *dev_distances = nullptr;
-    unsigned int *dev_overflows = nullptr;
+    float3 *dev_point = nullptr;
+    float3 *dev_query_point = nullptr;
+    int *dev_near_idx_old = nullptr;
+    float *dev_near_dist_sq = nullptr;
+    unsigned int *dev_stack_overflow = nullptr;
     std::size_t output_count = test.queries.size()*K;
 
-    _morton_cuda_check(cudaMalloc((void**)&dev_points, sizeof(float3)*test.points.size()), "allocate edge points");
-    _morton_cuda_check(cudaMalloc((void**)&dev_queries, sizeof(float3)*test.queries.size()), "allocate edge queries");
-    _morton_cuda_check(cudaMalloc((void**)&dev_indices, sizeof(int)*output_count), "allocate edge indices");
-    _morton_cuda_check(cudaMalloc((void**)&dev_distances, sizeof(float)*output_count), "allocate edge distances");
-    _morton_cuda_check(cudaMalloc((void**)&dev_overflows, sizeof(unsigned int)*test.queries.size()),
+    _morton_cuda_check(cudaMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate edge points");
+    _morton_cuda_check(cudaMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate edge queries");
+    _morton_cuda_check(cudaMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate edge near_idx_old");
+    _morton_cuda_check(cudaMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate edge near_dist_sq");
+    _morton_cuda_check(cudaMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate edge overflow flags");
-    _morton_cuda_check(cudaMemcpy(dev_points, test.points.data(), sizeof(float3)*test.points.size(),
+    _morton_cuda_check(cudaMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
         cudaMemcpyHostToDevice), "copy edge points");
-    _morton_cuda_check(cudaMemcpy(dev_queries, test.queries.data(), sizeof(float3)*test.queries.size(),
+    _morton_cuda_check(cudaMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
         cudaMemcpyHostToDevice), "copy edge queries");
 
-    morton_index index;
-    index.build(
-        dev_points, static_cast<int>(test.points.size()), origin, root_width,
-        test.dimension, test.leaf_target, 20
+    morton_index morton_owner;
+    morton_owner.build(
+        dev_point, static_cast<int>(test.points.size()), root_origin, root_width,
+        test.dim, test.leaf_target, 20
     );
     morton_query<K> <<< static_cast<int>(test.queries.size()), QUERY_THREADS >>> (
-        dev_indices, dev_distances, nullptr, nullptr, dev_overflows,
-        dev_queries, static_cast<int>(test.queries.size()), index.view(), test.radius
+        dev_near_idx_old, dev_near_dist_sq, nullptr, nullptr, dev_stack_overflow,
+        dev_query_point, static_cast<int>(test.queries.size()), morton_owner.view(), test.radius
     );
     _morton_cuda_check(cudaDeviceSynchronize(), "run edge queries");
 
-    std::vector<int> indices(output_count);
-    std::vector<float> distances(output_count);
-    std::vector<unsigned int> overflows(test.queries.size());
-    _morton_cuda_check(cudaMemcpy(indices.data(), dev_indices, sizeof(int)*output_count, cudaMemcpyDeviceToHost),
-        "copy edge indices");
-    _morton_cuda_check(cudaMemcpy(distances.data(), dev_distances, sizeof(float)*output_count,
-        cudaMemcpyDeviceToHost), "copy edge distances");
-    _morton_cuda_check(cudaMemcpy(overflows.data(), dev_overflows, sizeof(unsigned int)*test.queries.size(),
+    std::vector<int> near_idx_old(output_count);
+    std::vector<float> near_dist_sq(output_count);
+    std::vector<unsigned int> stack_overflow(test.queries.size());
+    _morton_cuda_check(cudaMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, cudaMemcpyDeviceToHost),
+        "copy edge near_idx_old");
+    _morton_cuda_check(cudaMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
+        cudaMemcpyDeviceToHost), "copy edge near_dist_sq");
+    _morton_cuda_check(cudaMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
         cudaMemcpyDeviceToHost), "copy edge overflow flags");
 
     bool passed = true;
@@ -221,15 +221,15 @@ bool run_case (const edge_case &test)
         for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
         {
             std::size_t idx_out = idx_query*K + idx_neighbor;
-            if (indices[idx_out] >= 0)
+            if (near_idx_old[idx_out] >= 0)
             {
-                actual.emplace_back(distances[idx_out], indices[idx_out]);
+                actual.emplace_back(near_dist_sq[idx_out], near_idx_old[idx_out]);
                 continue;
             }
-            if (indices[idx_out] == -1 && std::isinf(distances[idx_out])) continue;
+            if (near_idx_old[idx_out] == -1 && std::isinf(near_dist_sq[idx_out])) continue;
             passed = false;
             std::cerr << "  query " << idx_query << " invalid slot " << idx_neighbor
-                << " has index " << indices[idx_out] << " and distance " << distances[idx_out] << std::endl;
+                << " has index " << near_idx_old[idx_out] << " and distance " << near_dist_sq[idx_out] << std::endl;
         }
         std::sort(actual.begin(), actual.end());
         if (actual.size() != expected.size())
@@ -251,18 +251,18 @@ bool run_case (const edge_case &test)
                 << " expected=(" << expected[idx_neighbor].second << ',' << expected[idx_neighbor].first << ")"
                 << " actual=(" << actual[idx_neighbor].second << ',' << actual[idx_neighbor].first << ')' << std::endl;
         }
-        if (overflows[idx_query] != 0)
+        if (stack_overflow[idx_query] != 0)
         {
             passed = false;
             std::cerr << "  query " << idx_query << " overflowed the traversal stack" << std::endl;
         }
     }
 
-    cudaFree(dev_overflows);
-    cudaFree(dev_distances);
-    cudaFree(dev_indices);
-    cudaFree(dev_queries);
-    cudaFree(dev_points);
+    cudaFree(dev_stack_overflow);
+    cudaFree(dev_near_dist_sq);
+    cudaFree(dev_near_idx_old);
+    cudaFree(dev_query_point);
+    cudaFree(dev_point);
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;
@@ -275,13 +275,13 @@ int main ()
     try
     {
         std::vector<edge_case> tests;
-        for (int dimension : {2, 3})
+        for (int dim : {2, 3})
         {
-            tests.push_back(make_ties(dimension));
-            tests.push_back(make_duplicates(dimension));
-            tests.push_back(make_radius_boundary(dimension));
-            tests.push_back(make_sparse(dimension));
-            tests.push_back(make_split_planes(dimension));
+            tests.push_back(make_ties(dim));
+            tests.push_back(make_duplicates(dim));
+            tests.push_back(make_radius_boundary(dim));
+            tests.push_back(make_sparse(dim));
+            tests.push_back(make_split_planes(dim));
         }
 
         int failed = 0;

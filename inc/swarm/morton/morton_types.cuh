@@ -8,26 +8,26 @@
 struct morton_point
 {
     float3 cartesian;
-    int index_old;
+    int idx_old;
 };
 
 struct morton_node
 {
     float3 lower;
     float width;
-    int begin;
+    int idx_begin;
     int count;
-    int child[8];
-    int child_number;
+    int idx_child[8];
+    int child_count;
 };
 
 struct morton_view
 {
-    const morton_point *points;
-    const morton_node *nodes;
+    const morton_point *dev_point;
+    const morton_node *dev_node;
     int point_count;
     int node_count;
-    int dimension;
+    int dim;
     int max_level;
 };
 
@@ -52,17 +52,17 @@ std::uint64_t _get_morton_key (int ix, int iy, int iz)
 }
 
 __device__ __forceinline__
-bool _morton_neighbor_less (float dist_a, int idx_a, float dist_b, int idx_b)
+bool _morton_neighbor_less (float dist_a_sq, int idx_old_a, float dist_b_sq, int idx_old_b)
 {
-    return dist_a < dist_b || (dist_a == dist_b && idx_a < idx_b);
+    return dist_a_sq < dist_b_sq || (dist_a_sq == dist_b_sq && idx_old_a < idx_old_b);
 }
 
 __device__ __forceinline__
-float _get_morton_dist_sq (const float3 &a, const float3 &b)
+float _get_morton_point_dist_sq (const float3 &point_a, const float3 &point_b)
 {
-    float dx = a.x - b.x;
-    float dy = a.y - b.y;
-    float dz = a.z - b.z;
+    float dx = point_a.x - point_b.x;
+    float dy = point_a.y - point_b.y;
+    float dz = point_a.z - point_b.z;
     return dx*dx + dy*dy + dz*dz;
 }
 

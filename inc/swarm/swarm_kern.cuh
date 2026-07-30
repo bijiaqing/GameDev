@@ -98,7 +98,7 @@ __global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swa
 #ifdef COLLISION_KDTREE
 __global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
     const real *dev_size_old, const real *dev_numr_old,
-    const kdtree_node *dev_col_tree, const bbox *dev_boundbox,
+    const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
@@ -107,7 +107,7 @@ __global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swa
 );
 __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
     const real *dev_col_dist, const real *dev_size_old, const real *dev_numr_old,
-    const kdtree_node *dev_col_tree, const bbox *dev_boundbox,
+    const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
@@ -115,27 +115,27 @@ __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const re
     real lambda_0,
     real dt_col
 );
-__global__ void col_tree_init (kdtree_node *dev_col_tree, const swarm *dev_particle);
+__global__ void col_site_init (kdtree_node *dev_kdtree_node, const swarm *dev_particle);
 #else  // COLLISION_MORTON
-__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_col_overflow,
+__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_morton_overflow,
     const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
-    const float3 *dev_col_point, morton_view col_morton, bool duplicate_safe,
+    const float3 *dev_morton_point, morton_view morton_data, bool unique_ids,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
     real lambda_0
 );
 __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
-    const real *dev_col_rate, const real *dev_col_dist, unsigned int *dev_col_overflow,
+    const real *dev_col_rate, const real *dev_col_dist, unsigned int *dev_morton_overflow,
     const real *dev_size_old, const real *dev_numr_old,
-    const float3 *dev_col_point, morton_view col_morton, bool duplicate_safe,
+    const float3 *dev_morton_point, morton_view morton_data, bool unique_ids,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
     real lambda_0,
     real dt_col
 );
-__global__ void col_tree_init (float3 *dev_col_point, float *dev_col_x, float *dev_col_cutoff,
+__global__ void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
     const swarm *dev_particle);
 #endif // COLLISION_KDTREE
 #endif // COLLISION
@@ -149,7 +149,7 @@ __global__ void rngstate_init (curs *dev_rngstate, int seed = 1);
 // =========================================================================================================================
 
 #ifdef TRANSPORT
-__global__ void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
+__global__ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     #ifdef IMPORTGAS
     , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz
     , const real *dev_gas_velx_next, const real *dev_gas_vely_next, const real *dev_gas_velz_next

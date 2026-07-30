@@ -4,7 +4,7 @@
 #include <swarm_kern.cuh>
 
 // =========================================================================================================================
-// kernel: col_tree_init
+// kernel: col_site_init
 // construct Cartesian collision-search records from spherical particle positions
 //
 // parallelization: one thread per representative particle
@@ -12,7 +12,7 @@
 
 #ifdef COLLISION_KDTREE
 __global__
-void col_tree_init (kdtree_node *dev_col_tree, const swarm *dev_particle)
+void col_site_init (kdtree_node *dev_kdtree_node, const swarm *dev_particle)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
@@ -22,9 +22,9 @@ void col_tree_init (kdtree_node *dev_col_tree, const swarm *dev_particle)
     float z = static_cast<float>(dev_particle[idx].position.z);
 
     float3 cartesian = make_float3(y*sin(z)*cos(x), y*sin(z)*sin(x), y*cos(z));
-    dev_col_tree[idx].cartesian = cartesian;
-    dev_col_tree[idx].index_old = idx;
-    dev_col_tree[idx].image = 0;
+    dev_kdtree_node[idx].cartesian = cartesian;
+    dev_kdtree_node[idx].idx_old = idx;
+    dev_kdtree_node[idx].image = 0;
 
     if (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12)
     {
@@ -36,19 +36,19 @@ void col_tree_init (kdtree_node *dev_col_tree, const swarm *dev_particle)
         {
             int idx_image = idx + (image + 1)*N_P;
             float sin_angle = (image == 0) ? -sin_width : sin_width;
-            dev_col_tree[idx_image].cartesian = make_float3(
+            dev_kdtree_node[idx_image].cartesian = make_float3(
                 cos_width*cartesian.x - sin_angle*cartesian.y,
                 sin_angle*cartesian.x + cos_width*cartesian.y,
                 cartesian.z
             );
-            dev_col_tree[idx_image].index_old = idx;
-            dev_col_tree[idx_image].image = image + 1;
+            dev_kdtree_node[idx_image].idx_old = idx;
+            dev_kdtree_node[idx_image].image = image + 1;
         }
     }
 }
 #else  // COLLISION_MORTON
 __global__
-void col_tree_init (float3 *dev_col_point, float *dev_col_x, float *dev_col_cutoff,
+void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
     const swarm *dev_particle)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
@@ -59,13 +59,13 @@ void col_tree_init (float3 *dev_col_point, float *dev_col_x, float *dev_col_cuto
     real z = dev_particle[idx].position.z;
     real R = y*sin(z);
 
-    dev_col_point[idx] = make_float3(
+    dev_morton_point[idx] = make_float3(
         static_cast<float>(R*cos(x)),
         static_cast<float>(R*sin(x)),
         static_cast<float>(y*cos(z))
     );
-    dev_col_x[idx] = static_cast<float>(x);
-    dev_col_cutoff[idx] = static_cast<float>(H_SEARCH*_get_hg(R)*R);
+    dev_morton_posx[idx] = static_cast<float>(x);
+    dev_search_dist[idx] = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 }
 #endif // COLLISION_KDTREE
 

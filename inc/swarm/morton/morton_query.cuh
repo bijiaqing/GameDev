@@ -10,30 +10,32 @@
 
 template<int SORT_SIZE, int BLOCK_SIZE>
 __device__ __forceinline__
-void _morton_id_sort (float *distance, int *index)
+void _morton_id_sort (float *dist_sq, int *idx_old)
 {
     for (int width = 2; width <= SORT_SIZE; width <<= 1)
     {
         for (int stride = width >> 1; stride > 0; stride >>= 1)
         {
-            for (int slot = threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
+            for (int idx_slot = threadIdx.x; idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
             {
-                int partner = slot ^ stride;
-                if (partner <= slot) continue;
-                bool ascending = (slot & width) == 0;
-                bool partner_less = index[partner] < index[slot]
-                    || (index[partner] == index[slot] && distance[partner] < distance[slot]);
-                bool slot_less = index[slot] < index[partner]
-                    || (index[slot] == index[partner] && distance[slot] < distance[partner]);
+                int idx_partner = idx_slot ^ stride;
+                if (idx_partner <= idx_slot) continue;
+                bool ascending = (idx_slot & width) == 0;
+                bool partner_less = idx_old[idx_partner] < idx_old[idx_slot]
+                    || (idx_old[idx_partner] == idx_old[idx_slot]
+                        && dist_sq[idx_partner] < dist_sq[idx_slot]);
+                bool slot_less = idx_old[idx_slot] < idx_old[idx_partner]
+                    || (idx_old[idx_slot] == idx_old[idx_partner]
+                        && dist_sq[idx_slot] < dist_sq[idx_partner]);
                 bool swap_pair = ascending ? partner_less : slot_less;
                 if (swap_pair)
                 {
-                    float dist_tmp = distance[slot];
-                    distance[slot] = distance[partner];
-                    distance[partner] = dist_tmp;
-                    int idx_tmp = index[slot];
-                    index[slot] = index[partner];
-                    index[partner] = idx_tmp;
+                    float dist_sq_tmp = dist_sq[idx_slot];
+                    dist_sq[idx_slot] = dist_sq[idx_partner];
+                    dist_sq[idx_partner] = dist_sq_tmp;
+                    int idx_old_tmp = idx_old[idx_slot];
+                    idx_old[idx_slot] = idx_old[idx_partner];
+                    idx_old[idx_partner] = idx_old_tmp;
                 }
             }
             __syncthreads();
@@ -43,10 +45,11 @@ void _morton_id_sort (float *distance, int *index)
 
 template<int K, int BLOCK_SIZE, int WORK_SIZE, int STACK_SIZE>
 __device__ __forceinline__
-void _morton_ghost_topk (const morton_view &view, const float3 &query, float radius,
-    bool duplicate_safe, float *work_dist, int *work_idx, int *node_stack,
-    int &stack_size, int &idx_node, int &batch_count,
-    unsigned int &leaves_visited, unsigned int &candidates_examined,
+void _morton_ghost_topk (
+    const morton_view &morton_data, const float3 &query_point, float search_dist,
+    bool unique_ids, float *work_dist_sq, int *work_idx_old, int *idx_node_stack,
+    int &stack_count, int &idx_node, int &batch_count,
+    unsigned int &leaf_visit_count, unsigned int &candidate_count,
     unsigned int &stack_overflow)
 {
     static_assert(3*K + BLOCK_SIZE <= WORK_SIZE,
@@ -54,46 +57,49 @@ void _morton_ghost_topk (const morton_view &view, const float3 &query, float rad
     static_assert(K + BLOCK_SIZE <= 512,
         "Morton fast work array cannot hold one top-K candidate tile");
 
-    if (duplicate_safe)
+    if (unique_ids)
     {
         _morton_topk<K, BLOCK_SIZE, 512, STACK_SIZE>(
-            view, query, radius, work_dist, work_idx, node_stack,
-            stack_size, idx_node, batch_count, leaves_visited, candidates_examined, stack_overflow
+            morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
+            stack_count, idx_node, batch_count,
+            leaf_visit_count, candidate_count, stack_overflow
         );
         return;
     }
 
     _morton_topk<3*K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-        view, query, radius, work_dist, work_idx, node_stack,
-        stack_size, idx_node, batch_count, leaves_visited, candidates_examined, stack_overflow
+        morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
+        stack_count, idx_node, batch_count,
+        leaf_visit_count, candidate_count, stack_overflow
     );
 
-    for (int slot = 3*K + threadIdx.x; slot < WORK_SIZE; slot += BLOCK_SIZE)
+    for (int idx_slot = 3*K + threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
     {
-        work_dist[slot] = CUDART_INF_F;
-        work_idx[slot] = INT_MAX;
+        work_dist_sq[idx_slot] = CUDART_INF_F;
+        work_idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
 
-    _morton_id_sort<WORK_SIZE, BLOCK_SIZE>(work_dist, work_idx);
+    _morton_id_sort<WORK_SIZE, BLOCK_SIZE>(work_dist_sq, work_idx_old);
     constexpr int slots_per_thread = (WORK_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE;
     bool duplicate[slots_per_thread];
-    int local_slot = 0;
-    for (int slot = threadIdx.x; slot < WORK_SIZE; slot += BLOCK_SIZE)
-        duplicate[local_slot++] = slot > 0 && work_idx[slot] == work_idx[slot - 1];
+    int idx_local = 0;
+    for (int idx_slot = threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
+        duplicate[idx_local++] =
+            idx_slot > 0 && work_idx_old[idx_slot] == work_idx_old[idx_slot - 1];
     __syncthreads();
 
-    local_slot = 0;
-    for (int slot = threadIdx.x; slot < WORK_SIZE; slot += BLOCK_SIZE)
+    idx_local = 0;
+    for (int idx_slot = threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
     {
-        if (duplicate[local_slot++])
+        if (duplicate[idx_local++])
         {
-            work_dist[slot] = CUDART_INF_F;
-            work_idx[slot] = INT_MAX;
+            work_dist_sq[idx_slot] = CUDART_INF_F;
+            work_idx_old[idx_slot] = INT_MAX;
         }
     }
     __syncthreads();
-    _morton_pair_sort<WORK_SIZE, BLOCK_SIZE>(work_dist, work_idx);
+    _morton_pair_sort<WORK_SIZE, BLOCK_SIZE>(work_dist_sq, work_idx_old);
 }
 
 #endif // GAMEDEV_MORTON_QUERY_CUH

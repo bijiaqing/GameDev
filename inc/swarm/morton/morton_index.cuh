@@ -27,23 +27,24 @@ inline void _morton_cuda_check (cudaError_t status, const char *operation)
 }
 
 static __global__
-void morton_keygen (std::uint64_t *keys, morton_point *points, const float3 *source,
-    const int *source_ids, int point_count, float3 origin, float root_width, int max_level, int dimension)
+void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
+    const float3 *dev_source_point, const int *dev_source_idx_old,
+    int point_count, float3 root_origin, float root_width, int max_level, int dim)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= point_count) return;
 
-    float3 point = source[idx];
+    float3 point = dev_source_point[idx];
     int cells_per_axis = 1 << max_level;
     float scale = static_cast<float>(cells_per_axis) / root_width;
-    int ix = min(cells_per_axis - 1, max(0, static_cast<int>((point.x - origin.x)*scale)));
-    int iy = min(cells_per_axis - 1, max(0, static_cast<int>((point.y - origin.y)*scale)));
-    int iz = (dimension == 2)
-        ? 0 : min(cells_per_axis - 1, max(0, static_cast<int>((point.z - origin.z)*scale)));
+    int ix = min(cells_per_axis - 1, max(0, static_cast<int>((point.x - root_origin.x)*scale)));
+    int iy = min(cells_per_axis - 1, max(0, static_cast<int>((point.y - root_origin.y)*scale)));
+    int iz = (dim == 2)
+        ? 0 : min(cells_per_axis - 1, max(0, static_cast<int>((point.z - root_origin.z)*scale)));
 
-    keys[idx] = _get_morton_key(ix, iy, iz);
-    points[idx].cartesian = point;
-    points[idx].index_old = source_ids ? source_ids[idx] : idx;
+    dev_key[idx] = _get_morton_key(ix, iy, iz);
+    dev_point[idx].cartesian = point;
+    dev_point[idx].idx_old = dev_source_idx_old ? dev_source_idx_old[idx] : idx;
 }
 
 class morton_index
@@ -55,42 +56,44 @@ public:
 
     ~morton_index () { release(); }
 
-    void build (const float3 *source, int point_count, float3 origin, float root_width,
-        int dimension, int leaf_target, int max_level, const int *source_ids = nullptr)
+    void build (const float3 *dev_source_point, int point_count, float3 root_origin,
+        float root_width, int dim, int leaf_target, int max_level,
+        const int *dev_source_idx_old = nullptr)
     {
         release();
         if (point_count <= 0 || root_width <= 0.0f) throw std::invalid_argument("invalid adaptive Morton size");
-        if (dimension != 2 && dimension != 3) throw std::invalid_argument("adaptive Morton dimension must be 2 or 3");
+        if (dim != 2 && dim != 3) throw std::invalid_argument("adaptive Morton dimension must be 2 or 3");
         if (leaf_target <= 0) throw std::invalid_argument("adaptive Morton leaf target must be positive");
         if (max_level <= 0 || max_level > 20) throw std::invalid_argument("adaptive Morton max level must be 1 through 20");
 
         point_count_ = point_count;
-        dimension_ = dimension;
+        dim_ = dim;
         leaf_target_ = leaf_target;
         max_level_ = max_level;
-        origin_ = origin;
+        root_origin_ = root_origin;
         root_width_ = root_width;
 
-        std::uint64_t *keys = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&keys, sizeof(std::uint64_t)*point_count_),
+        std::uint64_t *dev_key = nullptr;
+        _morton_cuda_check(cudaMalloc((void**)&dev_key, sizeof(std::uint64_t)*point_count_),
             "allocate adaptive Morton keys");
-        _morton_cuda_check(cudaMalloc((void**)&points_, sizeof(morton_point)*point_count_),
+        _morton_cuda_check(cudaMalloc((void**)&dev_point_, sizeof(morton_point)*point_count_),
             "allocate adaptive Morton points");
 
-        constexpr int threads = 256;
-        int blocks = (point_count_ + threads - 1) / threads;
-        morton_keygen <<< blocks, threads >>> (
-            keys, points_, source, source_ids, point_count_, origin_, root_width_, max_level_, dimension_
+        constexpr int thread_count = 256;
+        int block_count = (point_count_ + thread_count - 1) / thread_count;
+        morton_keygen <<< block_count, thread_count >>> (
+            dev_key, dev_point_, dev_source_point, dev_source_idx_old,
+            point_count_, root_origin_, root_width_, max_level_, dim_
         );
         _morton_cuda_check(cudaGetLastError(), "launch morton_keygen");
 
-        thrust::device_ptr<std::uint64_t> key_ptr(keys);
-        thrust::device_ptr<morton_point> point_ptr(points_);
+        thrust::device_ptr<std::uint64_t> key_ptr(dev_key);
+        thrust::device_ptr<morton_point> point_ptr(dev_point_);
         thrust::stable_sort_by_key(thrust::device, key_ptr, key_ptr + point_count_, point_ptr);
         _morton_cuda_check(cudaDeviceSynchronize(), "sort adaptive Morton points");
 
         std::vector<std::uint64_t> host_keys(point_count_);
-        _morton_cuda_check(cudaMemcpy(host_keys.data(), keys, sizeof(std::uint64_t)*point_count_,
+        _morton_cuda_check(cudaMemcpy(host_keys.data(), dev_key, sizeof(std::uint64_t)*point_count_,
             cudaMemcpyDeviceToHost), "copy adaptive Morton keys");
 
         std::vector<morton_node> host_nodes;
@@ -98,77 +101,78 @@ public:
         leaf_counts_.clear();
 
         std::function<int(int, int, int, float3, float)> split =
-            [&] (int begin, int end, int level, float3 lower, float width) -> int
+            [&] (int idx_begin, int idx_end, int level, float3 lower, float width) -> int
         {
             int idx_node = static_cast<int>(host_nodes.size());
             morton_node node{};
             node.lower = lower;
             node.width = width;
-            node.begin = begin;
-            node.count = end - begin;
-            node.child_number = 0;
+            node.idx_begin = idx_begin;
+            node.count = idx_end - idx_begin;
+            node.child_count = 0;
             for (int idx_child = 0; idx_child < 8; idx_child++)
             {
-                node.child[idx_child] = -1;
+                node.idx_child[idx_child] = -1;
             }
             host_nodes.push_back(node);
 
-            if (end - begin <= leaf_target_ || level == max_level_)
+            if (idx_end - idx_begin <= leaf_target_ || level == max_level_)
             {
-                leaf_counts_.push_back(end - begin);
+                leaf_counts_.push_back(idx_end - idx_begin);
                 return idx_node;
             }
 
-            int bits_per_level = 3;
-            int shift = bits_per_level*(max_level_ - level - 1);
-            int child_total = (dimension_ == 2) ? 4 : 8;
-            int child_begin[9];
-            child_begin[0] = begin;
-            int cursor = begin;
-            for (int child_code = 0; child_code < child_total; child_code++)
+            constexpr int bits_per_level = 3;
+            int bit_shift = bits_per_level*(max_level_ - level - 1);
+            int child_count = (dim_ == 2) ? 4 : 8;
+            int idx_child_begin[9];
+            idx_child_begin[0] = idx_begin;
+            int idx_cursor = idx_begin;
+            for (int idx_child_code = 0; idx_child_code < child_count; idx_child_code++)
             {
-                while (cursor < end && static_cast<int>((host_keys[cursor] >> shift) & 7ULL) == child_code)
+                while (idx_cursor < idx_end
+                    && static_cast<int>((host_keys[idx_cursor] >> bit_shift) & 7ULL) == idx_child_code)
                 {
-                    cursor++;
+                    idx_cursor++;
                 }
-                child_begin[child_code + 1] = cursor;
+                idx_child_begin[idx_child_code + 1] = idx_cursor;
             }
 
             float child_width = 0.5f*width;
-            for (int child_code = 0; child_code < child_total; child_code++)
+            for (int idx_child_code = 0; idx_child_code < child_count; idx_child_code++)
             {
-                if (child_begin[child_code] == child_begin[child_code + 1]) continue;
+                if (idx_child_begin[idx_child_code] == idx_child_begin[idx_child_code + 1]) continue;
                 float3 child_lower = lower;
-                if (child_code & 1) child_lower.x += child_width;
-                if (child_code & 2) child_lower.y += child_width;
-                if (dimension_ == 3 && (child_code & 4)) child_lower.z += child_width;
+                if (idx_child_code & 1) child_lower.x += child_width;
+                if (idx_child_code & 2) child_lower.y += child_width;
+                if (dim_ == 3 && (idx_child_code & 4)) child_lower.z += child_width;
                 int idx_child = split(
-                    child_begin[child_code], child_begin[child_code + 1], level + 1,
+                    idx_child_begin[idx_child_code], idx_child_begin[idx_child_code + 1], level + 1,
                     child_lower, child_width
                 );
-                host_nodes[idx_node].child[child_code] = idx_child;
-                host_nodes[idx_node].child_number++;
+                host_nodes[idx_node].idx_child[idx_child_code] = idx_child;
+                host_nodes[idx_node].child_count++;
             }
             return idx_node;
         };
 
-        split(0, point_count_, 0, origin_, root_width_);
+        split(0, point_count_, 0, root_origin_, root_width_);
         node_count_ = static_cast<int>(host_nodes.size());
         leaf_count_ = static_cast<int>(leaf_counts_.size());
 
-        _morton_cuda_check(cudaMalloc((void**)&nodes_, sizeof(morton_node)*node_count_),
+        _morton_cuda_check(cudaMalloc((void**)&dev_node_, sizeof(morton_node)*node_count_),
             "allocate adaptive Morton nodes");
-        _morton_cuda_check(cudaMemcpy(nodes_, host_nodes.data(), sizeof(morton_node)*node_count_,
+        _morton_cuda_check(cudaMemcpy(dev_node_, host_nodes.data(), sizeof(morton_node)*node_count_,
             cudaMemcpyHostToDevice), "copy adaptive Morton nodes");
-        _morton_cuda_check(cudaFree(keys), "release adaptive Morton keys");
+        _morton_cuda_check(cudaFree(dev_key), "release adaptive Morton keys");
     }
 
     void release () noexcept
     {
-        if (points_) cudaFree(points_);
-        if (nodes_) cudaFree(nodes_);
-        points_ = nullptr;
-        nodes_ = nullptr;
+        if (dev_point_) cudaFree(dev_point_);
+        if (dev_node_) cudaFree(dev_node_);
+        dev_point_ = nullptr;
+        dev_node_ = nullptr;
         point_count_ = 0;
         node_count_ = 0;
         leaf_count_ = 0;
@@ -177,7 +181,7 @@ public:
 
     morton_view view () const
     {
-        return {points_, nodes_, point_count_, node_count_, dimension_, max_level_};
+        return {dev_point_, dev_node_, point_count_, node_count_, dim_, max_level_};
     }
 
     std::size_t persistent_bytes () const
@@ -191,21 +195,22 @@ public:
     const std::vector<int> &leaf_counts () const { return leaf_counts_; }
 
 private:
-    morton_point *points_ = nullptr;
-    morton_node *nodes_ = nullptr;
+    morton_point *dev_point_ = nullptr;
+    morton_node *dev_node_ = nullptr;
     int point_count_ = 0;
     int node_count_ = 0;
     int leaf_count_ = 0;
-    int dimension_ = 0;
+    int dim_ = 0;
     int leaf_target_ = 0;
     int max_level_ = 0;
-    float3 origin_ = make_float3(0.0f, 0.0f, 0.0f);
+    float3 root_origin_ = make_float3(0.0f, 0.0f, 0.0f);
     float root_width_ = 0.0f;
     std::vector<int> leaf_counts_;
 };
 
 __device__ __forceinline__
-float _get_node_dist_sq (const float3 &query, const morton_node &node, int dimension, int max_level)
+float _get_morton_node_dist_sq (
+    const float3 &query_point, const morton_node &node, int dim, int max_level)
 {
     float3 upper = make_float3(node.lower.x + node.width, node.lower.y + node.width, node.lower.z + node.width);
     float scale = fmaxf(1.0f, fmaxf(
@@ -216,37 +221,41 @@ float _get_node_dist_sq (const float3 &query, const morton_node &node, int dimen
 
     // cover accumulated rounding from every recursive single-precision subdivision
     float pad = 2.0f*static_cast<float>(max_level + 2)*FLT_EPSILON*scale;
-    float dx = fmaxf(fmaxf(node.lower.x - query.x - pad, 0.0f), query.x - upper.x - pad);
-    float dy = fmaxf(fmaxf(node.lower.y - query.y - pad, 0.0f), query.y - upper.y - pad);
-    float dz = (dimension == 2)
-        ? 0.0f : fmaxf(fmaxf(node.lower.z - query.z - pad, 0.0f), query.z - upper.z - pad);
+    float dx = fmaxf(fmaxf(node.lower.x - query_point.x - pad, 0.0f), query_point.x - upper.x - pad);
+    float dy = fmaxf(fmaxf(node.lower.y - query_point.y - pad, 0.0f), query_point.y - upper.y - pad);
+    float dz = (dim == 2)
+        ? 0.0f : fmaxf(fmaxf(node.lower.z - query_point.z - pad, 0.0f), query_point.z - upper.z - pad);
     return dx*dx + dy*dy + dz*dz;
 }
 
 template<int SORT_SIZE, int BLOCK_SIZE>
 __device__ __forceinline__
-void _morton_pair_sort (float *distances, int *indices)
+void _morton_pair_sort (float *dist_sq, int *idx_old)
 {
     for (int width = 2; width <= SORT_SIZE; width <<= 1)
     {
         for (int stride = width >> 1; stride > 0; stride >>= 1)
         {
-            for (int slot = threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
+            for (int idx_slot = threadIdx.x; idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
             {
-                int partner = slot ^ stride;
-                if (partner <= slot) continue;
-                bool ascending = (slot & width) == 0;
+                int idx_partner = idx_slot ^ stride;
+                if (idx_partner <= idx_slot) continue;
+                bool ascending = (idx_slot & width) == 0;
                 bool swap_pair = ascending
-                    ? _morton_neighbor_less(distances[partner], indices[partner], distances[slot], indices[slot])
-                    : _morton_neighbor_less(distances[slot], indices[slot], distances[partner], indices[partner]);
+                    ? _morton_neighbor_less(
+                        dist_sq[idx_partner], idx_old[idx_partner], dist_sq[idx_slot], idx_old[idx_slot]
+                    )
+                    : _morton_neighbor_less(
+                        dist_sq[idx_slot], idx_old[idx_slot], dist_sq[idx_partner], idx_old[idx_partner]
+                    );
                 if (swap_pair)
                 {
-                    float dist_tmp = distances[slot];
-                    distances[slot] = distances[partner];
-                    distances[partner] = dist_tmp;
-                    int idx_tmp = indices[slot];
-                    indices[slot] = indices[partner];
-                    indices[partner] = idx_tmp;
+                    float dist_sq_tmp = dist_sq[idx_slot];
+                    dist_sq[idx_slot] = dist_sq[idx_partner];
+                    dist_sq[idx_partner] = dist_sq_tmp;
+                    int idx_old_tmp = idx_old[idx_slot];
+                    idx_old[idx_slot] = idx_old[idx_partner];
+                    idx_old[idx_partner] = idx_old_tmp;
                 }
             }
             __syncthreads();
@@ -256,91 +265,99 @@ void _morton_pair_sort (float *distances, int *indices)
 
 template<int K, int BLOCK_SIZE, int SORT_SIZE>
 __device__ __forceinline__
-void _morton_pair_merge (float *distances, int *indices, int candidate_count)
+void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
 {
-    for (int slot = K + candidate_count + threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
+    for (int idx_slot = K + candidate_count + threadIdx.x;
+        idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
     {
-        distances[slot] = CUDART_INF_F;
-        indices[slot] = INT_MAX;
+        dist_sq[idx_slot] = CUDART_INF_F;
+        idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
-    _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(distances, indices);
+    _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(dist_sq, idx_old);
 }
 
 template<int K, int BLOCK_SIZE, int SORT_SIZE, int STACK_SIZE>
 __device__ __forceinline__
-void _morton_topk (const morton_view &view, const float3 &query, float radius,
-    float *best_dist, int *best_idx, int *node_stack, int &stack_size, int &idx_node, int &batch_count,
-    unsigned int &leaves_visited, unsigned int &candidates_examined, unsigned int &stack_overflow)
+void _morton_topk (const morton_view &morton_data, const float3 &query_point, float search_dist,
+    float *near_dist_sq, int *near_idx_old, int *idx_node_stack,
+    int &stack_count, int &idx_node, int &batch_count,
+    unsigned int &leaf_visit_count, unsigned int &candidate_count,
+    unsigned int &stack_overflow)
 {
     static_assert(K + BLOCK_SIZE <= SORT_SIZE, "top-K merge array is too small");
     static_assert((SORT_SIZE & (SORT_SIZE - 1)) == 0, "top-K merge array must be a power of two");
     constexpr int batch_capacity = (K < SORT_SIZE - K) ? K : SORT_SIZE - K;
 
-    for (int slot = threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
+    for (int idx_slot = threadIdx.x; idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
     {
-        best_dist[slot] = CUDART_INF_F;
-        best_idx[slot] = INT_MAX;
+        near_dist_sq[idx_slot] = CUDART_INF_F;
+        near_idx_old[idx_slot] = INT_MAX;
     }
     if (threadIdx.x == 0)
     {
-        stack_size = 1;
-        node_stack[0] = 0;
+        stack_count = 1;
+        idx_node_stack[0] = 0;
         idx_node = -1;
         batch_count = 0;
-        leaves_visited = 0;
-        candidates_examined = 0;
+        leaf_visit_count = 0;
+        candidate_count = 0;
         stack_overflow = 0;
     }
     __syncthreads();
 
-    float radius_sq = radius*radius;
+    float search_dist_sq = search_dist*search_dist;
     while (true)
     {
         // finish all uses of the previous node before replacing the shared index
         __syncthreads();
-        if (threadIdx.x == 0) idx_node = (stack_size > 0) ? node_stack[--stack_size] : -1;
+        if (threadIdx.x == 0)
+            idx_node = (stack_count > 0) ? idx_node_stack[--stack_count] : -1;
         __syncthreads();
         if (idx_node < 0) break;
 
-        const morton_node &node = view.nodes[idx_node];
-        float cutoff_sq = fminf(radius_sq, best_dist[K - 1]);
-        if (_get_node_dist_sq(query, node, view.dimension, view.max_level) > cutoff_sq) continue;
+        const morton_node &node = morton_data.dev_node[idx_node];
+        float cutoff_sq = fminf(search_dist_sq, near_dist_sq[K - 1]);
+        if (_get_morton_node_dist_sq(
+            query_point, node, morton_data.dim, morton_data.max_level
+        ) > cutoff_sq) continue;
 
-        if (node.child_number == 0)
+        if (node.child_count == 0)
         {
-            if (threadIdx.x == 0) leaves_visited++;
-            int offset = 0;
-            while (offset < node.count)
+            if (threadIdx.x == 0) leaf_visit_count++;
+            int idx_offset = 0;
+            while (idx_offset < node.count)
             {
-                int batch_begin = batch_count;
-                int take = min(batch_capacity - batch_begin, node.count - offset);
-                for (int local = threadIdx.x; local < take; local += BLOCK_SIZE)
+                int batch_offset = batch_count;
+                int take_count = min(batch_capacity - batch_offset, node.count - idx_offset);
+                for (int idx_local = threadIdx.x; idx_local < take_count; idx_local += BLOCK_SIZE)
                 {
-                    const morton_point &candidate = view.points[node.begin + offset + local];
-                    float dist_sq = _get_morton_dist_sq(query, candidate.cartesian);
-                    int slot = K + batch_begin + local;
-                    best_dist[slot] = CUDART_INF_F;
-                    best_idx[slot] = INT_MAX;
-                    if (dist_sq <= radius_sq)
+                    const morton_point &candidate =
+                        morton_data.dev_point[node.idx_begin + idx_offset + idx_local];
+                    float candidate_dist_sq =
+                        _get_morton_point_dist_sq(query_point, candidate.cartesian);
+                    int idx_slot = K + batch_offset + idx_local;
+                    near_dist_sq[idx_slot] = CUDART_INF_F;
+                    near_idx_old[idx_slot] = INT_MAX;
+                    if (candidate_dist_sq <= search_dist_sq)
                     {
-                        best_dist[slot] = dist_sq;
-                        best_idx[slot] = candidate.index_old;
+                        near_dist_sq[idx_slot] = candidate_dist_sq;
+                        near_idx_old[idx_slot] = candidate.idx_old;
                     }
                 }
                 __syncthreads();
                 if (threadIdx.x == 0)
                 {
-                    candidates_examined += take;
-                    batch_count = batch_begin + take;
+                    candidate_count += take_count;
+                    batch_count = batch_offset + take_count;
                 }
                 __syncthreads();
 
-                offset += take;
+                idx_offset += take_count;
                 if (batch_count >= batch_capacity)
                 {
                     _morton_pair_merge<K, BLOCK_SIZE, SORT_SIZE>(
-                        best_dist, best_idx, batch_count
+                        near_dist_sq, near_idx_old, batch_count
                     );
                     if (threadIdx.x == 0) batch_count = 0;
                     __syncthreads();
@@ -351,39 +368,40 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
 
         if (threadIdx.x == 0)
         {
-            int child_idx[8];
-            float child_dist[8];
-            int valid = 0;
-            cutoff_sq = fminf(radius_sq, best_dist[K - 1]);
-            int child_total = (view.dimension == 2) ? 4 : 8;
-            for (int child_code = 0; child_code < child_total; child_code++)
+            int idx_child[8];
+            float child_dist_sq[8];
+            int valid_count = 0;
+            cutoff_sq = fminf(search_dist_sq, near_dist_sq[K - 1]);
+            int child_count = (morton_data.dim == 2) ? 4 : 8;
+            for (int idx_child_code = 0; idx_child_code < child_count; idx_child_code++)
             {
-                int child = node.child[child_code];
-                if (child < 0) continue;
-                float dist_sq = _get_node_dist_sq(
-                    query, view.nodes[child], view.dimension, view.max_level
+                int idx_child_node = node.idx_child[idx_child_code];
+                if (idx_child_node < 0) continue;
+                float dist_sq = _get_morton_node_dist_sq(
+                    query_point, morton_data.dev_node[idx_child_node],
+                    morton_data.dim, morton_data.max_level
                 );
                 if (dist_sq > cutoff_sq) continue;
-                int insert = valid;
-                while (insert > 0 && child_dist[insert - 1] > dist_sq)
+                int idx_insert = valid_count;
+                while (idx_insert > 0 && child_dist_sq[idx_insert - 1] > dist_sq)
                 {
-                    child_dist[insert] = child_dist[insert - 1];
-                    child_idx[insert] = child_idx[insert - 1];
-                    insert--;
+                    child_dist_sq[idx_insert] = child_dist_sq[idx_insert - 1];
+                    idx_child[idx_insert] = idx_child[idx_insert - 1];
+                    idx_insert--;
                 }
-                child_dist[insert] = dist_sq;
-                child_idx[insert] = child;
-                valid++;
+                child_dist_sq[idx_insert] = dist_sq;
+                idx_child[idx_insert] = idx_child_node;
+                valid_count++;
             }
 
-            if (stack_size + valid > STACK_SIZE)
+            if (stack_count + valid_count > STACK_SIZE)
             {
                 stack_overflow = 1;
-                valid = 0;
+                valid_count = 0;
             }
-            for (int idx = valid - 1; idx >= 0; idx--)
+            for (int idx = valid_count - 1; idx >= 0; idx--)
             {
-                node_stack[stack_size++] = child_idx[idx];
+                idx_node_stack[stack_count++] = idx_child[idx];
             }
         }
         __syncthreads();
@@ -392,7 +410,7 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
 
     if (batch_count > 0)
     {
-        _morton_pair_merge<K, BLOCK_SIZE, SORT_SIZE>(best_dist, best_idx, batch_count);
+        _morton_pair_merge<K, BLOCK_SIZE, SORT_SIZE>(near_dist_sq, near_idx_old, batch_count);
         if (threadIdx.x == 0) batch_count = 0;
         __syncthreads();
     }
@@ -400,63 +418,66 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
 
 template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
 __global__
-void morton_query (int *neighbor_idx, float *neighbor_dist, unsigned int *leaf_visits,
-    unsigned int *candidate_visits, unsigned int *stack_overflows,
-    const float3 *queries, int query_count, morton_view view, float radius)
+void morton_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigned int *dev_leaf_visit_count,
+    unsigned int *dev_candidate_count, unsigned int *dev_stack_overflow,
+    const float3 *dev_query_point, int query_count, morton_view morton_data, float search_dist)
 {
     int idx_query = blockIdx.x;
     if (idx_query >= query_count) return;
 
-    __shared__ float best_dist[SORT_SIZE];
-    __shared__ int best_idx[SORT_SIZE];
-    __shared__ int node_stack[STACK_SIZE];
-    __shared__ int stack_size;
+    __shared__ float work_dist_sq[SORT_SIZE];
+    __shared__ int work_idx_old[SORT_SIZE];
+    __shared__ int idx_node_stack[STACK_SIZE];
+    __shared__ int stack_count;
     __shared__ int idx_node;
     __shared__ int batch_count;
-    __shared__ unsigned int leaves_visited;
-    __shared__ unsigned int candidates_examined;
-    __shared__ unsigned int stack_overflow;
+    __shared__ unsigned int leaf_count;
+    __shared__ unsigned int candidate_total;
+    __shared__ unsigned int overflow;
 
     _morton_topk<K, BLOCK_SIZE, SORT_SIZE, STACK_SIZE>(
-        view, queries[idx_query], radius, best_dist, best_idx, node_stack, stack_size, idx_node, batch_count,
-        leaves_visited, candidates_examined, stack_overflow
+        morton_data, dev_query_point[idx_query], search_dist, work_dist_sq, work_idx_old,
+        idx_node_stack, stack_count, idx_node, batch_count,
+        leaf_count, candidate_total, overflow
     );
 
     for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
     {
         int idx_out = idx_query*K + idx_neighbor;
-        neighbor_idx[idx_out] = (best_idx[idx_neighbor] == INT_MAX) ? -1 : best_idx[idx_neighbor];
-        neighbor_dist[idx_out] = best_dist[idx_neighbor];
+        dev_near_idx_old[idx_out] =
+            (work_idx_old[idx_neighbor] == INT_MAX) ? -1 : work_idx_old[idx_neighbor];
+        dev_near_dist_sq[idx_out] = work_dist_sq[idx_neighbor];
     }
     if (threadIdx.x == 0)
     {
-        if (leaf_visits) leaf_visits[idx_query] = leaves_visited;
-        if (candidate_visits) candidate_visits[idx_query] = candidates_examined;
-        if (stack_overflows) stack_overflows[idx_query] = stack_overflow;
+        if (dev_leaf_visit_count) dev_leaf_visit_count[idx_query] = leaf_count;
+        if (dev_candidate_count) dev_candidate_count[idx_query] = candidate_total;
+        if (dev_stack_overflow) dev_stack_overflow[idx_query] = overflow;
     }
 }
 
 template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
 __global__
-void morton_checksum (double *checksum, unsigned int *stack_overflows,
-    const float3 *queries, int query_count, morton_view view, float radius)
+void morton_checksum (double *dev_checksum, unsigned int *dev_stack_overflow,
+    const float3 *dev_query_point, int query_count, morton_view morton_data, float search_dist)
 {
     int idx_query = blockIdx.x;
     if (idx_query >= query_count) return;
 
-    __shared__ float best_dist[SORT_SIZE];
-    __shared__ int best_idx[SORT_SIZE];
-    __shared__ int node_stack[STACK_SIZE];
-    __shared__ int stack_size;
+    __shared__ float work_dist_sq[SORT_SIZE];
+    __shared__ int work_idx_old[SORT_SIZE];
+    __shared__ int idx_node_stack[STACK_SIZE];
+    __shared__ int stack_count;
     __shared__ int idx_node;
     __shared__ int batch_count;
-    __shared__ unsigned int leaves_visited;
-    __shared__ unsigned int candidates_examined;
-    __shared__ unsigned int stack_overflow;
+    __shared__ unsigned int leaf_count;
+    __shared__ unsigned int candidate_count;
+    __shared__ unsigned int overflow;
 
     _morton_topk<K, BLOCK_SIZE, SORT_SIZE, STACK_SIZE>(
-        view, queries[idx_query], radius, best_dist, best_idx, node_stack, stack_size, idx_node, batch_count,
-        leaves_visited, candidates_examined, stack_overflow
+        morton_data, dev_query_point[idx_query], search_dist, work_dist_sq, work_idx_old,
+        idx_node_stack, stack_count, idx_node, batch_count,
+        leaf_count, candidate_count, overflow
     );
 
     if (threadIdx.x == 0)
@@ -464,12 +485,12 @@ void morton_checksum (double *checksum, unsigned int *stack_overflows,
         double value = 0.0;
         for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
         {
-            if (best_idx[idx_neighbor] == INT_MAX) continue;
-            value += static_cast<double>(best_dist[idx_neighbor])
-                + 1.0e-12*static_cast<double>(best_idx[idx_neighbor]);
+            if (work_idx_old[idx_neighbor] == INT_MAX) continue;
+            value += static_cast<double>(work_dist_sq[idx_neighbor])
+                + 1.0e-12*static_cast<double>(work_idx_old[idx_neighbor]);
         }
-        checksum[idx_query] = value;
-        if (stack_overflows) stack_overflows[idx_query] = stack_overflow;
+        dev_checksum[idx_query] = value;
+        if (dev_stack_overflow) dev_stack_overflow[idx_query] = overflow;
     }
 }
 

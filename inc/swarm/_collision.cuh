@@ -12,9 +12,9 @@
 
 #ifdef COLLISION_KDTREE
 #include <kdtree/knn.h>                 // kdtree::cct::knn
-#include <kdtree/index_heap.cuh>          // index_old_heap
+#include <kdtree/index_heap.cuh>          // idx_old_heap
 
-using candidatelist = index_old_heap<N_K, kdtree_node>;
+using kdtree_heap = idx_old_heap<N_K, kdtree_node>;
 #endif // COLLISION_KDTREE
 
 enum KernelType { 

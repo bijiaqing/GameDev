@@ -21,7 +21,7 @@ constexpr int QUERY_THREADS = 256;
 struct periodic_case
 {
     std::string name;
-    int dimension;
+    int dim;
     float radius;
     float x_min;
     float x_max;
@@ -36,7 +36,7 @@ float3 make_point (float R, float x, float Z = 0.0f)
     return make_float3(R*std::cos(x), R*std::sin(x), Z);
 }
 
-void get_root (const std::vector<float3> &points, int dimension, float3 &origin, float &width)
+void get_root (const std::vector<float3> &points, int dim, float3 &root_origin, float &width)
 {
     float3 lower = points.front();
     float3 upper = points.front();
@@ -52,14 +52,14 @@ void get_root (const std::vector<float3> &points, int dimension, float3 &origin,
 
     float extent_x = upper.x - lower.x;
     float extent_y = upper.y - lower.y;
-    float extent_z = (dimension == 2) ? 0.0f : upper.z - lower.z;
+    float extent_z = (dim == 2) ? 0.0f : upper.z - lower.z;
     width = 1.0001f*std::max({extent_x, extent_y, extent_z});
     if (width <= 0.0f) width = 1.0f;
 
     float center_x = 0.5f*(lower.x + upper.x);
     float center_y = 0.5f*(lower.y + upper.y);
-    float center_z = (dimension == 2) ? 0.0f : 0.5f*(lower.z + upper.z);
-    origin = make_float3(
+    float center_z = (dim == 2) ? 0.0f : 0.5f*(lower.z + upper.z);
+    root_origin = make_float3(
         center_x - 0.5f*width,
         center_y - 0.5f*width,
         center_z - 0.5f*width
@@ -112,9 +112,9 @@ std::vector<std::pair<float, int>> periodic_brute (
     return result;
 }
 
-std::vector<float3> make_wedge_points (int dimension, float x_min, float x_max)
+std::vector<float3> make_wedge_points (int dim, float x_min, float x_max)
 {
-    float Z = (dimension == 2) ? 0.0f : 0.03f;
+    float Z = (dim == 2) ? 0.0f : 0.03f;
     return {
         make_point(1.00f, x_min + 0.01f,  Z),
         make_point(1.00f, x_max - 0.01f,  Z),
@@ -128,47 +128,47 @@ std::vector<float3> make_wedge_points (int dimension, float x_min, float x_max)
     };
 }
 
-periodic_case make_lower_seam (int dimension)
+periodic_case make_lower_seam (int dim)
 {
     float x_min = -0.25f*static_cast<float>(M_PI);
     float x_max =  0.25f*static_cast<float>(M_PI);
-    float Z = (dimension == 2) ? 0.0f : 0.03f;
+    float Z = (dim == 2) ? 0.0f : 0.03f;
     return {
-        "lower_seam_" + std::to_string(dimension) + "d", dimension, 0.09f, x_min, x_max,
-        make_wedge_points(dimension, x_min, x_max),
+        "lower_seam_" + std::to_string(dim) + "d", dim, 0.09f, x_min, x_max,
+        make_wedge_points(dim, x_min, x_max),
         {make_point(1.0f, x_min + 0.01f, Z)}, {x_min + 0.01f}, {2}
     };
 }
 
-periodic_case make_upper_seam (int dimension)
+periodic_case make_upper_seam (int dim)
 {
     float x_min = -0.25f*static_cast<float>(M_PI);
     float x_max =  0.25f*static_cast<float>(M_PI);
-    float Z = (dimension == 2) ? 0.0f : 0.03f;
+    float Z = (dim == 2) ? 0.0f : 0.03f;
     return {
-        "upper_seam_" + std::to_string(dimension) + "d", dimension, 0.09f, x_min, x_max,
-        make_wedge_points(dimension, x_min, x_max),
+        "upper_seam_" + std::to_string(dim) + "d", dim, 0.09f, x_min, x_max,
+        make_wedge_points(dim, x_min, x_max),
         {make_point(1.0f, x_max - 0.01f, Z)}, {x_max - 0.01f}, {2}
     };
 }
 
-periodic_case make_interior (int dimension)
+periodic_case make_interior (int dim)
 {
     float x_min = -0.25f*static_cast<float>(M_PI);
     float x_max =  0.25f*static_cast<float>(M_PI);
-    float Z = (dimension == 2) ? 0.0f : 0.03f;
+    float Z = (dim == 2) ? 0.0f : 0.03f;
     return {
-        "interior_" + std::to_string(dimension) + "d", dimension, 0.05f, x_min, x_max,
-        make_wedge_points(dimension, x_min, x_max),
+        "interior_" + std::to_string(dim) + "d", dim, 0.05f, x_min, x_max,
+        make_wedge_points(dim, x_min, x_max),
         {make_point(1.0f, 0.0f, Z)}, {0.0f}, {1}
     };
 }
 
-periodic_case make_narrow_wedge (int dimension)
+periodic_case make_narrow_wedge (int dim)
 {
     float x_min = -0.1f;
     float x_max =  0.1f;
-    float Z = (dimension == 2) ? 0.0f : 0.02f;
+    float Z = (dim == 2) ? 0.0f : 0.02f;
     std::vector<float3> points;
     for (int idx = 0; idx < 16; idx++)
     {
@@ -177,16 +177,16 @@ periodic_case make_narrow_wedge (int dimension)
         points.push_back(make_point(0.98f + 0.002f*idx, x, (idx % 2 == 0) ? Z : -Z));
     }
     return {
-        "narrow_dedup_" + std::to_string(dimension) + "d", dimension, 0.22f, x_min, x_max,
+        "narrow_dedup_" + std::to_string(dim) + "d", dim, 0.22f, x_min, x_max,
         points, {make_point(1.0f, 0.0f, Z)}, {0.0f}, {3}
     };
 }
 
-periodic_case make_full_disk (int dimension)
+periodic_case make_full_disk (int dim)
 {
     float x_min = -static_cast<float>(M_PI);
     float x_max =  static_cast<float>(M_PI);
-    float Z = (dimension == 2) ? 0.0f : 0.02f;
+    float Z = (dim == 2) ? 0.0f : 0.02f;
     std::vector<float3> points = {
         make_point(1.0f, x_min + 0.01f, Z),
         make_point(1.0f, x_max - 0.01f, Z),
@@ -195,65 +195,65 @@ periodic_case make_full_disk (int dimension)
         make_point(1.2f, -1.0f, -Z),
     };
     return {
-        "full_disk_" + std::to_string(dimension) + "d", dimension, 0.1f, x_min, x_max,
+        "full_disk_" + std::to_string(dim) + "d", dim, 0.1f, x_min, x_max,
         points, {make_point(1.0f, x_min + 0.01f, Z)}, {x_min + 0.01f}, {1}
     };
 }
 
 bool run_case (const periodic_case &test)
 {
-    float3 origin;
+    float3 root_origin;
     float root_width;
-    get_root(test.points, test.dimension, origin, root_width);
+    get_root(test.points, test.dim, root_origin, root_width);
 
-    float3 *dev_points = nullptr;
-    float3 *dev_queries = nullptr;
+    float3 *dev_point = nullptr;
+    float3 *dev_query_point = nullptr;
     float *dev_query_x = nullptr;
-    int *dev_indices = nullptr;
-    float *dev_distances = nullptr;
-    unsigned int *dev_overflows = nullptr;
-    unsigned int *dev_image_counts = nullptr;
+    int *dev_near_idx_old = nullptr;
+    float *dev_near_dist_sq = nullptr;
+    unsigned int *dev_stack_overflow = nullptr;
+    unsigned int *dev_image_count = nullptr;
     std::size_t output_count = test.queries.size()*K;
 
-    _morton_cuda_check(cudaMalloc((void**)&dev_points, sizeof(float3)*test.points.size()), "allocate periodic points");
-    _morton_cuda_check(cudaMalloc((void**)&dev_queries, sizeof(float3)*test.queries.size()), "allocate periodic queries");
+    _morton_cuda_check(cudaMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate periodic points");
+    _morton_cuda_check(cudaMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate periodic queries");
     _morton_cuda_check(cudaMalloc((void**)&dev_query_x, sizeof(float)*test.query_x.size()), "allocate query azimuths");
-    _morton_cuda_check(cudaMalloc((void**)&dev_indices, sizeof(int)*output_count), "allocate periodic indices");
-    _morton_cuda_check(cudaMalloc((void**)&dev_distances, sizeof(float)*output_count), "allocate periodic distances");
-    _morton_cuda_check(cudaMalloc((void**)&dev_overflows, sizeof(unsigned int)*test.queries.size()),
+    _morton_cuda_check(cudaMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate periodic near_idx_old");
+    _morton_cuda_check(cudaMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate periodic near_dist_sq");
+    _morton_cuda_check(cudaMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate periodic overflow flags");
-    _morton_cuda_check(cudaMalloc((void**)&dev_image_counts, sizeof(unsigned int)*test.queries.size()),
+    _morton_cuda_check(cudaMalloc((void**)&dev_image_count, sizeof(unsigned int)*test.queries.size()),
         "allocate periodic image counts");
-    _morton_cuda_check(cudaMemcpy(dev_points, test.points.data(), sizeof(float3)*test.points.size(),
+    _morton_cuda_check(cudaMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
         cudaMemcpyHostToDevice), "copy periodic points");
-    _morton_cuda_check(cudaMemcpy(dev_queries, test.queries.data(), sizeof(float3)*test.queries.size(),
+    _morton_cuda_check(cudaMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
         cudaMemcpyHostToDevice), "copy periodic queries");
     _morton_cuda_check(cudaMemcpy(dev_query_x, test.query_x.data(), sizeof(float)*test.query_x.size(),
         cudaMemcpyHostToDevice), "copy query azimuths");
 
-    morton_index index;
-    index.build(
-        dev_points, static_cast<int>(test.points.size()), origin, root_width,
-        test.dimension, 4, 20
+    morton_index morton_owner;
+    morton_owner.build(
+        dev_point, static_cast<int>(test.points.size()), root_origin, root_width,
+        test.dim, 4, 20
     );
     periodic_morton_query<K> <<< static_cast<int>(test.queries.size()), QUERY_THREADS >>> (
-        dev_indices, dev_distances, dev_overflows, dev_image_counts,
-        dev_queries, dev_query_x, static_cast<int>(test.queries.size()), index.view(),
+        dev_near_idx_old, dev_near_dist_sq, dev_stack_overflow, dev_image_count,
+        dev_query_point, dev_query_x, static_cast<int>(test.queries.size()), morton_owner.view(),
         test.radius, test.x_min, test.x_max
     );
     _morton_cuda_check(cudaDeviceSynchronize(), "run periodic queries");
 
-    std::vector<int> indices(output_count);
-    std::vector<float> distances(output_count);
-    std::vector<unsigned int> overflows(test.queries.size());
-    std::vector<unsigned int> image_counts(test.queries.size());
-    _morton_cuda_check(cudaMemcpy(indices.data(), dev_indices, sizeof(int)*output_count, cudaMemcpyDeviceToHost),
-        "copy periodic indices");
-    _morton_cuda_check(cudaMemcpy(distances.data(), dev_distances, sizeof(float)*output_count,
-        cudaMemcpyDeviceToHost), "copy periodic distances");
-    _morton_cuda_check(cudaMemcpy(overflows.data(), dev_overflows, sizeof(unsigned int)*test.queries.size(),
+    std::vector<int> near_idx_old(output_count);
+    std::vector<float> near_dist_sq(output_count);
+    std::vector<unsigned int> stack_overflow(test.queries.size());
+    std::vector<unsigned int> image_count(test.queries.size());
+    _morton_cuda_check(cudaMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, cudaMemcpyDeviceToHost),
+        "copy periodic near_idx_old");
+    _morton_cuda_check(cudaMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
+        cudaMemcpyDeviceToHost), "copy periodic near_dist_sq");
+    _morton_cuda_check(cudaMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
         cudaMemcpyDeviceToHost), "copy periodic overflow flags");
-    _morton_cuda_check(cudaMemcpy(image_counts.data(), dev_image_counts,
+    _morton_cuda_check(cudaMemcpy(image_count.data(), dev_image_count,
         sizeof(unsigned int)*test.queries.size(), cudaMemcpyDeviceToHost), "copy periodic image counts");
 
     bool passed = true;
@@ -265,21 +265,21 @@ bool run_case (const periodic_case &test)
         for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
         {
             std::size_t idx_out = idx_query*K + idx_neighbor;
-            if (indices[idx_out] >= 0 && !unique_indices.insert(indices[idx_out]).second)
+            if (near_idx_old[idx_out] >= 0 && !unique_indices.insert(near_idx_old[idx_out]).second)
             {
                 passed = false;
                 std::cerr << "  query " << idx_query << " repeats stable index "
-                    << indices[idx_out] << std::endl;
+                    << near_idx_old[idx_out] << std::endl;
             }
-            if (indices[idx_out] >= 0)
+            if (near_idx_old[idx_out] >= 0)
             {
-                actual.emplace_back(distances[idx_out], indices[idx_out]);
+                actual.emplace_back(near_dist_sq[idx_out], near_idx_old[idx_out]);
                 continue;
             }
-            if (indices[idx_out] == -1 && std::isinf(distances[idx_out])) continue;
+            if (near_idx_old[idx_out] == -1 && std::isinf(near_dist_sq[idx_out])) continue;
             passed = false;
             std::cerr << "  query " << idx_query << " invalid slot " << idx_neighbor
-                << " has index " << indices[idx_out] << " and distance " << distances[idx_out] << std::endl;
+                << " has index " << near_idx_old[idx_out] << " and distance " << near_dist_sq[idx_out] << std::endl;
         }
         std::sort(actual.begin(), actual.end());
         if (actual.size() != expected.size())
@@ -301,22 +301,22 @@ bool run_case (const periodic_case &test)
                 << " expected=(" << expected[idx_neighbor].second << ',' << expected[idx_neighbor].first << ")"
                 << " actual=(" << actual[idx_neighbor].second << ',' << actual[idx_neighbor].first << ')' << std::endl;
         }
-        if (overflows[idx_query] != 0 || image_counts[idx_query] != test.expected_images[idx_query])
+        if (stack_overflow[idx_query] != 0 || image_count[idx_query] != test.expected_images[idx_query])
         {
             passed = false;
-            std::cerr << "  query " << idx_query << " overflow=" << overflows[idx_query]
-                << " images=" << image_counts[idx_query]
+            std::cerr << "  query " << idx_query << " overflow=" << stack_overflow[idx_query]
+                << " images=" << image_count[idx_query]
                 << " expected_images=" << test.expected_images[idx_query] << std::endl;
         }
     }
 
-    cudaFree(dev_image_counts);
-    cudaFree(dev_overflows);
-    cudaFree(dev_distances);
-    cudaFree(dev_indices);
+    cudaFree(dev_image_count);
+    cudaFree(dev_stack_overflow);
+    cudaFree(dev_near_dist_sq);
+    cudaFree(dev_near_idx_old);
     cudaFree(dev_query_x);
-    cudaFree(dev_queries);
-    cudaFree(dev_points);
+    cudaFree(dev_query_point);
+    cudaFree(dev_point);
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;
@@ -329,13 +329,13 @@ int main ()
     try
     {
         std::vector<periodic_case> tests;
-        for (int dimension : {2, 3})
+        for (int dim : {2, 3})
         {
-            tests.push_back(make_lower_seam(dimension));
-            tests.push_back(make_upper_seam(dimension));
-            tests.push_back(make_interior(dimension));
-            tests.push_back(make_narrow_wedge(dimension));
-            tests.push_back(make_full_disk(dimension));
+            tests.push_back(make_lower_seam(dim));
+            tests.push_back(make_upper_seam(dim));
+            tests.push_back(make_interior(dim));
+            tests.push_back(make_narrow_wedge(dim));
+            tests.push_back(make_full_disk(dim));
         }
 
         int failed = 0;

@@ -22,7 +22,7 @@
 // =========================================================================================================================
 
 __global__
-void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
+void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     #ifdef IMPORTGAS
     , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz
     , const real *dev_gas_velx_next, const real *dev_gas_vely_next, const real *dev_gas_velz_next
@@ -38,7 +38,7 @@ void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
 
     if (!_is_particle_active(y, z))
     {
-        dev_dt_rate[idx] = 0.0;
+        dev_dyn_rate[idx] = 0.0;
         return;
     }
 
@@ -165,7 +165,7 @@ void dyn_rate_calc (real *dev_dt_rate, const swarm *dev_particle
     }
     #endif // DIFFUSION
 
-    dev_dt_rate[idx] = rate;
+    dev_dyn_rate[idx] = rate;
 }
 
 #endif // TRANSPORT

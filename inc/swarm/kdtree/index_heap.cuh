@@ -4,19 +4,19 @@
 #include <cuda_runtime.h>                  // CUDA device qualifiers and bit conversions
 
 template<int K, typename Node>
-struct index_old_heap
+struct idx_old_heap
 {
-    const Node *node;
-    unsigned long long key[K];
-    bool deduplicate;
+    const Node *kdtree_node;
+    unsigned long long near_key[K];
+    bool dedup_needed;
 
-    __device__ explicit index_old_heap (
-        float cutoff_radius, const Node *tree_node, bool deduplicate_images = false)
-        : node(tree_node), deduplicate(deduplicate_images)
+    __device__ explicit idx_old_heap (
+        float search_dist, const Node *tree_node, bool dedup_needed = false)
+        : kdtree_node(tree_node), dedup_needed(dedup_needed)
     {
-        unsigned long long empty = encode(cutoff_radius*cutoff_radius, 0xffffffffU);
+        unsigned long long empty = encode(search_dist*search_dist, 0xffffffffU);
         #pragma unroll
-        for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++) key[idx_neighbor] = empty;
+        for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++) near_key[idx_neighbor] = empty;
     }
 
     __device__ __forceinline__
@@ -38,14 +38,17 @@ struct index_old_heap
     }
 
     __device__ __forceinline__ float returnValue () const { return maxRadius2(); }
-    __device__ __forceinline__ float returnDist2 (int idx_neighbor) const { return decode_dist(key[idx_neighbor]); }
+    __device__ __forceinline__ float returnDist2 (int idx_neighbor) const
+    {
+        return decode_dist(near_key[idx_neighbor]);
+    }
     __device__ __forceinline__ int returnIndex (int idx_neighbor) const
     {
-        unsigned int idx_old = decode_idx(key[idx_neighbor]);
+        unsigned int idx_old = decode_idx(near_key[idx_neighbor]);
         return (idx_old == 0xffffffffU) ? -1 : static_cast<int>(idx_old);
     }
     __device__ __forceinline__ float initialCullDist2 () const { return expandedCullDist2(); }
-    __device__ __forceinline__ float maxRadius2 () const { return decode_dist(key[0]); }
+    __device__ __forceinline__ float maxRadius2 () const { return decode_dist(near_key[0]); }
     __device__ __forceinline__
     float expandedCullDist2 () const
     {
@@ -55,46 +58,46 @@ struct index_old_heap
     __device__ __forceinline__
     float processCandidate (int idx_candidate, float dist_sq)
     {
-        unsigned int idx_old = static_cast<unsigned int>(node[idx_candidate].index_old);
+        unsigned int idx_old = static_cast<unsigned int>(kdtree_node[idx_candidate].idx_old);
         unsigned long long candidate = encode(dist_sq, idx_old);
 
-        int position = -1;
-        if (deduplicate)
+        int idx_slot = -1;
+        if (dedup_needed)
         {
             for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
             {
-                if (decode_idx(key[idx_neighbor]) != idx_old) continue;
-                position = idx_neighbor;
+                if (decode_idx(near_key[idx_neighbor]) != idx_old) continue;
+                idx_slot = idx_neighbor;
                 break;
             }
         }
 
-        if (position >= 0)
+        if (idx_slot >= 0)
         {
-            if (candidate >= key[position]) return expandedCullDist2();
+            if (candidate >= near_key[idx_slot]) return expandedCullDist2();
         }
         else
         {
-            if (candidate >= key[0]) return expandedCullDist2();
-            position = 0;
+            if (candidate >= near_key[0]) return expandedCullDist2();
+            idx_slot = 0;
         }
 
         while (true)
         {
-            int child_1 = 2*position + 1;
-            int child_max = -1;
-            if (child_1 < K) child_max = child_1;
-            int child_2 = child_1 + 1;
-            if (child_2 < K && key[child_2] > key[child_max]) child_max = child_2;
+            int idx_child1 = 2*idx_slot + 1;
+            int idx_child_max = -1;
+            if (idx_child1 < K) idx_child_max = idx_child1;
+            int idx_child2 = idx_child1 + 1;
+            if (idx_child2 < K && near_key[idx_child2] > near_key[idx_child_max]) idx_child_max = idx_child2;
 
-            if (child_max < 0 || key[child_max] < candidate)
+            if (idx_child_max < 0 || near_key[idx_child_max] < candidate)
             {
-                key[position] = candidate;
+                near_key[idx_slot] = candidate;
                 break;
             }
 
-            key[position] = key[child_max];
-            position = child_max;
+            near_key[idx_slot] = near_key[idx_child_max];
+            idx_slot = idx_child_max;
         }
         return expandedCullDist2();
     }

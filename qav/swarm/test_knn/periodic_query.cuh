@@ -9,52 +9,52 @@
 #include <morton/morton_index.cuh>
 
 __device__ __forceinline__
-float3 _rotate_query_z (const float3 &query, float angle)
+float3 _rotate_query_z (const float3 &query_point, float angle)
 {
     float sin_angle;
     float cos_angle;
     sincosf(angle, &sin_angle, &cos_angle);
     return make_float3(
-        cos_angle*query.x - sin_angle*query.y,
-        sin_angle*query.x + cos_angle*query.y,
-        query.z
+        cos_angle*query_point.x - sin_angle*query_point.y,
+        sin_angle*query_point.x + cos_angle*query_point.y,
+        query_point.z
     );
 }
 
 __device__ __forceinline__
-float _get_seam_dist (const float3 &query, float angle_offset)
+float _get_seam_dist (const float3 &query_point, float x_offset)
 {
-    float R = hypotf(query.x, query.y);
-    float cos_offset = cosf(angle_offset);
-    return (cos_offset >= 0.0f) ? R*fabsf(sinf(angle_offset)) : R;
+    float R = hypotf(query_point.x, query_point.y);
+    float cos_offset = cosf(x_offset);
+    return (cos_offset >= 0.0f) ? R*fabsf(sinf(x_offset)) : R;
 }
 
 template<int SORT_SIZE, int BLOCK_SIZE>
 __device__ __forceinline__
-void _periodic_id_sort (float *distances, int *indices)
+void _periodic_id_sort (float *dist_sq, int *idx_old)
 {
     for (int width = 2; width <= SORT_SIZE; width <<= 1)
     {
         for (int stride = width >> 1; stride > 0; stride >>= 1)
         {
-            for (int slot = threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
+            for (int idx_slot = threadIdx.x; idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
             {
-                int partner = slot ^ stride;
-                if (partner <= slot) continue;
-                bool ascending = (slot & width) == 0;
-                bool partner_less = indices[partner] < indices[slot]
-                    || (indices[partner] == indices[slot] && distances[partner] < distances[slot]);
-                bool slot_less = indices[slot] < indices[partner]
-                    || (indices[slot] == indices[partner] && distances[slot] < distances[partner]);
+                int idx_partner = idx_slot ^ stride;
+                if (idx_partner <= idx_slot) continue;
+                bool ascending = (idx_slot & width) == 0;
+                bool partner_less = idx_old[idx_partner] < idx_old[idx_slot]
+                    || (idx_old[idx_partner] == idx_old[idx_slot] && dist_sq[idx_partner] < dist_sq[idx_slot]);
+                bool slot_less = idx_old[idx_slot] < idx_old[idx_partner]
+                    || (idx_old[idx_slot] == idx_old[idx_partner] && dist_sq[idx_slot] < dist_sq[idx_partner]);
                 bool swap_pair = ascending ? partner_less : slot_less;
                 if (swap_pair)
                 {
-                    float dist_tmp = distances[slot];
-                    distances[slot] = distances[partner];
-                    distances[partner] = dist_tmp;
-                    int idx_tmp = indices[slot];
-                    indices[slot] = indices[partner];
-                    indices[partner] = idx_tmp;
+                    float dist_tmp = dist_sq[idx_slot];
+                    dist_sq[idx_slot] = dist_sq[idx_partner];
+                    dist_sq[idx_partner] = dist_tmp;
+                    int idx_tmp = idx_old[idx_slot];
+                    idx_old[idx_slot] = idx_old[idx_partner];
+                    idx_old[idx_partner] = idx_tmp;
                 }
             }
             __syncthreads();
@@ -64,11 +64,11 @@ void _periodic_id_sort (float *distances, int *indices)
 
 template<int K, int BLOCK_SIZE, int WORK_SIZE, int MERGE_SIZE, int STACK_SIZE>
 __device__ __forceinline__
-int _periodic_topk (const morton_view &view, const float3 &query, float x,
-    float radius, float x_min, float x_max,
-    float *work_dist, int *work_idx, float *merge_dist, int *merge_idx, int *node_stack,
-    int &stack_size, int &idx_node, int &batch_count,
-    unsigned int &leaves_visited, unsigned int &candidates_examined,
+int _periodic_topk (const morton_view &morton_data, const float3 &query_point, float x,
+    float search_dist, float x_min, float x_max,
+    float *work_dist_sq, int *work_idx_old, float *merge_dist_sq, int *merge_idx_old, int *idx_node_stack,
+    int &stack_count, int &idx_node, int &batch_count,
+    unsigned int &leaf_visit_count, unsigned int &candidate_count,
     unsigned int &stack_overflow, unsigned int &overflow_total)
 {
     static_assert(3*K <= MERGE_SIZE, "periodic merge array cannot hold three top-K lists");
@@ -79,18 +79,18 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
 
     float width = x_max - x_min;
     bool periodic = width < 2.0f*CUDART_PI_F - 1.0e-6f;
-    bool lower_image = periodic && _get_seam_dist(query, x - x_min) <= radius;
-    bool upper_image = periodic && _get_seam_dist(query, x_max - x) <= radius;
+    bool lower_image = periodic && _get_seam_dist(query_point, x - x_min) <= search_dist;
+    bool upper_image = periodic && _get_seam_dist(query_point, x_max - x) <= search_dist;
     int image_count = 0;
 
     _morton_topk<K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-        view, query, radius, work_dist, work_idx, node_stack, stack_size, idx_node, batch_count,
-        leaves_visited, candidates_examined, stack_overflow
+        morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+        leaf_visit_count, candidate_count, stack_overflow
     );
     for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
     {
-        merge_dist[image_count*K + idx_neighbor] = work_dist[idx_neighbor];
-        merge_idx[image_count*K + idx_neighbor] = work_idx[idx_neighbor];
+        merge_dist_sq[image_count*K + idx_neighbor] = work_dist_sq[idx_neighbor];
+        merge_idx_old[image_count*K + idx_neighbor] = work_idx_old[idx_neighbor];
     }
     if (threadIdx.x == 0) overflow_total += stack_overflow;
     image_count++;
@@ -98,15 +98,15 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
 
     if (lower_image)
     {
-        float3 image_query = _rotate_query_z(query, width);
+        float3 image_query = _rotate_query_z(query_point, width);
         _morton_topk<K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-            view, image_query, radius, work_dist, work_idx, node_stack, stack_size, idx_node, batch_count,
-            leaves_visited, candidates_examined, stack_overflow
+            morton_data, image_query, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+            leaf_visit_count, candidate_count, stack_overflow
         );
         for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
         {
-            merge_dist[image_count*K + idx_neighbor] = work_dist[idx_neighbor];
-            merge_idx[image_count*K + idx_neighbor] = work_idx[idx_neighbor];
+            merge_dist_sq[image_count*K + idx_neighbor] = work_dist_sq[idx_neighbor];
+            merge_idx_old[image_count*K + idx_neighbor] = work_idx_old[idx_neighbor];
         }
         if (threadIdx.x == 0) overflow_total += stack_overflow;
         image_count++;
@@ -115,15 +115,15 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
 
     if (upper_image)
     {
-        float3 image_query = _rotate_query_z(query, -width);
+        float3 image_query = _rotate_query_z(query_point, -width);
         _morton_topk<K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-            view, image_query, radius, work_dist, work_idx, node_stack, stack_size, idx_node, batch_count,
-            leaves_visited, candidates_examined, stack_overflow
+            morton_data, image_query, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+            leaf_visit_count, candidate_count, stack_overflow
         );
         for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
         {
-            merge_dist[image_count*K + idx_neighbor] = work_dist[idx_neighbor];
-            merge_idx[image_count*K + idx_neighbor] = work_idx[idx_neighbor];
+            merge_dist_sq[image_count*K + idx_neighbor] = work_dist_sq[idx_neighbor];
+            merge_idx_old[image_count*K + idx_neighbor] = work_idx_old[idx_neighbor];
         }
         if (threadIdx.x == 0) overflow_total += stack_overflow;
         image_count++;
@@ -134,9 +134,9 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
     if (image_count == 1) return image_count;
 
     // disjoint query balls cannot contain two images of one physical particle, so merge directly
-    float3 first_image = _rotate_query_z(query, width);
-    float image_dist_sq = _get_morton_dist_sq(query, first_image);
-    if (image_count == 2 && image_dist_sq > 4.0f*radius*radius)
+    float3 first_image = _rotate_query_z(query_point, width);
+    float image_dist_sq = _get_morton_point_dist_sq(query_point, first_image);
+    if (image_count == 2 && image_dist_sq > 4.0f*search_dist*search_dist)
     {
         if (threadIdx.x == 0)
         {
@@ -145,94 +145,95 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
             for (int idx_out = 0; idx_out < K; idx_out++)
             {
                 bool take_a = idx_a < K && (idx_b >= 2*K
-                    || _morton_neighbor_less(merge_dist[idx_a], merge_idx[idx_a],
-                        merge_dist[idx_b], merge_idx[idx_b]));
+                    || _morton_neighbor_less(merge_dist_sq[idx_a], merge_idx_old[idx_a],
+                        merge_dist_sq[idx_b], merge_idx_old[idx_b]));
                 int idx_in = take_a ? idx_a++ : idx_b++;
-                work_dist[idx_out] = merge_dist[idx_in];
-                work_idx[idx_out] = merge_idx[idx_in];
+                work_dist_sq[idx_out] = merge_dist_sq[idx_in];
+                work_idx_old[idx_out] = merge_idx_old[idx_in];
             }
         }
         __syncthreads();
         for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
         {
-            merge_dist[idx_neighbor] = work_dist[idx_neighbor];
-            merge_idx[idx_neighbor] = work_idx[idx_neighbor];
+            merge_dist_sq[idx_neighbor] = work_dist_sq[idx_neighbor];
+            merge_idx_old[idx_neighbor] = work_idx_old[idx_neighbor];
         }
         __syncthreads();
         return image_count;
     }
 
-    for (int slot = image_count*K + threadIdx.x; slot < MERGE_SIZE; slot += BLOCK_SIZE)
+    for (int idx_slot = image_count*K + threadIdx.x; idx_slot < MERGE_SIZE; idx_slot += BLOCK_SIZE)
     {
-        merge_dist[slot] = CUDART_INF_F;
-        merge_idx[slot] = INT_MAX;
+        merge_dist_sq[idx_slot] = CUDART_INF_F;
+        merge_idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
 
-    // group equal original particle indices and retain the closest periodic image of each particle
-    _periodic_id_sort<MERGE_SIZE, BLOCK_SIZE>(merge_dist, merge_idx);
+    // group equal original particle idx_old and retain the closest periodic image of each particle
+    _periodic_id_sort<MERGE_SIZE, BLOCK_SIZE>(merge_dist_sq, merge_idx_old);
     constexpr int slots_per_thread = (MERGE_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE;
     bool duplicate[slots_per_thread];
-    int local_slot = 0;
-    for (int slot = threadIdx.x; slot < MERGE_SIZE; slot += BLOCK_SIZE)
+    int idx_local = 0;
+    for (int idx_slot = threadIdx.x; idx_slot < MERGE_SIZE; idx_slot += BLOCK_SIZE)
     {
-        duplicate[local_slot++] = slot > 0 && merge_idx[slot] == merge_idx[slot - 1];
+        duplicate[idx_local++] = idx_slot > 0 && merge_idx_old[idx_slot] == merge_idx_old[idx_slot - 1];
     }
     __syncthreads();
-    local_slot = 0;
-    for (int slot = threadIdx.x; slot < MERGE_SIZE; slot += BLOCK_SIZE)
+    idx_local = 0;
+    for (int idx_slot = threadIdx.x; idx_slot < MERGE_SIZE; idx_slot += BLOCK_SIZE)
     {
-        if (duplicate[local_slot++])
+        if (duplicate[idx_local++])
         {
-            merge_dist[slot] = CUDART_INF_F;
-            merge_idx[slot] = INT_MAX;
+            merge_dist_sq[idx_slot] = CUDART_INF_F;
+            merge_idx_old[idx_slot] = INT_MAX;
         }
     }
     __syncthreads();
 
-    _morton_pair_sort<MERGE_SIZE, BLOCK_SIZE>(merge_dist, merge_idx);
+    _morton_pair_sort<MERGE_SIZE, BLOCK_SIZE>(merge_dist_sq, merge_idx_old);
     return image_count;
 }
 
 template<int K, int BLOCK_SIZE = 256, int WORK_SIZE = 512, int MERGE_SIZE = 1024, int STACK_SIZE = 256>
 __global__
-void periodic_morton_query (int *neighbor_idx, float *neighbor_dist, unsigned int *stack_overflows,
-    unsigned int *image_counts, const float3 *queries, const float *query_x, int query_count,
-    morton_view view, float radius, float x_min, float x_max)
+void periodic_morton_query (int *dev_near_idx_old, float *dev_near_dist_sq,
+    unsigned int *dev_stack_overflow_count, unsigned int *dev_image_count,
+    const float3 *dev_query_point, const float *dev_query_x, int query_count,
+    morton_view morton_data, float search_dist, float x_min, float x_max)
 {
     int idx_query = blockIdx.x;
     if (idx_query >= query_count) return;
 
-    __shared__ float work_dist[WORK_SIZE];
-    __shared__ int work_idx[WORK_SIZE];
-    __shared__ float merge_dist[MERGE_SIZE];
-    __shared__ int merge_idx[MERGE_SIZE];
-    __shared__ int node_stack[STACK_SIZE];
-    __shared__ int stack_size;
+    __shared__ float work_dist_sq[WORK_SIZE];
+    __shared__ int work_idx_old[WORK_SIZE];
+    __shared__ float merge_dist_sq[MERGE_SIZE];
+    __shared__ int merge_idx_old[MERGE_SIZE];
+    __shared__ int idx_node_stack[STACK_SIZE];
+    __shared__ int stack_count;
     __shared__ int idx_node;
     __shared__ int batch_count;
-    __shared__ unsigned int leaves_visited;
-    __shared__ unsigned int candidates_examined;
+    __shared__ unsigned int leaf_visit_count;
+    __shared__ unsigned int candidate_count;
     __shared__ unsigned int stack_overflow;
     __shared__ unsigned int overflow_total;
 
     int image_count = _periodic_topk<K, BLOCK_SIZE, WORK_SIZE, MERGE_SIZE, STACK_SIZE>(
-        view, queries[idx_query], query_x[idx_query], radius, x_min, x_max,
-        work_dist, work_idx, merge_dist, merge_idx, node_stack,
-        stack_size, idx_node, batch_count, leaves_visited, candidates_examined,
+        morton_data, dev_query_point[idx_query], dev_query_x[idx_query], search_dist, x_min, x_max,
+        work_dist_sq, work_idx_old, merge_dist_sq, merge_idx_old, idx_node_stack,
+        stack_count, idx_node, batch_count, leaf_visit_count, candidate_count,
         stack_overflow, overflow_total
     );
 
     for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
     {
         int idx_out = idx_query*K + idx_neighbor;
-        neighbor_idx[idx_out] = (merge_idx[idx_neighbor] == INT_MAX) ? -1 : merge_idx[idx_neighbor];
-        neighbor_dist[idx_out] = merge_dist[idx_neighbor];
+        dev_near_idx_old[idx_out] = (merge_idx_old[idx_neighbor] == INT_MAX) ? -1 : merge_idx_old[idx_neighbor];
+        dev_near_dist_sq[idx_out] = merge_dist_sq[idx_neighbor];
     }
     if (threadIdx.x == 0)
     {
-        if (stack_overflows) stack_overflows[idx_query] = overflow_total;
-        if (image_counts) image_counts[idx_query] = image_count;
+        if (dev_stack_overflow_count) dev_stack_overflow_count[idx_query] = overflow_total;
+        if (dev_image_count) dev_image_count[idx_query] = image_count;
     }
 }
 

@@ -109,6 +109,19 @@ The runtime entry files are `fluid_runtime.cu` and `swarm_runtime.cu`; each stil
 
 Swarm collision backends are selected as `COLLISION_SEARCH=kdtree` or `COLLISION_SEARCH=morton`. Their private headers live under `inc/swarm/kdtree/` and `inc/swarm/morton/`; backend-specific identifiers use the corresponding `kdtree_*` or `morton_*` prefix. Morton top-$K$ selection always uses the block-parallel sorted merge and therefore needs no additional build selector
 
+The collision-search interfaces use the following paired names:
+
+- the particle identifier retained across either backend's internal reordering is `idx_old`
+- returned neighbors use `near_idx_old` and `near_dist_sq`, with `dev_` added for global device arrays
+- KD-tree storage uses `dev_kdtree_node` and `dev_kdtree_box`, whose bounding-box type is `kdtree_boxf`
+- Morton storage uses `dev_morton_point`, `dev_morton_posx`, `morton_owner`, and the non-owning device view `morton_data`
+- `col_site_init` constructs the backend-specific collision-search positions without implying a tree-only representation
+- a search cutoff is `search_dist`, and its square is `search_dist_sq`
+- traversal storage uses `idx_node_stack`, `stack_count`, `leaf_visit_count`, and `candidate_count`
+- `unique_ids` states that the searched records cannot repeat a physical particle identifier; the KD-tree heap instead receives the complementary action flag `dedup_needed`
+
+Use the full `kdtree_*` prefix in C++ identifiers rather than `kd_*`. The KNN verification JSON retains its historical `kd_*` keys as a stable external data format; those keys are not source-variable conventions
+
 Parallel host spellings include `initdens_calc`, `initdens_lerp`, `save_host_binary`, `load_host_binary`, `save_sam_as_velocity`, `load_velocity_as_sam`, `frame_stream`, `time_now`, `duration`, and `remaining`
 
 ## Scratch storage
@@ -127,7 +140,7 @@ Do not unify names that encode different algorithms or stored state:
 
 - swarm `particle_init` versus fluid `init_rho_calc` and `init_vel_calc`
 - swarm `diffusion_pos` versus fluid `diffusion_[xyz]{th,bl}`
-- swarm `dev_dt_rate` versus fluid `dev_cfl_rate`
+- swarm `dev_dyn_rate` versus fluid `dev_cfl_rate`
 - swarm `total_dust_mass`, `mass_norm`, grain size, and represented-grain number, which have no monodisperse fluid counterpart
 - fluid conserved `mx/my/mz`, vacuum threshold, positivity controls, and line workspaces, which have no particle-state counterpart
 - swarm `rhog_0`, which is the imported-gas Stokes calibration anchor at `R_0`
