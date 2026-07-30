@@ -130,7 +130,7 @@ int _periodic_topk (const morton_view &view, const float3 &query, float x,
         __syncthreads();
     }
 
-    // the ordinary one-image result is already sorted and contains no duplicate identifiers
+    // the ordinary one-image result contains no duplicate identifiers
     if (image_count == 1) return image_count;
 
     // disjoint query balls cannot contain two images of one physical particle, so merge directly
@@ -231,50 +231,6 @@ void periodic_morton_query (int *neighbor_idx, float *neighbor_dist, unsigned in
     }
     if (threadIdx.x == 0)
     {
-        if (stack_overflows) stack_overflows[idx_query] = overflow_total;
-        if (image_counts) image_counts[idx_query] = image_count;
-    }
-}
-
-template<int K, int BLOCK_SIZE = 256, int WORK_SIZE = 512, int MERGE_SIZE = 1024, int STACK_SIZE = 256>
-__global__
-void periodic_morton_checksum (double *checksum, unsigned int *stack_overflows,
-    unsigned int *image_counts, const float3 *queries, const float *query_x, int query_count,
-    morton_view view, float radius, float x_min, float x_max)
-{
-    int idx_query = blockIdx.x;
-    if (idx_query >= query_count) return;
-
-    __shared__ float work_dist[WORK_SIZE];
-    __shared__ int work_idx[WORK_SIZE];
-    __shared__ float merge_dist[MERGE_SIZE];
-    __shared__ int merge_idx[MERGE_SIZE];
-    __shared__ int node_stack[STACK_SIZE];
-    __shared__ int stack_size;
-    __shared__ int idx_node;
-    __shared__ int batch_count;
-    __shared__ unsigned int leaves_visited;
-    __shared__ unsigned int candidates_examined;
-    __shared__ unsigned int stack_overflow;
-    __shared__ unsigned int overflow_total;
-
-    int image_count = _periodic_topk<K, BLOCK_SIZE, WORK_SIZE, MERGE_SIZE, STACK_SIZE>(
-        view, queries[idx_query], query_x[idx_query], radius, x_min, x_max,
-        work_dist, work_idx, merge_dist, merge_idx, node_stack,
-        stack_size, idx_node, batch_count, leaves_visited, candidates_examined,
-        stack_overflow, overflow_total
-    );
-
-    if (threadIdx.x == 0)
-    {
-        double value = 0.0;
-        for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
-        {
-            if (merge_idx[idx_neighbor] == INT_MAX) continue;
-            value += static_cast<double>(merge_dist[idx_neighbor])
-                + 1.0e-12*static_cast<double>(merge_idx[idx_neighbor]);
-        }
-        checksum[idx_query] = value;
         if (stack_overflows) stack_overflows[idx_query] = overflow_total;
         if (image_counts) image_counts[idx_query] = image_count;
     }

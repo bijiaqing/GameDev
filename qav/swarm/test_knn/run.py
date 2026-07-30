@@ -19,7 +19,10 @@ def main() -> None:
     )
     parser.add_argument("--arch", default="sm_80")
     parser.add_argument("--build-only", action="store_true")
-    parser.add_argument("--full", action="store_true", help="also benchmark one million particles")
+    parser.add_argument(
+        "--full", action="store_true",
+        help="also benchmark one million and ten million particles",
+    )
     args = parser.parse_args()
 
     test_dir = Path(__file__).resolve().parent
@@ -29,13 +32,17 @@ def main() -> None:
     # KNN capacities and backend headers are compile-time inputs that Make
     # cannot infer from a previously linked executable, so always rebuild the
     # standalone drivers for a clean, reproducible benchmark run
-    subprocess.run(["make", "-C", str(test_dir), "clean"], check=True)
+    subprocess.run(
+        ["make", "-C", str(test_dir), "clean"], check=True
+    )
 
     # Compile the four independent CUDA drivers once.  The ordinary and wedge
-    # programs measure both backends, while the edge and periodic programs
-    # concentrate on exact topology at difficult geometric boundaries.
+    # programs time production search paths, while the edge and periodic
+    # programs concentrate on exact topology at difficult geometric boundaries.
     subprocess.run(
-        ["make", "-C", str(test_dir), "suite", f"ARCH={args.arch}", "K=200"],
+        [
+            "make", "-C", str(test_dir), "suite", f"ARCH={args.arch}", "K=200",
+        ],
         check=True,
     )
 
@@ -57,13 +64,16 @@ def main() -> None:
     if args.build_only:
         return
 
-    subprocess.run([str(test_dir/"bin"/"knn_edge_tests")], check=True)
-    subprocess.run([str(test_dir/"bin"/"knn_periodic_tests")], check=True)
+    bin_dir = test_dir/"bin"
+    subprocess.run([str(bin_dir/"knn_edge_tests")], check=True)
+    subprocess.run([str(bin_dir/"knn_periodic_tests")], check=True)
 
-    particles = [100_000, 1_000_000] if args.full else [100_000]
+    particles = [100_000, 1_000_000, 10_000_000] if args.full else [100_000]
     common = ["--particles", *(str(value) for value in particles), "--arch", args.arch]
     subprocess.run([python, str(test_dir/"run_benchmarks.py"), *common], check=True)
     subprocess.run([python, str(test_dir/"run_wedge_benchmarks.py"), *common], check=True)
+    subprocess.run([python, str(test_dir/"analyze_results.py")], check=True)
+    subprocess.run([python, str(test_dir/"analyze_wedge.py")], check=True)
 
     ordinary = json.loads((test_dir/"out"/"manifest.json").read_text())
     wedge = json.loads((test_dir/"out"/"wedge"/"manifest.json").read_text())

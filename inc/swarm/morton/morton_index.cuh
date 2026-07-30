@@ -254,6 +254,19 @@ void _morton_pair_sort (float *distances, int *indices)
     }
 }
 
+template<int K, int BLOCK_SIZE, int SORT_SIZE>
+__device__ __forceinline__
+void _morton_pair_merge (float *distances, int *indices, int candidate_count)
+{
+    for (int slot = K + candidate_count + threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
+    {
+        distances[slot] = CUDART_INF_F;
+        indices[slot] = INT_MAX;
+    }
+    __syncthreads();
+    _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(distances, indices);
+}
+
 template<int K, int BLOCK_SIZE, int SORT_SIZE, int STACK_SIZE>
 __device__ __forceinline__
 void _morton_topk (const morton_view &view, const float3 &query, float radius,
@@ -284,6 +297,8 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
     float radius_sq = radius*radius;
     while (true)
     {
+        // finish all uses of the previous node before replacing the shared index
+        __syncthreads();
         if (threadIdx.x == 0) idx_node = (stack_size > 0) ? node_stack[--stack_size] : -1;
         __syncthreads();
         if (idx_node < 0) break;
@@ -324,13 +339,9 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
                 offset += take;
                 if (batch_count >= batch_capacity)
                 {
-                    for (int slot = K + batch_count + threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
-                    {
-                        best_dist[slot] = CUDART_INF_F;
-                        best_idx[slot] = INT_MAX;
-                    }
-                    __syncthreads();
-                    _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(best_dist, best_idx);
+                    _morton_pair_merge<K, BLOCK_SIZE, SORT_SIZE>(
+                        best_dist, best_idx, batch_count
+                    );
                     if (threadIdx.x == 0) batch_count = 0;
                     __syncthreads();
                 }
@@ -381,13 +392,7 @@ void _morton_topk (const morton_view &view, const float3 &query, float radius,
 
     if (batch_count > 0)
     {
-        for (int slot = K + batch_count + threadIdx.x; slot < SORT_SIZE; slot += BLOCK_SIZE)
-        {
-            best_dist[slot] = CUDART_INF_F;
-            best_idx[slot] = INT_MAX;
-        }
-        __syncthreads();
-        _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(best_dist, best_idx);
+        _morton_pair_merge<K, BLOCK_SIZE, SORT_SIZE>(best_dist, best_idx, batch_count);
         if (threadIdx.x == 0) batch_count = 0;
         __syncthreads();
     }

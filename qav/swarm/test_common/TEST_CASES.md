@@ -17,7 +17,11 @@ beside the implementation.
 | `test_prdrag_2d` | combined gas and P-R exponential response | exact component-dependent exponential responses with $k_x=t_s^{-1}+\beta GM/(cR^2)$ and $k_y=t_s^{-1}+2\beta GM/(cR^2)$ |
 | `test_collision_2d` | collision helper kernels in a radial-azimuthal disk | exact disk area/circular-cap measure and constant, additive, and product kernel numerators |
 | `test_collision_3d` | collision helper kernels in full 3D | exact interior, radial-cap, and polar-cap ball measures plus the same three analytic kernel numerators |
-| `test_knn` | selectable KD-tree and adaptive-Morton exact KNN search, including periodic wedges and compact boundary ghosts | independent brute-force neighbor identities, adversarial boundary cases, overflow checks, and timing/memory records |
+| `test_knn` | KD-tree and adaptive-Morton exact KNN search, block-parallel sorted Morton top-$K$, periodic-image correctness, and compact production boundary ghosts | independent brute-force neighbor identities, adversarial boundary cases, overflow checks, and production-relevant timing/memory records |
+
+The default KNN run uses $N_P=10^5$. Passing `--knn-full` to the common suite extends both the
+ordinary and wedge matrices to $N_P=10^6$ and $10^7$; the latest clean run passed all 18 ordinary
+and 30 wedge cases.
 
 Diffusion tests use six-standard-error acceptance bands for sample means and variances.  Increasing `--res` raises the
 ensemble as $N_P=16N^2$ and therefore tightens those statistical bounds without pretending that stochastic trajectories

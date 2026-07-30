@@ -74,9 +74,11 @@ ifeq ($(wildcard $(MODEL_PARENT_DIR)),)
 $(error MODEL_PARENT=$(MODEL_PARENT) was not found under mod/)
 endif
 MODEL_SOURCE_DIRS := $(MODEL_DIR):$(MODEL_PARENT_DIR)
+MODEL_HEADER_DIRS := $(MODEL_DIR) $(MODEL_PARENT_DIR) $(MODEL_INCLUDE_DIRS)
 MODEL_INCLUDE_FLAGS := -I $(MODEL_DIR) -I $(MODEL_PARENT_DIR) $(addprefix -I ,$(MODEL_INCLUDE_DIRS))
 else
 MODEL_SOURCE_DIRS := $(MODEL_DIR)
+MODEL_HEADER_DIRS := $(MODEL_DIR) $(MODEL_INCLUDE_DIRS)
 MODEL_INCLUDE_FLAGS := -I $(MODEL_DIR) $(addprefix -I ,$(MODEL_INCLUDE_DIRS))
 endif
 
@@ -160,6 +162,7 @@ _OBJ_SWARM =       \
     swarm_runtime.o
 
 ifdef MODEL
+RELINK_TRIGGER :=
 ifeq ($(DUST_REPR),fluid)
 FLUID_SWEEP ?= thread
 ifneq ($(words $(FLUID_SWEEP)),1)
@@ -185,6 +188,7 @@ SRC_SEARCH_DIRS = $(MODEL_SOURCE_DIRS):$(SRC_BRANCH_DIR)
 INC_SEARCH_FLAGS = $(MODEL_INCLUDE_FLAGS) -I $(INC_BRANCH_DIR)
 else ifeq ($(DUST_REPR),swarm)
 ifneq ($(filter -DCOLLISION,$(NVCC)),)
+RELINK_TRIGGER := FORCE
 COLLISION_SEARCH ?= kdtree
 ifneq ($(words $(COLLISION_SEARCH)),1)
 $(error COLLISION_SEARCH must be kdtree or morton)
@@ -194,10 +198,11 @@ $(error COLLISION_SEARCH must be kdtree or morton)
 endif
 ifeq ($(COLLISION_SEARCH),morton)
 NVCC += -DCOLLISION_MORTON
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)
 else
 NVCC += -DCOLLISION_KDTREE
-endif
 OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)
+endif
 endif
 
 SRC_BRANCH_DIR = $(SRC_SWARM_DIR)
@@ -210,14 +215,20 @@ endif
 _OBJ += $(_OBJ_MOD)
 OBJ = $(foreach file,$(strip $(_OBJ)),$(OBJ_DIR)/$(strip $(file)))
 
+# Resolve noncanonical headers in compiler-search order so the build reports
+# only files that actually shadow a same-named representation header
+INC_HEADER_PATHS := $(shell find $(INC_BRANCH_DIR) -type f \( -name '*.cuh' -o -name '*.h' -o -name '*.hpp' \))
+INC_HEADER_NAMES := $(patsubst $(INC_BRANCH_DIR)/%,%,$(INC_HEADER_PATHS))
+HEADER_OVERRIDE_PATHS := $(sort $(foreach header,$(INC_HEADER_NAMES),\
+    $(firstword $(foreach directory,$(MODEL_HEADER_DIRS),$(wildcard $(directory)/$(header))))))
+
 vpath %.cu $(SRC_SEARCH_DIRS)
 
 $(info Using model setup: $(MODEL) from $(MODEL_DIR))
-ifneq ($(strip $(MODEL_CONST)),)
-$(info Using model constants: $(MODEL_DIR)/const_defs.cuh)
-else
+ifeq ($(strip $(MODEL_CONST)),)
 $(info Using representation constants: $(INC_BRANCH_DIR)/const_defs.cuh)
 endif
+$(foreach header,$(HEADER_OVERRIDE_PATHS),$(info Using header override: $(header)))
 $(info Using dust representation: $(DUST_REPR))
 ifeq ($(DUST_REPR),fluid)
 $(info Using fluid sweep: $(FLUID_SWEEP))
@@ -226,14 +237,16 @@ $(info Using collision search: $(COLLISION_SEARCH))
 endif
 endif
 
-.PHONY: all clean
+.PHONY: all clean FORCE
 
 all: $(EXEC)
 
-$(EXEC): $(OBJ) $(MODEL_DIR)/flags.mk $(MODEL_CONST)
+$(EXEC): $(OBJ) $(MODEL_DIR)/flags.mk $(MODEL_CONST) $(RELINK_TRIGGER)
 	@mkdir -p $(OUT_DIR)
 	@printf "%-12s %-20s %s\n" "Linking" "$@" "from $(words $(OBJ)) objects"
 	@$(NVCC) -o $@ $(OBJ)
+
+FORCE:
 
 $(OBJ_DIR)/%.o: %.cu $(MODEL_DIR)/flags.mk $(MODEL_CONST)
 	@mkdir -p $(dir $@)

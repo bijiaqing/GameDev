@@ -12,7 +12,10 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--particles", nargs="+", type=int, default=[100_000, 1_000_000])
+    parser.add_argument(
+        "--particles", nargs="+", type=int,
+        default=[100_000, 1_000_000, 10_000_000],
+    )
     parser.add_argument("--dim", nargs="+", type=int, choices=(2, 3), default=[2, 3])
     parser.add_argument(
         "--distribution",
@@ -37,7 +40,9 @@ def main() -> None:
 
     # K is compiled into the candidate-list types used by both search backends.
     subprocess.run(
-        ["make", "-C", str(test_root), "wedge", f"ARCH={args.arch}", f"K={args.k}"],
+        [
+            "make", "-C", str(test_root), "wedge", f"ARCH={args.arch}", f"K={args.k}",
+        ],
         check=True,
     )
 
@@ -75,26 +80,22 @@ def main() -> None:
                 print(
                     f"quality={record['quality_passed']}  "
                     f"query batch: KD={record['kd_query_ms']:.3f} ms  "
-                    f"Query={record['morton_query_ms']:.3f} ms  "
-                    f"Ghost={record['ghost_query_ms']:.3f} ms  "
-                    f"query-speedup={record['query_speedup']:.3f}  "
-                    f"ghost-speedup={record['ghost_query_speedup']:.3f}"
+                    f"Morton={record['morton_query_ms']:.3f} ms  "
+                    f"speedup={record['query_speedup']:.3f}"
                 )
                 if result.returncode != 0:
                     print(
                         "failure counters: "
                         f"KD/brute={record['kd_brute_mismatches']}  "
-                        f"query/brute={record['morton_brute_mismatches']}  "
-                        f"ghost/brute={record['ghost_brute_mismatches']}  "
+                        f"Morton/brute={record['morton_brute_mismatches']}  "
                         f"KD/disagreements={record['kd_disagreement_brute_mismatches']}  "
-                        f"query/disagreements={record['morton_disagreement_brute_mismatches']}  "
-                        f"ghost/disagreements={record['ghost_disagreement_brute_mismatches']}  "
-                        f"query-overflows={record['stack_overflows']}  "
-                        f"ghost-overflows={record['ghost_stack_overflows']}  "
+                        f"Morton/disagreements={record['morton_disagreement_brute_mismatches']}  "
+                        f"Morton/records={record['morton_record_mismatches']}  "
+                        f"records/geometry={record['record_geometry_mismatches']}  "
+                        f"overflows={record['stack_overflows']}  "
                         f"max-error={record['maximum_distance_error']:.3e}  "
                         f"ties: KD={record['kd_tie_equivalent_neighbors']} "
-                        f"Query={record['morton_tie_equivalent_neighbors']} "
-                        f"Ghost={record['ghost_tie_equivalent_neighbors']}",
+                        f"Morton={record['morton_tie_equivalent_neighbors']}",
                         flush=True,
                     )
                     result.check_returncode()

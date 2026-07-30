@@ -304,8 +304,9 @@ COLLISION_SEARCH := morton
 ```
 
 The same selection can be supplied on the build command line, for example
-`make MODEL=my_model COLLISION_SEARCH=morton`. Backend-specific objects are stored in separate
-directories, so switching methods cannot silently reuse objects compiled for the other search.
+`make MODEL=my_model COLLISION_SEARCH=morton`. Backend-specific objects are stored under separate
+search directories, so switching between KD-tree and Morton cannot silently reuse objects compiled
+for the other backend.
 
 The KD-tree is the default reference. The Morton backend uses an adaptive pointer-free hierarchy,
 cooperative top-$K$ selection, and boundary-only periodic ghosts. Locally planar accessible-volume
@@ -428,6 +429,22 @@ prevents accumulated recursive-subdivision roundoff from making the pruning boun
 CUDA block evaluates candidate tiles cooperatively and retains the nearest $N_K$ pairs in shared
 memory. The traversal reports an overflow rather than silently accepting an incomplete result.
 
+The validated repeated block-parallel bitonic merge retains the nearest pairs in lexicographic
+$(d^2,\mathrm{id})$ order. Distances remain available because traversal pruning, closest-ghost
+deduplication, and the collision-volume radius require them even though collision physics consumes
+the original particle identifiers. When periodic images overlap, the query temporarily retains
+$3N_K$ records, deduplicates physical identifiers, and performs a final ordered selection.
+
+All threads in a query block consume a shared traversal-node index. A block barrier precedes every
+replacement of that index, while the existing following barrier publishes the replacement. Both
+halves are required: a following barrier alone allows a fast warp to begin the next iteration and
+overwrite the index while a slower warp is still reading the preceding value. CUDA Racecheck
+identified this hazard during the top-$K$ validation; the corrected traversal reports zero
+Racecheck hazards on the 100,000-particle three-dimensional ring case.
+
+The block-parallel sorted merge is the only Morton top-$K$ implementation and requires no secondary
+selection flag.
+
 ### Periodic boundary ghosts
 
 For a wedge, the Morton owner copies only source records whose Cartesian distance to either
@@ -475,9 +492,11 @@ Morton-range ownership for multiple GPUs. Its hierarchy alone is compact, but th
 owner also retains unsorted query coordinates, azimuths, per-particle cutoffs, and overflow flags.
 Consequently, full-disk total search storage can exceed the single-array KD-tree even when the
 Morton hierarchy is smaller; partial wedges benefit more strongly because the KD-tree stores three
-complete copies. The KD-tree remains useful as an independent mature reference and can be faster
-for smaller populations. Backend choice is therefore a measured model configuration, not a change
-in collision physics.
+complete copies. The latest isolated query matrix found that Morton used less persistent search
+memory in every tested case through $N_P=10^7$, while KD-tree was faster in most cases and in every
+$N_P=10^7$ case. The KD-tree therefore remains both an independent mature reference and a strong
+single-GPU performance option. Backend choice is a measured model configuration, not a change in
+collision physics; detailed timing and pass criteria belong in `testset_swarm.md`.
 
 For distributed Morton search, each GPU can own contiguous coarse cells or key ranges and import
 read-only halo records. A local result is globally certified when every intersecting remote cell has

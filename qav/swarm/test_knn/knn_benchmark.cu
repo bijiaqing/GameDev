@@ -48,6 +48,7 @@ struct options
     int max_level = 20;
     int max_leaf_scan = 4096;
     float radius = 0.1f;
+    bool quality_only = false;
     std::string distribution = "smooth";
     std::string output;
 };
@@ -70,6 +71,9 @@ struct quality_stats
     int disagreement_queries_checked = 0;
     int kd_disagreement_brute_mismatches = 0;
     int morton_disagreement_brute_mismatches = 0;
+    int morton_record_mismatches = 0;
+    int record_geometry_mismatches = 0;
+    int first_failure_query = -1;
     unsigned int stack_overflows = 0;
     float maximum_distance_error = 0.0f;
 };
@@ -153,6 +157,7 @@ options parse_options (int argc, char **argv)
         else if (argument == "--max-level") result.max_level = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--max-leaf-scan") result.max_leaf_scan = std::stoi(next_argument(argc, argv, idx));
         else if (argument == "--radius") result.radius = std::stof(next_argument(argc, argv, idx));
+        else if (argument == "--quality-only") result.quality_only = true;
         else if (argument == "--distribution") result.distribution = next_argument(argc, argv, idx);
         else if (argument == "--output") result.output = next_argument(argc, argv, idx);
         else throw std::invalid_argument("unknown argument: " + argument);
@@ -355,7 +360,91 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
     return false;
 }
 
+void report_difference (const char *label, int idx_query,
+    const std::vector<std::pair<float, int>> &actual,
+    const std::vector<std::pair<float, int>> &expected)
+{
+    std::vector<std::pair<int, float>> actual_by_idx;
+    std::vector<std::pair<int, float>> expected_by_idx;
+    for (const auto &neighbor : actual) actual_by_idx.emplace_back(neighbor.second, neighbor.first);
+    for (const auto &neighbor : expected) expected_by_idx.emplace_back(neighbor.second, neighbor.first);
+    std::sort(actual_by_idx.begin(), actual_by_idx.end());
+    std::sort(expected_by_idx.begin(), expected_by_idx.end());
+
+    std::cerr << "  " << label << " query " << idx_query
+        << " actual-count=" << actual.size() << " expected-count=" << expected.size();
+    int reported = 0;
+    std::size_t idx_actual = 0;
+    std::size_t idx_expected = 0;
+    while (idx_actual < actual_by_idx.size() || idx_expected < expected_by_idx.size())
+    {
+        if (idx_expected == expected_by_idx.size()
+            || (idx_actual < actual_by_idx.size()
+                && actual_by_idx[idx_actual].first < expected_by_idx[idx_expected].first))
+        {
+            if (reported++ < 4) std::cerr << " extra=(" << actual_by_idx[idx_actual].first
+                << ',' << actual_by_idx[idx_actual].second << ')';
+            idx_actual++;
+            continue;
+        }
+        if (idx_actual == actual_by_idx.size()
+            || expected_by_idx[idx_expected].first < actual_by_idx[idx_actual].first)
+        {
+            if (reported++ < 4) std::cerr << " missing=(" << expected_by_idx[idx_expected].first
+                << ',' << expected_by_idx[idx_expected].second << ')';
+            idx_expected++;
+            continue;
+        }
+        idx_actual++;
+        idx_expected++;
+    }
+    if (!actual.empty()) std::cerr << " actual-kth=" << actual.back().first;
+    if (!expected.empty()) std::cerr << " expected-kth=" << expected.back().first;
+    std::cerr << std::endl;
+}
+
+std::vector<std::pair<float, int>> get_record_neighbors (
+    const std::vector<morton_point> &records, const float3 &query, float radius)
+{
+    std::vector<std::pair<float, int>> result;
+    float radius_sq = radius*radius;
+    for (const morton_point &record : records)
+    {
+        float dx = query.x - record.cartesian.x;
+        float dy = query.y - record.cartesian.y;
+        float dz = query.z - record.cartesian.z;
+        float dist_sq = dx*dx + dy*dy + dz*dz;
+        if (dist_sq <= radius_sq) result.emplace_back(dist_sq, record.index_old);
+    }
+    std::sort(result.begin(), result.end());
+    if (result.size() > K) result.resize(K);
+    return result;
+}
+
+void diagnose_morton_failure (quality_stats &quality, int idx_query,
+    const std::vector<morton_point> &records, const float3 &query,
+    const std::vector<std::pair<float, int>> &actual,
+    const std::vector<std::pair<float, int>> &physical_brute, float radius)
+{
+    if (quality.first_failure_query < 0) quality.first_failure_query = idx_query;
+    report_difference("Morton", idx_query, actual, physical_brute);
+    std::vector<std::pair<float, int>> record = get_record_neighbors(
+        records, query, radius
+    );
+    if (differs_from_brute(actual, record, quality.maximum_distance_error))
+    {
+        quality.morton_record_mismatches++;
+        report_difference("Morton traversal versus stored records", idx_query, actual, record);
+    }
+    if (differs_from_brute(record, physical_brute, quality.maximum_distance_error))
+    {
+        quality.record_geometry_mismatches++;
+        report_difference("stored records versus physical brute force", idx_query, record, physical_brute);
+    }
+}
+
 void compare_brute_force (quality_stats &quality, const std::vector<float3> &points,
+    const std::vector<morton_point> &records,
     const std::vector<int> &kd_idx, const std::vector<float> &kd_dist,
     const std::vector<int> &morton_idx, const std::vector<float> &morton_dist,
     int query_count, float radius)
@@ -384,11 +473,17 @@ void compare_brute_force (quality_stats &quality, const std::vector<float3> &poi
         if (differs_from_brute(kd_neighbors, expected, quality.maximum_distance_error))
             quality.kd_brute_mismatches++;
         if (differs_from_brute(morton_neighbors, expected, quality.maximum_distance_error))
+        {
             quality.morton_brute_mismatches++;
+            diagnose_morton_failure(
+                quality, idx_query, records, query, morton_neighbors, expected, radius
+            );
+        }
     }
 }
 
 void compare_disagreements_brute_force (quality_stats &quality, const std::vector<float3> &points,
+    const std::vector<morton_point> &records,
     const std::vector<int> &kd_idx, const std::vector<float> &kd_dist,
     const std::vector<int> &morton_idx, const std::vector<float> &morton_dist,
     const std::vector<int> &disagreement_queries, float radius)
@@ -419,7 +514,12 @@ void compare_disagreements_brute_force (quality_stats &quality, const std::vecto
         if (differs_from_brute(kd_neighbors, expected, quality.maximum_distance_error))
             quality.kd_disagreement_brute_mismatches++;
         if (differs_from_brute(morton_neighbors, expected, quality.maximum_distance_error))
+        {
             quality.morton_disagreement_brute_mismatches++;
+            diagnose_morton_failure(
+                quality, idx_query, records, query, morton_neighbors, expected, radius
+            );
+        }
     }
 }
 
@@ -428,6 +528,7 @@ void write_json (const options &config, float root_width, int node_count, int le
     std::size_t kd_bytes, std::size_t morton_bytes, const occupancy_stats &occupancy,
     const quality_stats &quality, double mean_cells, double mean_candidates)
 {
+    double query_speedup = (morton_query_ms > 0.0) ? kd_query_ms / morton_query_ms : 0.0;
     std::ostream *output = &std::cout;
     std::ofstream file;
     if (!config.output.empty())
@@ -454,6 +555,7 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"distribution\": \"" << config.distribution << "\",\n"
         << "  \"k\": " << K << ",\n"
         << "  \"radius\": " << config.radius << ",\n"
+        << "  \"quality_only\": " << (config.quality_only ? "true" : "false") << ",\n"
         << "  \"root_width\": " << root_width << ",\n"
         << "  \"leaf_target\": " << config.leaf_target << ",\n"
         << "  \"max_level\": " << config.max_level << ",\n"
@@ -470,13 +572,16 @@ void write_json (const options &config, float root_width, int node_count, int le
         << quality.kd_disagreement_brute_mismatches << ",\n"
         << "  \"morton_disagreement_brute_mismatches\": "
         << quality.morton_disagreement_brute_mismatches << ",\n"
+        << "  \"morton_record_mismatches\": " << quality.morton_record_mismatches << ",\n"
+        << "  \"record_geometry_mismatches\": " << quality.record_geometry_mismatches << ",\n"
+        << "  \"first_failure_query\": " << quality.first_failure_query << ",\n"
         << "  \"stack_overflows\": " << quality.stack_overflows << ",\n"
         << "  \"maximum_distance_error\": " << quality.maximum_distance_error << ",\n"
         << "  \"kd_build_ms\": " << kd_build_ms << ",\n"
         << "  \"morton_build_ms\": " << morton_build_ms << ",\n"
         << "  \"kd_query_ms\": " << kd_query_ms << ",\n"
         << "  \"morton_query_ms\": " << morton_query_ms << ",\n"
-        << "  \"query_speedup\": " << kd_query_ms / morton_query_ms << ",\n"
+        << "  \"query_speedup\": " << query_speedup << ",\n"
         << "  \"kd_persistent_bytes\": " << kd_bytes << ",\n"
         << "  \"morton_persistent_bytes\": " << morton_bytes << ",\n"
         << "  \"persistent_memory_ratio\": " << static_cast<double>(morton_bytes) / kd_bytes << ",\n"
@@ -589,17 +694,22 @@ int main (int argc, char **argv)
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy candidate visits");
         _morton_cuda_check(cudaMemcpy(quality_overflows.data(), dev_quality_overflows,
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy quality stack-overflow flags");
+        morton_view morton_data = morton.view();
+        std::vector<morton_point> morton_records(morton_data.point_count);
+        _morton_cuda_check(cudaMemcpy(morton_records.data(), morton_data.points,
+            sizeof(morton_point)*morton_data.point_count, cudaMemcpyDeviceToHost),
+            "copy Morton records for quality diagnosis");
 
         std::vector<int> disagreement_queries;
         quality_stats quality = compare_neighbors(
             kd_idx, kd_dist, morton_idx, morton_dist, config.queries, disagreement_queries
         );
         compare_brute_force(
-            quality, points, kd_idx, kd_dist, morton_idx, morton_dist,
+            quality, points, morton_records, kd_idx, kd_dist, morton_idx, morton_dist,
             config.brute_queries, config.radius
         );
         compare_disagreements_brute_force(
-            quality, points, kd_idx, kd_dist, morton_idx, morton_dist,
+            quality, points, morton_records, kd_idx, kd_dist, morton_idx, morton_dist,
             disagreement_queries, config.radius
         );
         for (unsigned int overflow : quality_overflows)
@@ -610,35 +720,41 @@ int main (int argc, char **argv)
         double *dev_kd_checksum = nullptr;
         double *dev_morton_checksum = nullptr;
         unsigned int *dev_performance_overflows = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_kd_checksum, sizeof(double)*config.particles), "allocate KD checksum");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
-            "allocate Morton checksum");
-        _morton_cuda_check(cudaMalloc((void**)&dev_performance_overflows, sizeof(unsigned int)*config.particles),
-            "allocate performance stack-overflow flags");
+        double kd_query_ms = 0.0;
+        double morton_query_ms = 0.0;
+        if (!config.quality_only)
+        {
+            _morton_cuda_check(cudaMalloc((void**)&dev_kd_checksum, sizeof(double)*config.particles),
+                "allocate KD checksum");
+            _morton_cuda_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
+                "allocate Morton checksum");
+            _morton_cuda_check(cudaMalloc((void**)&dev_performance_overflows,
+                sizeof(unsigned int)*config.particles), "allocate performance stack-overflow flags");
 
-        int kd_blocks = (config.particles + KD_THREADS - 1) / KD_THREADS;
-        double kd_query_ms = kernel_time_ms([&]
-        {
-            kd_checksum<K> <<< kd_blocks, KD_THREADS >>> (
-                dev_kd_checksum, dev_points, config.particles,
-                dev_kd_tree, dev_kd_bounds, config.particles, config.radius
-            );
-        }, config.repeats);
-        double morton_query_ms = kernel_time_ms([&]
-        {
-            morton_checksum<K> <<< config.particles, MORTON_THREADS >>> (
-                dev_morton_checksum, dev_performance_overflows,
-                dev_points, config.particles, morton.view(), config.radius
-            );
-        }, config.repeats);
+            int kd_blocks = (config.particles + KD_THREADS - 1) / KD_THREADS;
+            kd_query_ms = kernel_time_ms([&]
+            {
+                kd_checksum<K> <<< kd_blocks, KD_THREADS >>> (
+                    dev_kd_checksum, dev_points, config.particles,
+                    dev_kd_tree, dev_kd_bounds, config.particles, config.radius
+                );
+            }, config.repeats);
+            morton_query_ms = kernel_time_ms([&]
+            {
+                morton_checksum<K> <<< config.particles, MORTON_THREADS >>> (
+                    dev_morton_checksum, dev_performance_overflows,
+                    dev_points, config.particles, morton.view(), config.radius
+                );
+            }, config.repeats);
 
-        std::vector<unsigned int> performance_overflows(config.particles);
-        _morton_cuda_check(cudaMemcpy(performance_overflows.data(), dev_performance_overflows,
-            sizeof(unsigned int)*config.particles, cudaMemcpyDeviceToHost),
-            "copy performance stack-overflow flags");
-        for (unsigned int overflow : performance_overflows)
-        {
-            quality.stack_overflows += overflow;
+            std::vector<unsigned int> performance_overflows(config.particles);
+            _morton_cuda_check(cudaMemcpy(performance_overflows.data(), dev_performance_overflows,
+                sizeof(unsigned int)*config.particles, cudaMemcpyDeviceToHost),
+                "copy performance stack-overflow flags");
+            for (unsigned int overflow : performance_overflows)
+            {
+                quality.stack_overflows += overflow;
+            }
         }
         double mean_cells = 0.0;
         double mean_candidates = 0.0;
@@ -657,9 +773,9 @@ int main (int argc, char **argv)
             quality, mean_cells, mean_candidates
         );
 
-        cudaFree(dev_kd_checksum);
-        cudaFree(dev_morton_checksum);
-        cudaFree(dev_performance_overflows);
+        if (dev_kd_checksum) cudaFree(dev_kd_checksum);
+        if (dev_morton_checksum) cudaFree(dev_morton_checksum);
+        if (dev_performance_overflows) cudaFree(dev_performance_overflows);
         cudaFree(dev_kd_idx);
         cudaFree(dev_morton_idx);
         cudaFree(dev_kd_dist);

@@ -88,7 +88,7 @@ refinement:
 | circular orbit | timesteps in one orbit | $\Delta t=2\pi/N$, $N_P=64$ |
 | 2D/3D diffusion | ensemble-control parameter | $N_P=16N^2$ on a fixed mesh |
 | drag, radiation, P-R, collision algebra | no physical dependence on $N$ | only the first requested value is built |
-| KNN benchmark | no dependence on `--res` | $10^5$ particles by default; add `--knn-full` for $10^6$ |
+| KNN benchmark | no dependence on `--res` | $10^5$ particles by default; add `--knn-full` for $10^6$ and $10^7$ |
 
 Consequently, an order derived from the orbit is a temporal order, while decreasing diffusion
 errors demonstrate Monte Carlo sampling convergence. The exactly constructed grid cases are
@@ -117,7 +117,7 @@ validator constructs all reference values independently from these raw outputs a
 | `test_prdrag_2d` | combined gas and P-R exponential response | exact component-dependent damping at zero optical depth |
 | `test_collision_2d` | 2D accessible-neighborhood measure and coagulation-kernel numerators | disk and circular-cap areas plus constant, additive, and product rates |
 | `test_collision_3d` | 3D accessible-neighborhood measure and coagulation-kernel numerators | interior, radial-cap, and polar-cap ball volumes plus the same three rates |
-| `test_knn` | exact KD-tree and adaptive-Morton construction, cooperative top-$K$, periodic query images, and production boundary ghosts | independent brute-force neighbors, adversarial topology, overflow-free traversal, and timing/memory records |
+| `test_knn` | exact KD-tree and adaptive-Morton construction, block-parallel sorted Morton top-$K$, periodic-image correctness, and production boundary ghosts | independent brute-force neighbors, adversarial topology, overflow-free traversal, and production-relevant timing/memory records |
 
 ## Grid projection and optical depth
 
@@ -498,10 +498,10 @@ It compiles four drivers:
 - ordinary smooth, ring, and clump benchmarks in 2D and 3D
 - adversarial edge cases for ties, coincident points, cutoff equality, sparse neighborhoods, and
   Morton split planes
-- periodic query-image cases covering both wedge faces, full-$2\pi$ geometry, image overlap, and
-  deduplication
-- periodic wedge benchmarks comparing the three-copy KD-tree, query-image Morton, and the
-  production compact boundary-ghost Morton owner
+- correctness-only periodic query-image cases covering both wedge faces, full-$2\pi$ geometry,
+  image overlap, and deduplication
+- periodic wedge benchmarks comparing the production three-copy KD-tree and compact
+  boundary-ghost Morton owner
 - a deliberately narrow seam-clump wedge that forces physical-identifier deduplication and the
   production $3N_K$ fallback rather than the ordinary disjoint-image shortcut
 
@@ -527,7 +527,7 @@ meaning at each level.
 | ordinary adversarial cases | exhaustive CPU enumeration of every candidate | exact selected identifiers and valid count, squared-distance agreement, and zero traversal overflows |
 | periodic adversarial cases | exhaustive CPU minimum-image enumeration over the physical particle set | the same neighbor conditions, no repeated physical identifier, the expected number of query images, and zero overflows |
 | ordinary smooth/ring/clump matrix | exhaustive CPU search for a configured subset and every KD-tree/Morton disagreement; the remaining queries have differential agreement but no independent ground truth | zero KD-tree/Morton query disagreements, zero brute-force failures, and zero Morton traversal overflows |
-| periodic wedge matrix | exhaustive CPU minimum-image search for a configured subset and every disagreement among three GPU methods | every brute-force-checked KD-tree, query-image Morton, and ghost-Morton result is valid, with zero Morton overflows; backend differences are allowed only when each differing result is independently equivalent to brute force |
+| periodic wedge matrix | exhaustive CPU minimum-image search for a configured subset and every KD-tree/Morton disagreement | every brute-force-checked KD-tree and compact-ghost Morton result is valid, with zero Morton overflows; backend differences are allowed only when each differing result is independently equivalent to brute force |
 
 For the non-periodic CPU reference, every point inside the inclusive cutoff
 $d^2\le q^2$ is collected, sorted lexicographically by $(d^2,\mathrm{id})$, and truncated to
@@ -541,7 +541,7 @@ $$
 The adversarial cases also require unused output slots to be exactly represented by identifier
 `-1` and infinite distance. They exercise equal-distance identifiers, coincident points, a point
 exactly on the cutoff, fewer than $N_K$ valid points, and points on Morton split planes in both 2D
-and 3D.
+and 3D. The validator independently sorts valid returned pairs on the host before comparison.
 
 For a periodic wedge, the CPU reference evaluates the original query and its two adjacent images,
 retains the minimum squared distance to each physical identifier, applies the inclusive cutoff,
@@ -558,20 +558,31 @@ to adjudicate a disagreement. This is strong differential coverage but is not ex
 validation of all 4096 queries when all GPU backends make the same choice. The adversarial drivers
 provide the complementary fully exhaustive small-set checks.
 
-The clean A100 validation baseline covered:
+The latest clean CUDA validation covered:
 
 - 10 of 10 ordinary adversarial cases
 - 10 of 10 periodic adversarial cases
-- 12 smooth, ring, and clump cases at $N_P=10^5$ and $10^6$
-- 16 periodic-wedge cases at $N_P=10^5$ and $10^6$
+- 18 of 18 smooth, ring, and clump cases at $N_P=10^5$, $10^6$, and $10^7$
+- 30 of 30 periodic-wedge cases at $N_P=10^5$, $10^6$, and $10^7$
 - copied collision-runtime comparisons in full-disk 2D, wedge 2D, full-disk 3D, and full-disk 3D
   at $N_P=10^6$
 
-All recorded topology checks passed, including the million-particle cases. At $N_P=10^6$, ordinary
-Morton query time ranged from 0.991 to 1.136 times the KD-tree speed while using 0.706-0.752 of its
-persistent search memory. For periodic wedges, boundary ghosts gave KD-tree/ghost query speed
-ratios of 1.007-1.133 and used 0.249-0.455 of the three-image KD-tree persistent memory. Ratios above
-one favor Morton. These are hardware-specific A100 measurements, not universal performance claims.
+All topology checks passed, including every ten-million-particle case. Ordinary sorted-Morton
+speed ratios $t_{\rm KD}/t_{\rm Morton}$ ranged from 0.698 to 0.970 while using 0.706-0.764 of the
+KD-tree persistent search memory. Periodic-wedge ratios ranged from 0.663 to 1.281 and used
+0.247-0.492 of the three-image KD-tree persistent memory. Within the $N_P=10^7$ subset, the
+ordinary ratios were 0.842-0.930 and the wedge ratios were 0.718-0.926, so KD-tree was faster in
+every ten-million-particle timing while Morton retained its memory advantage. Values of
+$t_{\rm KD}/t_{\rm Morton}$ above one favor Morton. These are hardware-specific measurements of
+the isolated query batches, not universal performance or end-to-end collision claims.
+
+Before this matrix, intermittent ordinary and wedge mismatches exposed a shared-memory traversal
+race. Racecheck reported thread zero overwriting the shared node index while other warps still read
+its previous value, with secondary hazards in the sorted merge. Adding the missing block barrier
+before node-index replacement reduced the Racecheck result from three reported hazards to zero.
+The complete Morton matrices passed without topology, brute-force, geometry-record, or overflow
+failures. The benchmark retains `--quality-only` plus record-versus-traversal counters
+so future sanitizer runs can isolate the quality kernel without timing the full query batch.
 
 Those standalone memory ratios compare the owned search hierarchies while treating query points as
 common inputs. The copied-runtime experiments counted backend-specific support arrays as well:
@@ -579,13 +590,14 @@ Morton/KD-tree storage was 1.379-1.446 for the tested full disks and 0.468 for t
 The promoted production owner has changed since those measurements, so current total VRAM must be
 remeasured rather than inferred from the hierarchy-only ratios.
 
-The archived JSON, manifests, environment records, and terminal summaries under
-`qav/swarm/test_knn/out/` record the clean promoted-source run at base revision
-`115aa791f9db149bf3d53838df2efc86134994b7`; `worktree.txt` records the accompanying uncommitted
-state. The ordinary and wedge manifests report 12 of 12 and
-16 of 16 passing cases, respectively; both adversarial drivers report 10 of 10. A separate
-20-execution repeat of `smooth_3d_N100000` produced zero topology, brute-force, or overflow
-failures in every execution and the same maximum distance error,
+The latest terminal record reports 18 of 18 ordinary and 30 of 30 wedge cases passing through
+$N_P=10^7$. The machine-readable JSON and manifests currently retained under
+`qav/swarm/test_knn/out/` are an older promoted-source archive at base revision
+`115aa791f9db149bf3d53838df2efc86134994b7`; `worktree.txt` records its accompanying uncommitted
+state. Those retained manifests contain only 12 ordinary and 16 wedge cases and therefore must not
+be cited as the source of the $10^7$ results. Both retained adversarial drivers report 10 of 10,
+and a separate 20-execution repeat of `smooth_3d_N100000` produced zero topology, brute-force, or
+overflow failures in every execution with maximum distance error
 $9.313225746\times10^{-10}$.
 
 The standalone `*_query_ms` fields measure one complete batch of $N_P$ search queries using CUDA
@@ -595,13 +607,18 @@ host-device transfers, brute-force validation, collision-rate physics, and colli
 corresponding `*_build_ms` fields report index construction separately. These search-only timings
 must not be presented as end-to-end collision-operator or simulation timings.
 
+The current elapsed-time tables contain only production search structures: the periodic KD-tree
+with particle images and compact-ghost Morton with block-parallel sorted top-$K$. Query-image
+Morton remains a correctness-only adversarial driver and contributes no timing, memory, or wedge
+benchmark JSON fields.
+
 The promoted QA benchmark is not performance-identical to the former laboratory KD-tree driver.
 It uses the production `index_old` heap, and its periodic-wedge path deduplicates physical
 particles represented by multiple KD-tree images. The former driver used the stock KD-tree heap
 without that per-candidate deduplication. Consequently, historical laboratory ratios must not be
 compared directly with the promoted archive; only runs of one source revision are suitable for
 backend performance comparison.
-The current optimized heap stores `index_old` directly and activates its duplicate scan only
+The current optimized KD-tree heap stores `index_old` directly and activates its duplicate scan only
 for geometrically overlapping image neighborhoods; the JSON field `kd_deduplicate` records which
 path each wedge case exercises.
 
@@ -629,7 +646,7 @@ Before stochastic events, a runtime comparison requires:
 - collision-rate relative $L_2\le10^{-5}$ and maximum relative error $\le10^{-3}$
 - KNN-radius errors within the same probe tolerances
 
-After collision evolution, different heap orders may consume the random target differently and
+After collision evolution, different backend neighbor orders may consume the random target differently and
 produce different individual partners. Therefore byte-equal RNG state, byte-equal particle sizes,
 and trajectory closeness are diagnostics, not pass requirements. Instead, each of the eight final
 fields $(x,y,z,v_x,v_y,v_z,s,N)$ must pass a two-sample Kolmogorov–Smirnov comparison. The family
@@ -772,12 +789,20 @@ The KNN group can also be run directly:
 python3 qav/swarm/test_knn/run.py
 ```
 
-Add the million-particle matrix with either
+Add the million- and ten-million-particle matrices with either
 
 ```bash
 python3 qav/swarm/test_knn/run.py --full
 python3 qav/swarm/test_common/run_suite.py --group knn --knn-full
 ```
+
+These commands build and test the sole Morton path, the block-parallel sorted top-$K$ merge, against
+the KD-tree and independent brute-force references. The full run contains 18 ordinary cases and
+30 periodic-wedge cases across $N_P=10^5$, $10^6$, and $10^7$; the $10^7$ cases are substantially
+more expensive and require correspondingly more GPU memory. The runners print the KD-tree and
+Morton query batch times and their ratio. Standalone JSON, manifests, and analysis summaries are
+written directly under `qav/swarm/test_knn/out/`, with periodic-wedge results in its `wedge/`
+subdirectory.
 
 Use `--build-only` to compile every selected configuration without executing or validating it.
 Each resolution is cleaned and rebuilt because the mesh sizes, particle count, or timestep count

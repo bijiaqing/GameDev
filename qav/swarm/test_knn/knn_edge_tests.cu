@@ -2,7 +2,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -218,22 +217,39 @@ bool run_case (const edge_case &test)
         std::vector<std::pair<float, int>> expected = brute_neighbors(
             test.points, test.queries[idx_query], test.radius
         );
+        std::vector<std::pair<float, int>> actual;
         for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
         {
             std::size_t idx_out = idx_query*K + idx_neighbor;
-            int expected_idx = (idx_neighbor < static_cast<int>(expected.size()))
-                ? expected[idx_neighbor].second : -1;
-            float expected_dist = (idx_neighbor < static_cast<int>(expected.size()))
-                ? expected[idx_neighbor].first : std::numeric_limits<float>::infinity();
-            float error = std::fabs(distances[idx_out] - expected_dist);
-            bool distance_matches = (std::isinf(distances[idx_out]) && std::isinf(expected_dist))
-                || error <= 2.0e-6f*std::max(1.0f, std::fabs(expected_dist));
-            if (indices[idx_out] == expected_idx && distance_matches) continue;
+            if (indices[idx_out] >= 0)
+            {
+                actual.emplace_back(distances[idx_out], indices[idx_out]);
+                continue;
+            }
+            if (indices[idx_out] == -1 && std::isinf(distances[idx_out])) continue;
+            passed = false;
+            std::cerr << "  query " << idx_query << " invalid slot " << idx_neighbor
+                << " has index " << indices[idx_out] << " and distance " << distances[idx_out] << std::endl;
+        }
+        std::sort(actual.begin(), actual.end());
+        if (actual.size() != expected.size())
+        {
+            passed = false;
+            std::cerr << "  query " << idx_query << " expected " << expected.size()
+                << " neighbors but received " << actual.size() << std::endl;
+        }
+        std::size_t common = std::min(actual.size(), expected.size());
+        for (std::size_t idx_neighbor = 0; idx_neighbor < common; idx_neighbor++)
+        {
+            float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
+            bool distance_matches = error <= 2.0e-6f
+                *std::max(1.0f, std::fabs(expected[idx_neighbor].first));
+            if (actual[idx_neighbor].second == expected[idx_neighbor].second && distance_matches) continue;
 
             passed = false;
             std::cerr << "  query " << idx_query << " neighbor " << idx_neighbor
-                << " expected=(" << expected_idx << ',' << expected_dist << ")"
-                << " actual=(" << indices[idx_out] << ',' << distances[idx_out] << ')' << std::endl;
+                << " expected=(" << expected[idx_neighbor].second << ',' << expected[idx_neighbor].first << ")"
+                << " actual=(" << actual[idx_neighbor].second << ',' << actual[idx_neighbor].first << ')' << std::endl;
         }
         if (overflows[idx_query] != 0)
         {

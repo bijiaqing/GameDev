@@ -90,7 +90,7 @@ Two realistic policies are:
 1. port the KD-tree conservatively, retaining it as a CUDA-reference-compatible backend
 2. port the production adaptive-Morton backend's radix sort, scan, hierarchy, compact boundary ghosts, and cooperative selection with rocThrust and rocPRIM
 
-The Morton path is the preferable long-term ROCm target because its data are compact arrays and its operations have direct CUDA and ROCm analogues. It is selectable in the production swarm build, uses location-dependent query radii and compact periodic boundary ghosts, and has exact standalone CUDA comparisons through $N_P=10^6$. The promoted source still needs a clean native rerun, and radial halo bins, GPU-native hierarchy construction, multi-GPU exchange, and HIP-specific tuning remain future work.
+The Morton path is the preferable long-term ROCm target because its data are compact arrays and its operations have direct CUDA and ROCm analogues. It is selectable in the production swarm build, uses location-dependent query radii and compact periodic boundary ghosts, and its clean standalone CUDA matrices pass through $N_P=10^7$. Current end-to-end collision-runtime comparisons, radial halo bins, GPU-native hierarchy construction, multi-GPU exchange, and HIP-specific tuning remain future work.
 
 Equal-key sorting need not create identical internal trees on CUDA and ROCm. Verification should compare exact physical neighbor identifiers outside defined distance ties, followed by collision rates and statistical evolution.
 

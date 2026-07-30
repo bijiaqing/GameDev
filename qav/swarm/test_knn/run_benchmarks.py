@@ -29,7 +29,10 @@ def capture(command: list[str], cwd: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--particles", nargs="+", type=int, default=[100_000, 1_000_000])
+    parser.add_argument(
+        "--particles", nargs="+", type=int,
+        default=[100_000, 1_000_000, 10_000_000],
+    )
     parser.add_argument("--distribution", nargs="+", choices=("smooth", "ring", "clump"), default=None)
     parser.add_argument("--dim", nargs="+", type=int, choices=(2, 3), default=[2, 3])
     parser.add_argument("--queries", type=int, default=4096)
@@ -53,7 +56,9 @@ def main() -> None:
     # K is a compile-time top-K capacity for both backends, so compile once for
     # the complete matrix and then vary only runtime particle distributions.
     subprocess.run(
-        ["make", "-C", str(test_root), f"ARCH={args.arch}", f"K={args.k}"],
+        [
+            "make", "-C", str(test_root), f"ARCH={args.arch}", f"K={args.k}",
+        ],
         check=True,
     )
 
@@ -111,6 +116,9 @@ def main() -> None:
                         f"Morton/brute={record['morton_brute_mismatches']}  "
                         f"KD/disagreements={record['kd_disagreement_brute_mismatches']}  "
                         f"Morton/disagreements={record['morton_disagreement_brute_mismatches']}  "
+                        f"Morton/records={record['morton_record_mismatches']}  "
+                        f"records/geometry={record['record_geometry_mismatches']}  "
+                        f"first-query={record['first_failure_query']}  "
                         f"overflows={record['stack_overflows']}  "
                         f"max-error={record['maximum_distance_error']:.3e}",
                         flush=True,
