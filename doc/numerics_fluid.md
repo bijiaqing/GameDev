@@ -104,8 +104,8 @@ R_{\min,\mathrm{init}}
 Y_{\min}\min[\sin(Z_{\min}),\sin(Z_{\max})],
 $$
 
-rather than \(Y_{\min}\). This prevents high-latitude cells with \(R<Y_{\min}\) from being clipped
-to an unrelated radial profile value. In 2D, \(R_{\min,\mathrm{init}}=Y_{\min}\).
+rather than $Y_{\min}$. This prevents high-latitude cells with $R<Y_{\min}$ from being clipped
+to an unrelated radial profile value. In 2D, $R_{\min,\mathrm{init}}=Y_{\min}$.
 
 The edge convolution is not renormalized. In 2D the convolved surface density is evolved directly
 and its unresolved vertical profile is assumed to be well mixed with the gas. In 3D it is embedded

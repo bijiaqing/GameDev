@@ -8,8 +8,8 @@
 #include <curand_kernel.h>
 #endif
 
-#ifdef COLLISION
-#include "cukd/builder.h"
+#ifdef COLLISION_KDTREE
+#include <kdtree/builder.h>
 #endif
 
 using real = double;
@@ -19,8 +19,8 @@ using real3 = double3;
 using curs = curandState;
 #endif
 
-#ifdef COLLISION
-using bbox = cukd::box_t<float3>;
+#ifdef COLLISION_KDTREE
+using bbox = kdtree::box_t<float3>;
 #endif
 
 #ifdef TEST_RES
@@ -147,6 +147,13 @@ constexpr real V_FRAG = 1.0;
 constexpr real CFL_COL = 0.01;
 #endif
 
+#ifdef COLLISION_MORTON
+constexpr int MORTON_TPB = 256;
+constexpr int MORTON_LEAF_TARGET = 128;
+constexpr int MORTON_MAX_LEVEL = 20;
+constexpr int MORTON_WORK_SIZE = 1024;
+#endif
+
 constexpr int SAVE_MAX = 1;
 constexpr real DT_OUT = 1.0;
 constexpr real DT_MAX = 1.0;
@@ -163,8 +170,8 @@ struct swarm
 #endif
 };
 
-#ifdef COLLISION
-struct tree
+#ifdef COLLISION_KDTREE
+struct kdtree_node
 {
     float3 cartesian;
     int index_old;
@@ -172,14 +179,14 @@ struct tree
     int image;
 };
 
-struct tree_traits
+struct kdtree_traits
 {
     using point_t = float3;
     enum { has_explicit_dim = true };
-    static inline __host__ __device__ const point_t &get_point (const tree &node) { return node.cartesian; }
-    static inline __host__ __device__ float get_coord (const tree &node, int dim) { return cukd::get_coord(node.cartesian, dim); }
-    static inline __host__ __device__ int get_dim (const tree &node) { return node.split_dim; }
-    static inline __host__ __device__ void set_dim (tree &node, int dim) { node.split_dim = dim; }
+    static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
+    static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
 };
 #endif
 
@@ -189,7 +196,7 @@ constexpr int NB_G = N_G / TPB + 1;
 constexpr int NB_X = N_Y*N_Z / TPB + 1;
 constexpr int NB_Y = N_X*N_Z / TPB + 1;
 
-#ifdef COLLISION
+#ifdef COLLISION_KDTREE
 constexpr int N_T = N_P;
 constexpr int NB_T = N_T / TPB + 1;
 #endif

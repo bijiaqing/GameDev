@@ -16,6 +16,7 @@ GROUPS = {
     "diffusion": ["test_diffusion_2d", "test_diffusion_3d"],
     "radiation": ["test_radiation_2d", "test_prdrag_2d"],
     "collision": ["test_collision_2d", "test_collision_3d"],
+    "knn": ["test_knn"],
 }
 
 # Rebuilding one-step algebra checks at several TEST_RES values adds no
@@ -26,6 +27,7 @@ FIXED_RESOLUTION = {
     "test_prdrag_2d",
     "test_collision_2d",
     "test_collision_3d",
+    "test_knn",
 }
 
 
@@ -35,6 +37,7 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--build-only", action="store_true")
+    parser.add_argument("--knn-full", action="store_true")
     args = parser.parse_args()
 
     resolutions = args.res[:2] if args.quick else args.res
@@ -49,6 +52,8 @@ def main() -> None:
         command = [sys.executable, str(root/model/"run.py"), "--res", *(str(value) for value in model_resolutions)]
         if args.build_only:
             command.append("--build-only")
+        if model == "test_knn" and args.knn_full:
+            command.append("--full")
         print(f"\n=== {model} ===", flush=True)
         subprocess.run(command, check=True)
 

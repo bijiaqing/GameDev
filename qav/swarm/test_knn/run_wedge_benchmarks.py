@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+
+"""Run the periodic-wedge comparison between KD-tree and Morton methods"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--particles", nargs="+", type=int, default=[100_000, 1_000_000])
+    parser.add_argument("--dim", nargs="+", type=int, choices=(2, 3), default=[2, 3])
+    parser.add_argument(
+        "--distribution",
+        nargs="+",
+        choices=("smooth", "ring", "interior_clump", "seam_clump"),
+        default=None,
+    )
+    parser.add_argument("--queries", type=int, default=4096)
+    parser.add_argument("--brute-queries", type=int, default=32)
+    parser.add_argument("--repeat", type=int, default=5)
+    parser.add_argument("--radius", type=float, default=0.1)
+    parser.add_argument("--leaf-target", type=int, default=128)
+    parser.add_argument("--arch", default="sm_80")
+    parser.add_argument("--k", type=int, default=200)
+    args = parser.parse_args()
+
+    test_root = Path(__file__).resolve().parent
+    executable = test_root / "bin" / "knn_wedge_benchmark"
+    result_root = test_root / "out" / "wedge"
+    result_root.mkdir(parents=True, exist_ok=True)
+    distributions = args.distribution or ["smooth", "ring", "interior_clump", "seam_clump"]
+
+    # K is compiled into the candidate-list types used by both search backends.
+    subprocess.run(
+        ["make", "-C", str(test_root), "wedge", f"ARCH={args.arch}", f"K={args.k}"],
+        check=True,
+    )
+
+    cases = [(distribution, None) for distribution in distributions]
+    cases.append(("seam_clump", 0.2))
+    completed = []
+    for dimension in args.dim:
+        for distribution, wedge_width in cases:
+            for particles in args.particles:
+                prefix = "narrow_" if wedge_width is not None else ""
+                name = f"{prefix}{distribution}_{dimension}d_N{particles}"
+                output = result_root / f"{name}.json"
+                command = [
+                    str(executable),
+                    "--particles", str(particles),
+                    "--queries", str(min(args.queries, particles)),
+                    "--brute-queries", str(min(args.brute_queries, args.queries, particles)),
+                    "--repeat", str(args.repeat),
+                    "--dim", str(dimension),
+                    "--distribution", distribution,
+                    "--radius", str(args.radius),
+                    "--leaf-target", str(args.leaf_target),
+                    "--output", str(output),
+                ]
+                if wedge_width is not None:
+                    command.extend(("--x-min", str(-0.5*wedge_width), "--x-max", str(0.5*wedge_width)))
+                print(f"\n=== {name} ===", flush=True)
+                subprocess.run(command, cwd=test_root.parent, check=True)
+                record = json.loads(output.read_text())
+                completed.append((name, record))
+                print(
+                    f"quality={record['quality_passed']}  "
+                    f"KD={record['kd_query_ms']:.3f} ms  "
+                    f"Query={record['morton_query_ms']:.3f} ms  "
+                    f"Ghost={record['ghost_query_ms']:.3f} ms  "
+                    f"ghost-speedup={record['ghost_query_speedup']:.3f}  "
+                    f"images={record['mean_query_images']:.3f}"
+                )
+
+    manifest = {
+        "cases": len(completed),
+        "all_quality_passed": all(record["quality_passed"] for _, record in completed),
+        "files": [f"{name}.json" for name, _ in completed],
+    }
+    (result_root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
+if __name__ == "__main__":
+    main()

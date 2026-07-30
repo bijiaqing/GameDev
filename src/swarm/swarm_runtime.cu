@@ -3,6 +3,7 @@
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
 #include <sstream>          // std::stringstream
+#include <stdexcept>        // std::runtime_error
 
 #if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // thrust::device_ptr
@@ -11,6 +12,10 @@
 
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
+
+#ifdef COLLISION_MORTON
+#include <morton/morton_ghost.cuh>
+#endif // COLLISION_MORTON
 
 std::mt19937 rand_generator;
 
@@ -95,11 +100,22 @@ int main (int argc, char **argv)
     #endif // RADIATION
 
     #ifdef COLLISION
+    #ifdef COLLISION_KDTREE
     bbox *dev_boundbox;
     CUDA_CHECK(cudaMalloc((void**)&dev_boundbox, sizeof(bbox)));
 
-    tree *dev_col_tree;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_tree, sizeof(tree)*N_T));
+    kdtree_node *dev_col_tree;
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_tree, sizeof(kdtree_node)*N_T));
+    #else  // COLLISION_MORTON
+    float3 *dev_col_point;
+    float *dev_col_x, *dev_col_cutoff;
+    unsigned int *dev_col_overflow;
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_point, sizeof(float3)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_x, sizeof(float)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_cutoff, sizeof(float)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_overflow, sizeof(unsigned int)*N_P));
+    morton_ghost_index col_morton;
+    #endif // COLLISION_KDTREE
 
     real *dev_size_old, *dev_numr_old, *dev_col_rate, *dev_col_dist;
     CUDA_CHECK(cudaMalloc((void**)&dev_size_old, sizeof(real)*N_P));
@@ -261,11 +277,26 @@ int main (int argc, char **argv)
     // evolve collisions over a fixed-position interval with controlled frozen-rate Bernoulli batches
     auto evolve_collisions = [&] (real duration)
     {
-        // collisions change grain properties but not positions, so one KD tree serves the full interval
+        // collisions change grain properties but not positions, so one search index serves the full interval
+        #ifdef COLLISION_KDTREE
         col_tree_init <<< NB_P, TPB >>> (dev_col_tree, dev_particle);
         CUDA_KERNEL_CHECK("col_tree_init");
-        cukd::buildTree <tree, tree_traits> (dev_col_tree, N_T, dev_boundbox);
-        CUDA_KERNEL_CHECK("cukd::buildTree");
+        kdtree::buildTree <kdtree_node, kdtree_traits> (dev_col_tree, N_T, dev_boundbox);
+        CUDA_KERNEL_CHECK("kdtree::buildTree");
+        #else  // COLLISION_MORTON
+        col_tree_init <<< NB_P, TPB >>> (dev_col_point, dev_col_x, dev_col_cutoff, dev_particle);
+        CUDA_KERNEL_CHECK("col_tree_init");
+
+        thrust::device_ptr <const float> col_cutoff_ptr(dev_col_cutoff);
+        float max_col_cutoff = *thrust::max_element(col_cutoff_ptr, col_cutoff_ptr + N_P);
+        col_morton.build(
+            dev_col_point, dev_col_x, N_P, max_col_cutoff,
+            static_cast<float>(X_MIN), static_cast<float>(X_MAX),
+            static_cast<float>(Y_MIN), static_cast<float>(Y_MAX),
+            static_cast<float>(Z_MIN), static_cast<float>(Z_MAX),
+            N_X > 1, (N_Z > 1) ? 3 : 2, MORTON_LEAF_TARGET, MORTON_MAX_LEVEL
+        );
+        #endif // COLLISION_KDTREE
 
         real elapsed = 0.0;
         while (elapsed < duration)
@@ -273,6 +304,7 @@ int main (int argc, char **argv)
             // freeze only the species fields changed by collisions while positions and velocities remain fixed
             col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
             CUDA_KERNEL_CHECK("col_snap_save");
+            #ifdef COLLISION_KDTREE
             col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
@@ -280,7 +312,26 @@ int main (int argc, char **argv)
                 #endif // IMPORTGAS
                 N_P / (N_K - 1.0) / total_dust_mass
             );
+            #else  // COLLISION_MORTON
+            col_rate_calc <<< N_P, MORTON_TPB >>> (
+                dev_col_rate, dev_col_dist, dev_col_overflow, dev_particle,
+                dev_size_old, dev_numr_old, dev_col_point, col_morton.view(), col_morton.duplicate_safe(),
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass
+            );
+            #endif // COLLISION_KDTREE
             CUDA_KERNEL_CHECK("col_rate_calc");
+
+            #ifdef COLLISION_MORTON
+            thrust::device_ptr <const unsigned int> col_overflow_ptr(dev_col_overflow);
+            unsigned int max_col_overflow = *thrust::max_element(
+                col_overflow_ptr, col_overflow_ptr + N_P
+            );
+            if (max_col_overflow != 0)
+                throw std::runtime_error("Morton traversal stack overflow in col_rate_calc");
+            #endif // COLLISION_MORTON
 
             // use the largest total propensity to control every representative's event probability
             thrust::device_ptr <const real> col_rate_ptr(dev_col_rate);
@@ -297,7 +348,8 @@ int main (int argc, char **argv)
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
             dt_col = fmin(CFL_COL / max_col_rate, remaining);
-            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, 
+            #ifdef COLLISION_KDTREE
+            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
                 dev_size_old, dev_numr_old, dev_col_tree, dev_boundbox,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -305,8 +357,25 @@ int main (int argc, char **argv)
                 N_P / (N_K - 1.0) / total_dust_mass,
                 dt_col
             );
+            #else  // COLLISION_MORTON
+            col_event_run <<< N_P, MORTON_TPB >>> (
+                dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, dev_col_overflow,
+                dev_size_old, dev_numr_old, dev_col_point, col_morton.view(), col_morton.duplicate_safe(),
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass,
+                dt_col
+            );
+            #endif // COLLISION_KDTREE
             CUDA_KERNEL_CHECK("col_event_run");
             CUDA_CHECK(cudaDeviceSynchronize());
+
+            #ifdef COLLISION_MORTON
+            max_col_overflow = *thrust::max_element(col_overflow_ptr, col_overflow_ptr + N_P);
+            if (max_col_overflow != 0)
+                throw std::runtime_error("Morton traversal stack overflow in col_event_run");
+            #endif // COLLISION_MORTON
 
             elapsed += dt_col;
             clock_dyn = elapsed;

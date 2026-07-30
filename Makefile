@@ -184,6 +184,22 @@ _OBJ = $(_OBJ_FLUID)
 SRC_SEARCH_DIRS = $(MODEL_SOURCE_DIRS):$(SRC_BRANCH_DIR)
 INC_SEARCH_FLAGS = $(MODEL_INCLUDE_FLAGS) -I $(INC_BRANCH_DIR)
 else ifeq ($(DUST_REPR),swarm)
+ifneq ($(filter -DCOLLISION,$(NVCC)),)
+COLLISION_SEARCH ?= kdtree
+ifneq ($(words $(COLLISION_SEARCH)),1)
+$(error COLLISION_SEARCH must be kdtree or morton)
+endif
+ifeq ($(filter kdtree morton,$(COLLISION_SEARCH)),)
+$(error COLLISION_SEARCH must be kdtree or morton)
+endif
+ifeq ($(COLLISION_SEARCH),morton)
+NVCC += -DCOLLISION_MORTON
+else
+NVCC += -DCOLLISION_KDTREE
+endif
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)
+endif
+
 SRC_BRANCH_DIR = $(SRC_SWARM_DIR)
 INC_BRANCH_DIR = $(INC_SWARM_DIR)
 _OBJ = $(_OBJ_SWARM)
@@ -205,6 +221,8 @@ endif
 $(info Using dust representation: $(DUST_REPR))
 ifeq ($(DUST_REPR),fluid)
 $(info Using fluid sweep: $(FLUID_SWEEP))
+else ifneq ($(filter -DCOLLISION,$(NVCC)),)
+$(info Using collision search: $(COLLISION_SEARCH))
 endif
 endif
 

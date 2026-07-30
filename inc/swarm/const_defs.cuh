@@ -8,17 +8,17 @@
 #include <curand_kernel.h>                  // curandState
 #endif // COLLISION || DIFFUSION
 
-#ifdef COLLISION
-#include "cukd/builder.h"                   // cukd::get_coord, cukd::box_t
-#endif // COLLISION
+#ifdef COLLISION_KDTREE
+#include <kdtree/builder.h>                // kdtree::get_coord, kdtree::box_t
+#endif // COLLISION_KDTREE
 
 #if defined(COLLISION) || defined(DIFFUSION)
 using curs = curandState;
 #endif // COLLISION || DIFFUSION
 
-#ifdef COLLISION
-using bbox = cukd::box_t<float3>;           // axis-aligned bounding box type for KD-tree
-#endif // COLLISION
+#ifdef COLLISION_KDTREE
+using bbox = kdtree::box_t<float3>;           // axis-aligned bounding box type for KD-tree
+#endif // COLLISION_KDTREE
 
 using real  = double;                       // code real type
 using real3 = double3;                      // double3 is a built-in CUDA type
@@ -76,7 +76,7 @@ const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity par
 
 #ifdef COLLISION
 #ifdef CODE_UNIT
-const real  REYNOLDS_0        = 1.0e+08;          // reference Reynolds number at R_0
+const real  REYNOLDS_0  = 1.0e+08;          // reference Reynolds number at R_0
 #else  // PHYSICAL_UNIT
 const real  M_MOL       = 2.3*1.66054e-24;  // mean molecular weight of the gas in grams
 const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm^2
@@ -118,6 +118,16 @@ const real  H_SEARCH    = 1.0;              // KNN search radius in units of the
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
 const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
 #endif // COLLISION
+
+#ifdef COLLISION_MORTON
+const int   MORTON_TPB         = 256;       // cooperative threads assigned to one Morton query
+const int   MORTON_LEAF_TARGET = 128;       // target records per adaptive leaf
+const int   MORTON_MAX_LEVEL   = 20;        // maximum adaptive subdivision depth
+const int   MORTON_WORK_SIZE   = 1024;      // shared slots for duplicate-safe top-K selection
+
+static_assert(3*N_K + MORTON_TPB <= MORTON_WORK_SIZE,
+    "Morton work storage must hold three periodic images of every KNN slot");
+#endif // COLLISION_MORTON
 
 // =========================================================================================================================
 // dust initialization parameters
@@ -162,8 +172,8 @@ struct swarm                                // representative-particle state
     #endif // MULTISIZE
 };
 
-#ifdef COLLISION
-struct tree                                 // KD-tree node consumed by cukd::builder
+#ifdef COLLISION_KDTREE
+struct kdtree_node                         // KD-tree node consumed by kdtree::builder
 {
     float3  cartesian;                      // Cartesian position of the physical particle or periodic image
     int     index_old;                      // stable particle-array index before KD-tree reordering
@@ -171,18 +181,18 @@ struct tree                                 // KD-tree node consumed by cukd::bu
     int     image;                          // zero for a physical node and nonzero for a periodic image
 };
 
-struct tree_traits                          // traits for cukd::builder
+struct kdtree_traits                       // traits for kdtree::builder
 {
     using point_t = float3;
     enum { has_explicit_dim = true };
     
-    // expose point coordinates and split dimensions through the cuKD traits interface
-    static inline __host__ __device__ const point_t &get_point (const tree &node) { return node.cartesian; }
-    static inline __host__ __device__ float get_coord (const tree &node, int dim) { return cukd::get_coord(node.cartesian, dim); }
-    static inline __host__ __device__ int get_dim (const tree &node) { return node.split_dim; }
-    static inline __host__ __device__ void set_dim (tree &node, int dim) { node.split_dim = dim; }
+    // expose point coordinates and split dimensions through the KD-tree traits interface
+    static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
+    static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
 };
-#endif // COLLISION
+#endif // COLLISION_KDTREE
 
 // =========================================================================================================================
 // cuda numerical parameters
@@ -195,10 +205,10 @@ const int NB_G = N_G     / TPB + 1;         // number of blocks for grid-level  
 const int NB_X = N_Y*N_Z / TPB + 1;         // number of blocks for X-direction parallelization
 const int NB_Y = N_X*N_Z / TPB + 1;         // number of blocks for Y-direction parallelization
 
-#ifdef COLLISION
+#ifdef COLLISION_KDTREE
 const int N_T  = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P; // physical and periodic-image tree nodes
 const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level parallelization
-#endif // COLLISION
+#endif // COLLISION_KDTREE
 
 // =========================================================================================================================
 

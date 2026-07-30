@@ -14,7 +14,6 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
 | [`future_radial_model.md`](future_radial_model.md) | Planned vertically integrated radial-only swarm model, required corrections, isolation rules, and verification criteria |
-| [`future_knnalgorithm.md`](future_knnalgorithm.md) | Validated adaptive-Morton KNN prototype, measurements, production-integration plan, and multi-GPU halo design |
 | [`future_rocm_support.md`](future_rocm_support.md) | CUDA-to-ROCm portability assessment and implementation sequence |
 
 Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior
@@ -27,7 +26,6 @@ The active merged project is at the repository root:
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
 - `mod/` contains production model configurations
 - `qav/fluid/` and `qav/swarm/` contain verification models and validators
-- `lab/` contains the isolated adaptive-Morton KNN experiment
 
 The root Makefile requires `MODEL` and reads that model's `flags.mk`. `DUST_REPR := fluid` or `DUST_REPR := swarm` selects exactly one source branch. Fluid builds additionally select `FLUID_SWEEP := thread` or `FLUID_SWEEP := block`. A model-local `const_defs.cuh` has include priority; models without one inherit the selected representation's defaults
 
@@ -42,7 +40,7 @@ The branches do not share headers or translation units. Related algorithms, incl
 | fluid analytical suite | `qav/fluid/out/` is currently empty | the 85-case A100 result table in `testset_fluid.md` is a retained historical baseline, not a presently archived machine-readable result set |
 | fluid thread/block comparison | harness exists; no comparison JSON, build log, or profiler artifact is archived | implementation equivalence and timing claims should be regenerated on the target GPU before publication |
 | swarm analytical suite | 25 metrics, 25 metadata files, and 10 environment records under `qav/swarm/out/` | all ten models passed natively on the recorded A100 environment |
-| adaptive-Morton KNN | one clean ordinary, wedge, adversarial, and four-case copied-runtime matrix is archived under `lab/out/`, including exact topology at $N_P=10^6$ | correctness validation is complete for the tested laboratory scope; the recorded worktree was not immutable, and integrated Morton rate queries and full-disk persistent storage still do not outperform cuKD |
+| adaptive-Morton KNN | the clean ordinary, wedge, adversarial, and copied-runtime development baseline is archived under `qav/swarm/test_knn/out/`, including exact topology at $N_P=10^6$ | the backend is now selectable in production, but the promoted production source and QA driver still require one clean native CUDA rerun before the archive represents the current revision |
 
 The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files
 

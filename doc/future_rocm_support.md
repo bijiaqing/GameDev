@@ -17,8 +17,8 @@ Fluid and swarm will remain independent source branches. No shared fluid–swarm
 | fluid radiation | low to moderate | standard kernels and reductions |
 | swarm transport and radiation | low to moderate | interpolation, deposition, and atomics |
 | swarm diffusion | moderate | random-number behavior and checkpoint format |
-| swarm collisions with cuKD | high | CUDA-specific third-party implementation |
-| swarm collisions with Morton | moderate after production integration | portable primitives, but integration is unfinished |
+| swarm collisions with KD-tree | high | CUDA-specific third-party implementation |
+| swarm collisions with Morton | moderate | portable primitives and compact arrays; current CUDA implementation still requires a HIP port |
 | build and profiling | moderate | compiler, architecture, diagnostics, and tool differences |
 
 ## What HIP can translate directly
@@ -83,14 +83,14 @@ The port must:
 
 ### Collision search
 
-The bundled cuKD code is the largest CUDA-specific dependency. It uses CUDA headers, streams, allocation policies, `CUDART_VERSION` checks, CUDA compilation macros, and CUDA-oriented sorting paths. Blind renaming can leave incorrect host/device branches or unsupported allocator behavior.
+The bundled KD-tree code is the largest CUDA-specific dependency. It uses CUDA headers, streams, allocation policies, `CUDART_VERSION` checks, CUDA compilation macros, and CUDA-oriented sorting paths. Blind renaming can leave incorrect host/device branches or unsupported allocator behavior.
 
 Two realistic policies are:
 
-1. port cuKD conservatively, retaining it as a CUDA-reference-compatible backend
-2. finish the adaptive Morton backend described in [`future_knnalgorithm.md`](future_knnalgorithm.md), then implement its radix, scan, and cooperative selection operations with rocThrust and rocPRIM
+1. port the KD-tree conservatively, retaining it as a CUDA-reference-compatible backend
+2. port the production adaptive-Morton backend's radix sort, scan, hierarchy, compact boundary ghosts, and cooperative selection with rocThrust and rocPRIM
 
-The Morton path is the preferable long-term ROCm target because its data are compact arrays and its operations have direct CUDA and ROCm analogues. A selectable copied-swarm implementation now exercises collision-rate and event kernels with location-dependent query radii under `lab/`. Its individual CUDA comparisons pass through $N_P=10^6$, although the archived files still need a clean rerun from one source revision. It is not yet production-ready: the boundary-ghost and radially binned halo policies, peak-memory evidence, GPU-native hierarchy construction, performance tuning, and root-build integration remain unfinished.
+The Morton path is the preferable long-term ROCm target because its data are compact arrays and its operations have direct CUDA and ROCm analogues. It is selectable in the production swarm build, uses location-dependent query radii and compact periodic boundary ghosts, and has exact standalone CUDA comparisons through $N_P=10^6$. The promoted source still needs a clean native rerun, and radial halo bins, GPU-native hierarchy construction, multi-GPU exchange, and HIP-specific tuning remain future work.
 
 Equal-key sorting need not create identical internal trees on CUDA and ROCm. Verification should compare exact physical neighbor identifiers outside defined distance ties, followed by collision rates and statistical evolution.
 
@@ -143,15 +143,15 @@ Required ROCm gates are:
 7. port swarm transport, radiation, interpolation, and deposition
 8. run the current 25-case swarm suite on both backends
 9. define a portable particle and RNG checkpoint format
-10. finish and validate production Morton search
-11. port cuKD only if maintaining it on ROCm remains scientifically or operationally useful
+10. port and validate production Morton search
+11. port the KD-tree only if maintaining it on ROCm remains scientifically or operationally useful
 12. tune launch geometry and memory use per architecture
 
 ## Effort and recommendation
 
 A compile-capable fluid prototype is likely a matter of days once AMD hardware is available. A verified, tuned fluid backend and collision-disabled swarm backend are larger but bounded tasks. Collision-enabled swarm support, portable restart semantics, dual-backend continuous testing, and performance tuning make complete support a project measured in weeks.
 
-Keep CUDA as the reference backend while bringing up HIP incrementally. Use HIPIFY for initial syntax conversion, but preserve branch-local ownership and validate every numerical stage. The adaptive Morton search is the strongest path to portable collision support; cuKD remains the production reference until Morton passes the production collision contract.
+Keep CUDA as the reference backend while bringing up HIP incrementally. Use HIPIFY for initial syntax conversion, but preserve branch-local ownership and validate every numerical stage. Adaptive Morton is the strongest path to portable collision support; the KD-tree should remain the independent CUDA reference while both selectable backends are maintained.
 
 ## References
 

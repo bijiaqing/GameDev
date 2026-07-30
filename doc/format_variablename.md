@@ -107,6 +107,8 @@ The direction plus two-letter sweep suffix keeps each kernel name at 13 characte
 
 The runtime entry files are `fluid_runtime.cu` and `swarm_runtime.cu`; each still defines the required C++ entry function `main`. Branch-local optical-depth files may share function names because only one representation is compiled into a model
 
+Swarm collision backends are selected as `COLLISION_SEARCH=kdtree` or `COLLISION_SEARCH=morton`. Their private headers live under `inc/swarm/kdtree/` and `inc/swarm/morton/`; backend-specific identifiers use the corresponding `kdtree_*` or `morton_*` prefix
+
 Parallel host spellings include `initdens_calc`, `initdens_lerp`, `save_host_binary`, `load_host_binary`, `save_sam_as_velocity`, `load_velocity_as_sam`, `frame_stream`, `time_now`, `duration`, and `remaining`
 
 ## Scratch storage

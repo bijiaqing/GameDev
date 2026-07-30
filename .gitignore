@@ -17,4 +17,5 @@ out/*
 qav/*/out/*
 !qav/*/out/.gitkeep
 
-lab/out/
+qav/swarm/test_knn/bin/
+qav/swarm/test_knn/out/

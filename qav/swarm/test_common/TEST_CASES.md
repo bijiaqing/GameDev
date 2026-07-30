@@ -17,6 +17,7 @@ beside the implementation.
 | `test_prdrag_2d` | combined gas and P-R exponential response | exact component-dependent exponential responses with $k_x=t_s^{-1}+\beta GM/(cR^2)$ and $k_y=t_s^{-1}+2\beta GM/(cR^2)$ |
 | `test_collision_2d` | collision helper kernels in a radial-azimuthal disk | exact disk area/circular-cap measure and constant, additive, and product kernel numerators |
 | `test_collision_3d` | collision helper kernels in full 3D | exact interior, radial-cap, and polar-cap ball measures plus the same three analytic kernel numerators |
+| `test_knn` | selectable KD-tree and adaptive-Morton exact KNN search, including periodic wedges and compact boundary ghosts | independent brute-force neighbor identities, adversarial boundary cases, overflow checks, and timing/memory records |
 
 Diffusion tests use six-standard-error acceptance bands for sample means and variances.  Increasing `--res` raises the
 ensemble as $N_P=16N^2$ and therefore tightens those statistical bounds without pretending that stochastic trajectories
@@ -28,7 +29,6 @@ standard errors; use $N\ge128$ when interpreting that specific mean shift.
 The first implementation deliberately stops short of claiming complete swarm validation.  The following require additional
 test-local drivers or controlled input datasets:
 
-- KD-tree neighbor identities and periodic-image queries checked against brute force
 - event-level coagulation and fragmentation distributions over many frozen collision batches
 - analytic constant/additive/product Smoluchowski moment evolution
 - initialization CDFs, finite-sample mass normalization, and multisize conditional vertical distributions

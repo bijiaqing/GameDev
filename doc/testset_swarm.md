@@ -10,9 +10,10 @@ being measured still comes from `src/swarm/` or `inc/swarm/`.
 
 The initial suite covers particle-to-grid projection, optical-depth construction, semi-analytic
 transport, stiff gas drag, cylindrical stochastic diffusion, radiation pressure, Poynting–
-Robertson drag, collision-neighborhood measures, and the three dimensionless coagulation kernels.
-It does not yet validate initialization sampling, imported gas, KD-tree neighbor selection,
-stochastic collision events, boundaries, restart reproducibility, or long-term coupled evolution.
+Robertson drag, collision-neighborhood measures, the three dimensionless coagulation kernels, and
+exact KD-tree/Morton neighbor search. It does not yet validate initialization sampling, imported
+gas, complete stochastic collision events, boundaries, restart reproducibility, or long-term
+coupled evolution.
 
 This document defines what each test proves, what it does not prove, and what result is
 expected. Machine-readable results are written under `qav/swarm/out/`. The shorter implementation
@@ -87,6 +88,7 @@ refinement:
 | circular orbit | timesteps in one orbit | $\Delta t=2\pi/N$, $N_P=64$ |
 | 2D/3D diffusion | ensemble-control parameter | $N_P=16N^2$ on a fixed mesh |
 | drag, radiation, P-R, collision algebra | no physical dependence on $N$ | only the first requested value is built |
+| KNN benchmark | no dependence on `--res` | $10^5$ particles by default; add `--knn-full` for $10^6$ |
 
 Consequently, an order derived from the orbit is a temporal order, while decreasing diffusion
 errors demonstrate Monte Carlo sampling convergence. The exactly constructed grid cases are
@@ -115,6 +117,7 @@ validator constructs all reference values independently from these raw outputs a
 | `test_prdrag_2d` | combined gas and P-R exponential response | exact component-dependent damping at zero optical depth |
 | `test_collision_2d` | 2D accessible-neighborhood measure and coagulation-kernel numerators | disk and circular-cap areas plus constant, additive, and product rates |
 | `test_collision_3d` | 3D accessible-neighborhood measure and coagulation-kernel numerators | interior, radial-cap, and polar-cap ball volumes plus the same three rates |
+| `test_knn` | exact KD-tree and adaptive-Morton construction, cooperative top-$K$, periodic query images, and production boundary ghosts | independent brute-force neighbors, adversarial topology, overflow-free traversal, and timing/memory records |
 
 ## Grid projection and optical depth
 
@@ -482,9 +485,58 @@ remain below $2\times10^{-13}$. These cases catch incorrect dimensions, missing 
 incorrect additive-kernel definition. They do not test neighbor identity, periodic images,
 normalization by an actual KNN radius, partner selection, coagulation events, or fragmentation.
 
+## Exact KNN and periodic-ghost tests
+
+`qav/swarm/test_knn/` is a standalone CUDA test family registered as the `knn` common-suite group.
+It compiles four drivers:
+
+- ordinary smooth, ring, and clump benchmarks in 2D and 3D
+- adversarial edge cases for ties, coincident points, cutoff equality, sparse neighborhoods, and
+  Morton split planes
+- periodic query-image cases covering both wedge faces, full-$2\pi$ geometry, image overlap, and
+  deduplication
+- periodic wedge benchmarks comparing the three-copy KD-tree, query-image Morton, and the
+  production compact boundary-ghost Morton owner
+- a deliberately narrow seam-clump wedge that forces physical-identifier deduplication and the
+  production $3N_K$ fallback rather than the ordinary disjoint-image shortcut
+
+For every configured brute-force query, the CPU reference enumerates every physical particle,
+applies the exact minimum-image wedge geometry, sorts by $(d^2,\mathrm{id})$, and retains the first
+$N_K$. If the two GPU methods disagree outside the initially configured brute-force subset, the
+validator also checks every disagreement against exhaustive search. A case fails on an incorrect
+identifier, a distance outside the single-precision tolerance, a missing valid neighbor, or a
+traversal-stack overflow.
+
+The clean A100 validation baseline covered:
+
+- 10 of 10 ordinary adversarial cases
+- 10 of 10 periodic adversarial cases
+- 12 smooth, ring, and clump cases at $N_P=10^5$ and $10^6$
+- 16 periodic-wedge cases at $N_P=10^5$ and $10^6$
+- copied collision-runtime comparisons in full-disk 2D, wedge 2D, full-disk 3D, and full-disk 3D
+  at $N_P=10^6$
+
+All recorded topology checks passed, including the million-particle cases. At $N_P=10^6$, ordinary
+Morton query time ranged from 0.991 to 1.136 times the KD-tree speed while using 0.706-0.752 of its
+persistent search memory. For periodic wedges, boundary ghosts gave KD-tree/ghost query speed
+ratios of 1.007-1.133 and used 0.249-0.455 of the three-image KD-tree persistent memory. Ratios above
+one favor Morton. These are hardware-specific A100 measurements, not universal performance claims.
+
+Those standalone memory ratios compare the owned search hierarchies while treating query points as
+common inputs. The copied-runtime experiments counted backend-specific support arrays as well:
+Morton/KD-tree storage was 1.379-1.446 for the tested full disks and 0.468 for the tested wedge.
+The promoted production owner has changed since those measurements, so current total VRAM must be
+remeasured rather than inferred from the hierarchy-only ratios.
+
+The archived JSON, manifests, environment records, and terminal summaries were moved from the
+development laboratory to `qav/swarm/test_knn/out/`. That directory records the clean pre-promotion
+baseline. Because the QA driver now calls the production ghost owner directly, it must be rerun on
+native CUDA before the current source revision is treated as a publication artifact.
+
 ## Recorded native CUDA results
 
-The complete matrix was run natively on the Vera CUDA cluster on 2026-07-29 with
+The analytical matrix was run natively on the Vera CUDA cluster on 2026-07-29 with the then-current
+`all` group:
 
 ```bash
 python3 qav/swarm/test_common/run_suite.py \
@@ -492,7 +544,9 @@ python3 qav/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The completed archive contains all 25 required builds, and all ten models passed their validators.
+At that date the KNN group had not yet been registered, so this historical command comprised only
+the ten analytical models. The completed archive contains all 25 analytical builds, and all ten
+models passed their validators.
 Resolved development compilation errors are not part of the current verification claim.
 
 | Model | Requested $N$ | Recorded $L_2$ errors | Result |
@@ -575,8 +629,8 @@ From the repository root, run a short workflow check with
 python3 qav/swarm/test_common/run_suite.py --group all --quick
 ```
 
-This performs 15 clean builds: two resolutions for each of the five grid, orbit, and diffusion
-cases, plus one build for each of the five resolution-independent algebra cases.
+This performs the 15 analytical-suite builds, compiles the four KNN drivers, links the production
+collision sources once per backend, and then runs the $10^5$-particle KNN matrix.
 
 Run the complete default matrix with
 
@@ -586,7 +640,9 @@ python3 qav/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The complete command performs 25 builds. Individual groups can be selected with
+The complete command performs the 25 analytical-suite builds plus the four KNN driver builds and
+the two production-backend links.
+Individual groups can be selected with
 
 ```bash
 python3 qav/swarm/test_common/run_suite.py --group grid      --res 32 64 128 256
@@ -594,6 +650,20 @@ python3 qav/swarm/test_common/run_suite.py --group transport --res 32 64 128 256
 python3 qav/swarm/test_common/run_suite.py --group diffusion --res 32 64 128 256
 python3 qav/swarm/test_common/run_suite.py --group radiation --res 32
 python3 qav/swarm/test_common/run_suite.py --group collision --res 32
+python3 qav/swarm/test_common/run_suite.py --group knn       --res 32
+```
+
+The KNN group can also be run directly:
+
+```bash
+python3 qav/swarm/test_knn/run.py
+```
+
+Add the million-particle matrix with either
+
+```bash
+python3 qav/swarm/test_knn/run.py --full
+python3 qav/swarm/test_common/run_suite.py --group knn --knn-full
 ```
 
 Use `--build-only` to compile every selected configuration without executing or validating it.
@@ -607,12 +677,17 @@ qav/swarm/out/MODEL/
 with raw binary arrays, `meta_N*.txt`, `metrics_N*.json`, and `environment.txt`. Keep the output
 directory and full terminal log together when archiving a native run.
 
+KNN benchmark JSON and manifests are stored separately under
+
+```text
+qav/swarm/test_knn/out/
+```
+
 ## Verification still required
 
-- Connect the exact cuKD, adaptive-Morton, and brute-force comparisons already exercised under
-  `lab/` to the production collision-rate and collision-event paths, including axisymmetry, partial
-  wedges, and full 3D; the copied-runtime comparisons validate the laboratory integration but not
-  the active production source
+- Rerun the promoted KNN suite against the production boundary-ghost owner; the test group now
+  compiles and links both production collision backends before running the standalone topology matrix
+- Add direct end-to-end rate/event comparisons for axisymmetry, partial wedges, and full 3D
 - Test complete frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
   with `CFL_COL`, $N_K$, and $N_P$
@@ -637,9 +712,9 @@ directory and full terminal log together when archiving a native run.
   transport plus collision, and all enabled swarm physics
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
 
-The existing 2D and 3D helper tests do not establish correctness of complete 3D disk evolution,
-and the collision algebra tests do not establish correctness or performance of the KD-tree event
-pipeline.
+The existing 2D and 3D helper tests do not establish correctness of complete 3D disk evolution.
+The KNN suite establishes exact search topology and isolated performance, but the collision algebra
+tests still do not establish the statistical convergence of the complete event pipeline.
 
 ## References
 

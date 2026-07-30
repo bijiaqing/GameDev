@@ -166,7 +166,7 @@ $$
 With radiation enabled, transport first drifts particles to midpoint positions, reconstructs
 optical depth there, and then completes the force/drag step.
 
-When `PR_EFFECT` is enabled, the same attenuated and size-dependent \(\beta\) supplies the
+When `PR_EFFECT` is enabled, the same attenuated and size-dependent $\beta$ supplies the
 first-order Poynting-Robertson rate
 
 $$
@@ -196,9 +196,9 @@ v_x\boldsymbol e_x+2v_y\boldsymbol e_y+v_z\boldsymbol e_z
 \right).
 $$
 
-The stored tangential variables \(\ell_\phi\) and \(\ell_\theta\) are damped at
-\(\gamma_{\rm PR}\), while the spherical radial velocity is damped at
-\(2\gamma_{\rm PR}\). Gas and P-R drag are integrated together in the frozen-midpoint
+The stored tangential variables $\ell_\phi$ and $\ell_\theta$ are damped at
+$\gamma_{\rm PR}$, while the spherical radial velocity is damped at
+$2\gamma_{\rm PR}$. Gas and P-R drag are integrated together in the frozen-midpoint
 exponential response:
 
 $$
@@ -226,22 +226,22 @@ u(h)
 \right).
 $$
 
-The half response uses \(h=\Delta t/2\) and forces evaluated from the initial angular momenta.
+The half response uses $h=\Delta t/2$ and forces evaluated from the initial angular momenta.
 Those angular momenta are then used to reevaluate the centrifugal and polar terms, and the full
-response uses \(h=\Delta t\) from the original state with the updated midpoint forces. The
-`expm1` form evaluates \(1-e^{-kh}\) without small-argument cancellation.
+response uses $h=\Delta t$ from the original state with the updated midpoint forces. The
+`expm1` form evaluates $1-e^{-kh}$ without small-argument cancellation.
 
-The gas targets enter only through \(u_g/t_s\), so P-R drag damps toward the stellar rest frame
+The gas targets enter only through $u_g/t_s$, so P-R drag damps toward the stellar rest frame
 rather than toward the gas. This integration is stable even when either damping rate is large,
 although the trajectory timestep must still resolve spatial motion and coefficient variation.
 No separate P-R stability term is added to `dyn_rate_calc` because the damping is analytic and
 the P-R contribution is dissipative.
 
 The current dynamics always uses orbital code units, including builds without `CODE_UNIT`;
-that flag changes collision microphysics rather than \(G\), \(M_\star\), \(R_0\), position, or
+that flag changes collision microphysics rather than $G$, $M_\star$, $R_0$, position, or
 velocity units. Therefore `C_LIGHT = 10^4` is a code-unit velocity in the present implementation.
 A future fully cgs dynamics branch must instead use
-\(c=2.99792458\times10^{10}\ {\rm cm\,s^{-1}}\).
+$c=2.99792458\times10^{10}\ {\rm cm\,s^{-1}}$.
 
 Models enable this term with `NVCC += -DPR_EFFECT`. Compile-time validation rejects `PR_EFFECT`
 without `RADIATION`.
@@ -291,9 +291,26 @@ comparisons are valid until a common momentum equation is derived.
 
 ## Representative-particle collisions
 
-Collision neighborhoods are built with a cuKD tree. Periodic azimuthal images and locally planar
-accessible-volume corrections handle periodic seams and physical boundaries. For `N_X == 1`, the
-neighborhood measure is multiplied by $2\pi R$, restoring the missing axisymmetric dimension.
+Collision neighborhoods use one exact backend selected in `flags.mk`:
+
+```make
+COLLISION_SEARCH := kdtree
+```
+
+or
+
+```make
+COLLISION_SEARCH := morton
+```
+
+The same selection can be supplied on the build command line, for example
+`make MODEL=my_model COLLISION_SEARCH=morton`. Backend-specific objects are stored in separate
+directories, so switching methods cannot silently reuse objects compiled for the other search.
+
+The KD-tree is the default reference. The Morton backend uses an adaptive pointer-free hierarchy,
+cooperative top-$K$ selection, and boundary-only periodic ghosts. Locally planar accessible-volume
+corrections handle physical boundaries. For `N_X == 1`, the neighborhood measure is multiplied by
+$2\pi R$, restoring the missing axisymmetric dimension.
 
 For a pair $i,j$, the physical rate contains
 
@@ -343,6 +360,139 @@ law is a configured modeling choice rather than a universal fragment distributio
 constant, additive, and product kernels are available for analytical tests; the additive kernel is
 $K=m_i+m_j$.
 
+### Exact neighbor-search contract
+
+The search backend is part of the estimator because the normalization contains
+
+$$
+\frac{N_P}{(N_K-1)M_{\mathrm{dust}}}.
+$$
+
+For particle $i$, the location-dependent search cap is
+
+$$
+q_i=H_{\mathrm{SEARCH}}H_g(R_i)R_i.
+$$
+
+Both backends must return the same stable physical identifiers, squared distances, valid count,
+and farthest valid distance in lexicographic $(d^2,\mathrm{id})$ order. They retain the same
+$N_K$, $q_i$, accessible-ball normalization, pair physics, maximum-rate reduction, event
+probability, partner sampling, and coagulation or fragmentation update. Approximate neighbors or a
+fixed-radius population estimator would be a different numerical model and require a new
+derivation.
+
+The KD-tree candidate heap uses the stable particle identifier as its equal-distance tie breaker
+and expands its culling radius by one floating-point unit. This prevents mutable tree slots from
+changing which member of an exact-distance tie is retained.
+
+### Adaptive Morton hierarchy
+
+The Morton builder maps Cartesian coordinates to integer cells, interleaves their bits into 64-bit
+keys, stable-sorts the records, and recursively refines cells above `MORTON_LEAF_TARGET`. Compact
+record and node arrays contain no pointers. The current hierarchy topology is assembled on the host
+after the GPU key sort; GPU-native construction remains a performance improvement rather than a
+correctness requirement.
+
+For node bounds $[\boldsymbol b_{\min},\boldsymbol b_{\max}]$, traversal uses the conservative
+lower bound
+
+$$
+d_{\min}^2=\sum_\alpha
+\left[\max(b_{\min,\alpha}-x_\alpha,0,x_\alpha-b_{\max,\alpha})\right]^2.
+$$
+
+A scale-aware single-precision padding prevents repeated subdivision from overestimating this
+bound. One CUDA block evaluates candidate tiles cooperatively and retains the nearest $N_K$ pairs
+in shared memory. The traversal reports an overflow rather than silently accepting an incomplete
+result.
+
+### Periodic boundary ghosts
+
+For a wedge, the Morton owner copies only source records whose Cartesian distance to either
+azimuthal face is no larger than
+
+$$
+q_{\max}=\max_i q_i.
+$$
+
+Lower-face sources are rotated by one positive wedge width and upper-face sources by one negative
+wedge width. The original and compact ghost records are indexed together, while every record keeps
+the stable identifier of its physical representative. Ghost construction uses GPU `sincosf`, so
+the periodic isometry follows the same single-precision arithmetic as the search records.
+
+The global maximum is conservative for position-dependent cutoffs: a query still uses its own
+$q_i$, while the larger construction halo guarantees that no eligible source was omitted. If a
+wedge is narrow enough for multiple images of one representative to enter the same query ball, the
+query temporarily retains up to $3N_K$ records, deduplicates by stable identifier, and then selects
+the exact nearest $N_K$ physical particles. Ordinary disk wedges use the cheaper disjoint-image
+path.
+
+When $H_gR$ varies strongly, a later memory optimization may replace $q_{\max}$ by certified radial
+halo bins. For source and query radial bins $s$ and $b$, define
+
+$$
+D_{sb}=\max(0,R_s-R_{b+1},R_b-R_{s+1}),
+$$
+
+and use for source bin $s$
+
+$$
+h_s=\max_{\{b:D_{sb}\le c_b\}}c_b,
+\qquad
+c_b=\max_{i:R_i\in b}q_i.
+$$
+
+A source is ghosted when its seam distance is at most $h_s$ plus roundoff padding. This optimization
+must reproduce the global-halo neighbor sets exactly before it can replace the current policy.
+
+### Backend characteristics
+
+The Morton representation offers contiguous pointer-free storage, bounded cooperative scratch,
+boundary-only periodic records, explicit workload diagnostics, a more direct ROCm port, and natural
+Morton-range ownership for multiple GPUs. Its hierarchy alone is compact, but the current production
+owner also retains unsorted query coordinates, azimuths, per-particle cutoffs, and overflow flags.
+Consequently, full-disk total search storage can exceed the single-array KD-tree even when the
+Morton hierarchy is smaller; partial wedges benefit more strongly because the KD-tree stores three
+complete copies. The KD-tree remains useful as an independent mature reference and can be faster
+for smaller populations. Backend choice is therefore a measured model configuration, not a change
+in collision physics.
+
+For distributed Morton search, each GPU can own contiguous coarse cells or key ranges and import
+read-only halo records. A local result is globally certified when every intersecting remote cell has
+been examined and either $d_{K,i}$ or $q_i$ is below the conservative distance to all remaining
+remote cells. Particle migration, halo exchange, and collision-property synchronization are not yet
+implemented.
+
+### Future removal of the global collision timestep
+
+The present batch step
+
+$$
+\Delta t_{\mathrm{col}}=
+\min\left(\frac{\mathrm{CFL}_{\mathrm{COL}}}{\max_i\lambda_i},
+\Delta t_{\mathrm{remaining}}\right)
+$$
+
+is controlled by the fastest representative. Raising `CFL_COL` does not solve this bottleneck: if
+$\lambda_i\Delta t$ is large, collapsing several expected physical events into one Bernoulli trial
+changes the stochastic process.
+
+The preferred future integrator is a frozen-bath local continuous-time event chain. Over a larger
+bath interval $\tau_{\mathrm{bath}}$, each representative keeps a local clock, draws exact waiting
+times
+
+$$
+\delta t_i=-\frac{\ln U}{\lambda_i},
+$$
+
+and processes zero, one, or many events against immutable partner properties. After each event its
+own rate and partner weights are recomputed. This removes the fastest-particle global microstep and
+is exact conditional on the frozen bath; convergence under halving $\tau_{\mathrm{bath}}$ controls
+the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
+chain lengths without truncating a stochastic path. The current Bernoulli method must remain
+selectable until waiting-time statistics, Smoluchowski moments, mass conservation, and bath-interval
+convergence pass.
+
 ## Operator composition and boundaries
 
 For one dynamics interval, the combined sequence is
@@ -390,9 +540,9 @@ same CUDA state layout.
   production evolution; see [`testset_swarm.md`](testset_swarm.md)
 - P-R validation still needs secular optically thin circular-orbit decay with a fixed orbital-plane
   direction beyond the prepared constant-coefficient one-step response
-- Collision validation still needs physical $\sigma\Delta v/V$ scaling, brute-force KNN
-  comparisons, complete event statistics, and convergence with `CFL_COL`, neighbor count, and
-  particle number
+- Collision validation still needs complete event statistics and convergence with `CFL_COL`,
+  neighbor count, and particle number; exact KD-tree/Morton/brute-force neighbor tests are now in
+  `qav/swarm/test_knn/`
 - Settling equilibrium, initialization CDFs, imported gas, boundary behavior, restart
   reproducibility, timestep rates, and complete flag/operator combinations remain untested
 - The current fluid and swarm diffusion-momentum closures differ and should not be compared as the
@@ -401,11 +551,8 @@ same CUDA state layout.
   not a scientifically meaningful configuration and is not fully guarded
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection
-- The adaptive Morton method in [`future_knnalgorithm.md`](future_knnalgorithm.md) has passed
-  standalone exact-neighbor tests and individual copied-runtime comparisons through $N_P=10^6$
-  under `lab/`. The archived runs span debugging revisions and need one clean full rerun. It remains
-  a laboratory backend because the current integrated all-particle rate query is slower than cuKD
-  and its full-disk owner allocates more persistent memory
+- Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and local
+  continuous-time collision chains remain future work
 
 ## References
 
@@ -414,6 +561,9 @@ same CUDA state layout.
 - Ormel & Cuzzi (2007), [turbulent relative velocities](https://arxiv.org/abs/astro-ph/0702303)
 - Zsom & Dullemond (2008), [representative-particle coagulation](https://arxiv.org/abs/0807.5052)
 - Gillespie (1977), [stochastic reaction simulation](https://doi.org/10.1021/j100540a008)
+- Johnson, Douze & Jégou (2017), [GPU similarity search](https://arxiv.org/abs/1702.08734)
+- García et al. (2012), [multi-GPU spatial decomposition and halos](https://arxiv.org/abs/1210.1017)
+- Cao, Gillespie & Petzold (2005), [explicit Poisson tau-leaping](https://people.cs.vt.edu/~ycao/publication/JChemPhys_123_054104.pdf)
 - Nakagawa, Sekiya & Hayashi (1986), [steady dust–gas drift](<https://doi.org/10.1016/0019-1035(86)90121-1>)
 - Kanagawa et al. (2017), [viscous disk velocity](https://arxiv.org/abs/1706.08975)
 - Burns, Lamy & Soter (1979), [radiation forces on small particles](https://doi.org/10.1016/0019-1035(79)90050-2)
