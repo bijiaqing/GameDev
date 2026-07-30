@@ -386,6 +386,12 @@ probability, partner sampling, and coagulation or fragmentation update. Approxim
 fixed-radius population estimator would be a different numerical model and require a new
 derivation.
 
+The contract fixes the selected set, not the physical order in which a backend stores it. Morton
+returns a sorted list, whereas the KD-tree retains the same set in heap order. Ordered rate sums are
+reproducible within each backend, but an identical random target can therefore select a different
+partner after switching backends. Backend trajectories and RNG states need not remain byte-equal;
+mass conservation, rates, topology, and ensemble distributions are the cross-backend invariants.
+
 The KD-tree candidate heap uses `index_old` as its equal-distance tie breaker
 and expands its culling radius by one floating-point unit. Each heap slot stores only the encoded
 pair $(d^2,\mathrm{id})$; the shuffled tree slot is not retained because collision physics consumes

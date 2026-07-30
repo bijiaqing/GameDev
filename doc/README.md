@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation for the current merged GameDev project. It describes the active source tree, the verified numerical methods, the evidence retained in the repository, and future work that has not yet been promoted into production
 
-Resolved audit diaries and rename histories are not canonical documents. Durable findings from the 2026-07-27 merged-code audit and the 2026-07-29 swarm-test audit have been incorporated into the documents below
+Resolved audit diaries and rename histories are not canonical documents. Durable findings from the 2026-07-27 merged-code audit, the 2026-07-29 swarm-test audit, and the 2026-07-30 KNN audit have been incorporated into the documents below
 
 ## Document map
 
@@ -40,7 +40,7 @@ The branches do not share headers or translation units. Related algorithms, incl
 | fluid analytical suite | `qav/fluid/out/` is currently empty | the 85-case A100 result table in `testset_fluid.md` is a retained historical baseline, not a presently archived machine-readable result set |
 | fluid thread/block comparison | harness exists; no comparison JSON, build log, or profiler artifact is archived | implementation equivalence and timing claims should be regenerated on the target GPU before publication |
 | swarm analytical suite | 25 metrics, 25 metadata files, and 10 environment records under `qav/swarm/out/` | all ten models passed natively on the recorded A100 environment |
-| adaptive-Morton KNN | the clean ordinary, wedge, adversarial, and copied-runtime development baseline is archived under `qav/swarm/test_knn/out/`, including exact topology at $N_P=10^6$ | the backend is now selectable in production, but the promoted production source and QA driver still require one clean native CUDA rerun before the archive represents the current revision |
+| adaptive-Morton KNN | the clean promoted-source ordinary, wedge, and adversarial matrices are archived under `qav/swarm/test_knn/out/`, including exact topology at $N_P=10^6$; all current cases pass | the standalone archive records base revision `115aa791f9db149bf3d53838df2efc86134994b7` and its worktree state; copied collision-runtime comparisons remain an earlier development baseline and are not current production timings |
 
 The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files
 

@@ -12,8 +12,8 @@ The initial suite covers particle-to-grid projection, optical-depth construction
 transport, stiff gas drag, cylindrical stochastic diffusion, radiation pressure, Poynting–
 Robertson drag, collision-neighborhood measures, the three dimensionless coagulation kernels, and
 exact KD-tree/Morton neighbor search. It does not yet validate initialization sampling, imported
-gas, complete stochastic collision events, boundaries, restart reproducibility, or long-term
-coupled evolution.
+gas, complete stochastic collision events against an analytical or converged reference,
+boundaries, restart reproducibility, or long-term coupled evolution.
 
 This document defines what each test proves, what it does not prove, and what result is
 expected. Machine-readable results are written under `qav/swarm/out/`. The shorter implementation
@@ -485,6 +485,11 @@ remain below $2\times10^{-13}$. These cases catch incorrect dimensions, missing 
 incorrect additive-kernel definition. They do not test neighbor identity, periodic images,
 normalization by an actual KNN radius, partner selection, coagulation events, or fragmentation.
 
+Thus `test_collision_2d` or `test_collision_3d` passes only when all six GPU values agree with the
+independently evaluated CPU formulas above to the stated absolute tolerance. The other backend is
+not used as the reference, and resolution convergence is neither required nor implied because this
+is a direct device-helper test with fixed inputs.
+
 ## Exact KNN and periodic-ghost tests
 
 `qav/swarm/test_knn/` is a standalone CUDA test family registered as the `knn` common-suite group.
@@ -512,6 +517,47 @@ When the GPU and brute-force lists contain the same particle indices, the valida
 distance by its matching index rather than by independently rounded distance rank; genuinely
 different index sets retain the stricter boundary-tie adjudication.
 
+### KNN ground truth and pass criteria
+
+The KNN family contains four distinct levels of evidence; the word `PASS` has a different precise
+meaning at each level.
+
+| Test family | Ground truth | Required for `PASS` |
+|---|---|---|
+| ordinary adversarial cases | exhaustive CPU enumeration of every candidate | exact selected identifiers and valid count, squared-distance agreement, and zero traversal overflows |
+| periodic adversarial cases | exhaustive CPU minimum-image enumeration over the physical particle set | the same neighbor conditions, no repeated physical identifier, the expected number of query images, and zero overflows |
+| ordinary smooth/ring/clump matrix | exhaustive CPU search for a configured subset and every KD-tree/Morton disagreement; the remaining queries have differential agreement but no independent ground truth | zero KD-tree/Morton query disagreements, zero brute-force failures, and zero Morton traversal overflows |
+| periodic wedge matrix | exhaustive CPU minimum-image search for a configured subset and every disagreement among three GPU methods | every brute-force-checked KD-tree, query-image Morton, and ghost-Morton result is valid, with zero Morton overflows; backend differences are allowed only when each differing result is independently equivalent to brute force |
+
+For the non-periodic CPU reference, every point inside the inclusive cutoff
+$d^2\le q^2$ is collected, sorted lexicographically by $(d^2,\mathrm{id})$, and truncated to
+$N_K$. The ordinary adversarial and matrix comparisons accept a squared-distance error no larger
+than
+
+$$
+2\times10^{-6}\max(1,|d^2_{\rm ref}|).
+$$
+
+The adversarial cases also require unused output slots to be exactly represented by identifier
+`-1` and infinite distance. They exercise equal-distance identifiers, coincident points, a point
+exactly on the cutoff, fewer than $N_K$ valid points, and points on Morton split planes in both 2D
+and 3D.
+
+For a periodic wedge, the CPU reference evaluates the original query and its two adjacent images,
+retains the minimum squared distance to each physical identifier, applies the inclusive cutoff,
+sorts by $(d^2,\mathrm{id})$, and truncates to $N_K$. The periodic adversarial driver requires an
+exact identifier match and the same scaled $2\times10^{-6}$ distance tolerance. The large wedge
+matrix uses an absolute $2\times10^{-6}$ squared-distance tolerance. If separately rounded CPU and
+GPU rotations exchange identifiers at the cutoff, the matrix accepts the substitution only when
+the corresponding ranked squared distances differ by at most $10^{-7}$; it records such neighbors
+as tie-equivalent rather than silently ignoring them.
+
+The ordinary and wedge matrices use 4096 quality queries and brute-force the first 32 by default.
+Every additional backend-disagreement query is also brute-forced, so KD-tree agreement is not used
+to adjudicate a disagreement. This is strong differential coverage but is not exhaustive CPU
+validation of all 4096 queries when all GPU backends make the same choice. The adversarial drivers
+provide the complementary fully exhaustive small-set checks.
+
 The clean A100 validation baseline covered:
 
 - 10 of 10 ordinary adversarial cases
@@ -533,10 +579,14 @@ Morton/KD-tree storage was 1.379-1.446 for the tested full disks and 0.468 for t
 The promoted production owner has changed since those measurements, so current total VRAM must be
 remeasured rather than inferred from the hierarchy-only ratios.
 
-The archived JSON, manifests, environment records, and terminal summaries were moved from the
-development laboratory to `qav/swarm/test_knn/out/`. That directory records the clean pre-promotion
-baseline. Because the QA driver now calls the production ghost owner directly, it must be rerun on
-native CUDA before the current source revision is treated as a publication artifact.
+The archived JSON, manifests, environment records, and terminal summaries under
+`qav/swarm/test_knn/out/` record the clean promoted-source run at base revision
+`115aa791f9db149bf3d53838df2efc86134994b7`; `worktree.txt` records the accompanying uncommitted
+state. The ordinary and wedge manifests report 12 of 12 and
+16 of 16 passing cases, respectively; both adversarial drivers report 10 of 10. A separate
+20-execution repeat of `smooth_3d_N100000` produced zero topology, brute-force, or overflow
+failures in every execution and the same maximum distance error,
+$9.313225746\times10^{-10}$.
 
 The standalone `*_query_ms` fields measure one complete batch of $N_P$ search queries using CUDA
 events after an untimed warm-up and report the mean of the requested repeats. They include tree
@@ -545,21 +595,56 @@ host-device transfers, brute-force validation, collision-rate physics, and colli
 corresponding `*_build_ms` fields report index construction separately. These search-only timings
 must not be presented as end-to-end collision-operator or simulation timings.
 
-The promoted QA benchmark is not performance-identical to the archived laboratory KD-tree driver.
-It now uses the production `index_old` heap, and its periodic-wedge path deduplicates physical
-particles represented by multiple KD-tree images. The archived driver used the stock KD-tree heap
-without that per-candidate deduplication. Consequently, changes in the reported KD/Morton speed
-ratio across promotion reflect a changed KD reference implementation as well as Morton integration;
-only clean runs of the same source revision are suitable for backend performance comparison.
+The promoted QA benchmark is not performance-identical to the former laboratory KD-tree driver.
+It uses the production `index_old` heap, and its periodic-wedge path deduplicates physical
+particles represented by multiple KD-tree images. The former driver used the stock KD-tree heap
+without that per-candidate deduplication. Consequently, historical laboratory ratios must not be
+compared directly with the promoted archive; only runs of one source revision are suitable for
+backend performance comparison.
 The current optimized heap stores `index_old` directly and activates its duplicate scan only
 for geometrically overlapping image neighborhoods; the JSON field `kd_deduplicate` records which
 path each wedge case exercises.
 
-The post-audit source also uses level-aware Morton AABB padding and block-parallel pair-propensity
+The validated source also uses level-aware Morton AABB padding and block-parallel pair-propensity
 evaluation with serial ordered accumulation. The standalone QA and production KD paths now include
 the same generic `index_old_heap` from `inc/swarm/kdtree/index_heap.cuh`, eliminating the
-former test transcription. These changes require a new clean native-CUDA archive before their
-correctness and performance are treated as final measurements.
+former test transcription. The clean topology archive validates the shared search components;
+the production pair-rate optimization is compiled by the suite but still needs a fresh
+end-to-end production timing comparison.
+
+### Collision-runtime differential comparisons
+
+The four retained runtime models—`collision_disk_2d`, `collision_wedge_2d`,
+`collision_disk_3d`, and `collision_disk_3d_1m`—compare two executions initialized from the same
+particle bytes, with the KD-tree backend used as the independent mature reference and Morton used
+as the candidate. They are differential and statistical tests, not analytical solutions of the
+Smoluchowski equation.
+
+Before stochastic events, a runtime comparison requires:
+
+- byte-identical initialized particle state
+- identical neighbor count and neighbor-identifier hash, except for an explicitly adjudicated
+  distance-equivalent $N_K$ boundary tie
+- finite collision-rate and KNN-radius arrays with identical zero masks
+- collision-rate relative $L_2\le10^{-5}$ and maximum relative error $\le10^{-3}$
+- KNN-radius errors within the same probe tolerances
+
+After collision evolution, different heap orders may consume the random target differently and
+produce different individual partners. Therefore byte-equal RNG state, byte-equal particle sizes,
+and trajectory closeness are diagnostics, not pass requirements. Instead, each of the eight final
+fields $(x,y,z,v_x,v_y,v_z,s,N)$ must pass a two-sample Kolmogorov–Smirnov comparison. The family
+false-rejection probability is $0.01$, divided over the eight fields, so each field uses
+$\alpha=0.00125$ and its sample-size-dependent two-sample critical value. Both runs must remain
+finite, each relative dust-mass drift and the final cross-backend mass mismatch must remain below
+$10^{-11}$, and every pre-event probe and final-field KS test must pass. Only then is the runtime
+record marked `passed: true`.
+
+This reference establishes that changing the exact search backend preserves the collision
+estimator and its output distribution. It does not establish that either backend reproduces an
+analytical coagulation history, that the Bernoulli leap is converged in `CFL_COL`, or that a single
+realization should follow the same trajectory. The retained runtime JSON files describe the
+earlier development implementation; regenerating them with the promoted source remains listed
+below.
 
 ## Recorded native CUDA results
 
@@ -713,9 +798,9 @@ qav/swarm/test_knn/out/
 
 ## Verification still required
 
-- Rerun the promoted KNN suite against the production boundary-ghost owner; the test group now
-  compiles and links both production collision backends before running the standalone topology matrix
-- Add direct end-to-end rate/event comparisons for axisymmetry, partial wedges, and full 3D
+- Regenerate the four production collision-runtime comparisons with the promoted source for
+  axisymmetry, partial wedges, full 3D, and $N_P=10^6$; the retained copies establish the earlier
+  development baseline but do not measure the current cooperative pair-rate implementation
 - Test complete frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
   with `CFL_COL`, $N_K$, and $N_P$
