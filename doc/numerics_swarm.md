@@ -9,10 +9,9 @@ coagulation/fragmentation.
 
 The active tree includes the corrected axisymmetric measure, well-mixed vertically integrated
 closures, imported-gas Stokes calibration, frozen collision snapshots, random-state restart
-semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The previously archived
-ten-model CUDA suite passed all 25 historical cases. New radial CUDA cases are implemented but do
-not become evidence until they are run on a native GPU and their metrics are archived as described
-in [`testset_swarm.md`](testset_swarm.md)
+semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The complete native CUDA
+suite, including the radial analytical and KNN cases, is archived and summarized in
+[`testset_swarm.md`](testset_swarm.md)
 
 ## Coordinates and particle state
 
@@ -52,6 +51,75 @@ $$
 For an axisymmetric cell, deposition and collision normalization include the missing complete
 azimuthal circumference or extent rather than treating the stored meridional section as a physical
 volume.
+
+### Radial-only closure
+
+The radial model is selected intrinsically by
+
+$$
+N_X=1,\qquad N_Y>1,\qquad N_Z=1,
+$$
+
+without a separate preprocessor flag. It represents an azimuthally symmetric, vertically
+integrated disk: grid dust and gas densities are surface densities $\Sigma_d$ and $\Sigma_g$,
+while gas drag, gravity, radiation, and particle dynamics use a midplane closure at $Z=0$.
+Representative particles sample the radial mass distribution rather than acting as rigid rings.
+
+The active particle state is
+
+$$
+R,\qquad v_R,\qquad \ell_\phi=Rv_\phi,
+$$
+
+with exact inactive assignments
+
+$$
+x=\frac{X_{\min}+X_{\max}}{2},\qquad
+z=\frac{\pi}{2},\qquad
+\ell_\theta=v_\theta=0.
+$$
+
+Azimuth is spatially inactive, but $\ell_\phi$ remains dynamical because it supplies centrifugal
+support, azimuthal drag, collision velocity, and Poynting–Robertson damping. The radial surface
+density obeys
+
+$$
+\frac{\partial\Sigma_d}{\partial t}
++\frac{1}{R}\frac{\partial}{\partial R}(R\Sigma_dv_R)
+=\frac{1}{R}\frac{\partial}{\partial R}
+\left(RD_R\frac{\partial\Sigma_d}{\partial R}\right),
+$$
+
+where transport follows particle characteristics and stochastic diffusion represents the
+right-hand side. The midplane characteristic variables satisfy
+
+$$
+\frac{dR}{dt}=v_R,
+$$
+
+$$
+\frac{d\ell_\phi}{dt}
+=-\frac{\ell_\phi-\ell_{\phi,g}}{t_s}-\gamma_{\rm PR}\ell_\phi,
+$$
+
+$$
+\frac{dv_R}{dt}
+=\frac{\ell_\phi^2}{R^3}
+-(1-\beta)\frac{GM_\star}{R^2}
+-\frac{v_R-v_{R,g}}{t_s}
+-2\gamma_{\rm PR}v_R.
+$$
+
+The binary particle layout remains the common three-coordinate layout. Science files store
+physical linear velocities $(v_\phi,v_R,v_\theta)$, with $v_\theta=0$. Grid density files contain
+$N_Y$ values of $\Sigma_d$, optical-depth files contain the radial cumulative outer-face field,
+and runtime metadata labels the geometry, density kinds, inactive coordinates, and midplane
+dynamical closure.
+
+The radial timestep retains the orbital rate because centrifugal and epicyclic dynamics remain
+active. It also limits radial particle and gas-target crossing, force-driven displacement,
+diffusion RMS displacement, deterministic diffusion drift, `DT_MAX`, and the remaining output
+interval; azimuthal and polar crossing rates are inactive.
 
 ## Dust normalization and initialization
 
@@ -96,7 +164,10 @@ imported gas velocities already prescribe the gas flow.
 
 Imported gas initialization samples the imported gas density times $\epsilon$ using the same exact
 cell-measure construction. Active azimuthal cells are sampled with `_get_dx()`; an inactive
-azimuth is centered. When `N_Z == 1`, the imported field is $\Sigma_g$ and
+azimuth is centered. Here $\epsilon$ controls the spatial shape of the dust sampling distribution;
+the total represented dust mass is still normalized from `SIGMA_0`, `METAL_Z`, and the configured
+domain rather than taken as an independent absolute mass from the imported field. When
+`N_Z == 1`, the imported field is $\Sigma_g$ and
 
 $$
 \mathrm{St}(R,s)
@@ -637,6 +708,8 @@ high-order quadrature before replacing the present cap formula.
 Science files store physical linear velocity $(v_\phi,v_r,v_\theta)$. Loading converts it back to
 the internal angular variables before device evolution. Grain size and represented grain number
 are included only for multisize builds, matching the declared binary dtype.
+Loading also reasserts every inactive coordinate, so a radial restart has exact
+$x=(X_{\min}+X_{\max})/2$, $z=\pi/2$, and $\ell_\theta=0$ before evolution resumes.
 
 Collision or diffusion builds save `rngstate_<frame>.dat` beside every particle checkpoint and
 restore it on resume. The companion file contains one raw `curandState` per representative, so a
@@ -645,9 +718,6 @@ same CUDA state layout.
 
 ## Current limitations
 
-- The radial-only production path and its analytical test models are implemented, but native CUDA
-  results have not yet been archived. Treat it as implemented but not yet validated for production
-  until the radial matrix in [`testset_swarm.md`](testset_swarm.md) passes on the target GPU
 - The passed CUDA suite covers circular orbits, frozen stiff drag, one-step diffusion moments,
   optical-depth reconstruction, radiation and P-R response algebra, accessible collision measures,
   and constant, additive, and product kernel numerators. It does not establish long-time coupled

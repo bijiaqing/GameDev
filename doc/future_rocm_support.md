@@ -121,7 +121,10 @@ The test runners should select backend-aware environment tools:
 | `-Xptxas=-v` | AMD compiler resource diagnostics |
 | Nsight Compute/Systems | rocprofiler and rocTracer-family tools |
 
-The current swarm CUDA archive contains all 25 deterministic/statistical metric files, 25 metadata files, and 10 environment files. The fluid suite is structurally complete, but its local `qav/fluid/out/` directory is currently empty and must be repopulated before it can serve as a stored CUDA baseline.
+The current swarm CUDA archive contains all 47 deterministic/statistical metric files, 47 matching
+metadata files, 23 analytical model manifests, the complete KNN component records, and a passing
+aggregate manifest. The fluid suite is structurally complete, but its local `qav/fluid/out/`
+directory is currently empty and must be repopulated before it can serve as a stored CUDA baseline.
 
 Required ROCm gates are:
 

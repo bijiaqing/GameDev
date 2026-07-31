@@ -13,7 +13,6 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian representative-particle transport, diffusion, radiation, collisions, state semantics, and scientific limitations |
 | [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
-| [`future_radial_model.md`](future_radial_model.md) | Implemented vertically integrated radial-only swarm prescription, remaining validation work, and production-readiness criteria |
 | [`future_rocm_support.md`](future_rocm_support.md) | CUDA-to-ROCm portability assessment and implementation sequence |
 
 Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior
@@ -39,8 +38,8 @@ The branches do not share headers or translation units. Related algorithms, incl
 |---|---|---|
 | fluid analytical suite | `qav/fluid/out/` is currently empty | the 85-case A100 result table in `testset_fluid.md` is a retained historical baseline, not a presently archived machine-readable result set |
 | fluid thread/block comparison | harness exists; no comparison JSON, build log, or profiler artifact is archived | implementation equivalence and timing claims should be regenerated on the target GPU before publication |
-| swarm analytical suite | 25 metrics, 25 metadata files, and 10 environment records under `qav/swarm/out/` | all ten models passed natively on the recorded A100 environment |
-| adaptive-Morton KNN | the latest clean CUDA run passed all 18 ordinary and 30 wedge cases through $N_P=10^7$, together with both adversarial drivers; Racecheck reports zero remaining hazards in the targeted 3D ring case | the validated block-parallel sorted top-$K$ merge is the sole Morton selection path; the repository's machine-readable KNN archive still predates the $10^7$ extension, and current end-to-end collision timing still requires regeneration |
+| swarm analytical suite | 47 metrics, 47 metadata files, 23 model manifests, and a passing aggregate under `qav/swarm/out/` | all current 1D, 2D, and 3D analytical configurations passed natively on the recorded A100 environment |
+| adaptive-Morton KNN | the current archive passes 7 ordinary cases, 15 edge checks, 10 periodic checks, 10 wedge cases, and all 6 production backend links at $N_P=10^5$ | the validated block-parallel sorted top-$K$ merge is the sole Morton selection path; larger historical matrices are development evidence, while current end-to-end collision timing still requires regeneration |
 
 The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files
 

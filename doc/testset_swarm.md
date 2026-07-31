@@ -1186,6 +1186,8 @@ expected model as pending, running, passed, failed, or interrupted and prints a 
 - Validate vertical settling–diffusion equilibrium and spatially varying diffusivity-gradient
   terms
 - Compare uninterrupted and restarted stochastic runs bitwise, including restored cuRAND state
+- Compare the radial-only model with an azimuthally uniform radial–azimuthal model using matched
+  surface density, gas targets, and enabled physics
 - Add end-to-end operator-combination tests for transport plus diffusion, transport plus radiation,
   transport plus collision, and all enabled swarm physics
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
