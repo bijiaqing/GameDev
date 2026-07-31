@@ -1,9 +1,9 @@
 #ifndef SWARM_HOST_CUH
 #define SWARM_HOST_CUH
 
-#include <algorithm>        // std::copy, std::lower_bound, std::max, std::max_element, std::minmax_element
+#include <algorithm>        // std::copy, std::lower_bound, std::max, std::minmax_element
 #include <chrono>           // std::chrono::system_clock
-#include <cmath>            // std::abs, std::acos, std::cos, std::exp, std::log, std::pow, std::sin, std::sqrt
+#include <cmath>            // std::abs, std::acos, std::atan2, std::cos, std::erf, std::erfc, std::exp, std::log, std::pow, std::sin, std::sqrt
 #include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
@@ -46,15 +46,18 @@ real _get_sz (real z) { return -std::cos(z); }
 extern std::mt19937 rand_generator;
 
 #ifdef MULTISIZE
-// calculate the mass scale that makes the sampled representative masses sum to the target dust mass
+// calculate the scale that makes containment-weighted representative masses sum to the target domain mass
 inline __host__
-real get_mass_norm (const real *randsize, real total_dust_mass)
+real get_mass_norm (const real *randsize, const std::vector <real> &mass_bank, real total_dust_mass)
 {
     long double weight_sum = 0.0;
+    int mass_bin_count = static_cast<int>(mass_bank.size());
 
     for (int idx = 0; idx < N_P; idx++)
     {
-        weight_sum += static_cast<long double>(_get_mass_weight(randsize[idx]));
+        real domain_mass = _get_domain_mass(randsize[idx], mass_bank.data(), mass_bin_count);
+        weight_sum += static_cast<long double>(_get_mass_weight(randsize[idx]))
+                    * static_cast<long double>(domain_mass);
     }
 
     return static_cast<real>(
@@ -134,12 +137,10 @@ real initdens_lerp (real R, const std::vector <real> &initdens)
     return (1.0 - frac)*initdens[idx_bin] + frac*initdens[idx_bin + 1];
 }
 
-// evaluate the physical initialized dust density for one cylindrical position and grain size
+// calculate the initialized dust scale height for one cylindrical radius and grain size
 inline static __host__
-real _get_init_rhod (real sigma_d, real R, real Z, real size)
+real _get_init_Hd (real R, real size)
 {
-    if (N_Z == 1 || sigma_d <= 0.0) return sigma_d;
-
     real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
     real H_d = h_g*R;
 
@@ -153,39 +154,344 @@ real _get_init_rhod (real sigma_d, real R, real Z, real size)
     H_d *= std::sqrt(alpha_z / stokes_mid);
     #endif // DIFFUSION
 
-    return sigma_d*std::exp(-0.5*Z*Z / (H_d*H_d)) / (std::sqrt(2.0*M_PI)*H_d);
+    return H_d;
 }
 
-// integrate the initialized profile to obtain the total dust mass represented by the simulation domain
+// select the common log-size resolution for domain-mass and conditional-CDF tables
+inline static __host__
+int _get_mass_bin_count ()
+{
+    #ifdef MULTISIZE
+    #ifdef IMPORTGAS
+    return 1;
+    #else  // ANALYTIC_GAS
+    #ifdef COLLISION_LINEAR_TEST
+    return 1;
+    #else  // STANDARD_INITIALIZATION
+    if (N_Z == 1 || INIT_SMIN == INIT_SMAX) return 1;
+    return 128;
+    #endif // COLLISION_LINEAR_TEST
+    #endif // IMPORTGAS
+    #else  // MONOSIZE
+    return 1;
+    #endif // MULTISIZE
+}
+
+// return a radial resolution independent of the simulation polar mesh
+inline static __host__
+int _get_init_Rbin_count ()
+{ return std::max(2048, 4*N_Y); }
+
+struct init_zspan
+{
+    real z_lo[2];
+    real z_hi[2];
+    int count;
+};
+
+// intersect one cylindrical line with the configured spherical radial-polar domain
+inline static __host__
+init_zspan _get_init_zspan (real R)
+{
+    init_zspan span = {{0.0, 0.0}, {0.0, 0.0}, 0};
+    if (R < 0.0 || R > Y_MAX) return span;
+
+    real infinity = std::numeric_limits<real>::infinity();
+    real z_polar_lo = (Z_MAX >= M_PI) ? -infinity : R*std::cos(Z_MAX) / std::sin(Z_MAX);
+    real z_polar_hi = (Z_MIN <= 0.0) ? +infinity : R*std::cos(Z_MIN) / std::sin(Z_MIN);
+    real z_outer = std::sqrt(std::max(Y_MAX*Y_MAX - R*R, 0.0));
+    real z_lo = std::max(z_polar_lo, -z_outer);
+    real z_hi = std::min(z_polar_hi, +z_outer);
+    if (z_hi <= z_lo) return span;
+
+    if (R >= Y_MIN)
+    {
+        span.z_lo[0] = z_lo;
+        span.z_hi[0] = z_hi;
+        span.count = 1;
+        return span;
+    }
+
+    real z_inner = std::sqrt(std::max(Y_MIN*Y_MIN - R*R, 0.0));
+    real z_neg_hi = std::min(z_hi, -z_inner);
+    if (z_neg_hi > z_lo)
+    {
+        span.z_lo[span.count] = z_lo;
+        span.z_hi[span.count] = z_neg_hi;
+        span.count++;
+    }
+
+    real z_pos_lo = std::max(z_lo, +z_inner);
+    if (z_hi > z_pos_lo)
+    {
+        span.z_lo[span.count] = z_pos_lo;
+        span.z_hi[span.count] = z_hi;
+        span.count++;
+    }
+
+    return span;
+}
+
+// integrate a normalized zero-mean Gaussian over one finite interval
+inline static __host__
+real _get_normal_mass (real z_lo, real z_hi, real H_d)
+{
+    if (z_hi <= z_lo) return 0.0;
+
+    real inv_width = 1.0 / (std::sqrt(2.0)*H_d);
+    if (z_lo >= 0.0)
+        return 0.5*(std::erfc(z_lo*inv_width) - std::erfc(z_hi*inv_width));
+    if (z_hi <= 0.0)
+        return 0.5*(std::erfc(-z_hi*inv_width) - std::erfc(-z_lo*inv_width));
+
+    return 0.5*(std::erf(z_hi*inv_width) - std::erf(z_lo*inv_width));
+}
+
+// approximate the inverse standard-normal cumulative distribution
+inline static __host__
+real _get_normal_quantile (real probability)
+{
+    constexpr real a1 = -3.969683028665376e+01;
+    constexpr real a2 = +2.209460984245205e+02;
+    constexpr real a3 = -2.759285104469687e+02;
+    constexpr real a4 = +1.383577518672690e+02;
+    constexpr real a5 = -3.066479806614716e+01;
+    constexpr real a6 = +2.506628277459239e+00;
+    constexpr real b1 = -5.447609879822406e+01;
+    constexpr real b2 = +1.615858368580409e+02;
+    constexpr real b3 = -1.556989798598866e+02;
+    constexpr real b4 = +6.680131188771972e+01;
+    constexpr real b5 = -1.328068155288572e+01;
+    constexpr real c1 = -7.784894002430293e-03;
+    constexpr real c2 = -3.223964580411365e-01;
+    constexpr real c3 = -2.400758277161838e+00;
+    constexpr real c4 = -2.549732539343734e+00;
+    constexpr real c5 = +4.374664141464968e+00;
+    constexpr real c6 = +2.938163982698783e+00;
+    constexpr real d1 = +7.784695709041462e-03;
+    constexpr real d2 = +3.224671290700398e-01;
+    constexpr real d3 = +2.445134137142996e+00;
+    constexpr real d4 = +3.754408661907416e+00;
+    constexpr real prob_lo = 0.02425;
+    constexpr real prob_hi = 1.0 - prob_lo;
+
+    real prob_min = std::numeric_limits<real>::min();
+    real prob_max = 1.0 - std::numeric_limits<real>::epsilon();
+    real prob = std::max(prob_min, std::min(probability, prob_max));
+
+    if (prob < prob_lo)
+    {
+        real q = std::sqrt(-2.0*std::log(prob));
+        return (((((c1*q + c2)*q + c3)*q + c4)*q + c5)*q + c6)
+             / ((((d1*q + d2)*q + d3)*q + d4)*q + 1.0);
+    }
+
+    if (prob > prob_hi)
+    {
+        real q = std::sqrt(-2.0*std::log(1.0 - prob));
+        return -(((((c1*q + c2)*q + c3)*q + c4)*q + c5)*q + c6)
+               / ((((d1*q + d2)*q + d3)*q + d4)*q + 1.0);
+    }
+
+    real q = prob - 0.5;
+    real r = q*q;
+    return (((((a1*r + a2)*r + a3)*r + a4)*r + a5)*r + a6)*q
+         / (((((b1*r + b2)*r + b3)*r + b4)*r + b5)*r + 1.0);
+}
+
+// sample one Gaussian restricted to a selected finite interval
+inline static __host__
+real _sample_normal_interval (real z_lo, real z_hi, real H_d, real frac)
+{
+    real inv_width = 1.0 / (std::sqrt(2.0)*H_d);
+
+    if (z_lo >= 0.0)
+    {
+        real prob_lo = 0.5*std::erfc(z_lo*inv_width);
+        real prob_hi = 0.5*std::erfc(z_hi*inv_width);
+        real tail_prob = prob_lo + (prob_hi - prob_lo)*frac;
+        return -H_d*_get_normal_quantile(tail_prob);
+    }
+
+    if (z_hi <= 0.0)
+    {
+        real prob_lo = 0.5*std::erfc(-z_lo*inv_width);
+        real prob_hi = 0.5*std::erfc(-z_hi*inv_width);
+        real cdf_prob = prob_lo + (prob_hi - prob_lo)*frac;
+        return H_d*_get_normal_quantile(cdf_prob);
+    }
+
+    real prob_lo = 0.5*(1.0 + std::erf(z_lo*inv_width));
+    real prob_hi = 0.5*(1.0 + std::erf(z_hi*inv_width));
+    return H_d*_get_normal_quantile(prob_lo + (prob_hi - prob_lo)*frac);
+}
+
+// integrate the vertical Gaussian over every allowed interval at one cylindrical radius
+inline static __host__
+real _get_init_containment (real R, real size)
+{
+    if (N_Z == 1) return 1.0;
+
+    init_zspan span = _get_init_zspan(R);
+    if (span.count == 0) return 0.0;
+
+    real H_d = _get_init_Hd(R, size);
+    real containment = 0.0;
+    for (int idx_span = 0; idx_span < span.count; idx_span++)
+    {
+        containment += _get_normal_mass(span.z_lo[idx_span], span.z_hi[idx_span], H_d);
+    }
+
+    return containment;
+}
+
+// sample the exact truncated vertical Gaussian at one cylindrical radius
+inline static __host__
+real _sample_init_Z (real R, real size, real frac)
+{
+    if (N_Z == 1) return 0.0;
+
+    init_zspan span = _get_init_zspan(R);
+    real H_d = _get_init_Hd(R, size);
+    real span_mass[2] = {0.0, 0.0};
+    real total_mass = 0.0;
+
+    for (int idx_span = 0; idx_span < span.count; idx_span++)
+    {
+        span_mass[idx_span] = _get_normal_mass(span.z_lo[idx_span], span.z_hi[idx_span], H_d);
+        total_mass += span_mass[idx_span];
+    }
+
+    if (total_mass <= 0.0) throw std::runtime_error("initialized dust profile has zero vertical mass");
+
+    real target_mass = frac*total_mass;
+    real mass_before = 0.0;
+    for (int idx_span = 0; idx_span < span.count; idx_span++)
+    {
+        real mass_after = mass_before + span_mass[idx_span];
+        if (target_mass <= mass_after || idx_span == span.count - 1)
+        {
+            real local_frac = (span_mass[idx_span] > 0.0)
+                ? (target_mass - mass_before) / span_mass[idx_span] : 0.5;
+            local_frac = std::max(0.0, std::min(local_frac, 1.0));
+            real Z = _sample_normal_interval(
+                span.z_lo[idx_span], span.z_hi[idx_span], H_d, local_frac
+            );
+            return std::max(span.z_lo[idx_span], std::min(Z, span.z_hi[idx_span]));
+        }
+        mass_before = mass_after;
+    }
+
+    throw std::runtime_error("failed to select an initialized vertical interval");
+}
+
+// evaluate the cylindrical radial mass density after exact vertical containment
+inline static __host__
+real _get_init_Rmass (real R, const std::vector <real> &initdens, real size)
+{
+    if (R <= 0.0 || R > Y_MAX) return 0.0;
+
+    real sigma_d = initdens_lerp(R, initdens);
+    if (sigma_d <= 0.0) return 0.0;
+
+    return R*sigma_d*_get_init_containment(R, size);
+}
+
+// tabulate the continuous cylindrical-radius CDF and its finite-domain physical mass
+inline static __host__
+real disk_cdf_calc (std::vector <real> &cdf, const std::vector <real> &initdens, real size)
+{
+    int radial_bin_count = _get_init_Rbin_count();
+    real R_min = _get_init_Rmin();
+    real dR = (Y_MAX - R_min) / static_cast<real>(radial_bin_count);
+    cdf.assign(radial_bin_count + 1, 0.0);
+
+    real mass_lo = _get_init_Rmass(R_min, initdens, size);
+    for (int idx_R = 0; idx_R < radial_bin_count; idx_R++)
+    {
+        real R_hi = R_min + static_cast<real>(idx_R + 1)*dR;
+        real mass_hi = _get_init_Rmass(R_hi, initdens, size);
+        cdf[idx_R + 1] = cdf[idx_R] + 0.5*(mass_lo + mass_hi)*dR;
+        mass_lo = mass_hi;
+    }
+
+    real radial_mass = cdf.back();
+    if (radial_mass <= 0.0) throw std::runtime_error("initialized dust profile has zero mass in the domain");
+    for (real &value : cdf)
+    {
+        value /= radial_mass;
+    }
+
+    real azimuth_extent = static_cast<real>(N_X)*_get_vol_x();
+    return azimuth_extent*radial_mass;
+}
+
+// tabulate the physical domain mass on the same logarithmic size axis used by spatial CDFs
 inline __host__
-real get_total_dust_mass ()
+void initmass_calc (std::vector <real> &mass_bank)
 {
     std::vector <real> initdens;
     initdens_calc(initdens);
 
-    real vol_x = _get_vol_x();
-    real total_dust_mass = 0.0;
+    int mass_bin_count = _get_mass_bin_count();
+    mass_bank.resize(mass_bin_count);
+    std::vector <real> cdf;
 
-    for (int iz = 0; iz < N_Z; iz++)
+    #ifdef MULTISIZE
+    #ifdef IMPORTGAS
+    mass_bank[0] = disk_cdf_calc(cdf, initdens, S_0);
+    #else  // ANALYTIC_GAS
+    #ifdef COLLISION_LINEAR_TEST
+    mass_bank[0] = disk_cdf_calc(cdf, initdens, S_0);
+    #else  // STANDARD_INITIALIZATION
+    real log_size_min = std::log(INIT_SMIN);
+    real dlog_size = (mass_bin_count > 1)
+        ? (std::log(INIT_SMAX) - log_size_min) / static_cast<real>(mass_bin_count - 1)
+        : 0.0;
+
+    for (int idx_size = 0; idx_size < mass_bin_count; idx_size++)
     {
-        real z = _get_zcent(iz);
-        real vol_z = _get_vol_z(iz);
-
-        for (int iy = 0; iy < N_Y; iy++)
-        {
-            real y = _get_ycent(iy);
-            real R = _get_cyl_R(y, z);
-            real Z = _get_cyl_Z(y, z);
-
-            real sigma_d = initdens_lerp(R, initdens);
-            real rhod = _get_init_rhod(sigma_d, R, Z, S_0);
-            real vol_y = _get_vol_y(iy);
-
-            total_dust_mass += rhod*vol_x*vol_y*vol_z;
-        }
+        real size = std::exp(log_size_min + static_cast<real>(idx_size)*dlog_size);
+        mass_bank[idx_size] = disk_cdf_calc(cdf, initdens, size);
     }
+    #endif // COLLISION_LINEAR_TEST
+    #endif // IMPORTGAS
+    #else  // MONOSIZE
+    mass_bank[0] = disk_cdf_calc(cdf, initdens, S_0);
+    #endif // MULTISIZE
+}
 
-    return total_dust_mass;
+// integrate the physical mass spectrum over grain size to obtain the represented domain mass
+inline __host__
+real get_total_dust_mass (const std::vector <real> &mass_bank)
+{
+    #ifdef MULTISIZE
+    if (mass_bank.size() > 1)
+    {
+        constexpr int size_quad_count = 1024;
+        real sqrt_size_min = std::sqrt(INIT_SMIN);
+        real sqrt_size_max = std::sqrt(INIT_SMAX);
+        long double mass_sum = 0.0;
+
+        for (int idx_quad = 0; idx_quad <= size_quad_count; idx_quad++)
+        {
+            real frac = static_cast<real>(idx_quad) / static_cast<real>(size_quad_count);
+            real sqrt_size = sqrt_size_min + (sqrt_size_max - sqrt_size_min)*frac;
+            real size = sqrt_size*sqrt_size;
+            real domain_mass = _get_domain_mass(
+                size, mass_bank.data(), static_cast<int>(mass_bank.size())
+            );
+
+            real quad_weight = (idx_quad == 0 || idx_quad == size_quad_count)
+                ? 1.0 : ((idx_quad % 2 == 0) ? 2.0 : 4.0);
+            mass_sum += static_cast<long double>(quad_weight)*static_cast<long double>(domain_mass);
+        }
+
+        return static_cast<real>(mass_sum / (3.0L*static_cast<long double>(size_quad_count)));
+    }
+    #endif // MULTISIZE
+
+    return mass_bank[0];
 }
 
 // =========================================================================================================================
@@ -193,9 +499,46 @@ real get_total_dust_mass ()
 // =========================================================================================================================
 
 #ifndef IMPORTGAS
-// sample one-size dust from the joint spherical disk distribution with the exact cell measure
-// draw y and z together because R = y sin(z) and Z = y cos(z) jointly determine radial and vertical dust density
-// when diffusion is enabled use size to calculate the Stokes-dependent scale height before drawing the shared cell
+// invert one linearly interpolated radial CDF
+inline static __host__
+real _sample_init_R (const real *cdf_lo, const real *cdf_hi, real frac_size, real cdf_sample)
+{
+    int radial_bin_count = _get_init_Rbin_count();
+    int idx_lo = 0;
+    int idx_hi = radial_bin_count;
+    while (idx_lo < idx_hi)
+    {
+        int idx_mid = idx_lo + (idx_hi - idx_lo) / 2;
+        real prob_mid = (1.0 - frac_size)*cdf_lo[idx_mid] + frac_size*cdf_hi[idx_mid];
+        if (prob_mid < cdf_sample) idx_lo = idx_mid + 1;
+        else idx_hi = idx_mid;
+    }
+
+    int idx_R = std::max(0, idx_lo - 1);
+    real prob_lo = (1.0 - frac_size)*cdf_lo[idx_R] + frac_size*cdf_hi[idx_R];
+    real prob_hi = (1.0 - frac_size)*cdf_lo[idx_R + 1] + frac_size*cdf_hi[idx_R + 1];
+    real frac_R = (prob_hi > prob_lo) ? (cdf_sample - prob_lo) / (prob_hi - prob_lo) : 0.5;
+    frac_R = std::max(0.0, std::min(frac_R, 1.0));
+
+    real R_min = _get_init_Rmin();
+    real dR = (Y_MAX - R_min) / static_cast<real>(radial_bin_count);
+    return R_min + (static_cast<real>(idx_R) + frac_R)*dR;
+}
+
+// sample one continuous cylindrical position from a radial CDF and exact conditional Gaussian
+inline static __host__
+void _sample_disk_pos (real &x, real &y, real &z, real size, const real *cdf_lo, const real *cdf_hi,
+    real frac_size, std::uniform_real_distribution <real> &random)
+{
+    real R = _sample_init_R(cdf_lo, cdf_hi, frac_size, random(rand_generator));
+    real Z = _sample_init_Z(R, size, random(rand_generator));
+
+    x = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
+    y = (N_Z > 1) ? std::sqrt(R*R + Z*Z) : R;
+    z = (N_Z > 1) ? std::atan2(R, Z) : 0.5*M_PI;
+}
+
+// sample one-size dust continuously from the cylindrical density truncated by the spherical domain
 inline __host__
 void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, int count)
 {
@@ -204,148 +547,20 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
     std::vector <real> initdens;
     initdens_calc(initdens);
 
-    real mesh_dim = _get_mesh_dim();
-
-    std::vector <real> cell_mass(N_Y*N_Z);
-    std::vector <real> cdf(N_Y*N_Z + 1, 0.0);
-
-    // integrate the local dust profile over each radial-polar cell
-    for (int iz = 0; iz < N_Z; iz++)
-    {
-        real z = _get_zcent(iz);
-        real vol_z = _get_vol_z(iz);
-
-        for (int iy = 0; iy < N_Y; iy++)
-        {
-            real y = _get_ycent(iy);
-            real R = _get_cyl_R(y, z);
-            real Z = _get_cyl_Z(y, z);
-
-            real sigma_d = initdens_lerp(R, initdens);
-            real rhod = _get_init_rhod(sigma_d, R, Z, size);
-
-            real vol_y = _get_vol_y(iy);
-            int idx_cell = iy + iz*N_Y;
-
-            cell_mass[idx_cell] = rhod*vol_y*vol_z;
-            cdf[idx_cell + 1] = cdf[idx_cell] + cell_mass[idx_cell];
-        }
-    }
-
-    // normalize the cell-mass CDF before inverse sampling
-    real total_mass = cdf.back();
-    for (real &value : cdf)
-    {
-        value /= total_mass;
-    }
-
-    std::vector<real> y_face_s(N_Y + 1);
-    for (int iy = 0; iy <= N_Y; iy++)
-    {
-        y_face_s[iy] = _get_sy(_get_yface(iy));
-    }
-
-    std::vector<real> z_face_s(N_Z + 1);
-    for (int iz = 0; iz <= N_Z; iz++)
-    {
-        z_face_s[iz] = _get_sz(_get_zface(iz));
-    }
+    std::vector <real> cdf;
+    disk_cdf_calc(cdf, initdens, size);
 
     for (int idx = 0; idx < count; idx++)
     {
-        real cdf_sample = random(rand_generator);
-        auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), cdf_sample);
-        int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
-        int iy = idx_cell % N_Y;
-        int iz = idx_cell / N_Y;
-
-        randposx[idx] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
-
-        // sample uniformly in the exact radial and polar volume coordinates inside the chosen cell
-        real s_y0 = y_face_s[iy];
-        real s_y1 = y_face_s[iy + 1];
-        real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
-
-        randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
-
-        if (N_Z > 1)
-        {
-            real s_z0 = z_face_s[iz];
-            real s_z1 = z_face_s[iz + 1];
-            real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
-
-            randposz[idx] = std::acos(-s_z);
-        }
-        else
-        {
-            randposz[idx] = 0.5*M_PI;
-        }
+        _sample_disk_pos(
+            randposx[idx], randposy[idx], randposz[idx], size,
+            cdf.data(), cdf.data(), 0.0, random
+        );
     }
 }
 
 #if defined(MULTISIZE) && defined(DIFFUSION)
-// precompute one normalized spatial CDF for a selected grain size
-inline static __host__
-void disk_cdf_calc (std::vector <real> &cdf, const std::vector <real> &initdens, real size)
-{
-    int cell_count = N_Y*N_Z;
-    real log_zero = -std::numeric_limits<real>::infinity();
-    std::vector <real> log_mass(cell_count, log_zero);
-    cdf.assign(cell_count + 1, 0.0);
-
-    for (int iz = 0; iz < N_Z; iz++)
-    {
-        real z = _get_zcent(iz);
-        real vol_z = _get_vol_z(iz);
-
-        for (int iy = 0; iy < N_Y; iy++)
-        {
-            real y = _get_ycent(iy);
-            real R = _get_cyl_R(y, z);
-            real Z = _get_cyl_Z(y, z);
-            real sigma_d = initdens_lerp(R, initdens);
-            real log_rhod = (sigma_d > 0.0) ? std::log(sigma_d) : log_zero;
-
-            if (N_Z > 1 && sigma_d > 0.0)
-            {
-                real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
-                real H_g = h_g*R;
-
-                real alpha_z = _get_alpha(R, h_g) / SCHMIDT_Z;
-
-                real stokes_mid = STOKES_0*(size / S_0);
-                #ifndef CONST_ST
-                stokes_mid /= std::pow(R / R_0, IDX_P);
-                #endif // NOT CONST_ST
-
-                real H_d = H_g*std::sqrt(alpha_z / stokes_mid);
-
-                log_rhod -= 0.5*Z*Z / (H_d*H_d);
-                log_rhod -= std::log(H_d);
-            }
-
-            real vol_y = _get_vol_y(iy);
-            int idx_cell = iy + iz*N_Y;
-            if (sigma_d > 0.0) log_mass[idx_cell] = log_rhod + std::log(vol_y) + std::log(vol_z);
-        }
-    }
-
-    // remove the largest logarithm before exponentiation to preserve highly settled distributions
-    real max_log_mass = *std::max_element(log_mass.begin(), log_mass.end());
-    for (int idx = 0; idx < cell_count; idx++)
-    {
-        cdf[idx + 1] = cdf[idx] + std::exp(log_mass[idx] - max_log_mass);
-    }
-
-    real total_mass = cdf[cell_count];
-    for (real &value : cdf) 
-    {
-        value /= total_mass;
-    }
-}
-
-// sample polydisperse dust from the joint y-z distribution conditioned on each previously assigned grain size
-// interpolate log-size CDFs because size changes the Stokes number and therefore the coupled vertical distribution
+// sample polydisperse dust from radial CDFs conditioned on each previously assigned grain size
 inline __host__
 void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real *randsize, int count)
 {
@@ -360,75 +575,47 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
     }
 
     // tabulate conditional CDFs uniformly in log size and interpolate their normalized probabilities
-    int size_bin_count = std::max(2, std::min(128, std::max(N_Y, N_Z)));
-    int cell_count = N_Y*N_Z;
+    #ifdef COLLISION_LINEAR_TEST
+    int size_bin_count = 128;
     real log_size_min = std::log(size_min);
     real log_size_max = std::log(size_max);
+    #else  // STANDARD_INITIALIZATION
+    int size_bin_count = _get_mass_bin_count();
+    real log_size_min = std::log(INIT_SMIN);
+    real log_size_max = std::log(INIT_SMAX);
+    #endif // COLLISION_LINEAR_TEST
+    int radial_bin_count = _get_init_Rbin_count();
     real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bin_count - 1);
 
     std::vector <real> initdens;
     initdens_calc(initdens);
 
     std::vector <real> cdf;
-    std::vector <real> cdf_bank(static_cast<size_t>(size_bin_count)*static_cast<size_t>(cell_count + 1));
+    std::vector <real> cdf_bank(static_cast<size_t>(size_bin_count)*static_cast<size_t>(radial_bin_count + 1));
     for (int idx_size = 0; idx_size < size_bin_count; idx_size++)
     {
         real size = std::exp(log_size_min + static_cast<real>(idx_size)*dlog_size);
         disk_cdf_calc(cdf, initdens, size);
-        std::copy(cdf.begin(), cdf.end(), cdf_bank.begin() + static_cast<size_t>(idx_size)*static_cast<size_t>(cell_count + 1));
+        std::copy(cdf.begin(), cdf.end(),
+            cdf_bank.begin() + static_cast<size_t>(idx_size)*static_cast<size_t>(radial_bin_count + 1));
     }
 
-    real mesh_dim = _get_mesh_dim();
     std::uniform_real_distribution <real> random(0.0, 1.0);
-
-    std::vector<real> y_face_s(N_Y + 1);
-    for (int iy = 0; iy <= N_Y; iy++)
-    {
-        y_face_s[iy] = _get_sy(_get_yface(iy));
-    }
-
-    std::vector<real> z_face_s(N_Z + 1);
-    for (int iz = 0; iz <= N_Z; iz++)
-    {
-        z_face_s[iz] = _get_sz(_get_zface(iz));
-    }
 
     for (int idx = 0; idx < count; idx++)
     {
         real loc_size = (std::log(randsize[idx]) - log_size_min) / dlog_size;
+        loc_size = std::max(0.0, std::min(loc_size, static_cast<real>(size_bin_count - 1)));
         int size_lo = std::min(static_cast<int>(loc_size), size_bin_count - 2);
         real frac_size = loc_size - static_cast<real>(size_lo);
-        const real *cdf_lo = cdf_bank.data() + static_cast<size_t>(size_lo)*static_cast<size_t>(cell_count + 1);
-        const real *cdf_hi = cdf_lo + cell_count + 1;
+        const real *cdf_lo = cdf_bank.data()
+            + static_cast<size_t>(size_lo)*static_cast<size_t>(radial_bin_count + 1);
+        const real *cdf_hi = cdf_lo + radial_bin_count + 1;
 
-        real cdf_sample = random(rand_generator);
-        int idx_lo = 0;
-        int idx_hi = cell_count;
-        while (idx_lo < idx_hi)
-        {
-            int idx_mid = idx_lo + (idx_hi - idx_lo) / 2;
-            real prob_mid = (1.0 - frac_size)*cdf_lo[idx_mid] + frac_size*cdf_hi[idx_mid];
-            if (prob_mid < cdf_sample) idx_lo = idx_mid + 1;
-            else idx_hi = idx_mid;
-        }
-
-        int idx_cell = std::max(0, idx_lo - 1);
-        int iy = idx_cell % N_Y;
-        int iz = idx_cell / N_Y;
-
-        randposx[idx] = (N_X > 1) ? X_MIN + (X_MAX - X_MIN)*random(rand_generator) : 0.5*(X_MIN + X_MAX);
-
-        real s_y0 = y_face_s[iy];
-        real s_y1 = y_face_s[iy + 1];
-        real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
-        
-        randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
-
-        real s_z0 = z_face_s[iz];
-        real s_z1 = z_face_s[iz + 1];
-        real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
-        
-        randposz[idx] = std::acos(-s_z);
+        _sample_disk_pos(
+            randposx[idx], randposy[idx], randposz[idx], randsize[idx],
+            cdf_lo, cdf_hi, frac_size, random
+        );
     }
 }
 #endif // MULTISIZE && DIFFUSION

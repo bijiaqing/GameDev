@@ -122,7 +122,9 @@ The collision-search interfaces use the following paired names:
 
 Use the full `kdtree_*` prefix in C++ identifiers rather than `kd_*`. The KNN verification JSON retains its historical `kd_*` keys as a stable external data format; those keys are not source-variable conventions
 
-Parallel host spellings include `initdens_calc`, `initdens_lerp`, `save_host_binary`, `load_host_binary`, `save_sam_as_velocity`, `load_velocity_as_sam`, `frame_stream`, `time_now`, `duration`, and `remaining`
+Parallel host spellings include `initdens_calc`, `initdens_lerp`, `initmass_calc`, `mass_bank`,
+`dev_mass_bank`, `domain_mass`, `save_host_binary`, `load_host_binary`, `save_sam_as_velocity`,
+`load_velocity_as_sam`, `frame_stream`, `time_now`, `duration`, and `remaining`
 
 ## Scratch storage
 

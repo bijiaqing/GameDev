@@ -16,6 +16,7 @@ GROUPS = {
     "grid": ["test_grid_1d", "test_grid_2d", "test_grid_3d"],
     "transport": ["test_orbit_1d", "test_drag_1d", "test_viscflow_1d", "test_orbit_2d", "test_drag_2d"],
     "diffusion": ["test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d"],
+    "initialization": ["test_initial_3d"],
     "radiation": ["test_radiation_1d", "test_prdrag_1d", "test_radiation_2d", "test_prdrag_2d"],
     "boundary": ["test_boundary_1d", "test_boundary_2d", "test_boundary_3d", "test_boundary_half"],
     "collision": ["test_collision_1d", "test_import_1d", "test_collision_2d", "test_collision_3d"],

@@ -36,6 +36,8 @@ constexpr real S_0 = 1.0;
 
 #if defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
 constexpr int N_P = 16*VERIFY_RES*VERIFY_RES;
+#elif defined(TEST_INITIAL_3D)
+constexpr int N_P = 65536;
 #elif defined(TEST_GRID_1D)
 constexpr int N_P = VERIFY_RES;
 #elif defined(TEST_GRID_2D)
@@ -66,6 +68,10 @@ constexpr int N_Z = 1;
 #elif defined(TEST_GRID_3D)
 constexpr int N_X = 4;
 constexpr int N_Y = VERIFY_RES;
+constexpr int N_Z = VERIFY_RES;
+#elif defined(TEST_INITIAL_3D)
+constexpr int N_X = 1;
+constexpr int N_Y = 96;
 constexpr int N_Z = VERIFY_RES;
 #elif defined(TEST_DIFFUSION_3D) || defined(TEST_COLLISION_3D)
 constexpr int N_X = 8;
@@ -104,7 +110,10 @@ constexpr real X_MAX = M_PI;
 constexpr real Y_MIN = 0.5;
 constexpr real Y_MAX = 1.5;
 
-#if defined(TEST_GRID_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_COLLISION_3D) \
+#if defined(TEST_INITIAL_3D)
+constexpr real Z_MIN = 0.5*M_PI - 0.01;
+constexpr real Z_MAX = 0.5*M_PI + 0.01;
+#elif defined(TEST_GRID_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_COLLISION_3D) \
     || defined(TEST_BOUNDARY_3D)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
@@ -149,7 +158,7 @@ constexpr real SCHMIDT_X = 1.0e300;
 constexpr real SCHMIDT_R = 1.0e300;
 #endif
 constexpr real SCHMIDT_Z =
-#if defined(TEST_DIFFUSION_3D)
+#if defined(TEST_DIFFUSION_3D) || defined(TEST_INITIAL_3D)
     1.0;
 #else
     1.0e300;

@@ -129,23 +129,76 @@ $$
 \Sigma_d(R)=Z_{\rm metal}\Sigma_g(R)
 $$
 
-before the Gaussian edge convolution. `get_total_dust_mass()` integrates that initialized
-profile over the configured domain. Representative grain counts, opacity, diagnostics, and
-dimensionless collision normalizations use this runtime mass; there is no independent arbitrary
-dust-mass parameter.
+before the Gaussian edge convolution. For one grain size $s$, let
 
-Monodisperse initialization samples a joint $(y,z)$ CDF proportional to density times the exact
-cell measure. For a multisize 3D disk, grain size is sampled first, then the conditional spatial
-CDF uses the size-dependent dust thickness
+$$
+I(s)=\int_{\mathcal D}\rho_d(\boldsymbol{x}\mid s)\,dV
+$$
+
+be the physical mass that the normalized surface profile would place inside the finite simulation
+domain $\mathcal D$. The host initializer tabulates $I(s)$ on the same logarithmic size grid used
+by the conditional spatial CDFs. At fixed cylindrical radius $R$, the spherical radial boundaries
+and polar boundaries define at most two allowed vertical intervals. Their Gaussian containment is
+integrated analytically with error functions, after which only the one-dimensional radial marginal
+
+$$
+\frac{dI}{dR}
+=\Delta\phi\,R\Sigma_d(R)
+\sum_k\left[
+\Phi\!\left(\frac{Z_{k,\rm hi}}{H_d}\right)
+-\Phi\!\left(\frac{Z_{k,\rm lo}}{H_d}\right)
+\right]
+$$
+
+is numerically tabulated. Here $\Delta\phi=X_{\max}-X_{\min}$ for an active azimuth and $2\pi$
+for an axisymmetric model. The auxiliary radial CDF has at least 2048 intervals, and the common
+logarithmic grain-size axis has 128 entries whenever size-dependent 3D settling is active. Neither
+resolution depends on the simulation polar grid, so a dust layer with $H_d\ll y\Delta z$ no longer
+loses mass or collapses onto polar-cell centers during initialization. For the initialized physical number spectrum
+$dN/ds\propto s^{-3.5}$, the normalized mass spectrum is $f_M(s)\propto s^{-1/2}$ and
+
+$$
+M_{\rm dust}=\int f_M(s)I(s)\,ds.
+$$
+
+The size integral is evaluated as an average uniform in $\sqrt{s}$, using Simpson quadrature over
+the interpolated size table. It reduces to $I(S_0)$ for monodisperse dust and becomes independent
+of size in a vertically integrated model. Imported-gas initialization deliberately uses one
+common spatial distribution for every size and therefore retains one common containment factor.
+Representative grain counts, opacity, diagnostics, and dimensionless collision normalizations use
+this runtime domain mass; there is no independent arbitrary dust-mass parameter.
+
+Monodisperse initialization samples cylindrical radius from this marginal and cylindrical height
+from the exact truncated Gaussian on the selected vertical interval. The result is then converted
+to stored spherical $(y,z)$ coordinates. For a multisize 3D disk, grain size is sampled first and
+the radial CDF is interpolated on the common logarithmic size axis using the size-dependent dust thickness
 
 $$
 H_d(R,s)=H_g(R)
 \sqrt{\frac{\alpha_z}{\mathrm{St}_{\rm mid}(R,s)}}.
 $$
 
-The joint spatial draw is necessary because cylindrical $R=y\sin z$ couples the radial surface
-profile and the vertical thickness on a spherical grid. Within a selected cell, the sampler is
-uniform in $y^d$ and $\cos z$, so it does not apply a geometry Jacobian twice.
+The conditional draw preserves the spherical shell and polar cutoffs without tying the physical
+vertical distribution to the simulation cells. The cylindrical Jacobian $R$ appears once in the
+radial marginal, while the normalized vertical Gaussian supplies the conditional height density.
+
+Because the spatial sampler uses the normalized conditional density
+$p(\boldsymbol{x}\mid s,\boldsymbol{x}\in\mathcal D)=\rho_d/I(s)$, the mass represented by sampled
+particle $i$ includes the same containment factor:
+
+$$
+\widetilde W_i=w(s_i)I(s_i),
+\qquad
+W_i=M_{\rm dust}\frac{\widetilde W_i}{\sum_j\widetilde W_j},
+\qquad
+N_i=\frac{W_i}{m_g(s_i)}.
+$$
+
+Here $w(s)=f_M(s)/q(s)$ corrects the proposal size distribution $q(s)$. Without radiation,
+$q\propto s^{-1/2}$ and $w=1$; with radiation, $q\propto s^{-3/2}$ and $w\propto s$, allocating
+representatives by full-column geometric area. The finite normalization makes
+$\sum_iW_i=M_{\rm dust}$ to roundoff while preserving the size-dependent mass physically contained
+inside the modeled polar domain.
 
 The initial velocity is the same no-backreaction steady drift used by the fluid branch:
 

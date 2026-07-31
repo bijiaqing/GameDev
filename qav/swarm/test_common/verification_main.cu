@@ -17,6 +17,12 @@
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
+#ifdef TEST_INITIAL_3D
+#include <swarm_host.cuh>
+
+std::mt19937 rand_generator;
+#endif // TEST_INITIAL_3D
+
 namespace
 {
 
@@ -64,6 +70,8 @@ const char *case_name ()
     return "diffusion_2d";
 #elif defined(TEST_DIFFUSION_3D)
     return "diffusion_3d";
+#elif defined(TEST_INITIAL_3D)
+    return "initial_3d";
 #elif defined(TEST_RADIATION_1D)
     return "radiation_1d";
 #elif defined(TEST_RADIATION_2D)
@@ -385,17 +393,21 @@ int main ()
     real *dev_randposy = nullptr;
     real *dev_randposz = nullptr;
     real *dev_randsize = nullptr;
+    real *dev_mass_bank = nullptr;
+    real domain_mass = 1.0;
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposx), sizeof(real)*N_P), "allocate x positions");
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposy), sizeof(real)*N_P), "allocate radial positions");
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposz), sizeof(real)*N_P), "allocate z positions");
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randsize), sizeof(real)*N_P), "allocate grain sizes");
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_mass_bank), sizeof(real)), "allocate domain mass");
     cuda_check(cudaMemcpy(dev_randposx, randposx.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload x positions");
     cuda_check(cudaMemcpy(dev_randposy, randposy.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload radial positions");
     cuda_check(cudaMemcpy(dev_randposz, randposz.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload z positions");
     cuda_check(cudaMemcpy(dev_randsize, randsize.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload grain sizes");
+    cuda_check(cudaMemcpy(dev_mass_bank, &domain_mass, sizeof(real), cudaMemcpyHostToDevice), "upload domain mass");
 
     particle_init <<< NB_P, TPB >>> (
-        dev_particle, dev_randposx, dev_randposy, dev_randposz, dev_randsize, 1.0
+        dev_particle, dev_randposx, dev_randposy, dev_randposz, dev_randsize, dev_mass_bank, 1, 1.0
     );
     kernel_check("viscous-flow initialization");
     copy_state_from_device(particle, dev_particle);
@@ -405,6 +417,7 @@ int main ()
     cuda_check(cudaFree(dev_randposy), "free radial positions");
     cuda_check(cudaFree(dev_randposz), "free z positions");
     cuda_check(cudaFree(dev_randsize), "free grain sizes");
+    cuda_check(cudaFree(dev_mass_bank), "free domain mass");
 
 #elif defined(TEST_DRAG_1D) || defined(TEST_RADIATION_1D) || defined(TEST_PRDRAG_1D) \
     || defined(TEST_DRAG_2D) || defined(TEST_RADIATION_2D) || defined(TEST_PRDRAG_2D)
@@ -451,6 +464,63 @@ int main ()
     write_state(particle);
     write_meta(dt, dt);
     cuda_check(cudaFree(dev_rngstate), "free random states");
+
+#elif defined(TEST_INITIAL_3D)
+    std::vector<real> mass_bank;
+    initmass_calc(mass_bank);
+    real total_dust_mass = get_total_dust_mass(mass_bank);
+
+    std::vector<real> randposx(N_P);
+    std::vector<real> randposy(N_P);
+    std::vector<real> randposz(N_P);
+    std::vector<real> randsize(N_P);
+    real size_mid = std::sqrt(INIT_SMIN*INIT_SMAX);
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        if (idx < N_P / 3)
+        {
+            randsize[idx] = INIT_SMIN;
+        }
+        else if (idx < 2*N_P / 3)
+        {
+            randsize[idx] = size_mid;
+        }
+        else
+        {
+            randsize[idx] = INIT_SMAX;
+        }
+    }
+
+    rand_generator.seed(0);
+    rand_disk_poly(randposx.data(), randposy.data(), randposz.data(), randsize.data(), N_P);
+    real mass_norm = get_mass_norm(randsize.data(), mass_bank, total_dust_mass);
+    long double represented_mass = 0.0;
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        real domain_mass = _get_domain_mass(
+            randsize[idx], mass_bank.data(), static_cast<int>(mass_bank.size())
+        );
+        real grain_number = mass_norm*_get_mass_weight(randsize[idx])*domain_mass
+                          / static_cast<real>(N_P) / _get_grain_mass(randsize[idx]);
+        represented_mass += static_cast<long double>(grain_number)
+                          * static_cast<long double>(_get_grain_mass(randsize[idx]));
+    }
+
+    std::vector<real> initial(4*N_P);
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        initial[idx]         = randposx[idx];
+        initial[N_P + idx]   = randposy[idx];
+        initial[2*N_P + idx] = randposz[idx];
+        initial[3*N_P + idx] = randsize[idx];
+    }
+    std::vector<real> mass_summary = {
+        total_dust_mass, static_cast<real>(represented_mass), mass_norm,
+    };
+    write_binary("initial", initial);
+    write_binary("mass_bank", mass_bank);
+    write_binary("mass_summary", mass_summary);
+    write_meta(0.0, 0.0);
 
 #elif defined(TEST_COLLISION_1D) || defined(TEST_COLLISION_2D) || defined(TEST_COLLISION_3D)
     particle[0].position = make_double3(0.0, 1.0, 0.5*M_PI);

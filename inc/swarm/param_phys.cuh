@@ -35,6 +35,30 @@ real _get_mass_weight (real size)
 
     return weight;
 }
+
+// interpolate the physical dust mass contained in the domain for one sampled grain size
+__host__ __device__ __forceinline__
+real _get_domain_mass (real size, const real *mass_bank, int mass_bin_count)
+{
+    if (mass_bin_count == 1) return mass_bank[0];
+
+    real log_size_min = log(INIT_SMIN);
+    real log_size_max = log(INIT_SMAX);
+    real loc_size = (log(size) - log_size_min)*static_cast<real>(mass_bin_count - 1)
+                  / (log_size_max - log_size_min);
+    loc_size = fmax(0.0, fmin(loc_size, static_cast<real>(mass_bin_count - 1)));
+
+    int size_lo = static_cast<int>(loc_size);
+    if (size_lo >= mass_bin_count - 1) size_lo = mass_bin_count - 2;
+    real frac_size = loc_size - static_cast<real>(size_lo);
+
+    real mass_lo = mass_bank[size_lo];
+    real mass_hi = mass_bank[size_lo + 1];
+    if (mass_lo > 0.0 && mass_hi > 0.0)
+        return exp((1.0 - frac_size)*log(mass_lo) + frac_size*log(mass_hi));
+
+    return (1.0 - frac_size)*mass_lo + frac_size*mass_hi;
+}
 #endif // MULTISIZE
 
 __host__ __device__ __forceinline__

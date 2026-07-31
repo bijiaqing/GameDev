@@ -1,22 +1,22 @@
-__pycache__/
-*.pyc
+# executable files
+gamedev
 
-mod/*/gamedev
-qav/*/*/gamedev
-
-# pre-GameDev build artifacts
-mod/*/graffiti
-qav/*/*/graffiti
-
+# build artifacts
 obj/*
 !obj/.gitkeep
 
+# output files
 out/*
 !out/.gitkeep
 
+# quality assurance validation (qav) output files
 qav/*/out/*
 !qav/*/out/.gitkeep
-
 qav/swarm/test_knn/bin/
-# legacy benchmark output location used before KNN results joined qav/swarm/out/
-qav/swarm/test_knn/out/
+
+# experimental files
+lab/
+
+# Python cache files
+__pycache__/
+*.pyc

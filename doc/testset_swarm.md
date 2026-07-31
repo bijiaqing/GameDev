@@ -13,7 +13,7 @@ transport, stiff gas drag, cylindrical stochastic diffusion, radiation pressure,
 Robertson drag, collision-neighborhood measures, the three dimensionless coagulation kernels, and
 exact KD-tree/Morton neighbor search. Dedicated radial-only cases additionally test exact inactive
 coordinates, annular collision normalization, and imported surface-density Stokes/Reynolds scaling.
-It does not yet validate initialization sampling, complete stochastic collision events against an analytical or converged reference,
+It does not yet validate monodisperse initialization and initial drift together, complete stochastic collision events against an analytical or converged reference,
 boundary-event convergence, restart reproducibility, or long-term coupled evolution.
 
 This document defines what each test proves, what it does not prove, and what result is
@@ -154,6 +154,7 @@ component is stored as JSON `null`, distinguishing “not selected” from eithe
 | `test_diffusion_1d` | direct cylindrical radial SDE | exact Itô mean and variance, invariant physical velocity, and exact inactive coordinates |
 | `test_diffusion_2d` | azimuthal cylindrical diffusion SDE and velocity reprojection | exact Gaussian angular moments and invariant Cartesian velocity |
 | `test_diffusion_3d` | cylindrical radial and vertical SDE mapped to spherical storage | exact radial/vertical moments including cylindrical Itô drift and invariant Cartesian velocity |
+| `test_initial_3d` | continuous finite-domain multisize initialization with unresolved settling | independent truncated-Gaussian containment, radial and vertical probability transforms, represented-mass closure, exact domain bounds, and invariance under changes to simulation $N_Z$ |
 | `test_radiation_1d` | radial-only midpoint radiation split | exact radiation-modified frozen response and inactive-state invariants |
 | `test_radiation_2d` | midpoint radiation split without P-R damping | exact radiation-modified frozen response at zero optical depth |
 | `test_prdrag_1d` | radial-only gas plus P-R exponential response | exact component-dependent damping and inactive-state invariants |
@@ -592,6 +593,68 @@ band is approximately $1.33\times10^{-3}$ at $N=32$, $6.63\times10^{-4}$ at $N=6
 $3.31\times10^{-4}$ at $N=128$, and $1.66\times10^{-4}$ at $N=256$. The $N=32$ and $N=64$
 ensembles therefore check gross diffusion behavior but cannot independently resolve the Itô drift;
 the $N\ge128$ results provide that evidence.
+
+## Continuous finite-domain initialization
+
+`test_initial_3d` exercises the host initialization path with `MULTISIZE` and `DIFFUSION`. It uses
+$N_Y=96$, $N_P=65\,536$, the broad size interval
+
+$$
+s\in[0.05,6.4],
+$$
+
+and a finite polar domain $|z-\pi/2|\le0.01$. Approximately one third of the representatives use
+each endpoint size and the remaining third use
+
+$$
+s_{\rm mid}=\sqrt{s_{\min}s_{\max}}.
+$$
+
+The midpoint lies halfway between the two central entries of the logarithmic 128-knot size axis,
+so it directly exercises interpolation of both the conditional radial CDF and the contained-mass
+table. All three populations retain enough samples for separate distribution tests.
+
+At each cylindrical radius, the Python validator independently intersects the radial shell and
+polar wedge to recover the allowed vertical intervals. For every interval it evaluates
+
+$$
+F_Z(R,s)=
+\Phi\!\left(\frac{Z_{\rm hi}}{H_d(R,s)}\right)
+-\Phi\!\left(\frac{Z_{\rm lo}}{H_d(R,s)}\right),
+$$
+
+reconstructs the convolved surface-density profile, and integrates
+
+$$
+I(s)=2\pi\int R\Sigma_d(R)F_Z(R,s)\,dR
+$$
+
+on the production size axis. The 128 returned containment masses must agree with this independent
+reference to relative $L_\infty<2\times10^{-12}$. The validator independently interpolates the two
+central mass entries to reconstruct the expected normalization of the midpoint population. Its
+relative error and the finite representative normalization error must both remain below
+$5\times10^{-12}$, with the latter written as
+
+$$
+\left|\frac{\sum_i m_g(s_i)N_i-M_{\rm dust}}{M_{\rm dust}}\right|<5\times10^{-12}.
+$$
+
+For spatial sampling, the validator maps every sampled radius through its independently rebuilt
+radial CDF and every sampled height through the appropriate truncated-Gaussian conditional CDF.
+For the midpoint population, the radial reference is independently formed by interpolating the
+two adjacent normalized CDFs exactly as specified by the production size discretization. Each of
+the three transformed populations must be uniform by a two-sided KS statistic below
+$6/\sqrt{N_j}$ for its own population count $N_j$, and every converted spherical position must
+remain inside the configured domain. The validator also reports, without using them as pass/fail
+criteria, the midpoint CDF and contained-mass interpolation errors relative to a CDF integrated
+directly at $s_{\rm mid}$.
+
+The requested test resolution changes `N_Z` while leaving all physical parameters, auxiliary
+radial resolution, size table, and random seed fixed. The model runner compares `initial`,
+`mass_bank`, and `mass_summary` byte for byte across those builds. This directly detects any
+accidental return of polar-cell-center quadrature to the initialization path. A single-resolution
+invocation still validates the analytical and statistical criteria but cannot establish the
+cross-`N_Z` byte comparison.
 
 ## Deterministic boundary policies
 
@@ -1073,7 +1136,7 @@ From the repository root, run a short workflow check with
 python3 qav/swarm/test_common/run_suite.py --group all --quick
 ```
 
-This performs the 31 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
+This performs the 33 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
 and 3D production collision sources with both backends, and then runs the
 $10^5$-particle KNN matrix.
 
@@ -1085,7 +1148,7 @@ python3 qav/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The current complete command performs 47 analytical-suite builds plus four KNN driver builds and
+The current complete command performs 51 analytical-suite builds plus four KNN driver builds and
 six production backend/geometry links.
 Individual groups can be selected with
 
@@ -1093,6 +1156,7 @@ Individual groups can be selected with
 python3 qav/swarm/test_common/run_suite.py --group grid      --res 32 64 128 256
 python3 qav/swarm/test_common/run_suite.py --group transport --res 32 64 128 256
 python3 qav/swarm/test_common/run_suite.py --group diffusion --res 32 64 128 256
+python3 qav/swarm/test_common/run_suite.py --group initialization --res 32 64 128 256
 python3 qav/swarm/test_common/run_suite.py --group radiation --res 32
 python3 qav/swarm/test_common/run_suite.py --group boundary  --res 32
 python3 qav/swarm/test_common/run_suite.py --group collision --res 32
@@ -1171,8 +1235,11 @@ expected model as pending, running, passed, failed, or interrupted and prints a 
   with `CFL_COL`, $N_K$, and $N_P$
 - Recover analytical constant, additive, and product Smoluchowski moment evolution rather than
   checking only the pair-kernel numerators
-- Validate the monodisperse and conditional multisize initialization CDFs, the convolved radial
-  profile, finite-sample mass normalization, and initial drift velocities
+- Archive a native-CUDA run of `test_initial_3d`; its implemented checks cover the continuous
+  conditional multisize CDF, convolved radial profile, analytic finite-domain Gaussian containment,
+  intermediate-size interpolation, independence from simulation `N_Z`, and finite-sample mass
+  normalization, while monodisperse initialization and initial drift velocities remain to be
+  tested separately
 - Validate imported-gas spatial and temporal interpolation, the analytical `STOKES_0` anchor, and
   response to a depleted imported midplane density
 - Add boundary-event convergence tests that can detect within-step exits and returns; the current

@@ -7,9 +7,9 @@
 // =========================================================================================================================
 
 #ifdef MULTISIZE
-// calculate the physical grain count represented by one normalized equal-mass or equal-area swarm
+// calculate the physical grain count represented by one containment-weighted sampled swarm
 __device__ __forceinline__
-real _get_grain_number (real size, real mass_norm)
+real _get_grain_number (real size, real domain_mass, real mass_norm)
 {
     // the question is, if we want
     // (1) the grain size distribution follows a -3.5 power-law,
@@ -52,9 +52,11 @@ real _get_grain_number (real size, real mass_norm)
     // (9) n_1 = total_dust_mass / N_P / C_m / (s_max^0.5 - s_min^0.5) * (s_min^-0.5 - s_max^-0.5)
 
     // finally, combining (3) and (9), we know n_d(s)
+    // condition positions on the finite domain, so the importance weight also includes its size-dependent contained mass
     // replace the continuous normalization by mass_norm so the finite ensemble sums to total_dust_mass within roundoff
 
-    return mass_norm*_get_mass_weight(size) / static_cast<real>(N_P) / _get_grain_mass(size);
+    return mass_norm*_get_mass_weight(size)*domain_mass
+         / static_cast<real>(N_P) / _get_grain_mass(size);
 }
 #endif // MULTISIZE
 
@@ -68,7 +70,7 @@ real _get_grain_number (real size, real mass_norm)
 __global__
 void particle_init (swarm *dev_particle, const real *dev_randposx, const real *dev_randposy, const real *dev_randposz
     #ifdef MULTISIZE
-    , const real *dev_randsize, real mass_norm
+    , const real *dev_randsize, const real *dev_mass_bank, int mass_bin_count, real mass_norm
     #endif // MULTISIZE
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
@@ -132,8 +134,9 @@ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *d
 
     #ifdef MULTISIZE
     // attach the sampled grain species and its represented physical grain count
+    real domain_mass = _get_domain_mass(size, dev_mass_bank, mass_bin_count);
     dev_particle[idx].par_size   = size;
-    dev_particle[idx].par_numr   = _get_grain_number(size, mass_norm);
+    dev_particle[idx].par_numr   = _get_grain_number(size, domain_mass, mass_norm);
     #endif // MULTISIZE
 }
 

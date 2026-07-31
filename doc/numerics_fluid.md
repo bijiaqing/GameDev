@@ -151,8 +151,12 @@ stencil is unavailable. The pressureless HLL flux retains its proper left-going,
 two-wave branches.
 
 The limiter enforces nonnegative density and local bounds on every momentum-to-density ratio. The
-same face flux enters neighboring cells with opposite signs, so it does not repair vacuum states by
-post-update clipping or by discarding momentum.
+same limited face flux enters neighboring cells with opposite signs, so the normal update remains
+conservative. As a final floating-point safety fallback, any cell whose updated density is still
+negative is converted to an exact vacuum by setting its density and all three momentum components
+to zero. This fallback should remain inactive when the CFL and invariant-domain assumptions hold;
+its purpose is to prevent a residual negative density from producing an undefined vacuum velocity,
+not to replace the conservative limiter.
 
 Azimuthal transport uses FARGO orbital advection. For each ring, the arithmetic mean
 $\ell_\phi$ defines a nearest-integer periodic shift. PPM transports the residual, including the

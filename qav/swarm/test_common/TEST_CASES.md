@@ -18,6 +18,7 @@ beside the implementation.
 | `test_diffusion_1d` | radial cylindrical SDE | exact Itô mean and variance plus invariant physical velocity and inactive coordinates |
 | `test_diffusion_2d` | azimuthal cylindrical SDE and velocity reprojection | zero mean, angular variance $2D\Delta t/R^2$ evaluated at $R=1$, and invariant Cartesian velocity |
 | `test_diffusion_3d` | cylindrical radial and vertical SDE mapped through spherical storage | $E[\Delta R]=D\Delta t/R$, $E[\Delta Z]=0$, both variances $2D\Delta t$, and invariant Cartesian velocity |
+| `test_initial_3d` | continuous finite-domain size-conditioned initialization | independent Gaussian containment and radial CDFs for endpoint and interpolated midpoint sizes, represented-mass closure, exact bounds, and invariance under changes to simulation $N_Z$ |
 | `test_radiation_1d` | radial-only radiation midpoint response | exact frozen radiation response and inactive-state invariants |
 | `test_radiation_2d` | radiation midpoint split without P-R drag | exact frozen-midpoint angular relaxation, radiation-modified radial force response, and completed radial drift |
 | `test_prdrag_1d` | radial-only gas and P-R damping | exact component-dependent exponential response and inactive-state invariants |
@@ -55,7 +56,7 @@ test-local drivers or controlled input datasets:
 
 - event-level coagulation and fragmentation distributions over many frozen collision batches
 - analytic constant/additive/product Smoluchowski moment evolution
-- initialization CDFs, finite-sample mass normalization, and multisize conditional vertical distributions
+- monodisperse initialization and initial drift velocities in the complete production path
 - imported-gas interpolation in time and full trajectory coupling beyond the isolated radial Stokes/Reynolds test
 - checkpoint/restart bitwise continuation including random states
 - within-step transport and stochastic boundary-event convergence

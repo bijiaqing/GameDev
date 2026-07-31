@@ -6,6 +6,7 @@
 #include <limits>           // std::numeric_limits
 #include <sstream>          // std::stringstream
 #include <stdexcept>        // std::runtime_error
+#include <vector>           // std::vector
 
 #if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // thrust::device_ptr
@@ -42,7 +43,9 @@ int main (int argc, char **argv)
         throw std::runtime_error("HALFDISK requires Z_MAX = pi/2");
     #endif // HALFDISK
 
-    const real total_dust_mass = get_total_dust_mass();
+    std::vector <real> mass_bank;
+    initmass_calc(mass_bank);
+    const real total_dust_mass = get_total_dust_mass(mass_bank);
 
     int idx_from;
     real clock_sim;   // total simulated time
@@ -161,15 +164,19 @@ int main (int argc, char **argv)
         real *randsize, *dev_randsize;
         CUDA_CHECK(cudaMallocHost((void**)&randsize, sizeof(real)*N_P));
         CUDA_CHECK(cudaMalloc((void**)&dev_randsize, sizeof(real)*N_P));
+
+        real *dev_mass_bank;
+        CUDA_CHECK(cudaMalloc((void**)&dev_mass_bank, sizeof(real)*mass_bank.size()));
+        CUDA_CHECK(cudaMemcpy(dev_mass_bank, mass_bank.data(), sizeof(real)*mass_bank.size(), cudaMemcpyHostToDevice));
         #endif // MULTISIZE
 
         rand_generator.seed(0); // keep initialization reproducible across runs
 
         #ifdef MULTISIZE
         // sample grain properties before positions so settled spatial distributions can depend on size
-        real power_idx = -0.5;  // equal represented mass per swarm
+        real power_idx = -0.5;  // full-column equal-mass sampling proposal
         #ifdef RADIATION
-        power_idx = -1.5;       // equal represented surface area per swarm, see _get_grain_number
+        power_idx = -1.5;       // full-column equal-area sampling proposal, see _get_grain_number
         #endif // RADIATION
         #ifdef COLLISION_LINEAR_TEST
         rand_gamma_k2(randsize, N_P);
@@ -177,8 +184,8 @@ int main (int argc, char **argv)
         rand_powerlaw(randsize, N_P, INIT_SMIN, INIT_SMAX, power_idx);
         #endif // COLLISION_LINEAR_TEST
 
-        // correct finite-sample size fluctuations so represented masses sum exactly to total_dust_mass
-        real mass_norm = get_mass_norm(randsize, total_dust_mass);
+        // correct size sampling and finite-domain containment so represented masses sum exactly to total_dust_mass
+        real mass_norm = get_mass_norm(randsize, mass_bank, total_dust_mass);
         #endif // MULTISIZE
 
         #ifdef IMPORTGAS
@@ -216,7 +223,7 @@ int main (int argc, char **argv)
         // convert sampled coordinates and sizes into the device particle state
         particle_init <<< NB_P, TPB >>> (dev_particle, dev_randposx, dev_randposy, dev_randposz
             #ifdef MULTISIZE
-            , dev_randsize, mass_norm
+            , dev_randsize, dev_mass_bank, static_cast<int>(mass_bank.size()), mass_norm
             #endif // MULTISIZE
             #ifdef IMPORTGAS
             , dev_gas_dens
@@ -234,6 +241,7 @@ int main (int argc, char **argv)
         #ifdef MULTISIZE
         CUDA_CHECK(cudaFreeHost(randsize));
         CUDA_CHECK(cudaFree(dev_randsize));
+        CUDA_CHECK(cudaFree(dev_mass_bank));
         #endif // MULTISIZE
         
         #if defined(COLLISION) || defined(DIFFUSION)

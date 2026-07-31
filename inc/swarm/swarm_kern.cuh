@@ -61,7 +61,7 @@
 
 __global__ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *dev_randposy, const real *dev_randposz
     #ifdef MULTISIZE
-    , const real *dev_randsize, real mass_norm
+    , const real *dev_randsize, const real *dev_mass_bank, int mass_bin_count, real mass_norm
     #endif // MULTISIZE
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
