@@ -321,7 +321,7 @@ The complete `--group all --res 32 64 128 256` matrix performs 85 builds/runs be
 models sweep CFL values, FARGO shifts, or optical-depth powers. Each resolution is cleaned and
 rebuilt so model-local compile-time constants cannot reuse stale objects.
 
-Only NumPy is required by the Python validator. Keep the JSON metrics, `environment.txt`, and full
+Only NumPy is required by the Python validator. Keep the JSON metrics, `environment.json`, and full
 terminal output together when archiving a run. Analytical results are namespaced as
 `qav/fluid/out/SWEEP/MODEL/`, where `SWEEP` is `thread` or `block`.
 

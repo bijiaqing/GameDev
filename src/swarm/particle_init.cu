@@ -1,3 +1,4 @@
+#include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
@@ -78,14 +79,14 @@ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *d
     if (idx >= N_P) return;
 
     // copy host-sampled spherical positions into the particle state
-    dev_particle[idx].position.x = dev_randposx[idx];
+    dev_particle[idx].position.x = (N_X > 1) ? dev_randposx[idx] : 0.5*(X_MIN + X_MAX);
     dev_particle[idx].position.y = dev_randposy[idx];
     dev_particle[idx].position.z = (N_Z > 1) ? dev_randposz[idx] : 0.5*M_PI;
 
     real y = dev_particle[idx].position.y;
     real z = dev_particle[idx].position.z;
-    real R = y*sin(z);
-    real Z = y*cos(z);
+    real R = _get_cyl_R(y, z);
+    real Z = _get_cyl_Z(y, z);
 
     #ifdef MULTISIZE
     real size = dev_randsize[idx];
@@ -114,12 +115,20 @@ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *d
     real vx = vx_g - 0.5*stokes*vR;
     real vZ = (N_Z > 1) ? -stokes*omega*Z : 0.0;
 
-    real vy = vR*sin(z) + vZ*cos(z);
-    real vz = vR*cos(z) - vZ*sin(z);
-
     dev_particle[idx].velocity.x = R*vx;
-    dev_particle[idx].velocity.y = vy;
-    dev_particle[idx].velocity.z = y*vz;
+    if (N_Z == 1)
+    {
+        dev_particle[idx].velocity.y = vR;
+        dev_particle[idx].velocity.z = 0.0;
+    }
+    else
+    {
+        real vy = vR*sin(z) + vZ*cos(z);
+        real vz = vR*cos(z) - vZ*sin(z);
+
+        dev_particle[idx].velocity.y = vy;
+        dev_particle[idx].velocity.z = y*vz;
+    }
 
     #ifdef MULTISIZE
     // attach the sampled grain species and its represented physical grain count

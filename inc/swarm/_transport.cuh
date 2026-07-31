@@ -154,6 +154,13 @@ void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i
 {
     // advance from the initial state i to the staggered midpoint position 1
     y_1 = y_i + 0.5*vy_i*dt;
+    if constexpr (N_Z == 1)
+    {
+        z_1 = 0.5*M_PI;
+        x_1 = (N_X > 1) ? x_i + 0.5*lx_i*dt / y_i / y_1 : 0.5*(X_MIN + X_MAX);
+        return;
+    }
+
     z_1 = z_i + 0.5*lz_i*dt / y_i / y_1;
     x_1 = x_i + 0.5*lx_i*dt / y_i / y_1 / sin(z_i) / sin(z_1);
 }
@@ -176,8 +183,8 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     #endif // IMPORTGAS
 )
 {
-    real R_1 = y_1*sin(z_1);
-    real Z_1 = y_1*cos(z_1);
+    real R_1 = _get_cyl_R(y_1, z_1);
+    real Z_1 = _get_cyl_Z(y_1, z_1);
     
     real h_g = _get_hg(R_1);
     real omega = _get_omegaK(R_1);
@@ -193,7 +200,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         real loc_y = _get_loc_y(y_1);
         real loc_z = _get_loc_z(z_1);
         
-        lx_g1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*y_1*sin(z_1);
+        lx_g1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*R_1;
         vy_g1 = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
         lz_g1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;
     }
@@ -205,7 +212,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 
         #ifdef VISC_FLOW
         real vR_g = _get_visc_vel(R_1, Z_1, h_g);
-        vy_g1 = vR_g*sin(z_1);
+        vy_g1 = (N_Z > 1) ? vR_g*sin(z_1) : vR_g;
         lz_g1 = (N_Z > 1) ? y_1*vR_g*cos(z_1) : 0.0;
         #else  // PURE_ROTATION
         vy_g1 = 0.0;
@@ -279,6 +286,14 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 
     // drift from the midpoint position to the final state j
     y_j = y_1 + 0.5*vy_j*dt;
+    if constexpr (N_Z == 1)
+    {
+        z_j = 0.5*M_PI;
+        lz_j = 0.0;
+        x_j = (N_X > 1) ? x_1 + 0.5*lx_j*dt / y_1 / y_j : 0.5*(X_MIN + X_MAX);
+        return;
+    }
+
     z_j = z_1 + 0.5*lz_j*dt / y_1 / y_j;
     x_j = x_1 + 0.5*lx_j*dt / y_1 / y_j / sin(z_1) / sin(z_j);
 }

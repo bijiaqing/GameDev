@@ -7,11 +7,12 @@ It supports analytic or imported gas, semi-analytic particle transport, stochast
 diffusion, radiation pressure, particle-to-grid diagnostics, and representative-particle
 coagulation/fragmentation.
 
-The active tree includes the corrected axisymmetric measure, well-mixed two-dimensional vertical
-closures, imported-gas Stokes calibration, frozen collision snapshots, and random-state restart
-semantics described below. The ten-model native CUDA suite has passed all 25 configured cases.
-That evidence covers the isolated operations listed in [`testset_swarm.md`](testset_swarm.md), not
-every coupled production path.
+The active tree includes the corrected axisymmetric measure, well-mixed vertically integrated
+closures, imported-gas Stokes calibration, frozen collision snapshots, random-state restart
+semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The previously archived
+ten-model CUDA suite passed all 25 historical cases. New radial CUDA cases are implemented but do
+not become evidence until they are run on a native GPU and their metrics are archived as described
+in [`testset_swarm.md`](testset_swarm.md)
 
 ## Coordinates and particle state
 
@@ -34,9 +35,10 @@ $$
 =(Rv_\phi,v_r,rv_\theta).
 $$
 
-When `N_Z == 1`, every particle remains at $z=\pi/2$ and $\ell_\theta=0$. When `N_X == 1`, one
-stored azimuthal cell represents the complete axisymmetric ring and particles are centered in the
-inactive coordinate.
+When `N_Z == 1`, the code evaluates $R=y$ and $Z=0$ directly and keeps every particle at
+$z=\pi/2$ with $\ell_\theta=0$. When `N_X == 1`, one stored azimuthal cell represents the complete
+axisymmetric ring and particles are centered exactly in the inactive coordinate. The radial-only
+model retains $v_R$ and $\ell_\phi$ as dynamical variables even though azimuth is spatially inactive
 
 The mesh measure uses $d=2$ for a vertically integrated disk and $d=3$ when the polar dimension is
 active:
@@ -92,10 +94,17 @@ $v_Z=-\mathrm{St}\,\Omega_K Z$. `VISC_FLOW` replaces the zero gas radial velocit
 analytic viscous prescription, requires `DIFFUSION`, and cannot be combined with `IMPORTGAS` because
 imported gas velocities already prescribe the gas flow.
 
-Imported gas initialization samples the imported $\rho_g\epsilon$ field using the same exact
+Imported gas initialization samples the imported gas density times $\epsilon$ using the same exact
 cell-measure construction. Active azimuthal cells are sampled with `_get_dx()`; an inactive
-azimuth is centered. Every dynamically evaluated local Stokes number uses the imported gas density.
-`STOKES_0` is anchored to the analytical reference midplane through
+azimuth is centered. When `N_Z == 1`, the imported field is $\Sigma_g$ and
+
+$$
+\mathrm{St}(R,s)
+=\mathrm{St}_0\frac{s}{S_0}\frac{\Sigma_0}{\Sigma_g(R)}.
+$$
+
+When `N_Z > 1`, the imported field is $\rho_g$ and `STOKES_0` is anchored to the analytical
+reference midplane through
 
 $$
 \mathrm{St}(R,Z,s)
@@ -283,6 +292,13 @@ gradients are zero; explicit placeholders mark where more general dependencies w
 radial drift includes both the variable-diffusivity derivative and the cylindrical Itô term
 $D_R/R$.
 
+All supported geometries impose the same zero-flux radial diffusion boundary by repeatedly
+reflecting the spherical radius into $[Y_{\min},Y_{\max}]$. In a vertically integrated model,
+$y=R$, so this is also the cylindrical-radial boundary and does not change azimuth. In 3D, a
+negative intermediate cylindrical $R$ is first mapped as
+$(R,\phi)\mapsto(-R,\phi+\pi)$; this is a coordinate continuation across the cylindrical axis,
+not a radial-boundary condition
+
 A random displacement is a spatial redistribution, not an impulse. The kernel reconstructs the
 particle's Cartesian velocity before moving it and projects that unchanged velocity into the new
 local spherical basis afterward. This is internally consistent, but it is not the same momentum
@@ -310,8 +326,18 @@ for the other backend.
 
 The KD-tree is the default reference. The Morton backend uses an adaptive pointer-free hierarchy,
 cooperative top-$K$ selection, and boundary-only periodic ghosts. Locally planar accessible-volume
-corrections handle physical boundaries. For `N_X == 1`, the neighborhood measure is multiplied by
-$2\pi R$, restoring the missing axisymmetric dimension.
+corrections handle physical boundaries in 2D and 3D. In the radial-only model, both backends search
+the collinear points $(R,0,0)$ and the exact accessible annular area is
+
+$$
+A_K=\pi\left[
+\min(Y_{\max},R+d_K)^2-
+\max(Y_{\min},R-d_K)^2
+\right].
+$$
+
+For an axisymmetric radial-polar model, the reduced-dimensional neighborhood retains the existing
+$2\pi R$ revolution factor
 
 For a pair $i,j$, the physical rate contains
 
@@ -333,7 +359,14 @@ $$
 The resolved relative speed is reconstructed from the complete Cartesian velocity difference.
 Brownian and Ormel–Cuzzi turbulent speeds are added in quadrature as unresolved contributions.
 Stokes numbers remain local inputs to drag and unresolved relative velocities, but not to the 2D
-vertical overlap closure.
+vertical overlap closure. In an imported vertically integrated model, the turbulent Reynolds
+number uses the same external $\Sigma_g$ that determines the local Stokes number
+
+For an imported 3D model, the local Stokes number uses the imported gas volume density, whereas
+the turbulent Reynolds closure retains the analytic $\Sigma_g(R)$ profile because the imported
+interface provides no vertically integrated gas column. This is a deliberate limitation of the
+current 3D imported-gas interface rather than a reconstruction of $\Sigma_g$ from the imported
+volume-density field
 
 The GPU event update is a controlled parallel Bernoulli leap, not an exact serial Gillespie
 trajectory. During each batch:
@@ -402,6 +435,12 @@ checks for repeated physical identifiers only when the minimum separation betwee
 periodic images is no larger than twice the current query radius. Wider wedges use the ordinary
 $O(\log N_K)$ heap insertion without an $O(N_K)$ duplicate scan.
 
+At the beginning of each fixed-position collision interval, the code records one active byte per
+physical representative. Absorbed representatives may remain in the immutable search hierarchy,
+but the KD heap rejects their stable identifiers before insertion. They therefore cannot occupy one
+of the retained $N_K$ slots or reduce the active-neighbor radius. This avoids rebuilding a compacted
+tree while making absorbed particles invisible to collision selection.
+
 ### Adaptive Morton hierarchy
 
 The Morton builder maps Cartesian coordinates to integer cells, interleaves their bits into 64-bit
@@ -444,6 +483,11 @@ Racecheck hazards on the 100,000-particle three-dimensional ring case.
 
 The block-parallel sorted merge is the only Morton top-$K$ implementation and requires no secondary
 selection flag.
+
+The Morton candidate tiles use the same active-byte array as the KD heap. An absorbed record is
+replaced by the empty sentinel before each shared-memory merge, so it cannot enter the retained
+top-$K$ list. The hierarchy may still contain its spatial record, which costs traversal work but
+does not affect neighbor identity or collision normalization.
 
 ### Periodic boundary ghosts
 
@@ -551,10 +595,42 @@ Boundary policies are operator-specific:
 - transport is periodic in azimuth
 - transport absorbs radial exits and full-disk polar exits
 - `HALFDISK` reflects transport at the midplane and absorbs at the other polar edge
-- diffusion is periodic in azimuth and reflecting in radial and polar directions
+- diffusion is periodic in azimuth and reflecting at finite radial and polar boundaries in every
+  supported geometry
+
+An active `HALFDISK` configuration is accepted only when $Z_{\max}=\pi/2$; the swarm runtime checks
+this before allocating or evolving particle state.
 
 An absorbed representative is parked at `y=0`, assigned zero stored velocity, and skipped by
 subsequent transport, diffusion, deposition, opacity, timestep, and collision calculations.
+
+The production helpers currently apply boundary conditions to the completed operator endpoint.
+Repeated folding makes diffusion positions lie inside the reflecting interval and is consistent with
+the zero-flux process in the small-step limit, but it is not an exact finite-step transition for
+spatially varying drift or diffusivity. Likewise, endpoint absorption cannot detect a trajectory
+that crosses an absorbing face and returns inside during one transport step. A rigorous future
+boundary-event implementation should do the following:
+
+1. construct a dense trajectory consistent with the staggered transport step
+2. solve for the earliest radial or polar face crossing within the step
+3. terminate an absorbing trajectory at that event, or reflect the normal velocity and reintegrate
+   the unused part of the step for a reflecting face
+4. treat stochastic crossings with a Brownian-bridge or reflected-transition construction and
+   verify weak convergence under diffusion-step refinement
+
+The existing CFL controls make missed transport crossings unlikely in ordinary runs, but do not
+constitute a mathematical event detector. The deterministic boundary tests exercise the endpoint
+policy itself; they do not yet establish boundary-event convergence.
+
+The 2D and 3D collision-volume corrections also remain locally planar approximations. The exact
+quantity is the measure of the Cartesian KNN ball intersected with the spherical disk domain. A
+robust replacement should retain the exact 1D annular formula and evaluate boundary-overlapping 2D
+and 3D measures by deterministic quadrature of the exact intersection: solve the ball/domain radial
+limits along each angular ray, integrate $R\,dR\,d\phi$ in a vertically integrated disk or
+$r^2\sin z\,dr\,dz\,d\phi$ in 3D, and handle periodic wedge faces as identified copies rather than
+physical cuts. Interior queries keep the analytic disk/ball measure. A tabulated correction in
+dimensionless boundary distances can amortize the quadrature, but it must be checked against direct
+high-order quadrature before replacing the present cap formula.
 
 ## File and restart semantics
 
@@ -569,12 +645,9 @@ same CUDA state layout.
 
 ## Current limitations
 
-- **TODO — radial-only 1D swarm:** support `N_X == 1` and `N_Z == 1` with radius as the only
-  spatial coordinate, while retaining the azimuthal orbital velocity and angular momentum as
-  dynamical particle properties. Audit initialization, radial transport and diffusion, CFL rates,
-  boundaries, deposition and optical depth, collision-volume normalization, and inactive-coordinate
-  handling, then add dedicated analytical and convergence tests before declaring this geometry
-  supported
+- The radial-only production path and its analytical test models are implemented, but native CUDA
+  results have not yet been archived. Treat it as implemented but not yet validated for production
+  until the radial matrix in [`testset_swarm.md`](testset_swarm.md) passes on the target GPU
 - The passed CUDA suite covers circular orbits, frozen stiff drag, one-step diffusion moments,
   optical-depth reconstruction, radiation and P-R response algebra, accessible collision measures,
   and constant, additive, and product kernel numerators. It does not establish long-time coupled
@@ -584,8 +657,9 @@ same CUDA state layout.
 - Collision validation still needs complete event statistics and convergence with `CFL_COL`,
   neighbor count, and particle number; exact KD-tree/Morton/brute-force neighbor tests are now in
   `qav/swarm/test_knn/`
-- Settling equilibrium, initialization CDFs, imported gas, boundary behavior, restart
-  reproducibility, timestep rates, and complete flag/operator combinations remain untested
+- Settling equilibrium, initialization CDFs, imported-gas trajectory coupling, boundary-event
+  convergence, restart reproducibility, timestep rates, and complete flag/operator combinations
+  remain untested; deterministic endpoint boundary helpers now have dedicated CUDA cases
 - The current fluid and swarm diffusion-momentum closures differ and should not be compared as the
   same velocity equation
 - A zero integrated dust mass, `N_K == 1`, or a polar domain reaching a coordinate singularity is

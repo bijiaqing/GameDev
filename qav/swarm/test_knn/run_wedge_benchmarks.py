@@ -34,7 +34,7 @@ def main() -> None:
 
     test_root = Path(__file__).resolve().parent
     executable = test_root / "bin" / "knn_wedge_benchmark"
-    result_root = test_root / "out" / "wedge"
+    result_root = test_root.parent / "out" / "test_knn" / "wedge"
     result_root.mkdir(parents=True, exist_ok=True)
     distributions = args.distribution or ["smooth", "ring", "interior_clump", "seam_clump"]
 
@@ -76,12 +76,21 @@ def main() -> None:
                     result.check_returncode()
                     raise RuntimeError(f"wedge benchmark did not write {output}")
                 record = json.loads(output.read_text())
+                if (
+                    record.get("distribution") != distribution
+                    or record.get("particles") != particles
+                    or record.get("dimension") != dimension
+                    or record.get("passed") != record.get("quality_passed")
+                ):
+                    raise RuntimeError(
+                        f"wedge benchmark labels in {output} do not match case {name}"
+                    )
                 completed.append((name, record))
                 print(
-                    f"quality={record['quality_passed']}  "
+                    f"pass={record['passed']}  "
                     f"query batch: KD={record['kd_query_ms']:.3f} ms  "
                     f"Morton={record['morton_query_ms']:.3f} ms  "
-                    f"speedup={record['query_speedup']:.3f}"
+                    f"KD/Morton={record['query_time_ratio_kd_morton']:.3f}"
                 )
                 if result.returncode != 0:
                     print(
@@ -100,9 +109,13 @@ def main() -> None:
                     )
                     result.check_returncode()
 
+    passed = all(record["passed"] for _, record in completed)
     manifest = {
+        "component": "wedge",
         "cases": len(completed),
-        "all_quality_passed": all(record["quality_passed"] for _, record in completed),
+        "all_quality_passed": passed,
+        "passed": passed,
+        "environment": "../environment.json",
         "files": [f"{name}.json" for name, _ in completed],
     }
     (result_root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

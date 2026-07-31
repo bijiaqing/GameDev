@@ -98,13 +98,16 @@ def run(model: str) -> None:
 
     # Record the compiler, GPU, and driver associated with these results.  The
     # information is written once per parameter variant rather than once per N.
-    environment = [
-        "nvcc:\n" + capture(["nvcc", "--version"], project_root),
-        "nvidia-smi:\n" + capture(
+    environment = {
+        "nvcc": capture(["nvcc", "--version"], project_root),
+        "nvidia_smi": capture(
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"], project_root
         ),
-    ]
-    (data_dir / "environment.txt").write_text("\n\n".join(environment) + "\n")
+    }
+    (data_dir / "environment.txt").unlink(missing_ok=True)
+    (data_dir / "environment.json").write_text(
+        json.dumps(environment, indent=2, sort_keys=True) + "\n"
+    )
 
     # One record is the dictionary returned by validate_case.analyze for one
     # resolution.  The complete list is later used to print convergence orders.

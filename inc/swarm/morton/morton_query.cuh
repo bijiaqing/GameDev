@@ -50,7 +50,7 @@ void _morton_ghost_topk (
     bool unique_ids, float *work_dist_sq, int *work_idx_old, int *idx_node_stack,
     int &stack_count, int &idx_node, int &batch_count,
     unsigned int &leaf_visit_count, unsigned int &candidate_count,
-    unsigned int &stack_overflow)
+    unsigned int &stack_overflow, const unsigned char *dev_active = nullptr)
 {
     static_assert(3*K + BLOCK_SIZE <= WORK_SIZE,
         "Morton ghost work array cannot hold the duplicate-safe candidate set");
@@ -62,7 +62,7 @@ void _morton_ghost_topk (
         _morton_topk<K, BLOCK_SIZE, 512, STACK_SIZE>(
             morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
             stack_count, idx_node, batch_count,
-            leaf_visit_count, candidate_count, stack_overflow
+            leaf_visit_count, candidate_count, stack_overflow, dev_active
         );
         return;
     }
@@ -70,7 +70,7 @@ void _morton_ghost_topk (
     _morton_topk<3*K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
         morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
         stack_count, idx_node, batch_count,
-        leaf_visit_count, candidate_count, stack_overflow
+        leaf_visit_count, candidate_count, stack_overflow, dev_active
     );
 
     for (int idx_slot = 3*K + threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)

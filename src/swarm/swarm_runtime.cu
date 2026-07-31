@@ -3,6 +3,7 @@
 #include <filesystem>       // std::filesystem::create_directories
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
+#include <limits>           // std::numeric_limits
 #include <sstream>          // std::stringstream
 #include <stdexcept>        // std::runtime_error
 
@@ -36,6 +37,11 @@ const std::string PATH = PATH_OUT; // convert the Makefile string literal to the
 
 int main (int argc, char **argv)
 {
+    #ifdef HALFDISK
+    if (N_Z > 1 && std::fabs(Z_MAX - 0.5*M_PI) > 16.0*std::numeric_limits<real>::epsilon())
+        throw std::runtime_error("HALFDISK requires Z_MAX = pi/2");
+    #endif // HALFDISK
+
     const real total_dust_mass = get_total_dust_mass();
 
     int idx_from;
@@ -101,6 +107,9 @@ int main (int argc, char **argv)
     #endif // RADIATION
 
     #ifdef COLLISION
+    unsigned char *dev_col_active;
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_active, sizeof(unsigned char)*N_P));
+
     #ifdef COLLISION_KDTREE
     kdtree_boxf *dev_kdtree_box;
     CUDA_CHECK(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)));
@@ -280,7 +289,7 @@ int main (int argc, char **argv)
     {
         // collisions change grain properties but not positions, so one search index serves the full interval
         #ifdef COLLISION_KDTREE
-        col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_particle);
+        col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle);
         CUDA_KERNEL_CHECK("col_site_init");
         kdtree::buildTree <kdtree_node, kdtree_traits> (
             dev_kdtree_node, N_T, dev_kdtree_box
@@ -296,7 +305,7 @@ int main (int argc, char **argv)
         }
         #else  // COLLISION_MORTON
         col_site_init <<< NB_P, TPB >>> (
-            dev_morton_point, dev_morton_posx, dev_search_dist, dev_particle
+            dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle
         );
         CUDA_KERNEL_CHECK("col_site_init");
 
@@ -319,7 +328,7 @@ int main (int argc, char **argv)
             CUDA_KERNEL_CHECK("col_snap_save");
             #ifdef COLLISION_KDTREE
             col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
-                dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
+                dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
@@ -329,7 +338,7 @@ int main (int argc, char **argv)
             #else  // COLLISION_MORTON
             col_rate_calc <<< N_P, MORTON_TPB >>> (
                 dev_col_rate, dev_col_dist, dev_morton_overflow, dev_particle,
-                dev_size_old, dev_numr_old, dev_morton_point,
+                dev_col_active, dev_size_old, dev_numr_old, dev_morton_point,
                 morton_owner.view(), morton_owner.unique_ids(),
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -365,7 +374,7 @@ int main (int argc, char **argv)
             dt_col = fmin(CFL_COL / max_col_rate, remaining);
             #ifdef COLLISION_KDTREE
             col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
-                dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
+                dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
@@ -376,7 +385,7 @@ int main (int argc, char **argv)
             #else  // COLLISION_MORTON
             col_event_run <<< N_P, MORTON_TPB >>> (
                 dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, dev_morton_overflow,
-                dev_size_old, dev_numr_old, dev_morton_point,
+                dev_col_active, dev_size_old, dev_numr_old, dev_morton_point,
                 morton_owner.view(), morton_owner.unique_ids(),
                 #ifdef IMPORTGAS
                 dev_gas_dens,

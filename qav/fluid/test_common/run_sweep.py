@@ -47,13 +47,16 @@ def build_and_run(
     (out_dir/"build.txt").write_text(build.stdout)
     print(build.stdout, end="", flush=True)
 
-    environment = [
-        "nvcc:\n" + capture(["nvcc", "--version"], project_root),
-        "nvidia-smi:\n" + capture(
+    environment = {
+        "nvcc": capture(["nvcc", "--version"], project_root),
+        "nvidia_smi": capture(
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"], project_root
         ),
-    ]
-    (out_dir/"environment.txt").write_text("\n\n".join(environment) + "\n")
+    }
+    (out_dir/"environment.txt").unlink(missing_ok=True)
+    (out_dir/"environment.json").write_text(
+        json.dumps(environment, indent=2, sort_keys=True) + "\n"
+    )
 
     # Keep the verbose simulation stream in run.txt while reporting a compact elapsed time here
     start = time.perf_counter()

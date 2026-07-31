@@ -174,8 +174,9 @@ options parse_options (int argc, char **argv)
     if (result.max_level <= 0 || result.max_level > 20) throw std::invalid_argument("--max-level must be 1 through 20");
     if (result.max_leaf_scan <= 0) throw std::invalid_argument("--max-leaf-scan must be positive");
     if (result.radius <= 0.0f) throw std::invalid_argument("--radius must be positive");
-    if (result.distribution != "smooth" && result.distribution != "ring" && result.distribution != "clump")
-        throw std::invalid_argument("--distribution must be smooth, ring, or clump");
+    if (result.distribution != "smooth" && result.distribution != "ring"
+        && result.distribution != "clump" && result.distribution != "radial")
+        throw std::invalid_argument("--distribution must be smooth, ring, clump, or radial");
     result.queries = std::min(result.queries, result.particles);
     result.brute_queries = std::min(result.brute_queries, result.queries);
     return result;
@@ -190,6 +191,13 @@ std::vector<float3> generate_points (const options &config)
 
     for (int idx = 0; idx < config.particles; idx++)
     {
+        if (config.distribution == "radial")
+        {
+            float R = 0.5f + uniform(generator);
+            points[idx] = make_float3(R, 0.0f, 0.0f);
+            continue;
+        }
+
         float phi = 2.0f*static_cast<float>(M_PI)*uniform(generator);
         float R;
         float Z = 0.0f;
@@ -531,7 +539,8 @@ void write_json (const options &config, float root_width, int node_count, int le
     std::size_t kdtree_bytes, std::size_t morton_bytes, const occupancy_stats &occupancy,
     const quality_stats &quality, double mean_cells, double mean_candidates)
 {
-    double query_speedup = (morton_query_ms > 0.0) ? kdtree_query_ms / morton_query_ms : 0.0;
+    double query_ratio_kd_morton =
+        (morton_query_ms > 0.0) ? kdtree_query_ms / morton_query_ms : 0.0;
     std::ostream *output = &std::cout;
     std::ofstream file;
     if (!config.output.empty())
@@ -555,6 +564,7 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"quality_queries\": " << config.queries << ",\n"
         << "  \"brute_force_queries\": " << config.brute_queries << ",\n"
         << "  \"dimension\": " << config.dim << ",\n"
+        << "  \"physical_dimension\": " << ((config.distribution == "radial") ? 1 : config.dim) << ",\n"
         << "  \"distribution\": \"" << config.distribution << "\",\n"
         << "  \"k\": " << K << ",\n"
         << "  \"radius\": " << config.radius << ",\n"
@@ -566,6 +576,7 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"tree_nodes\": " << node_count << ",\n"
         << "  \"occupied_leaves\": " << leaf_count << ",\n"
         << "  \"quality_passed\": " << (quality_passed ? "true" : "false") << ",\n"
+        << "  \"passed\": " << (quality_passed ? "true" : "false") << ",\n"
         << "  \"mismatched_queries\": " << quality.mismatched_queries << ",\n"
         << "  \"mismatched_neighbors\": " << quality.mismatched_neighbors << ",\n"
         << "  \"kd_brute_mismatches\": " << quality.kdtree_brute_mismatches << ",\n"
@@ -584,10 +595,11 @@ void write_json (const options &config, float root_width, int node_count, int le
         << "  \"morton_build_ms\": " << morton_build_ms << ",\n"
         << "  \"kd_query_ms\": " << kdtree_query_ms << ",\n"
         << "  \"morton_query_ms\": " << morton_query_ms << ",\n"
-        << "  \"query_speedup\": " << query_speedup << ",\n"
+        << "  \"query_time_ratio_kd_morton\": " << query_ratio_kd_morton << ",\n"
         << "  \"kd_persistent_bytes\": " << kdtree_bytes << ",\n"
         << "  \"morton_persistent_bytes\": " << morton_bytes << ",\n"
-        << "  \"persistent_memory_ratio\": " << static_cast<double>(morton_bytes) / kdtree_bytes << ",\n"
+        << "  \"memory_ratio_morton_kd\": "
+        << static_cast<double>(morton_bytes) / kdtree_bytes << ",\n"
         << "  \"leaf_occupancy\": {\n"
         << "    \"mean\": " << occupancy.mean << ",\n"
         << "    \"median\": " << occupancy.median << ",\n"

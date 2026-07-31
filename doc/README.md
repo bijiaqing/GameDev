@@ -13,7 +13,7 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian representative-particle transport, diffusion, radiation, collisions, state semantics, and scientific limitations |
 | [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
-| [`future_radial_model.md`](future_radial_model.md) | Planned vertically integrated radial-only swarm model, required corrections, isolation rules, and verification criteria |
+| [`future_radial_model.md`](future_radial_model.md) | Implemented vertically integrated radial-only swarm prescription, remaining validation work, and production-readiness criteria |
 | [`future_rocm_support.md`](future_rocm_support.md) | CUDA-to-ROCm portability assessment and implementation sequence |
 
 Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior

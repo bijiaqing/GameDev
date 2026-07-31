@@ -29,12 +29,57 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
 
     if (!_is_particle_active(y, z)) return;
 
-    real R = y*sin(z);
-    real Z = y*cos(z);
+    real R = _get_cyl_R(y, z);
+    real Z = _get_cyl_Z(y, z);
 
     real lx = dev_particle[idx].velocity.x;
     real vy = dev_particle[idx].velocity.y;
     real lz = dev_particle[idx].velocity.z;
+
+    if constexpr (N_Z == 1)
+    {
+        // evolve the vertically integrated disk directly in cylindrical coordinates
+        real vx = lx / R;
+        real vR = vy;
+        real vx_cart = vR*cos(x) - vx*sin(x);
+        real vy_cart = vR*sin(x) + vx*cos(x);
+
+        real h_g = _get_hg(R);
+        real nu = _get_nu(R, h_g);
+        curs rngstate = dev_rngstate[idx];
+
+        real delta_x = 0.0;
+        if (N_X > 1)
+        {
+            real diff_x = nu / SCHMIDT_X;
+            real grad_x = 0.0;
+            real avg_x = dt*grad_x / (R*R);
+            real std_x = sqrt(2.0*dt*diff_x) / R;
+
+            delta_x = avg_x + std_x*curand_normal_double(&rngstate);
+        }
+
+        real diff_R = nu / SCHMIDT_R;
+        real avg_R = dt*_get_diff_drift_R(R, diff_R);
+        real std_R = sqrt(2.0*dt*diff_R);
+
+        real x_new = x + delta_x;
+        real R_new = R + avg_R + std_R*curand_normal_double(&rngstate);
+        real z_new = 0.5*M_PI;
+        _apply_diffusion_boundary(x_new, R_new, z_new);
+
+        real vR_new = vx_cart*cos(x_new) + vy_cart*sin(x_new);
+        real vx_new = vy_cart*cos(x_new) - vx_cart*sin(x_new);
+
+        dev_particle[idx].position.x = x_new;
+        dev_particle[idx].position.y = R_new;
+        dev_particle[idx].position.z = 0.5*M_PI;
+        dev_particle[idx].velocity.x = R_new*vx_new;
+        dev_particle[idx].velocity.y = vR_new;
+        dev_particle[idx].velocity.z = 0.0;
+        dev_rngstate[idx] = rngstate;
+        return;
+    }
 
     // reconstruct the pre-displacement velocity in a fixed Cartesian basis
     real vx = lx / R;
@@ -94,7 +139,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     real R_new = R + delta_R;
     real Z_new = Z + delta_Z;
 
-    // map a negative cylindrical radius to the equivalent positive-radius coordinate
+    // continue across the cylindrical axis before reconstructing the spherical coordinates
     if (R_new < 0.0)
     {
         R_new = -R_new;
@@ -105,8 +150,8 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     real z_new = atan2(R_new, Z_new);
 
     _apply_diffusion_boundary(x_new, y_new, z_new);
-    R_new = y_new*sin(z_new);
-    Z_new = y_new*cos(z_new);
+    R_new = _get_cyl_R(y_new, z_new);
+    Z_new = _get_cyl_Z(y_new, z_new);
 
     // project the unchanged Cartesian velocity into the new local spherical basis
     real sinz_new = R_new / y_new;

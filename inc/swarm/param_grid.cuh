@@ -18,6 +18,14 @@ real _get_dy() { return pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y)); }
 __host__ __device__ __forceinline__
 real _get_dz() { return (Z_MAX - Z_MIN) / static_cast<real>(N_Z); }
 
+// return the cylindrical radius with an exact vertically integrated branch
+__host__ __device__ __forceinline__
+real _get_cyl_R (real y, real z) { return (N_Z > 1) ? y*sin(z) : y; }
+
+// return the cylindrical height with an exact vertically integrated branch
+__host__ __device__ __forceinline__
+real _get_cyl_Z (real y, real z) { return (N_Z > 1) ? y*cos(z) : 0.0; }
+
 // smallest cylindrical radius covered by the spherical domain
 __host__ __device__ __forceinline__
 real _get_init_Rmin()

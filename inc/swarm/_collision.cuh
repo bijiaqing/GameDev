@@ -36,11 +36,20 @@ real3 _get_cart_vel (const swarm &particle)
     real y = particle.position.y;
     real z = particle.position.z;
 
-    real vx = particle.velocity.x / (y*sin(z));
+    real R = _get_cyl_R(y, z);
+    real vx = particle.velocity.x / R;
     real vy = particle.velocity.y;
     real vz = particle.velocity.z / y;
 
     real3 v_cart;
+
+    if constexpr (N_Z == 1)
+    {
+        v_cart.x = vy*cos(x) - vx*sin(x);
+        v_cart.y = vy*sin(x) + vx*cos(x);
+        v_cart.z = 0.0;
+        return v_cart;
+    }
 
     v_cart.x = vy*sin(z)*cos(x) + vz*cos(z)*cos(x) - vx*sin(x);
     v_cart.y = vy*sin(z)*sin(x) + vz*cos(z)*sin(x) + vx*cos(x);
@@ -54,6 +63,14 @@ __device__ __forceinline__
 real _get_ball_measure (real y, real z, real radius)
 {
     if (radius <= 0.0) return 0.0;
+
+    if constexpr (N_X == 1 && N_Z == 1)
+    {
+        real R_lo = fmax(Y_MIN, y - radius);
+        real R_hi = fmin(Y_MAX, y + radius);
+
+        return (R_hi > R_lo) ? M_PI*(R_hi*R_hi - R_lo*R_lo) : 0.0;
+    }
 
     int dim = 1 + static_cast<int>(N_X > 1) + static_cast<int>(N_Z > 1);
     real measure = (dim == 1) ? 2.0*radius : (dim == 2) ? M_PI*radius*radius : 4.0*M_PI*radius*radius*radius / 3.0;
@@ -88,7 +105,7 @@ real _get_ball_measure (real y, real z, real radius)
     }
 
     // revolve a reduced-dimensional axisymmetric neighborhood around the complete ring
-    if (N_X == 1) measure *= 2.0*M_PI*y*sin(z);
+    if (N_X == 1) measure *= 2.0*M_PI*_get_cyl_R(y, z);
 
     return measure;
 }
@@ -114,10 +131,9 @@ real _get_vrel_b (real R, real size_i, real size_j, real h_g)
 
 // calculate the inverse square root of the turbulent Reynolds number
 __device__ __forceinline__
-real _get_re_inv_sqrt (real R, real alpha)
+real _get_re_inv_sqrt (real R, real alpha, real sigma_g)
 {
     real reynolds = 1.0;
-    real sigma_g = _get_sigma_g(R);
     
     #ifdef CODE_UNIT
     real alpha_0 = _get_alpha(R_0, ASPR_0);
@@ -131,7 +147,7 @@ real _get_re_inv_sqrt (real R, real alpha)
 
 // calculate the turbulence-induced relative speed using the Ormel-Cuzzi regimes
 __device__ __forceinline__
-real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
+real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g, real sigma_g)
 {
     // turbulence-induced relative velocity based on Ormel & Cuzzi (2007), A&A, 466, 413
     // part of code adapted from DustPy (Stammler & Birnstiel 2022, ApJ, 935, 35), also see:
@@ -159,7 +175,7 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g)
     
     real c_s = _get_cs(R, h_g);
     real alpha = _get_alpha(R, h_g);
-    real re_inv_sqrt = _get_re_inv_sqrt(R, alpha);
+    real re_inv_sqrt = _get_re_inv_sqrt(R, alpha, sigma_g);
 
     // comes from normalizing the power spectrum                            (page 415, section 3.2)
     real vg_sq = 1.5*alpha*c_s*c_s;
@@ -271,13 +287,14 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     real size_i = dev_size_old[idx_old_i];
     real size_j = dev_size_old[idx_old_j];
     
-    real R_i = y_i*sin(z_i);
-    real R_j = y_j*sin(z_j);
-    
-    real Z_i = y_i*cos(z_i);
-    real Z_j = y_j*cos(z_j);
+    real R_i = _get_cyl_R(y_i, z_i);
+    real R_j = _get_cyl_R(y_j, z_j);
+
+    real Z_i = _get_cyl_Z(y_i, z_i);
+    real Z_j = _get_cyl_Z(y_j, z_j);
     
     real R = 0.5*(R_i + R_j);
+    real sigma_g = _get_sigma_g(R);
 
     real h_g = _get_hg(R);
     real h_gi = _get_hg(R_i);
@@ -293,6 +310,26 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
         , x_j, y_j, z_j, dev_gas_dens
         #endif // IMPORTGAS
     );
+
+    #ifdef IMPORTGAS
+    if constexpr (N_Z == 1)
+    {
+        if constexpr (N_X == 1)
+        {
+            sigma_g = _interp_field(dev_gas_dens, 0.0, _get_loc_y(R), 0.0);
+        }
+        else
+        {
+            real sigma_gi = _interp_field(
+                dev_gas_dens, _get_loc_x(x_i), _get_loc_y(y_i), _get_loc_z(z_i)
+            );
+            real sigma_gj = _interp_field(
+                dev_gas_dens, _get_loc_x(x_j), _get_loc_y(y_j), _get_loc_z(z_j)
+            );
+            sigma_g = 0.5*(sigma_gi + sigma_gj);
+        }
+    }
+    #endif // IMPORTGAS
 
     real3 v_i = _get_cart_vel(dev_particle[idx_old_i]);
     real3 v_j = _get_cart_vel(dev_particle[idx_old_j]);
@@ -310,7 +347,7 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     vrel_sq += vrel_b*vrel_b;
     #endif // NOT CODE_UNIT
 
-    real vrel_t = _get_vrel_t(R, stokes_i, stokes_j, h_g);
+    real vrel_t = _get_vrel_t(R, stokes_i, stokes_j, h_g, sigma_g);
     vrel_sq += vrel_t*vrel_t;
 
     return sqrt(vrel_sq);
@@ -376,8 +413,12 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         if (N_Z == 1)
         {
             // convert the vertically integrated neighbor area to an effective pair volume
-            real R_i = dev_particle[idx_old_i].position.y*sin(dev_particle[idx_old_i].position.z);
-            real R_j = dev_particle[idx_old_j].position.y*sin(dev_particle[idx_old_j].position.z);
+            real R_i = _get_cyl_R(
+                dev_particle[idx_old_i].position.y, dev_particle[idx_old_i].position.z
+            );
+            real R_j = _get_cyl_R(
+                dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
+            );
             real H_gi = R_i*_get_hg(R_i);
             real H_gj = R_j*_get_hg(R_j);
 

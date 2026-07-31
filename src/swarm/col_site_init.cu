@@ -1,5 +1,7 @@
 #ifdef COLLISION
 
+#include <_transport.cuh>
+#include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
@@ -12,16 +14,25 @@
 
 #ifdef COLLISION_KDTREE
 __global__
-void col_site_init (kdtree_node *dev_kdtree_node, const swarm *dev_particle)
+void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
+    const swarm *dev_particle)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
 
-    float x = static_cast<float>(dev_particle[idx].position.x);
-    float y = static_cast<float>(dev_particle[idx].position.y);
-    float z = static_cast<float>(dev_particle[idx].position.z);
+    real x = dev_particle[idx].position.x;
+    real y = dev_particle[idx].position.y;
+    real z = dev_particle[idx].position.z;
+    bool active = _is_particle_active(y, z);
+    dev_col_active[idx] = static_cast<unsigned char>(active);
+    real R = _get_cyl_R(y, z);
+    real Z = _get_cyl_Z(y, z);
 
-    float3 cartesian = make_float3(y*sin(z)*cos(x), y*sin(z)*sin(x), y*cos(z));
+    float3 cartesian = (N_X == 1 && N_Z == 1)
+        ? make_float3(static_cast<float>(R), 0.0f, 0.0f)
+        : make_float3(
+            static_cast<float>(R*cos(x)), static_cast<float>(R*sin(x)), static_cast<float>(Z)
+        );
     dev_kdtree_node[idx].cartesian = cartesian;
     dev_kdtree_node[idx].idx_old = idx;
     dev_kdtree_node[idx].image = 0;
@@ -49,7 +60,7 @@ void col_site_init (kdtree_node *dev_kdtree_node, const swarm *dev_particle)
 #else  // COLLISION_MORTON
 __global__
 void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
-    const swarm *dev_particle)
+    unsigned char *dev_col_active, const swarm *dev_particle)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
@@ -57,15 +68,18 @@ void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev
     real x = dev_particle[idx].position.x;
     real y = dev_particle[idx].position.y;
     real z = dev_particle[idx].position.z;
-    real R = y*sin(z);
+    bool active = _is_particle_active(y, z);
+    dev_col_active[idx] = static_cast<unsigned char>(active);
+    real R = _get_cyl_R(y, z);
+    real Z = _get_cyl_Z(y, z);
 
-    dev_morton_point[idx] = make_float3(
-        static_cast<float>(R*cos(x)),
-        static_cast<float>(R*sin(x)),
-        static_cast<float>(y*cos(z))
-    );
+    dev_morton_point[idx] = (N_X == 1 && N_Z == 1)
+        ? make_float3(static_cast<float>(R), 0.0f, 0.0f)
+        : make_float3(
+            static_cast<float>(R*cos(x)), static_cast<float>(R*sin(x)), static_cast<float>(Z)
+        );
     dev_morton_posx[idx] = static_cast<float>(x);
-    dev_search_dist[idx] = static_cast<float>(H_SEARCH*_get_hg(R)*R);
+    dev_search_dist[idx] = active ? static_cast<float>(H_SEARCH*_get_hg(R)*R) : 0.0f;
 }
 #endif // COLLISION_KDTREE
 

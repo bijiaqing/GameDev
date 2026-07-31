@@ -29,7 +29,8 @@ inline __host__
 real _get_ycent (int iy) { return Y_MIN*std::pow(_get_dy(), static_cast<real>(iy) + 0.5); }
 
 inline __host__
-real _get_zcent (int iz) { return Z_MIN + (static_cast<real>(iz) + 0.5)*_get_dz(); }
+real _get_zcent (int iz)
+{ return (N_Z > 1) ? Z_MIN + (static_cast<real>(iz) + 0.5)*_get_dz() : 0.5*M_PI; }
 
 inline __host__
 real _get_sy (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
@@ -173,8 +174,8 @@ real get_total_dust_mass ()
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y = _get_ycent(iy);
-            real R = y*std::sin(z);
-            real Z = y*std::cos(z);
+            real R = _get_cyl_R(y, z);
+            real Z = _get_cyl_Z(y, z);
 
             real sigma_d = initdens_lerp(R, initdens);
             real rhod = _get_init_rhod(sigma_d, R, Z, S_0);
@@ -217,8 +218,8 @@ void rand_disk_mono (real *randposx, real *randposy, real *randposz, real size, 
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y = _get_ycent(iy);
-            real R = y*std::sin(z);
-            real Z = y*std::cos(z);
+            real R = _get_cyl_R(y, z);
+            real Z = _get_cyl_Z(y, z);
 
             real sigma_d = initdens_lerp(R, initdens);
             real rhod = _get_init_rhod(sigma_d, R, Z, size);
@@ -300,8 +301,8 @@ void disk_cdf_calc (std::vector <real> &cdf, const std::vector <real> &initdens,
         for (int iy = 0; iy < N_Y; iy++)
         {
             real y = _get_ycent(iy);
-            real R = y*std::sin(z);
-            real Z = y*std::cos(z);
+            real R = _get_cyl_R(y, z);
+            real Z = _get_cyl_Z(y, z);
             real sigma_d = initdens_lerp(R, initdens);
             real log_rhod = (sigma_d > 0.0) ? std::log(sigma_d) : log_zero;
 
@@ -745,10 +746,12 @@ void save_sam_as_velocity (swarm *particle)
     {
         real y = particle[idx].position.y;
         real z = particle[idx].position.z;
-        real R = y*std::sin(z);
+        real R = _get_cyl_R(y, z);
 
+        if (N_X == 1) particle[idx].position.x = 0.5*(X_MIN + X_MAX);
+        if (N_Z == 1) particle[idx].position.z = 0.5*M_PI;
         particle[idx].velocity.x = (R > 0.0) ? particle[idx].velocity.x / R : 0.0;
-        particle[idx].velocity.z = (y > 0.0) ? particle[idx].velocity.z / y : 0.0;
+        particle[idx].velocity.z = (N_Z > 1 && y > 0.0) ? particle[idx].velocity.z / y : 0.0;
     }
 }
 
@@ -758,12 +761,15 @@ void load_velocity_as_sam (swarm *particle)
 {
     for (int idx = 0; idx < N_P; idx++)
     {
+        if (N_X == 1) particle[idx].position.x = 0.5*(X_MIN + X_MAX);
+        if (N_Z == 1) particle[idx].position.z = 0.5*M_PI;
+
         real y = particle[idx].position.y;
         real z = particle[idx].position.z;
-        real R = y*std::sin(z);
+        real R = _get_cyl_R(y, z);
 
         particle[idx].velocity.x *= R;
-        particle[idx].velocity.z *= y;
+        particle[idx].velocity.z = (N_Z > 1) ? particle[idx].velocity.z*y : 0.0;
     }
 }
 
@@ -944,6 +950,20 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "N_G         = " << std::scientific     << std::setprecision(8) << N_G          << std::endl;
     file                                                                                    << std::endl;
 
+    if (N_X == 1 && N_Z == 1) file << "GEOMETRY    = radial"                              << std::endl;
+    if (N_X >  1 && N_Z == 1) file << "GEOMETRY    = radial_azimuthal"                    << std::endl;
+    if (N_X == 1 && N_Z >  1) file << "GEOMETRY    = radial_polar"                        << std::endl;
+    if (N_X >  1 && N_Z >  1) file << "GEOMETRY    = full_3d"                             << std::endl;
+    file << "DUST_DENSITY_KIND = " << ((N_Z == 1) ? "surface" : "volume")                << std::endl;
+    #ifdef IMPORTGAS
+    file << "GAS_DENSITY_KIND  = " << ((N_Z == 1) ? "surface" : "volume")                << std::endl;
+    file << "IMPORTED_EPSILON_NORMALIZATION = shape_only"                                  << std::endl;
+    #endif // IMPORTGAS
+    if (N_X == 1) file << "INACTIVE_X  = " << 0.5*(X_MIN + X_MAX)                          << std::endl;
+    if (N_Z == 1) file << "INACTIVE_Z  = " << 0.5*M_PI                                    << std::endl;
+    if (N_X == 1 && N_Z == 1) file << "DYNAMICAL_CLOSURE = midplane"                     << std::endl;
+    file                                                                                    << std::endl;
+
     // initialization parameters
     #ifdef MULTISIZE
     file << "INIT_SMIN   = " << std::scientific     << std::setprecision(8) << INIT_SMIN    << std::endl;
@@ -1032,14 +1052,6 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
     }
 
     load_velocity_as_sam(particle);
-    if (N_Z == 1)
-    {
-        for (int idx = 0; idx < N_P; idx++)
-        {
-            particle[idx].position.z = 0.5*M_PI;
-            particle[idx].velocity.z = 0.0;
-        }
-    }
     CUDA_CHECK(cudaMemcpy(dev_particle, particle, sizeof(swarm)*N_P, cudaMemcpyHostToDevice));
 
     #if defined(COLLISION) || defined(DIFFUSION)

@@ -33,7 +33,7 @@ def main() -> None:
         "--particles", nargs="+", type=int,
         default=[100_000, 1_000_000, 10_000_000],
     )
-    parser.add_argument("--distribution", nargs="+", choices=("smooth", "ring", "clump"), default=None)
+    parser.add_argument("--distribution", nargs="+", choices=("smooth", "ring", "clump", "radial"), default=None)
     parser.add_argument("--dim", nargs="+", type=int, choices=(2, 3), default=[2, 3])
     parser.add_argument("--queries", type=int, default=4096)
     parser.add_argument("--brute-queries", type=int, default=32)
@@ -44,14 +44,20 @@ def main() -> None:
     parser.add_argument("--max-leaf-scan", type=int, default=4096)
     parser.add_argument("--arch", default="sm_80")
     parser.add_argument("--k", type=int, default=200)
+    parser.add_argument(
+        "--output-subdir", default="",
+        help="store a selected matrix below a separate output directory",
+    )
     args = parser.parse_args()
 
     test_root = Path(__file__).resolve().parent
     executable = test_root / "bin" / "knn_benchmark"
-    result_root = test_root / "out"
+    result_root = test_root.parent / "out" / "test_knn"
+    if args.output_subdir:
+        result_root = result_root / args.output_subdir
     result_root.mkdir(parents=True, exist_ok=True)
 
-    distributions = args.distribution or ["smooth", "ring", "clump"]
+    distributions = args.distribution or ["smooth", "ring", "clump", "radial"]
 
     # K is a compile-time top-K capacity for both backends, so compile once for
     # the complete matrix and then vary only runtime particle distributions.
@@ -71,6 +77,7 @@ def main() -> None:
         "arch": args.arch,
         "k": args.k,
     }
+    (result_root / "environment.txt").unlink(missing_ok=True)
     (result_root / "environment.json").write_text(
         json.dumps(environment, indent=2, sort_keys=True) + "\n"
     )
@@ -78,8 +85,11 @@ def main() -> None:
     completed = []
     for dimension in args.dim:
         for distribution in distributions:
+            if distribution == "radial" and dimension != 2:
+                continue
             for particles in args.particles:
-                name = f"{distribution}_{dimension}d_N{particles}"
+                physical_dimension = 1 if distribution == "radial" else dimension
+                name = f"{distribution}_{physical_dimension}d_N{particles}"
                 output = result_root / f"{name}.json"
                 command = [
                     str(executable),
@@ -102,12 +112,23 @@ def main() -> None:
                     result.check_returncode()
                     raise RuntimeError(f"ordinary benchmark did not write {output}")
                 record = json.loads(output.read_text())
-                completed.append(record)
+                if (
+                    record.get("distribution") != distribution
+                    or record.get("particles") != particles
+                    or record.get("dimension") != dimension
+                    or record.get("physical_dimension") != physical_dimension
+                    or record.get("k") != args.k
+                    or record.get("passed") != record.get("quality_passed")
+                ):
+                    raise RuntimeError(
+                        f"ordinary benchmark labels in {output} do not match case {name}"
+                    )
+                completed.append((name, record))
                 print(
-                    f"quality={record['quality_passed']}  "
+                    f"pass={record['passed']}  "
                     f"query batch: KD={record['kd_query_ms']:.3f} ms  "
                     f"Morton={record['morton_query_ms']:.3f} ms  "
-                    f"speedup={record['query_speedup']:.3f}"
+                    f"KD/Morton={record['query_time_ratio_kd_morton']:.3f}"
                 )
                 if result.returncode != 0:
                     print(
@@ -125,13 +146,14 @@ def main() -> None:
                     )
                     result.check_returncode()
 
+    passed = all(record["passed"] for _, record in completed)
     manifest = {
+        "component": "ordinary",
         "cases": len(completed),
-        "all_quality_passed": all(record["quality_passed"] for record in completed),
-        "files": [
-            f"{record['distribution']}_{record['dimension']}d_N{record['particles']}.json"
-            for record in completed
-        ],
+        "all_quality_passed": passed,
+        "passed": passed,
+        "environment": "environment.json",
+        "files": [f"{name}.json" for name, _ in completed],
     }
     (result_root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 

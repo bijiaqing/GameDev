@@ -1,6 +1,7 @@
 #ifdef RADIATION
 
 #include <_transport.cuh>
+#include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_grid.cuh>
 #include <swarm_kern.cuh>
@@ -29,7 +30,7 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real total_du
 
     if (N_Z == 1)
     {
-        real R = dev_particle[idx].position.y*sin(dev_particle[idx].position.z);
+        real R = _get_cyl_R(dev_particle[idx].position.y, dev_particle[idx].position.z);
         real H_g = _get_hg(R)*R;
 
         // close the vertically integrated disk with a well-mixed gas-scale-height profile

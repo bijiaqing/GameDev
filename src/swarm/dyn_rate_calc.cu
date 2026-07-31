@@ -47,7 +47,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     real lz = dev_particle[idx].velocity.z;
 
     // construct the local physical cell scales from the spherical mesh
-    real R = y*sin(z);
+    real R = _get_cyl_R(y, z);
     real dx = _get_dx();
     real dy = _get_dy();
     real dz = _get_dz();
@@ -59,6 +59,9 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     // the radial scale is the exact width of the logarithmic cell containing the particle
     real omega = _get_omegaK(R);
     real rate = omega / CFL_DYN;
+    #ifdef IMPORTGAS
+    real lx_bound = abs(lx);
+    #endif // IMPORTGAS
     if (N_X > 1) rate = fmax(rate, omega / (dx*CFL_DYN));
     if (N_X > 1) rate = fmax(rate, abs(lx) / (R*R*dx*CFL_DYN));
     if (N_Y > 1) rate = fmax(rate, abs(vy) / (dr*CFL_DYN));
@@ -81,6 +84,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     if (N_X > 1) rate = fmax(rate, abs(vx_g) / (R*dx*CFL_DYN));
     if (N_Y > 1) rate = fmax(rate, abs(vy_g) / (dr*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(vz_g) / (y*dz*CFL_DYN));
+    lx_bound = fmax(lx_bound, R*vx_g);
     #endif // IMPORTGAS
 
     real beta = 0.0;
@@ -101,6 +105,12 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     real grav_y = -(1.0 - beta)*G*M_S / (y*y);
     real cent_y = lx*lx / (R*R*y) + lz*lz / (y*y*y);
     real accel_y = abs(grav_y + cent_y);
+    #ifdef IMPORTGAS
+    real cent_y_min = lz*lz / (y*y*y);
+    real cent_y_max = lx_bound*lx_bound / (R*R*y) + cent_y_min;
+    accel_y = fmax(accel_y, abs(grav_y + cent_y_min));
+    accel_y = fmax(accel_y, abs(grav_y + cent_y_max));
+    #endif // IMPORTGAS
     
     rate = fmax(rate, sqrt(accel_y / (2.0*CFL_DYN*dr)));
     if (N_Z > 1)
@@ -114,9 +124,9 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     {
         // include the analytic gas target velocity before drag can transfer it to the dust
         real h_g = _get_hg(R);
-        real vR_g = _get_visc_vel(R, y*cos(z), h_g);
+        real vR_g = _get_visc_vel(R, _get_cyl_Z(y, z), h_g);
 
-        if (N_Y > 1) rate = fmax(rate, abs(vR_g*sin(z)) / (dr*CFL_DYN));
+        if (N_Y > 1) rate = fmax(rate, abs((N_Z > 1) ? vR_g*sin(z) : vR_g) / (dr*CFL_DYN));
         if (N_Z > 1) rate = fmax(rate, abs(vR_g*cos(z)) / (y*dz*CFL_DYN));
     }
     #endif // VISC_FLOW
@@ -138,8 +148,8 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     real drift_Z = grad_Z;
 
     // project cylindrical diffusion variance and drift onto spherical radial and polar directions
-    real sin_z = sin(z);
-    real cos_z = cos(z);
+    real sin_z = (N_Z > 1) ? sin(z) : 1.0;
+    real cos_z = (N_Z > 1) ? cos(z) : 0.0;
     real diff_y = diff_R*sin_z*sin_z + diff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
     

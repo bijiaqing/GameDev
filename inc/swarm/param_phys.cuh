@@ -151,18 +151,27 @@ real _get_stokes (real R, real Z, real h_g, real size
     real loc_y = _get_loc_y(y);
     real loc_z = _get_loc_z(z);
 
-    real rhog = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
-    if (rhog <= 0.0)
+    real gasdens = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
+    if (gasdens <= 0.0)
     {
-        printf("ERROR: Invalid gas density rhog = %e at (x,y,z) = (%e,%e,%e)\n", rhog, x, y, z);
+        printf("ERROR: Invalid gas density = %e at (x,y,z) = (%e,%e,%e)\n", gasdens, x, y, z);
         assert(false);
     }
 
-    real H_g0 = ASPR_0*R_0;
-    real rhog_0 = SIGMA_0 / (sqrt(2.0*M_PI)*H_g0);
-    real H_g = h_g*R;
+    if constexpr (N_Z == 1)
+    {
+        real sigma_g = gasdens;
+        stokes *= SIGMA_0 / sigma_g;
+    }
+    else
+    {
+        real rhog = gasdens;
+        real H_g0 = ASPR_0*R_0;
+        real rhog_0 = SIGMA_0 / (sqrt(2.0*M_PI)*H_g0);
+        real H_g = h_g*R;
 
-    stokes *= rhog_0*H_g0 / (rhog*H_g);
+        stokes *= rhog_0*H_g0 / (rhog*H_g);
+    }
     #else  // ANALYTIC_GAS
     #ifndef CONST_ST
     // apply the radial surface-density scaling and exact spherical vertical stratification

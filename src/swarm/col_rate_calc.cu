@@ -20,7 +20,7 @@
 #ifdef COLLISION_KDTREE
 __global__
 void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
-    const real *dev_size_old, const real *dev_numr_old,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
     const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
@@ -46,10 +46,10 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     real loc_z = _get_loc_z(z);
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
 
-    real R = y*sin(z);
+    real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
     bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*search_dist;
-    kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids);
+    kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active);
     kdtree::cct::knn <kdtree_heap, kdtree_node, kdtree_traits> (
         near_result, dev_kdtree_node[idx_tree].cartesian,
         *dev_kdtree_box, dev_kdtree_node, N_T
@@ -88,7 +88,8 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
 #else  // COLLISION_MORTON
 __global__
 void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_morton_overflow,
-    const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
+    const swarm *dev_particle, const unsigned char *dev_col_active,
+    const real *dev_size_old, const real *dev_numr_old,
     const float3 *dev_morton_point, morton_view morton_data, bool unique_ids,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
@@ -117,7 +118,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
     real loc_z = _get_loc_z(z);
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
 
-    real R = y*sin(z);
+    real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
     __shared__ float work_dist_sq[MORTON_WORK_SIZE];
@@ -135,7 +136,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
     _morton_ghost_topk<N_K, MORTON_TPB, MORTON_WORK_SIZE, 256>(
         morton_data, dev_morton_point[idx_old_i], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
-        leaf_visit_count, candidate_count, stack_overflow
+        leaf_visit_count, candidate_count, stack_overflow, dev_col_active
     );
 
     if (threadIdx.x == 0) dev_morton_overflow[idx_old_i] = stack_overflow;

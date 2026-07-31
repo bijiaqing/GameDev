@@ -2,6 +2,7 @@
 
 #include <_collision.cuh>
 #include <_transport.cuh>
+#include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
@@ -19,7 +20,8 @@
 #ifdef COLLISION_KDTREE
 __global__
 void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
-    const real *dev_col_dist, const real *dev_size_old, const real *dev_numr_old,
+    const real *dev_col_dist, const unsigned char *dev_col_active,
+    const real *dev_size_old, const real *dev_numr_old,
     const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
@@ -46,11 +48,11 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
-    real R = y*sin(z);
+    real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
     bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*search_dist;
-    kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids);
+    kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active);
     kdtree::cct::knn <kdtree_heap, kdtree_node, kdtree_traits> (
         near_result, dev_kdtree_node[idx_tree].cartesian,
         *dev_kdtree_box, dev_kdtree_node, N_T
@@ -123,7 +125,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 __global__
 void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     const real *dev_col_rate, const real *dev_col_dist, unsigned int *dev_morton_overflow,
-    const real *dev_size_old, const real *dev_numr_old,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
     const float3 *dev_morton_point, morton_view morton_data, bool unique_ids,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
@@ -155,7 +157,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
 
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
-    real R = y*sin(z);
+    real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
     __shared__ float work_dist_sq[MORTON_WORK_SIZE];
@@ -172,7 +174,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     _morton_ghost_topk<N_K, MORTON_TPB, MORTON_WORK_SIZE, 256>(
         morton_data, dev_morton_point[idx_old_i], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
-        leaf_visit_count, candidate_count, stack_overflow
+        leaf_visit_count, candidate_count, stack_overflow, dev_col_active
     );
 
     if (threadIdx.x == 0)

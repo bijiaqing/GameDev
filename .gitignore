@@ -18,4 +18,5 @@ qav/*/out/*
 !qav/*/out/.gitkeep
 
 qav/swarm/test_knn/bin/
+# legacy benchmark output location used before KNN results joined qav/swarm/out/
 qav/swarm/test_knn/out/

@@ -41,10 +41,13 @@ $(TARGET): $(TEST_DIR)/knn_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
 
-$(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.cu \
+$(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.cu $(TEST_DIR)/knn_types.cuh \
+	$(ROOT_DIR)/inc/swarm/kdtree/builder.h $(ROOT_DIR)/inc/swarm/kdtree/index_heap.cuh \
+	$(ROOT_DIR)/inc/swarm/kdtree/knn.h \
 	$(ROOT_DIR)/inc/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/swarm/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@mkdir -p $(BIN_DIR)
+	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
 

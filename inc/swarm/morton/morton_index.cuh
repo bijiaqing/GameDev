@@ -283,7 +283,7 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
     float *near_dist_sq, int *near_idx_old, int *idx_node_stack,
     int &stack_count, int &idx_node, int &batch_count,
     unsigned int &leaf_visit_count, unsigned int &candidate_count,
-    unsigned int &stack_overflow)
+    unsigned int &stack_overflow, const unsigned char *dev_active = nullptr)
 {
     static_assert(K + BLOCK_SIZE <= SORT_SIZE, "top-K merge array is too small");
     static_assert((SORT_SIZE & (SORT_SIZE - 1)) == 0, "top-K merge array must be a power of two");
@@ -339,7 +339,8 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                     int idx_slot = K + batch_offset + idx_local;
                     near_dist_sq[idx_slot] = CUDART_INF_F;
                     near_idx_old[idx_slot] = INT_MAX;
-                    if (candidate_dist_sq <= search_dist_sq)
+                    if (candidate_dist_sq <= search_dist_sq
+                        && (!dev_active || dev_active[candidate.idx_old] != 0))
                     {
                         near_dist_sq[idx_slot] = candidate_dist_sq;
                         near_idx_old[idx_slot] = candidate.idx_old;
@@ -420,7 +421,8 @@ template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
 __global__
 void morton_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigned int *dev_leaf_visit_count,
     unsigned int *dev_candidate_count, unsigned int *dev_stack_overflow,
-    const float3 *dev_query_point, int query_count, morton_view morton_data, float search_dist)
+    const float3 *dev_query_point, int query_count, morton_view morton_data, float search_dist,
+    const unsigned char *dev_active = nullptr)
 {
     int idx_query = blockIdx.x;
     if (idx_query >= query_count) return;
@@ -438,7 +440,7 @@ void morton_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigned int 
     _morton_topk<K, BLOCK_SIZE, SORT_SIZE, STACK_SIZE>(
         morton_data, dev_query_point[idx_query], search_dist, work_dist_sq, work_idx_old,
         idx_node_stack, stack_count, idx_node, batch_count,
-        leaf_count, candidate_total, overflow
+        leaf_count, candidate_total, overflow, dev_active
     );
 
     for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
