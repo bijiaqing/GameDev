@@ -187,7 +187,8 @@ the spherical radial-polar domain, integrates the resulting one or two truncated
 analytically, samples height by inverse Gaussian CDF, and tabulates only the remaining radial
 marginal on an auxiliary grid independent of `N_Z`. The broad-size finite-polar-domain regression
 described in T2b is now implemented as `test_initial_3d`, including an intermediate-size population
-that exercises interpolation between adjacent size knots; native CUDA execution is pending.
+that exercises interpolation between adjacent size knots. Its native CUDA run passed at
+$N_Z=32,64,128,256$, with byte-identical initialization outputs across all four builds.
 
 The correction also exposed an independent prefactor error in the old domain integral: it summed
 only over radial and polar cells but multiplied by one azimuthal cell width when `N_X > 1`. The
@@ -291,7 +292,7 @@ already list: full-3D MMS, settling equilibrium, boundary-crossing transport cas
 tolerance, POS_LIMIT multi-substep diffusion, finite-opacity radiation coupling, matched
 thread/block artifacts, non-`--use_fast_math` runs (fluid); and regenerated collision-runtime
 comparisons, complete frozen collision batches + `CFL_COL`/`N_K`/`N_P` convergence, Smoluchowski
-moment evolution, initialization-CDF validation, imported-gas interpolation/anchoring,
+moment evolution, monodisperse initialization and initial-drift validation, imported-gas interpolation/anchoring,
 boundary-event convergence, direct `dyn_rate_calc` tests, finite `e^{-\tau}` coupling,
 long-term reduced-gravity and secular P-R inspiral, settling–diffusion equilibrium,
 restart bitwise reproducibility, radial-vs-axisymmetric equivalence, and end-to-end operator
@@ -317,13 +318,14 @@ Compare $v_{\phi,g}(R,Z)$ and the height-dependent drift against an independent 
 separately evaluates the exact horizontal-gravity factor and fixed-$Z$ pressure gradient before
 confirming their cancellation to the implemented expression in §2.1(b).
 
-**T2b. Polydisperse finite-domain mass initialization test (3D swarm; implemented, native run pending).**
+**T2b. Polydisperse finite-domain mass initialization test (3D swarm; implemented and passed natively).**
 Use a broad size interval and polar boundaries that truncate a measurable fraction of at least one
 size-dependent dust layer. Independently integrate $f_M(s)F(s)$, then verify the initialized sum
 $\sum_i m_g(s_i)N_i$, the size-binned represented masses, and the conditional spatial CDFs. Repeat
 with multiple simulation values of `N_Z`, including $H_d\ll y\Delta z$, and require the containment
 and sampled continuous distribution to remain invariant within radial-quadrature and Monte Carlo
-errors. This test should accompany the §2.3 correction.
+errors. `test_initial_3d` now performs these checks for endpoint and geometric-mean sizes and passed
+at `N_Z = 32, 64, 128, 256`; monodisperse initialization and initial drift remain separate gaps.
 
 **T3. Ormel–Cuzzi turbulent relative-velocity regime test (swarm).**
 `_get_vrel_t` is currently never tested: the collision cases exercise only the

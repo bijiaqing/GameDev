@@ -500,10 +500,10 @@ int main ()
         real domain_mass = _get_domain_mass(
             randsize[idx], mass_bank.data(), static_cast<int>(mass_bank.size())
         );
-        real grain_number = mass_norm*_get_mass_weight(randsize[idx])*domain_mass
-                          / static_cast<real>(N_P) / _get_grain_mass(randsize[idx]);
-        represented_mass += static_cast<long double>(grain_number)
-                          * static_cast<long double>(_get_grain_mass(randsize[idx]));
+        represented_mass += static_cast<long double>(mass_norm)
+                          * static_cast<long double>(_get_mass_weight(randsize[idx]))
+                          * static_cast<long double>(domain_mass)
+                          / static_cast<long double>(N_P);
     }
 
     std::vector<real> initial(4*N_P);

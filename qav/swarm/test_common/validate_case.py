@@ -405,9 +405,9 @@ def analyze_initialization(out_dir: Path, resolution: int, meta: dict[str, str])
         (1.0 - mid_fraction)*radial_references[mid_index][1]
         + mid_fraction*radial_references[mid_index + 1][1]
     )
-    middle_mass = (
-        (1.0 - mid_fraction)*expected_mass[mid_index]
-        + mid_fraction*expected_mass[mid_index + 1]
+    middle_mass = math.exp(
+        (1.0 - mid_fraction)*math.log(expected_mass[mid_index])
+        + mid_fraction*math.log(expected_mass[mid_index + 1])
     )
     _, middle_cdf_exact, middle_mass_exact = initialization_radial_cdf(
         size_mid, meta, profile_radius, profile_surface

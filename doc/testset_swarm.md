@@ -631,7 +631,8 @@ $$
 
 on the production size axis. The 128 returned containment masses must agree with this independent
 reference to relative $L_\infty<2\times10^{-12}$. The validator independently interpolates the two
-central mass entries to reconstruct the expected normalization of the midpoint population. Its
+central positive mass entries linearly in $\log I$ to reconstruct the expected normalization of
+the midpoint population. Its
 relative error and the finite representative normalization error must both remain below
 $5\times10^{-12}$, with the latter written as
 
@@ -1021,7 +1022,7 @@ below.
 
 ## Recorded native CUDA results
 
-The complete current suite was run natively on the Vera CUDA cluster on 2026-07-31:
+The then-current complete suite was run natively on the Vera CUDA cluster on 2026-07-31:
 
 ```bash
 python3 qav/swarm/test_common/run_suite.py \
@@ -1061,7 +1062,45 @@ All environment records agree on:
 
 This all-in-one archive supersedes the earlier focused radial, boundary, and KNN result summaries.
 The separate test groups remain useful for development, but the numerical claims below are taken
-from this complete current-source run.
+from this all-group baseline and the newer focused initialization run described next.
+
+### Continuous-initialization supplement
+
+After replacing polar-cell-center initialization with continuous cylindrical containment and
+adding the intermediate-size population, `test_initial_3d` was run natively on the same Vera CUDA
+platform on 2026-08-01 at
+
+$$
+N_Z=32,64,128,256.
+$$
+
+All four builds passed, and the model manifest reports
+`"polar_resolution_independent": true`. The initialized particle arrays, 128-entry domain-mass
+bank, and mass summary were byte-identical across all four values of `N_Z`. Every sampled point
+remained in the spherical radial-polar domain. The worst metrics, identical at every resolution,
+were
+
+| Quantity | Recorded value | Acceptance limit |
+|---|---:|---:|
+| domain-mass relative $L_\infty$ | $3.71\times10^{-15}$ | $2\times10^{-12}$ |
+| mass-normalization relative error | $8.65\times10^{-16}$ | $5\times10^{-12}$ |
+| represented-mass relative error | $4.76\times10^{-16}$ | $5\times10^{-12}$ |
+| radial PIT KS | $5.22\times10^{-3}$ | $4.06\times10^{-2}$ |
+| vertical PIT KS | $6.75\times10^{-3}$ | $4.06\times10^{-2}$ |
+
+For the geometric-mean grain size, interpolation between the two central size knots differed from
+a directly integrated midpoint reference by $4.07\times10^{-9}$ in CDF $L_\infty$ and
+$6.61\times10^{-9}$ in contained mass. These are fidelity diagnostics rather than acceptance
+thresholds. The archived `metrics_N*.json`, `meta_N*.txt`, `manifest.json`, and `environment.json`
+files under `qav/swarm/out/test_initial_3d/` are the native machine-readable record.
+
+The archived JSON was generated immediately before the midpoint normalization mirror in the Python
+validator was changed from arithmetic mass interpolation to the production rule, which is linear
+in $(\log s,\log I)$ for positive entries. The CUDA initialization itself already used the latter
+rule. Applying the corrected validator changes only the reported midpoint-sensitive normalization
+residual, from $8.65\times10^{-16}$ to approximately $5.13\times10^{-13}$ in the checked host
+artifact, still well below the $5\times10^{-12}$ limit. A focused native rerun should refresh the
+archived metric rather than treating the older last digits as current validator output.
 
 ### Deterministic accuracy and conservation
 
@@ -1235,11 +1274,9 @@ expected model as pending, running, passed, failed, or interrupted and prints a 
   with `CFL_COL`, $N_K$, and $N_P$
 - Recover analytical constant, additive, and product Smoluchowski moment evolution rather than
   checking only the pair-kernel numerators
-- Archive a native-CUDA run of `test_initial_3d`; its implemented checks cover the continuous
-  conditional multisize CDF, convolved radial profile, analytic finite-domain Gaussian containment,
-  intermediate-size interpolation, independence from simulation `N_Z`, and finite-sample mass
-  normalization, while monodisperse initialization and initial drift velocities remain to be
-  tested separately
+- Test monodisperse initialization and initial drift velocities in the complete production path;
+  the native `test_initial_3d` archive now covers conditional multisize initialization, finite-domain
+  containment, intermediate-size interpolation, mass normalization, and independence from `N_Z`
 - Validate imported-gas spatial and temporal interpolation, the analytical `STOKES_0` anchor, and
   response to a depleted imported midplane density
 - Add boundary-event convergence tests that can detect within-step exits and returns; the current
