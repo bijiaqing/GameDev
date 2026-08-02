@@ -1,16 +1,18 @@
-#include <algorithm>
-#include <cmath>
-#include <cstdlib>
-#include <iostream>
-#include <set>
-#include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
+#include <algorithm>      // std::min, std::max, std::sort
+#include <cmath>          // std::cos, std::sin
+#include <cstdlib>        // EXIT_SUCCESS, EXIT_FAILURE
+#include <iostream>       // std::cout, std::cerr
+#include <set>            // std::set
+#include <stdexcept>      // std::runtime_error
+#include <string>         // std::string, std::to_string
+#include <utility>        // std::pair
+#include <vector>         // std::vector
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // CUDA allocation, copies, and kernel launches
 
 #include "periodic_query.cuh"
+
+// verify periodic query-image selection and physical-id deduplication against brute-force wedge geometry
 
 namespace
 {
@@ -85,6 +87,7 @@ float get_dist_sq (const float3 &a, const float3 &b)
     return dx*dx + dy*dy + dz*dz;
 }
 
+// enumerate the nearest physical image of every point for an independent periodic reference
 std::vector<std::pair<float, int>> periodic_brute (
     const periodic_case &test, std::size_t idx_query)
 {
@@ -200,6 +203,7 @@ periodic_case make_full_disk (int dim)
     };
 }
 
+// compare the periodic Morton result, image count, and overflow state with the reference
 bool run_case (const periodic_case &test)
 {
     float3 root_origin;

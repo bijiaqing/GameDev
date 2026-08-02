@@ -4,7 +4,7 @@
 
 // =========================================================================================================================
 // kernel: advection_zbl
-// purpose: preserve the fiducial polar SSPRK and PPM update while assigning one polar column to one block
+// purpose: reproduce the thread-sweep polar SSPRK and PPM update with one cooperative block per column
 // workspace: reuse 11 explicit full-grid fields and retain serial invariant-domain correction order within each column
 // =========================================================================================================================
 
@@ -61,6 +61,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
     real y = _get_ycent(iy);
 
+    // load one conserved polar column into the explicit workspace
     for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
     {
         int idx_cell = idx_base + iz*N_X*N_Y;
@@ -71,8 +72,10 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     }
     __syncthreads();
 
+    // advance three forward-Euler evaluations and SSPRK(3,3) convex combinations
     for (int stage = 0; stage < 3; stage++)
     {
+        // recover primitives from the current SSPRK stage state
         for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
         {
             real z = _get_zcent(iz);
@@ -81,6 +84,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
         __syncthreads();
 
+        // construct PPM and low-order HLL fluxes cooperatively at polar faces
         for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
         {
             if (iz == N_Z - 1)
@@ -120,6 +124,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
         if (threadIdx.x == 0)
         {
+            // apply the spherical low-order update in deterministic polar order
             real speed_i = lz[0] / y;
             real flux_rhod_i = (speed_i < 0.0) ? speed_i*fmax(rhod[0], 0.0) : 0.0;
             real flux_mx_i = flux_rhod_i*lx[0];
@@ -149,6 +154,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_mz_i = flux_mz_o;
             }
 
+            // restore antidiffusive transfers with one invariant-domain scale per interior face
             for (int iz = 0; iz < N_Z - 1; iz++)
             {
                 real area_f = sin(_get_zface(iz + 1));
@@ -196,6 +202,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
             if (stage == 1)
             {
+                // form the second SSPRK stage from the original and twice-Euler-updated states
                 for (int iz = 0; iz < N_Z; iz++)
                 {
                     int idx_cell = idx_base + iz*N_X*N_Y;
@@ -209,6 +216,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         __syncthreads();
     }
 
+    // form the final SSPRK combination while storing the conserved column
     for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
     {
         int idx_cell = idx_base + iz*N_X*N_Y;

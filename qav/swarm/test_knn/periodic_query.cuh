@@ -1,13 +1,14 @@
 #ifndef QAV_PERIODIC_QUERY_CUH
 #define QAV_PERIODIC_QUERY_CUH
 
-#include <climits>
+#include <climits>        // INT_MAX
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // float3 and CUDA device intrinsics
 #include <math_constants.h>  // CUDART_INF_F, CUDART_PI_F
 
 #include <morton/morton_index.cuh>
 
+// rotate one Cartesian query into an adjacent azimuthal wedge image
 __device__ __forceinline__
 float3 _rotate_query_z (const float3 &query_point, float angle)
 {
@@ -21,6 +22,7 @@ float3 _rotate_query_z (const float3 &query_point, float angle)
     );
 }
 
+// calculate the shortest Cartesian distance to one radial seam plane
 __device__ __forceinline__
 float _get_seam_dist (const float3 &query_point, float x_offset)
 {
@@ -29,6 +31,7 @@ float _get_seam_dist (const float3 &query_point, float x_offset)
     return (cos_offset >= 0.0f) ? R*fabsf(sinf(x_offset)) : R;
 }
 
+// group equal physical identifiers before retaining their nearest periodic image
 template<int SORT_SIZE, int BLOCK_SIZE>
 __device__ __forceinline__
 void _periodic_id_sort (float *dist_sq, int *idx_old)
@@ -62,6 +65,7 @@ void _periodic_id_sort (float *dist_sq, int *idx_old)
     }
 }
 
+// query only geometrically reachable wedge images and merge them into one physical top-K set
 template<int K, int BLOCK_SIZE, int WORK_SIZE, int MERGE_SIZE, int STACK_SIZE>
 __device__ __forceinline__
 int _periodic_topk (const morton_view &morton_data, const float3 &query_point, float x,

@@ -4,6 +4,7 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
+// interpolate the host-convolved surface-density profile on its uniform cylindrical-radius axis
 __device__ __forceinline__
 real initdens_lerp (real R, const real *dev_initdens)
 {

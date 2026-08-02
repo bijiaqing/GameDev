@@ -1,20 +1,20 @@
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cstddef>
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <limits>
-#include <random>
-#include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
+#include <algorithm>      // std::min, std::max, std::sort
+#include <chrono>         // std::chrono timing
+#include <cmath>          // std::cos, std::sin, std::sqrt
+#include <cstddef>        // std::size_t
+#include <cstdlib>        // EXIT_SUCCESS, EXIT_FAILURE
+#include <filesystem>     // std::filesystem::create_directories
+#include <fstream>        // std::ofstream
+#include <iomanip>        // std::setprecision
+#include <iostream>       // std::cout, std::cerr
+#include <limits>         // std::numeric_limits
+#include <random>         // std::mt19937, probability distributions
+#include <stdexcept>      // std::invalid_argument, std::runtime_error
+#include <string>         // std::string, std::stoi
+#include <utility>        // std::pair
+#include <vector>         // std::vector
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // CUDA allocation, events, copies, and kernel launches
 
 #include <kdtree/builder.h>
 #include <kdtree/knn.h>
@@ -23,6 +23,9 @@
 #include <morton/morton_query.cuh>
 
 #include "knn_types.cuh"
+
+// compare periodic-wedge KD-tree images with query-image and compact-ghost Morton searches
+// stress ordinary, interior-clump, and seam-clump distributions in two and three dimensions
 
 #ifndef QAV_KNN_K
 #define QAV_KNN_K 200
@@ -241,6 +244,7 @@ options parse_options (int argc, char **argv)
     return result;
 }
 
+// generate production-like disk distributions and retain azimuth for seam-image selection
 void generate_points (const options &config, std::vector<float3> &points, std::vector<float> &azimuth)
 {
     std::mt19937 generator(config.seed);
@@ -490,6 +494,7 @@ std::vector<std::pair<float, int>> record_neighbors (
     return result;
 }
 
+// construct the exact physical top-K set over the original and reachable wedge images
 std::vector<std::pair<float, int>> brute_neighbors (
     const std::vector<float3> &points, const float3 &query, float width, float radius)
 {
@@ -545,6 +550,7 @@ int main (int argc, char **argv)
         _morton_cuda_check(cudaMemcpy(dev_azimuth, azimuth.data(), sizeof(float)*config.particles,
             cudaMemcpyHostToDevice), "copy wedge azimuths");
 
+        // compare the three-copy KD representation with the compact Morton ghost representation
         int kdtree_node_count = 3*config.particles;
         kdtree_point *dev_kdtree_node = nullptr;
         kdtree_boxf *dev_kdtree_box = nullptr;
@@ -569,6 +575,7 @@ int main (int argc, char **argv)
         });
         bool kdtree_dedup_needed = !morton_owner.unique_ids();
 
+        // retain complete physical-id neighbor lists for backend and brute-force comparison
         std::size_t quality_count = static_cast<std::size_t>(config.queries)*K;
         int *dev_kdtree_idx_old = nullptr;
         int *dev_morton_idx_old = nullptr;
@@ -649,6 +656,7 @@ int main (int argc, char **argv)
                     idx_query, record, physical_brute);
             }
         };
+        // arbitrate every backend disagreement and a fixed query prefix with physical brute force
         for (int idx_query = 0; idx_query < config.queries; idx_query++)
         {
             std::vector<std::pair<float, int>> kdtree_neighbors =
@@ -702,6 +710,7 @@ int main (int argc, char **argv)
         _morton_cuda_check(cudaMalloc((void**)&dev_performance_stack_overflow, sizeof(unsigned int)*config.particles),
             "allocate performance overflows");
 
+        // time all-particle searches through checksums after correctness has been established
         double kdtree_query_ms = kernel_time_ms([&]
         {
             kdtree_wedge_checksum<K> <<< (config.particles + KDTREE_TPB - 1) / KDTREE_TPB, KDTREE_TPB >>> (
@@ -726,7 +735,7 @@ int main (int argc, char **argv)
         {
             stack_overflows += performance_stack_overflow[idx];
         }
-        // Independently constructed trees can exchange distance-equivalent cutoff neighbors
+        // permit independently built trees to exchange distance-equivalent cutoff neighbors
         bool quality_passed = kdtree_brute_mismatches == 0 && morton_brute_mismatches == 0
             && kdtree_disagreement_brute_mismatches == 0
             && morton_disagreement_brute_mismatches == 0 && stack_overflows == 0;

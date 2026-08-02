@@ -14,6 +14,7 @@
 
 #include <morton/morton_index.cuh>
 
+// calculate Cartesian distance to one radial plane bounding the azimuthal wedge
 static __device__ __forceinline__
 float _get_morton_seam_dist (const float3 &point, float x_offset)
 {
@@ -22,6 +23,7 @@ float _get_morton_seam_dist (const float3 &point, float x_offset)
     return (cos_offset >= 0.0f) ? R*fabsf(sinf(x_offset)) : R;
 }
 
+// count only particles whose search balls can intersect each periodic seam
 static __global__
 void morton_gcount (int *dev_ghost_count, const float3 *dev_point, const float *dev_morton_posx,
     int point_count, float search_dist, float x_min, float x_max)
@@ -35,6 +37,7 @@ void morton_gcount (int *dev_ghost_count, const float3 *dev_point, const float *
     dev_ghost_count[idx_point] = count;
 }
 
+// append rotated periodic images while preserving original particle identifiers
 static __global__
 void morton_gwrite (float3 *dev_record, int *dev_idx_old, const float3 *dev_point, const float *dev_morton_posx,
     const int *dev_ghost_offset, int point_count, float search_dist, float x_min, float x_max)
@@ -71,6 +74,7 @@ void morton_gwrite (float3 *dev_record, int *dev_idx_old, const float3 *dev_poin
     }
 }
 
+// build an adaptive Morton index over physical points and required periodic ghosts
 class morton_ghost_index
 {
 public:
@@ -88,6 +92,7 @@ public:
         bool use_ghosts = azimuth_active && x_max - x_min < 2.0f*CUDART_PI_F - 1.0e-6f;
         if (!use_ghosts)
         {
+            // index physical records directly for full-period or inactive azimuth
             record_count_ = point_count;
             unique_ids_ = true;
             build_index(dev_point, nullptr, point_count, y_max, dim, leaf_target, max_level);
@@ -108,6 +113,7 @@ public:
         );
         _morton_cuda_check(cudaGetLastError(), "launch morton_gcount");
 
+        // convert per-particle ghost counts into compact write offsets
         thrust::device_ptr<int> count_ptr(dev_ghost_count);
         thrust::device_ptr<int> offset_ptr(dev_ghost_offset);
         thrust::exclusive_scan(thrust::device, count_ptr, count_ptr + point_count, offset_ptr);
@@ -141,6 +147,7 @@ public:
         _morton_cuda_check(cudaFree(dev_ghost_count), "release Morton ghost counts");
         _morton_cuda_check(cudaFree(dev_ghost_offset), "release Morton ghost offsets");
 
+        // flag whether one search ball can encounter multiple images of the same particle
         float image_dist_min = 2.0f*y_min*fminf(sinf(z_min), sinf(z_max))
             *fabsf(sinf(0.5f*(x_max - x_min)));
         unique_ids_ = image_dist_min > 2.0f*search_dist;

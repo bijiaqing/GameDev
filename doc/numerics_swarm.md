@@ -52,6 +52,12 @@ single-valued velocity closure. Their common and distinct closures are
 | imported gas fields | absent | optional |
 | radiation pressure | optional | optional, with optional Poynting–Robertson drag |
 
+The diffusion-basis distinction is physical rather than merely an implementation detail. In a
+resolved vertical domain, fluid $D_y$ diffuses along spherical radius $r$, whereas swarm $D_R$
+diffuses along cylindrical radius $R$. Equal scalar coefficients therefore need not produce the
+same radial equilibrium away from the midplane; the two closures coincide radially only where
+$r=R$, including the vertically integrated model.
+
 The mathematical bridge between the branches is obtained from moments of a dust mass distribution:
 
 $$
@@ -311,6 +317,11 @@ dimensional formula consistently.
 | `N_P`, `N_K`, `H_SEARCH` | representative count, retained KNN count, and local search cap in $H_g$ units |
 | `CFL_DYN`, `DT_MAX` | dynamics Courant factor and timestep ceiling |
 | `CFL_COL`, `V_FRAG` | collision-leap control and fragmentation threshold speed |
+| `DT_OUT`, `SAVE_MAX` | output-interval scale and final mesh-output index |
+| `LOG_BASE`, `LIN_BASE` | logarithmic output base or linear particle-checkpoint stride |
+| `COAG_KERNEL` | constant, additive, product, or physical collision-kernel selection |
+| `REYNOLDS_0` | code-unit turbulent Reynolds number at the reference radius |
+| `M_MOL`, `X_SEC` | physical-unit gas molecular mass and molecular collision cross section |
 | `MORTON_LEAF_TARGET`, `MORTON_MAX_LEVEL` | adaptive Morton leaf occupancy target and depth limit |
 
 ### 2.5 Compile-time feature selection
@@ -387,16 +398,52 @@ v_K=R\Omega_K,
 c_s=h_gR\Omega_K.
 $$
 
-For the vertically isothermal pressure $P_g=\rho_gc_s^2$, the radial pressure-support parameter is
+At the midplane, the usual radial pressure-support parameter for the vertically isothermal
+pressure $P_g=\rho_gc_s^2$ is
 
 $$
-\eta=-\frac{1}{2\rho_gR\Omega_K^2}\frac{\partial P_g}{\partial R},
+\eta_{\rm mid}=-\frac{1}{2\rho_gR\Omega_K^2}\frac{\partial P_g}{\partial R}\bigg|_{Z=0},
 \qquad
-v_{\phi,g}^2=v_K^2(1-2\eta).
+\eta_{\rm mid}
+=-\frac{h_g^2}{2}\left(p+\frac q2-\frac32\right).
 $$
 
-The explicit $\eta(R,Z)$ in Section 3.6 is obtained by evaluating this derivative for the
-prescribed radial power laws and exact vertical stratification.
+Away from the midplane, the code variable `eta` is the effective rotation-support parameter after
+combining the cylindrical stellar gravity and pressure gradient, rather than the pressure term
+alone. This distinction follows the vertically structured disk force balance discussed by
+[Takeuchi & Lin (2002)](https://arxiv.org/abs/astro-ph/0208552). Define
+
+$$
+u=\frac{R}{\sqrt{R^2+Z^2}},
+\qquad
+A=p+\frac q2-\frac32.
+$$
+
+At fixed cylindrical height, the exact hydrostatic profile gives
+
+$$
+h_g^2\frac{\partial\ln P_g}{\partial\ln R}
+=Ah_g^2+q(1-u)+(1-u^3).
+$$
+
+Because the cylindrical stellar gravity is $u^3$ times its midplane value, radial force balance is
+
+$$
+\frac{v_{\phi,g}^2}{v_K^2}
+=u^3+h_g^2\frac{\partial\ln P_g}{\partial\ln R}
+=1+Ah_g^2+q(1-u)
+=1-2\eta(R,Z),
+$$
+
+where
+
+$$
+\eta(R,Z)=-\frac12\left[Ah_g^2+q(1-u)\right].
+$$
+
+The $(1-u^3)$ pressure term therefore cancels the off-midplane weakening of cylindrical gravity.
+At $Z=0$, $u=1$ and the effective parameter reduces to the ordinary midplane pressure-support
+definition. Section 3.6 uses this exact rotation target.
 
 For constant `ALPHA`, the turbulent viscosity uses the $\alpha$ prescription of
 [Shakura & Sunyaev (1973)](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S); the alternative
@@ -418,9 +465,43 @@ $$
 
 The Gaussian prefactor calibrates the reference midplane density. Since $\mathcal G$ is the exact
 point-mass hydrostatic profile rather than its local Gaussian approximation, $\Sigma_g$ is not the
-exact integral of this volume-density expression over $Z$. Unless `CONST_ST` is selected, the local
-Stokes number uses the linear, subsonic Epstein-drag scaling
-$t_s\propto s/(\rho_gc_s)$ of [Epstein (1924)](https://doi.org/10.1103/PhysRev.23.710):
+exact integral of this volume-density expression over $Z$. For a finite resolved domain whose
+intersection at cylindrical radius $R$ consists of vertical intervals $[Z_{k,a},Z_{k,b}]$, the
+implied column is
+
+$$
+\Sigma_{g,\mathcal D}(R)=\Sigma_g(R)\,\mathcal C_g(R),
+$$
+
+$$
+\mathcal C_g(R)=\frac{1}{\sqrt{2\pi}H_g(R)}
+\sum_k\int_{Z_{k,a}}^{Z_{k,b}}\mathcal G(R,Z)\,dZ.
+$$
+
+The factor $\mathcal C_g$ depends on the finite spherical radial and polar domain and need not
+equal one. A vertically integrated model instead uses $\Sigma_g$ directly.
+
+For comparison, on an untruncated vertical line let $x=Z/H_g$. Expanding the exact point-mass
+profile gives
+
+$$
+\mathcal G(R,Z)
+=e^{-x^2/2}
+\left[1+\frac{3}{8}h_g^2x^4+O(h_g^4)\right],
+$$
+
+so the Gaussian fourth moment yields
+
+$$
+\mathcal C_{g,\infty}=1+\frac{9}{8}h_g^2+O(h_g^4).
+$$
+
+Finite spherical boundaries instead require the exact containment factor above and can dominate
+the correction near a radial or polar edge.
+
+Unless `CONST_ST` is selected, the local Stokes number uses the linear, subsonic Epstein-drag
+scaling $t_s\propto s/(\rho_gc_s)$ of
+[Epstein (1924)](https://doi.org/10.1103/PhysRev.23.710):
 
 $$
 \mathrm{St}(R,Z,s)
@@ -741,6 +822,10 @@ $$
 while $x$ is uniform over the active azimuthal interval or exactly centered when azimuth is
 inactive.
 
+Unlike the fluid initializer, the swarm initializer applies no explicit azimuthal density
+perturbation. Random spatial sampling supplies the finite-$N_P$ seed fluctuations of the empirical
+particle distribution.
+
 ### 3.6 Initial velocities and imported gas
 
 The initial velocity is the same no-backreaction steady drift used by the fluid branch and follows
@@ -770,6 +855,11 @@ $v_Z=-\mathrm{St}\,\Omega_K Z$. `VISC_FLOW` replaces the zero gas radial velocit
 analytic prescription of [Kanagawa et al. (2017)](https://arxiv.org/abs/1706.08975), requires
 `DIFFUSION`, and cannot be combined with `IMPORTGAS` because imported gas velocities already
 prescribe the gas flow.
+
+This differs from the fluid initialization: the swarm adds terminal settling but no deterministic
+velocity that balances its stochastic diffusive flux, whereas the fluid adds a polar
+diffusive-balance velocity but no terminal-settling term. The two branches therefore should not be
+assumed to begin from an identical vertical dynamical equilibrium.
 
 The initialized cylindrical velocities are stored through
 
@@ -1240,9 +1330,20 @@ $$
 \beta_{\max}=\beta_0\frac{S_0}{s_{\rm bound}},
 $$
 
-where $s_{\rm bound}$ is the current size or, when fragmentation can create smaller grains,
-$\min(s_i,s_{\min})$. Omitting attenuation and the time ramp makes the rate conservative before
-the local optical depth or future fragment is known. For diffusion, requiring the RMS displacement
+where
+
+$$
+s_{\rm bound}=
+\begin{cases}
+S_0,&\text{monodisperse},\\
+s_i,&\text{multisize without collisions},\\
+\min(s_i,s_{\min}),&\text{multisize with collisions}.
+\end{cases}
+$$
+
+Omitting attenuation and the time ramp makes the rate conservative before the local optical depth
+or future collision product is known. For
+diffusion, requiring the RMS displacement
 $\sqrt{2D\Delta t}$ and deterministic drift $|b|\Delta t$ to remain within a fraction of $L$ gives
 
 $$
@@ -1250,6 +1351,26 @@ $$
 \qquad
 \lambda_b=\frac{|b|}{\mathrm{CFL\_DYN}L}.
 $$
+
+The diffusion operator is defined in cylindrical $(R,Z)$ coordinates, while the mesh-crossing
+limits are applied to spherical $(r,\theta)$ directions. The code therefore projects both the
+variance and deterministic drift before evaluating these rates:
+
+$$
+D_r=D_R\sin^2\theta+D_Z\cos^2\theta,
+\qquad
+D_\theta=D_R\cos^2\theta+D_Z\sin^2\theta,
+$$
+
+$$
+b_r=b_R\sin\theta+b_Z\cos\theta,
+\qquad
+b_\theta=b_R\cos\theta-b_Z\sin\theta.
+$$
+
+The radial rate uses $(D_r,b_r,L=\Delta r)$ and the polar rate uses
+$(D_\theta,b_\theta,L=r\Delta\theta)$. Azimuth retains its cylindrical coefficient $D_\phi$ and
+physical arc length $R\Delta\phi$.
 
 After taking the maximum over all active candidates and particles,
 
@@ -1984,9 +2105,16 @@ reproducible within each backend, but an identical random target can therefore s
 partner after switching backends. Backend trajectories and RNG states need not remain byte-equal;
 mass conservation, rates, topology, and ensemble distributions are the cross-backend invariants.
 
-The KD-tree candidate heap uses `index_old` as its equal-distance tie breaker
-and expands its culling radius by one floating-point unit. Each heap slot stores only the encoded
-pair $(d^2,\mathrm{id})$; the shuffled tree slot is not retained because collision physics consumes
+The KD-tree candidate heap uses `index_old` as its equal-distance tie breaker and expands its
+squared culling distance by one floating-point unit,
+
+$$
+d_{\rm cull}^2
+\leftarrow\mathtt{nextafterf}(d_K^2,+\infty).
+$$
+
+Each heap slot stores only the encoded pair $(d^2,\mathrm{id})$; the shuffled tree slot is not
+retained because collision physics consumes
 `index_old` directly. This prevents mutable tree slots from changing which member of an
 exact-distance tie is retained while minimizing thread-local storage. For partial wedges, the heap
 checks for repeated physical identifiers only when the minimum separation between adjacent
@@ -2101,9 +2229,9 @@ The sign is chosen so a source adjacent to one seam is copied across the opposit
 The global maximum is conservative for position-dependent cutoffs: a query still uses its own
 $q_i$, while the larger construction halo guarantees that no eligible source was omitted. If a
 wedge is narrow enough for multiple images of one representative to enter the same query ball, the
-query temporarily retains up to $3N_K$ records, deduplicates by original particle index, and then selects
-the exact nearest $N_K$ physical particles. Ordinary disk wedges use the cheaper disjoint-image
-path.
+query temporarily retains up to $3N_K$ records, deduplicates by original particle index, and then
+selects the exact nearest $N_K$ physical particles. Ordinary disk wedges use the cheaper
+disjoint-image path.
 
 When $H_gR$ varies strongly, a later memory optimization may replace $q_{\max}$ by certified radial
 halo bins. For source and query radial bins $s$ and $b$, define
@@ -2194,6 +2322,23 @@ where $C$ is collision, $D$ positional diffusion, and $T$ transport. This remove
 splitting between enabled modules, but it does not make the stochastic diffusion or Bernoulli
 collision leap deterministically second order.
 
+One dynamics step is executed as
+
+```text
+choose dt_dyn from all active particle rates, DT_MAX, and the remaining output interval
+interpolate imported gas fields to the dynamics-step midpoint when required
+evolve frozen collision batches over dt_dyn/2
+apply stochastic positional diffusion over dt_dyn/2
+if radiation is active, drift to midpoint positions, reconstruct optical depth, and finish transport
+otherwise apply the complete semi-analytic transport update
+apply stochastic positional diffusion over dt_dyn/2
+evolve frozen collision batches over dt_dyn/2
+advance the synchronized dynamics and output clocks
+```
+
+Disabled operators are skipped. A collision-only executable instead lets collision batches tile
+the complete remaining output interval directly.
+
 Dynamics substeps exactly tile each output interval,
 
 $$
@@ -2235,7 +2380,17 @@ y\leftarrow2Y_{\max}-y,
 $$
 
 and the polar coordinate is folded analogously about $Z_{\min}$ or $Z_{\max}$. Repetition handles
-an increment wider than one domain. Before spherical reconstruction, a negative cylindrical
+an increment wider than one domain. If roundoff leaves a folded coordinate exactly on its upper
+face, the implementation applies the inward clamps
+
+$$
+y\leftarrow Y_{\max}-10^{-12}(Y_{\max}-Y_{\min}),
+\qquad
+z\leftarrow Z_{\max}-10^{-12}(Z_{\max}-Z_{\min}),
+$$
+
+with the polar expression used only when that dimension is active. This keeps subsequent
+half-open cell indexing inside the domain. Before spherical reconstruction, a negative cylindrical
 radius is continued through the axis by
 
 $$
@@ -2521,6 +2676,7 @@ the verification boundary for the equations and algorithms in this guide.
 - García et al. (2012), [multi-GPU spatial decomposition and halos](https://arxiv.org/abs/1210.1017)
 - Cao, Gillespie & Petzold (2005), [explicit Poisson tau-leaping](https://people.cs.vt.edu/~ycao/publication/JChemPhys_123_054104.pdf)
 - Nakagawa, Sekiya & Hayashi (1986), [steady dust–gas drift](<https://doi.org/10.1016/0019-1035(86)90121-1>)
+- Takeuchi & Lin (2002), [vertically structured gas and dust drift](https://arxiv.org/abs/astro-ph/0208552)
 - Kanagawa et al. (2017), [viscous disk velocity](https://arxiv.org/abs/1706.08975)
 - Burns, Lamy & Soter (1979), [radiation forces on small particles](https://doi.org/10.1016/0019-1035(79)90050-2)
 - Shakura & Sunyaev (1973), [$\alpha$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)

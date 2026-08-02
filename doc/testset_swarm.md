@@ -1271,9 +1271,18 @@ expected model as pending, running, passed, failed, or interrupted and prints a 
   development baseline but do not measure the current cooperative pair-rate implementation
 - Test complete frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
-  with `CFL_COL`, $N_K$, and $N_P$
+  with `CFL_COL`, $N_K$, $N_P$, and `H_SEARCH`; include a uniform-density field with a known rate
+  and a forced fragmentation case that exercises the size and represented-number update
+- Validate the physical `CUSTOM_KERNEL` directly across all Ormel–Cuzzi turbulent regimes and
+  their boundaries, the physical-unit Brownian term, and the vertically integrated Gaussian
+  overlap factor $[2\pi(H_{g,i}^2+H_{g,j}^2)]^{-1/2}$
 - Recover analytical constant, additive, and product Smoluchowski moment evolution rather than
   checking only the pair-kernel numerators
+- Add an axisymmetric radial–polar collision-helper case for the revolved
+  $2\pi R$ neighborhood measure
+- Add independent nonzero-$(p,q)$ tests of the midplane pressure-support target and complete 3D
+  gas rotation law, followed by the corresponding dust drift at several heights
+- Add a resolved-vertical `VISC_FLOW` test at several heights against the complete Kanagawa target
 - Test monodisperse initialization and initial drift velocities in the complete production path;
   the native `test_initial_3d` archive now covers conditional multisize initialization, finite-domain
   containment, intermediate-size interpolation, mass normalization, and independence from `N_Z`
@@ -1294,6 +1303,9 @@ expected model as pending, running, passed, failed, or interrupted and prints a 
   surface density, gas targets, and enabled physics
 - Add end-to-end operator-combination tests for transport plus diffusion, transport plus radiation,
   transport plus collision, and all enabled swarm physics
+- Compile and run a small legal flag matrix covering `HALFDISK`, `DIFFUSION`, `RADIATION`,
+  `PR_EFFECT`, `COLLISION`, `MULTISIZE`, `IMPORTGAS`, `CONST_ST`, `VISC_FLOW`, and both KNN
+  backends where compatible, while also requiring illegal combinations to fail at compile time
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
 
 The existing 2D and 3D helper tests do not establish correctness of complete 3D disk evolution.

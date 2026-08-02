@@ -5,12 +5,14 @@
 
 #include <cuda_runtime.h>  // CUDA vector types and device qualifiers
 
+// store one Morton-sorted search record and its original particle identifier
 struct morton_point
 {
     float3 cartesian;
     int idx_old;
 };
 
+// store one adaptive quadtree or octree node over a contiguous Morton-key range
 struct morton_node
 {
     float3 lower;
@@ -21,6 +23,7 @@ struct morton_node
     int child_count;
 };
 
+// expose the device-resident index without transferring ownership
 struct morton_view
 {
     const morton_point *dev_point;
@@ -31,6 +34,7 @@ struct morton_view
     int max_level;
 };
 
+// separate one 21-bit coordinate into every third bit of a 64-bit Morton key
 __host__ __device__ inline
 std::uint64_t _expand_morton_3d (std::uint32_t value)
 {
@@ -43,6 +47,7 @@ std::uint64_t _expand_morton_3d (std::uint32_t value)
     return bits;
 }
 
+// interleave integer Cartesian coordinates into one deterministic spatial key
 __host__ __device__ inline
 std::uint64_t _get_morton_key (int ix, int iy, int iz)
 {
@@ -51,12 +56,14 @@ std::uint64_t _get_morton_key (int ix, int iy, int iz)
         | (_expand_morton_3d(static_cast<std::uint32_t>(iz)) << 2);
 }
 
+// order equal-distance neighbors by original particle identifier
 __device__ __forceinline__
 bool _morton_neighbor_less (float dist_a_sq, int idx_old_a, float dist_b_sq, int idx_old_b)
 {
     return dist_a_sq < dist_b_sq || (dist_a_sq == dist_b_sq && idx_old_a < idx_old_b);
 }
 
+// calculate Cartesian squared distance without a square root
 __device__ __forceinline__
 float _get_morton_point_dist_sq (const float3 &point_a, const float3 &point_b)
 {

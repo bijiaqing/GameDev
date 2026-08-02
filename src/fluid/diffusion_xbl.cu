@@ -6,7 +6,7 @@
 
 // =========================================================================================================================
 // kernel: diffusion_xbl
-// purpose: preserve periodic Crank-Nicolson diffusion while moving each ring solve into block-shared memory
+// purpose: solve periodic Crank-Nicolson diffusion cooperatively in block-shared memory
 // =========================================================================================================================
 
 __global__
@@ -20,6 +20,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     int iz = idx_ring / N_Y;
     int idx_base = iy*N_X + iz*N_X*N_Y;
 
+    // partition dynamic shared memory among density, cyclic solve, and reusable flux work arrays
     extern __shared__ real shared_work[];
     real *rhod = shared_work;
     real *rhod_work = rhod + N_X;
@@ -45,6 +46,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     __shared__ real sm_diagN;
     __shared__ real corr_scale;
 
+    // load one density ring and construct positivity-controlled cyclic CN coefficients
     for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
     {
         rhod[ix] = dev_dustdens[idx_base + ix];
@@ -66,6 +68,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     }
     __syncthreads();
 
+    // advance density and donor momentum through every accepted CN substep
     for (int idx_sub = 0; idx_sub < sub_count; idx_sub++)
     {
         for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
@@ -79,6 +82,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
         if (threadIdx.x == 0)
         {
+            // solve the cyclic tridiagonal system through a Sherman-Morrison correction
             real diag_cur = sm_diag0;
             upper_work[0] = -cn_coeff / diag_cur;
             rhod_work[0] /= diag_cur;
@@ -105,12 +109,14 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
+        // apply the Sherman-Morrison correction to the provisional density solution
         for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
         {
             rhod_work[ix] -= corr_scale*cycle_work[ix];
         }
         __syncthreads();
 
+        // reconstruct the time-centred periodic diffusive mass flux
         for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
         {
             int ixp1 = (ix + 1) % N_X;
@@ -166,6 +172,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         __syncthreads();
     }
 
+    // store density after all substeps
     for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
     {
         dev_dustdens[idx_base + ix] = rhod[ix];

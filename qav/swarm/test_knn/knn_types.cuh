@@ -1,13 +1,14 @@
 #ifndef QAV_KNN_TYPES_CUH
 #define QAV_KNN_TYPES_CUH
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // float3 and host-device qualifiers
 
 #include <kdtree/builder.h>
 #include <kdtree/index_heap.cuh>
 
 #include <morton/morton_types.cuh>
 
+// mirror the production KD-tree record while retaining periodic-image identity
 struct kdtree_point
 {
     float3 cartesian;
@@ -16,6 +17,7 @@ struct kdtree_point
     int image;
 };
 
+// expose the benchmark point record through the bundled KD-tree trait interface
 struct kdtree_traits
 {
     using point_t = float3;

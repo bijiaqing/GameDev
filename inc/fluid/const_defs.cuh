@@ -1,7 +1,7 @@
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 
-#include <cmath>       // for M_PI
+#include <cmath>       // M_PI
 
 using real  = double;
 

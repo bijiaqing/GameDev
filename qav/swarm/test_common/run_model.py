@@ -65,6 +65,8 @@ def print_record(record: dict) -> None:
 
 
 def run(model: str) -> None:
+    """Compile every requested resolution, validate it, and write one model manifest"""
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--build-only", action="store_true")

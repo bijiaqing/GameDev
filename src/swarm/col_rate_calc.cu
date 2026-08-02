@@ -48,6 +48,8 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
 
     real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
+
+    // query the local physical top-K set while deduplicating overlapping periodic images when required
     bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*search_dist;
     kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active);
     kdtree::cct::knn <kdtree_heap, kdtree_node, kdtree_traits> (
@@ -55,6 +57,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
         *dev_kdtree_box, dev_kdtree_node, N_T
     );
 
+    // sum pair propensities and use the farthest retained neighbor as the KNN-ball radius
     real col_rate_i = 0.0;
     float max_dist_sq = 0.0f;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
@@ -133,6 +136,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
     __shared__ real pair_rate[N_K];
     __shared__ float pair_dist_sq[N_K];
 
+    // query and deduplicate the periodic Morton top-K set cooperatively
     _morton_ghost_topk<N_K, MORTON_TPB, MORTON_WORK_SIZE, 256>(
         morton_data, dev_morton_point[idx_old_i], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
@@ -143,6 +147,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
     __syncthreads();
     if (stack_overflow != 0) return;
 
+    // evaluate retained pair propensities in parallel before the deterministic reduction
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {
         pair_rate[idx_neighbor] = 0.0;

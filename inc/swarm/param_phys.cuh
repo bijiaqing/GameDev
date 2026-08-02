@@ -18,7 +18,7 @@ real _get_grain_mass (real size)
 { return M_PI*RHO_0*size*size*size / 6.0; }
 
 #ifdef MULTISIZE
-// calculate the represented-mass weight implied by the sampled swarm-size distribution
+// calculate the importance weight that converts the sampled size proposal to the target mass spectrum
 __host__ __device__ __forceinline__
 real _get_mass_weight (real size)
 {
@@ -36,7 +36,7 @@ real _get_mass_weight (real size)
     return weight;
 }
 
-// interpolate the physical dust mass contained in the domain for one sampled grain size
+// interpolate finite-domain dust mass for one sampled grain size
 __host__ __device__ __forceinline__
 real _get_domain_mass (real size, const real *mass_bank, int mass_bin_count)
 {

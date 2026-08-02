@@ -1,13 +1,13 @@
-#include <cmath>
-#include <cstdlib>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <stdexcept>
-#include <string>
-#include <vector>
+#include <cmath>          // std::log, std::pow, std::sqrt
+#include <cstdlib>        // std::exit, EXIT_FAILURE
+#include <fstream>        // std::ofstream
+#include <iomanip>        // std::setprecision
+#include <iostream>       // std::cerr, std::endl
+#include <stdexcept>      // std::runtime_error
+#include <string>         // std::string, std::to_string
+#include <vector>         // std::vector
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // cudaMalloc, cudaMemcpy, cudaFree, kernel launches
 
 #ifdef COLLISION
 #include <_collision.cuh>
@@ -26,8 +26,12 @@ std::mt19937 rand_generator;
 namespace
 {
 
+// shared native-CUDA driver for isolated swarm formula, operator, and boundary tests
+// each model selects one compile-time branch and writes raw arrays plus metadata for the independent Python validator
+
 const std::string output_path = PATH_OUT;
 
+// fail immediately with the CUDA operation that produced the error
 void cuda_check (cudaError_t status, const char *operation)
 {
     if (status == cudaSuccess) return;
@@ -35,17 +39,20 @@ void cuda_check (cudaError_t status, const char *operation)
     std::exit(EXIT_FAILURE);
 }
 
+// expose asynchronous launch and execution failures at the tested operator boundary
 void kernel_check (const char *kernel)
 {
     cuda_check(cudaGetLastError(), kernel);
     cuda_check(cudaDeviceSynchronize(), kernel);
 }
 
+// keep every resolution artifact distinct inside one model output directory
 std::string suffix ()
 {
     return "_N" + std::to_string(VERIFY_RES) + ".dat";
 }
 
+// map the active compile-time test selector to its validator-facing label
 const char *case_name ()
 {
 #if defined(TEST_GRID_1D)
@@ -101,6 +108,7 @@ const char *case_name ()
 #endif
 }
 
+// write one contiguous float64 artifact consumed by the Python validator
 void write_binary (const std::string &name, const std::vector<real> &values)
 {
     std::string path = output_path + name + suffix();
@@ -111,6 +119,7 @@ void write_binary (const std::string &name, const std::vector<real> &values)
     if (!file) throw std::runtime_error("cannot write output file: " + path);
 }
 
+// flatten particle phase space and optional species properties into stable test artifacts
 void write_state (const std::vector<swarm> &particle)
 {
     std::vector<real> state(6*N_P);
@@ -136,6 +145,7 @@ void write_state (const std::vector<swarm> &particle)
 #endif
 }
 
+// record the grid and integration parameters needed to reconstruct the analytical reference
 void write_meta (real dt, real time)
 {
     std::string path = output_path + "meta_N" + std::to_string(VERIFY_RES) + ".txt";
@@ -160,11 +170,13 @@ void write_meta (real dt, real time)
     if (!file) throw std::runtime_error("cannot write metadata file: " + path);
 }
 
+// synchronize one completed device state back to the host representation
 void copy_state_from_device (std::vector<swarm> &particle, const swarm *dev_particle)
 {
     cuda_check(cudaMemcpy(particle.data(), dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost), "copy state");
 }
 
+// locate the exact centroid of a logarithmic radial cell in the represented disk measure
 real radial_centroid_offset ()
 {
     real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
@@ -173,6 +185,7 @@ real radial_centroid_offset ()
         / (pow(dy, dimension) - 1.0)) / log(dy);
 }
 
+// place one equal-weight representative at every exact finite-volume centroid
 void initialize_grid_particles (std::vector<swarm> &particle)
 {
     real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
@@ -198,6 +211,7 @@ void initialize_grid_particles (std::vector<swarm> &particle)
 }
 
 #if defined(TEST_COLLISION_1D) || defined(TEST_COLLISION_2D) || defined(TEST_COLLISION_3D)
+// evaluate collision volumes and kernels at fixed points for direct analytical comparison
 __global__ void collision_math (real *result, const swarm *particle, const real *size, const real *number)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
@@ -218,6 +232,7 @@ __global__ void collision_math (real *result, const swarm *particle, const real 
 #endif
 
 #ifdef TEST_IMPORT_1D
+// evaluate imported-gas Stokes and Reynolds closures at selected radial cells
 __global__ void import_math (real *result, const real *gasdens)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
@@ -245,6 +260,7 @@ __global__ void import_math (real *result, const real *gasdens)
 
 #if defined(TEST_BOUNDARY_1D) || defined(TEST_BOUNDARY_2D) \
     || defined(TEST_BOUNDARY_3D) || defined(TEST_BOUNDARY_HALF)
+// pack one transformed boundary state into the validator's fixed six-field layout
 __device__ __forceinline__
 void write_boundary_state (real *result, int idx_case, real x, real y, real z, real lx, real vy, real lz)
 {
@@ -257,6 +273,7 @@ void write_boundary_state (real *result, int idx_case, real x, real y, real z, r
     result[idx_out + 5] = lz;
 }
 
+// exercise diffusion reflection, transport outflow, periodic wrapping, and midplane reflection
 __global__ void boundary_math (real *result)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
@@ -331,6 +348,7 @@ int main ()
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(swarm)*N_P), "allocate particles");
 
 #if defined(TEST_GRID_1D) || defined(TEST_GRID_2D) || defined(TEST_GRID_3D)
+    // verify particle deposition, exact cell measure, radial optical-depth accumulation, and azimuthal averaging
     initialize_grid_particles(particle);
     cuda_check(cudaMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, cudaMemcpyHostToDevice), "upload particles");
 
@@ -361,6 +379,7 @@ int main ()
     write_meta(0.0, 0.0);
 
 #elif defined(TEST_ORBIT_1D) || defined(TEST_ORBIT_2D)
+    // integrate one Keplerian period to measure staggered semi-analytic orbit error
     for (int idx = 0; idx < N_P; idx++)
     {
         real x = (N_X > 1) ? X_MIN + (idx + 0.5)*(X_MAX - X_MIN)/N_P : 0.5*(X_MIN + X_MAX);
@@ -380,6 +399,7 @@ int main ()
     write_meta(dt, time_end);
 
 #elif defined(TEST_VISCFLOW_1D)
+    // verify the steady particle velocity initialized against the viscous gas target
     std::vector<real> randposx(N_P, 0.0);
     std::vector<real> randposy(N_P);
     std::vector<real> randposz(N_P, 0.5*M_PI);
@@ -421,6 +441,7 @@ int main ()
 
 #elif defined(TEST_DRAG_1D) || defined(TEST_RADIATION_1D) || defined(TEST_PRDRAG_1D) \
     || defined(TEST_DRAG_2D) || defined(TEST_RADIATION_2D) || defined(TEST_PRDRAG_2D)
+    // isolate drag, radiation pressure, and P-R damping over one fixed source step
     for (int idx = 0; idx < N_P; idx++)
     {
         particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
@@ -448,6 +469,7 @@ int main ()
     write_meta(dt, dt);
 
 #elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
+    // apply one reproducible stochastic displacement for pathwise analytical reconstruction
     for (int idx = 0; idx < N_P; idx++)
     {
         particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
@@ -466,6 +488,7 @@ int main ()
     cuda_check(cudaFree(dev_rngstate), "free random states");
 
 #elif defined(TEST_INITIAL_3D)
+    // validate continuous polydisperse containment, sampling CDFs, and represented-mass normalization
     std::vector<real> mass_bank;
     initmass_calc(mass_bank);
     real total_dust_mass = get_total_dust_mass(mass_bank);
@@ -523,6 +546,7 @@ int main ()
     write_meta(0.0, 0.0);
 
 #elif defined(TEST_COLLISION_1D) || defined(TEST_COLLISION_2D) || defined(TEST_COLLISION_3D)
+    // compare reduced-dimensional neighborhood measures and collision kernels with closed-form values
     particle[0].position = make_double3(0.0, 1.0, 0.5*M_PI);
     particle[1].position = make_double3((N_X > 1) ? 0.1 : 0.0, 1.0, 0.5*M_PI);
     particle[0].velocity = make_double3(1.0, 0.0, 0.0);
@@ -554,6 +578,7 @@ int main ()
     cuda_check(cudaFree(dev_result), "free results");
 
 #elif defined(TEST_IMPORT_1D)
+    // compare local closures against a prescribed external radial gas-density profile
     std::vector<real> gasdens(N_G);
     for (int iy = 0; iy < N_Y; iy++) gasdens[iy] = SIGMA_0*(1.0 + 0.1*static_cast<real>(iy));
 
@@ -574,6 +599,7 @@ int main ()
 
 #elif defined(TEST_BOUNDARY_1D) || defined(TEST_BOUNDARY_2D) \
     || defined(TEST_BOUNDARY_3D) || defined(TEST_BOUNDARY_HALF)
+    // record deliberately crossed states after each configured boundary policy
     real *dev_result = nullptr;
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_result), 42*sizeof(real)),
         "allocate boundary results");

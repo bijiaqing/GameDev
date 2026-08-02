@@ -1,17 +1,19 @@
-#include <algorithm>
-#include <cmath>
-#include <cstdlib>
-#include <iostream>
-#include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
+#include <algorithm>      // std::min, std::max, std::sort
+#include <cmath>          // std::nextafter
+#include <cstdlib>        // EXIT_SUCCESS, EXIT_FAILURE
+#include <iostream>       // std::cout, std::cerr
+#include <stdexcept>      // std::runtime_error
+#include <string>         // std::string, std::to_string
+#include <utility>        // std::pair
+#include <vector>         // std::vector
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // CUDA allocation, copies, and kernel launches
 
 #include <kdtree/knn.h>
 #include <morton/morton_index.cuh>
 #include "knn_types.cuh"
+
+// compare Morton top-K output with brute force for ties, duplicates, sparse balls, split planes, and inactive records
 
 namespace
 {
@@ -61,6 +63,7 @@ void get_root (const std::vector<float3> &points, int dim, float3 &root_origin, 
     );
 }
 
+// build a double-check reference ordered by squared distance then physical identifier
 std::vector<std::pair<float, int>> brute_neighbors (
     const std::vector<float3> &points, const std::vector<unsigned char> &active,
     const float3 &query, float radius)
@@ -304,6 +307,7 @@ bool run_kdtree_filter_case (const edge_case &test)
     return passed;
 }
 
+// execute one adversarial geometry through Morton search and compare every returned slot
 bool run_case (const edge_case &test)
 {
     float3 root_origin;

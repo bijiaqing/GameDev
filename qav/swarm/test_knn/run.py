@@ -88,6 +88,8 @@ def main() -> None:
     python = sys.executable
 
     if not args.build_only:
+        # Remove the pre-integration output location so no obsolete benchmark
+        # artifact can be mistaken for a result owned by the common suite.
         legacy_output = test_dir/"out"
         if legacy_output.exists():
             shutil.rmtree(legacy_output)

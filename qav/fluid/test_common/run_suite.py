@@ -43,7 +43,7 @@ def main() -> None:
     model_root = common.parent
 
     # Sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence.  It remains a
-    # separate branch because the full 128^3 pair is substantially more expensive than the 85 analytical configurations.
+    # separate branch because the full 128^3 pair is substantially more expensive than the analytical matrix.
     if args.group == "sweep":
         command = [
             sys.executable, str(common/"run_sweep.py"),

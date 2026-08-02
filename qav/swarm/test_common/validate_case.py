@@ -26,6 +26,8 @@ INIT_SMAX = 6.4
 
 
 def read_meta(path: Path) -> dict[str, str]:
+    """Read the simple key=value metadata emitted by the CUDA driver"""
+
     values: dict[str, str] = {}
     for line in path.read_text().splitlines():
         key, value = line.split("=", 1)
@@ -34,6 +36,8 @@ def read_meta(path: Path) -> dict[str, str]:
 
 
 def read_array(out_dir: Path, name: str, resolution: int, count: int) -> np.ndarray:
+    """Load one raw float64 artifact and reject truncated or stale files"""
+
     path = out_dir / f"{name}_N{resolution}.dat"
     values = np.fromfile(path, dtype=np.float64)
     if values.size != count:
@@ -42,6 +46,8 @@ def read_array(out_dir: Path, name: str, resolution: int, count: int) -> np.ndar
 
 
 def norms(values: np.ndarray) -> dict[str, float]:
+    """Return the common absolute L1, L2, and Linf summaries"""
+
     return {
         "l1": float(np.mean(np.abs(values))),
         "l2": float(np.sqrt(np.mean(values * values))),
@@ -50,14 +56,20 @@ def norms(values: np.ndarray) -> dict[str, float]:
 
 
 def wrap_angle(values: np.ndarray) -> np.ndarray:
+    """Map angular errors to the principal interval from -pi through pi"""
+
     return (values + math.pi) % (2.0 * math.pi) - math.pi
 
 
 def load_state(out_dir: Path, resolution: int, nparticle: int) -> np.ndarray:
+    """Load the six position and velocity components as one component-first array"""
+
     return read_array(out_dir, "state", resolution, 6*nparticle).reshape(6, nparticle)
 
 
 def radial_measures(ny: int, dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Reconstruct logarithmic radial edges, exact cell measures, and widths"""
+
     ratio = (Y_MAX / Y_MIN) ** (1.0 / ny)
     edges = Y_MIN * ratio ** np.arange(ny + 1)
     volume = (edges[1:]**dimension - edges[:-1]**dimension) / dimension
@@ -65,6 +77,8 @@ def radial_measures(ny: int, dimension: int) -> tuple[np.ndarray, np.ndarray, np
 
 
 def analyze_grid(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Check particle deposition, density conversion, optical-depth accumulation, and inactive coordinates"""
+
     nx, ny, nz = int(meta["nx"]), int(meta["ny"]), int(meta["nz"])
     shape = (nz, ny, nx)
     density = read_array(out_dir, "dustdens", resolution, nx*ny*nz).reshape(shape)
@@ -120,6 +134,8 @@ def analyze_grid(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
 
 
 def analyze_orbit(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Compare a completed Keplerian orbit with its exact phase-space state"""
+
     nparticle = int(meta["np"])
     state = load_state(out_dir, resolution, nparticle)
     radial = meta["case"] == "orbit_1d"
@@ -138,6 +154,8 @@ def analyze_orbit(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
 
 
 def analyze_relaxation(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Evaluate exact drag relaxation with optional radiation pressure and P-R damping"""
+
     nparticle = int(meta["np"])
     dt = float(meta["dt"])
     state = load_state(out_dir, resolution, nparticle)
@@ -178,6 +196,8 @@ def analyze_relaxation(out_dir: Path, resolution: int, meta: dict[str, str]) -> 
 
 
 def analyze_viscflow(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Check the initialized dust drift against the prescribed viscous gas flow"""
+
     nparticle = int(meta["np"])
     state = load_state(out_dir, resolution, nparticle)
     radius = 0.7 + 0.6*np.arange(nparticle)/(nparticle - 1.0)
@@ -202,6 +222,8 @@ def analyze_viscflow(out_dir: Path, resolution: int, meta: dict[str, str]) -> di
 
 
 def analyze_diffusion(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Check stochastic moments and preservation of Cartesian velocity after displacement"""
+
     nparticle = int(meta["np"])
     dt = float(meta["dt"])
     state = load_state(out_dir, resolution, nparticle)
@@ -501,6 +523,8 @@ def analyze_initialization(out_dir: Path, resolution: int, meta: dict[str, str])
 
 
 def ball_measure(dimension: int, radius: float, distance: float) -> float:
+    """Return a disk or sphere measure after clipping one boundary cap"""
+
     if dimension == 2:
         full = math.pi*radius*radius
         cap = radius*radius*math.acos(distance/radius) - distance*math.sqrt(radius*radius - distance*distance)
@@ -511,6 +535,8 @@ def ball_measure(dimension: int, radius: float, distance: float) -> float:
 
 
 def analyze_collision(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Check local neighborhood measures and constant, additive, and product kernels"""
+
     values = read_array(out_dir, "collision", resolution, 7)
     radial = meta["case"] == "collision_1d"
     dimension = 2 if meta["case"] in {"collision_1d", "collision_2d"} else 3
@@ -547,6 +573,8 @@ def analyze_collision(out_dir: Path, resolution: int, meta: dict[str, str]) -> d
 
 
 def analyze_import(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Check imported-density scaling of Stokes and turbulent Reynolds closures"""
+
     values = read_array(out_dir, "import", resolution, 2*int(meta["np"])).reshape(2, -1)
     iy = 2*np.arange(values.shape[1])
     sigma_g = 1.0 + 0.1*iy
@@ -561,6 +589,8 @@ def analyze_import(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict
 
 
 def analyze_boundary(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Reconstruct diffusion and transport boundary maps independently on the host"""
+
     values = read_array(out_dir, "boundary", resolution, 42).reshape(7, 6)
     nx, nz = int(meta["nx"]), int(meta["nz"])
     x_min, x_max = float(meta["x_min"]), float(meta["x_max"])
@@ -634,6 +664,8 @@ def analyze_boundary(out_dir: Path, resolution: int, meta: dict[str, str]) -> di
 
 
 def analyze(out_dir: Path, resolution: int) -> dict:
+    """Dispatch one recorded case and raise immediately when its criteria fail"""
+
     meta = read_meta(out_dir / f"meta_N{resolution}.txt")
     if int(meta["resolution"]) != resolution:
         raise ValueError(

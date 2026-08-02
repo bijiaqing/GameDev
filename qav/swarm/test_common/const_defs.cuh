@@ -1,8 +1,8 @@
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 
-#include <cmath>
-#include <string>
+#include <cmath>  // M_PI
+#include <string> // std::string
 
 #if defined(COLLISION) || defined(DIFFUSION)
 #include <curand_kernel.h>

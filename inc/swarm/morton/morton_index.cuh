@@ -20,12 +20,14 @@
 
 #include <morton/morton_types.cuh>
 
+// convert CUDA failures into exceptions usable by the host-side index owner
 inline void _morton_cuda_check (cudaError_t status, const char *operation)
 {
     if (status == cudaSuccess) return;
     throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
 }
 
+// quantize Cartesian points at the deepest level and emit sortable Morton keys
 static __global__
 void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
     const float3 *dev_source_point, const int *dev_source_idx_old,
@@ -47,6 +49,7 @@ void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
     dev_point[idx].idx_old = dev_source_idx_old ? dev_source_idx_old[idx] : idx;
 }
 
+// own one adaptive Morton index and its device-resident point and node arrays
 class morton_index
 {
 public:
@@ -100,6 +103,7 @@ public:
         host_nodes.reserve(static_cast<std::size_t>(2*point_count_ / leaf_target_ + 64));
         leaf_counts_.clear();
 
+        // split each sorted key range until its leaf occupancy or depth limit is reached
         std::function<int(int, int, int, float3, float)> split =
             [&] (int idx_begin, int idx_end, int level, float3 lower, float width) -> int
         {
@@ -208,6 +212,7 @@ private:
     std::vector<int> leaf_counts_;
 };
 
+// calculate a conservative point-to-node lower distance for branch pruning
 __device__ __forceinline__
 float _get_morton_node_dist_sq (
     const float3 &query_point, const morton_node &node, int dim, int max_level)
@@ -228,6 +233,7 @@ float _get_morton_node_dist_sq (
     return dx*dx + dy*dy + dz*dz;
 }
 
+// sort shared-memory neighbor pairs by distance and original identifier
 template<int SORT_SIZE, int BLOCK_SIZE>
 __device__ __forceinline__
 void _morton_pair_sort (float *dist_sq, int *idx_old)
@@ -263,6 +269,7 @@ void _morton_pair_sort (float *dist_sq, int *idx_old)
     }
 }
 
+// merge one candidate tile into the retained top-K prefix
 template<int K, int BLOCK_SIZE, int SORT_SIZE>
 __device__ __forceinline__
 void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
@@ -277,6 +284,7 @@ void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
     _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(dist_sq, idx_old);
 }
 
+// traverse the adaptive hierarchy cooperatively and retain the exact bounded top-K set
 template<int K, int BLOCK_SIZE, int SORT_SIZE, int STACK_SIZE>
 __device__ __forceinline__
 void _morton_topk (const morton_view &morton_data, const float3 &query_point, float search_dist,
@@ -324,6 +332,7 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
 
         if (node.child_count == 0)
         {
+            // stream arbitrarily large leaves through bounded shared-memory candidate tiles
             if (threadIdx.x == 0) leaf_visit_count++;
             int idx_offset = 0;
             while (idx_offset < node.count)
@@ -369,6 +378,7 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
 
         if (threadIdx.x == 0)
         {
+            // visit surviving children from nearest to farthest to tighten the cutoff early
             int idx_child[8];
             float child_dist_sq[8];
             int valid_count = 0;
@@ -417,6 +427,7 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
     }
 }
 
+// expose one cooperative exact top-K query per CUDA block for tests and standalone consumers
 template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
 __global__
 void morton_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigned int *dev_leaf_visit_count,
@@ -458,6 +469,7 @@ void morton_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigned int 
     }
 }
 
+// reduce each top-K result to a deterministic checksum for timing without large output transfers
 template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
 __global__
 void morton_checksum (double *dev_checksum, unsigned int *dev_stack_overflow,

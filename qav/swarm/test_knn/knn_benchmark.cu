@@ -1,27 +1,30 @@
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <limits>
-#include <random>
-#include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
+#include <algorithm>      // std::min, std::max, std::sort
+#include <chrono>         // std::chrono timing
+#include <cmath>          // std::cos, std::sin, std::sqrt
+#include <cstddef>        // std::size_t
+#include <cstdint>        // std::uint64_t
+#include <cstdlib>        // EXIT_SUCCESS, EXIT_FAILURE
+#include <filesystem>     // std::filesystem::create_directories
+#include <fstream>        // std::ofstream
+#include <iomanip>        // std::setprecision
+#include <iostream>       // std::cout, std::cerr
+#include <limits>         // std::numeric_limits
+#include <random>         // std::mt19937, probability distributions
+#include <stdexcept>      // std::invalid_argument, std::runtime_error
+#include <string>         // std::string, std::stoi
+#include <utility>        // std::pair
+#include <vector>         // std::vector
 
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> // CUDA allocation, events, copies, and kernel launches
 
 #include <kdtree/builder.h>
 #include <kdtree/knn.h>
 
 #include <morton/morton_index.cuh>
 #include "knn_types.cuh"
+
+// compare exact nonperiodic KD-tree and adaptive-Morton top-K searches on matched point clouds
+// validate both backends against brute force before reporting build, query, and persistent-memory costs
 
 #ifndef QAV_KNN_K
 #define QAV_KNN_K 200
@@ -182,6 +185,7 @@ options parse_options (int argc, char **argv)
     return result;
 }
 
+// generate smooth, ring, or clumped Cartesian point clouds from one reproducible seed
 std::vector<float3> generate_points (const options &config)
 {
     std::mt19937 generator(config.seed);
@@ -220,6 +224,7 @@ std::vector<float3> generate_points (const options &config)
     return points;
 }
 
+// enclose all generated points in the cubic Morton root used by both build and traversal
 void get_root (const std::vector<float3> &points, int dim, float3 &root_origin, float &root_width)
 {
     float3 lower = points.front();
@@ -301,6 +306,7 @@ occupancy_stats get_occupancy (const morton_index &morton_owner)
     return result;
 }
 
+// compare complete sorted top-K lists and retain enough diagnostics to localize disagreements
 quality_stats compare_neighbors (const std::vector<int> &kdtree_idx_old, const std::vector<float> &kdtree_dist_sq,
     const std::vector<int> &morton_idx_old, const std::vector<float> &morton_dist_sq, int query_count,
     std::vector<int> &disagreement_queries)
@@ -493,6 +499,7 @@ void compare_brute_force (quality_stats &quality, const std::vector<float3> &poi
     }
 }
 
+// arbitrate backend disagreements with a double-precision brute-force reference
 void compare_disagreements_brute_force (quality_stats &quality, const std::vector<float3> &points,
     const std::vector<morton_point> &records,
     const std::vector<int> &kdtree_idx_old, const std::vector<float> &kdtree_dist_sq,
@@ -629,6 +636,7 @@ int main (int argc, char **argv)
         _morton_cuda_check(cudaMemcpy(dev_point, points.data(), sizeof(float3)*points.size(), cudaMemcpyHostToDevice),
             "copy benchmark points");
 
+        // build both indexes from the same physical records and include allocation in build timing
         kdtree_point *dev_kdtree_node = nullptr;
         kdtree_boxf *dev_kdtree_box = nullptr;
         double kdtree_build_ms = wall_time_ms([&]
@@ -659,6 +667,7 @@ int main (int argc, char **argv)
             );
         }
 
+        // retain complete neighbor lists for correctness comparison and traversal diagnostics
         std::size_t quality_size = static_cast<std::size_t>(config.queries)*K;
         int *dev_kdtree_idx_old = nullptr;
         int *dev_morton_idx_old = nullptr;
@@ -716,6 +725,7 @@ int main (int argc, char **argv)
             "copy Morton records for quality diagnosis");
 
         std::vector<int> disagreement_queries;
+        // use brute force on a fixed prefix and on every backend disagreement
         quality_stats quality = compare_neighbors(
             kdtree_idx_old, kdtree_dist_sq, morton_idx_old, morton_dist_sq, config.queries, disagreement_queries
         );
@@ -739,6 +749,7 @@ int main (int argc, char **argv)
         double morton_query_ms = 0.0;
         if (!config.quality_only)
         {
+            // time all-particle queries through checksums to avoid output-transfer cost
             _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
                 "allocate KD checksum");
             _morton_cuda_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),

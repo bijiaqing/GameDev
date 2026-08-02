@@ -8,6 +8,7 @@
 
 #include <morton/morton_index.cuh>
 
+// sort candidates by original identifier before removing periodic duplicates
 template<int SORT_SIZE, int BLOCK_SIZE>
 __device__ __forceinline__
 void _morton_id_sort (float *dist_sq, int *idx_old)
@@ -43,6 +44,7 @@ void _morton_id_sort (float *dist_sq, int *idx_old)
     }
 }
 
+// query periodic ghost records and collapse multiple images to one physical particle
 template<int K, int BLOCK_SIZE, int WORK_SIZE, int STACK_SIZE>
 __device__ __forceinline__
 void _morton_ghost_topk (
@@ -59,6 +61,7 @@ void _morton_ghost_topk (
 
     if (unique_ids)
     {
+        // skip duplicate filtering when geometry guarantees disjoint physical identifiers
         _morton_topk<K, BLOCK_SIZE, 512, STACK_SIZE>(
             morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
             stack_count, idx_node, batch_count,
@@ -67,6 +70,7 @@ void _morton_ghost_topk (
         return;
     }
 
+    // retain up to three images per physical neighbor before identifier deduplication
     _morton_topk<3*K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
         morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
         stack_count, idx_node, batch_count,

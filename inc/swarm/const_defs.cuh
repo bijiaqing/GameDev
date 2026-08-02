@@ -9,7 +9,7 @@
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION_KDTREE
-#include <kdtree/builder.h>                // kdtree::get_coord, kdtree::box_t
+#include <kdtree/builder.h>                 // kdtree::get_coord, kdtree::box_t
 #endif // COLLISION_KDTREE
 
 #if defined(COLLISION) || defined(DIFFUSION)
@@ -17,7 +17,7 @@ using curs = curandState;
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION_KDTREE
-using kdtree_boxf = kdtree::box_t<float3>;    // axis-aligned float bounding box type for KD-tree
+using kdtree_boxf = kdtree::box_t<float3>;  // axis-aligned float bounding box type for KD-tree
 #endif // COLLISION_KDTREE
 
 using real  = double;                       // code real type
@@ -142,7 +142,7 @@ const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle i
 // time step and output parameters
 // =========================================================================================================================
 
-const int  SAVE_MAX     = 100;                // total number of outputs for mesh fields
+const int  SAVE_MAX     = 100;              // total number of outputs for mesh fields
 
 const real DT_OUT       = 1.0;
 
@@ -173,7 +173,7 @@ struct swarm                                // representative-particle state
 };
 
 #ifdef COLLISION_KDTREE
-struct kdtree_node                         // KD-tree node consumed by kdtree::builder
+struct kdtree_node                          // KD-tree node consumed by kdtree::builder
 {
     float3  cartesian;                      // Cartesian position of the physical particle or periodic image
     int     idx_old;                        // stable particle-array index before KD-tree reordering
@@ -181,7 +181,7 @@ struct kdtree_node                         // KD-tree node consumed by kdtree::b
     int     image;                          // zero for a physical node and nonzero for a periodic image
 };
 
-struct kdtree_traits                       // traits for kdtree::builder
+struct kdtree_traits                        // traits for kdtree::builder
 {
     using point_t = float3;
     enum { has_explicit_dim = true };

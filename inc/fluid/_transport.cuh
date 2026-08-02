@@ -43,7 +43,7 @@ real *_block_field (real *dev_adv_work, int field, int idx_line, int line_size)
 // =========================================================================================================================
 // PPM face reconstruction
 
-// reconstruct a bounded PPM face value on a uniform grid from four neighboring cells (for x direction)
+// reconstruct one bounded periodic-azimuthal PPM face from four neighboring cells
 __device__ __forceinline__
 static real _ppm_face_uniform (real q_m1, real q_0, real q_p1, real q_p2)
 {
@@ -192,7 +192,7 @@ real _block_ppm_state (const real *value, const real *face_weight,
 // =========================================================================================================================
 // invariant-domain correction limiting
 
-// find local extrema from a cell and its periodic neighbors (for x direction)
+// find local extrema from one cell and its periodic azimuthal neighbors
 __device__ __forceinline__
 static void _local_bounds_periodic (const real *value, int idx, int count, real &value_min, real &value_max)
 {
@@ -207,7 +207,7 @@ static void _local_bounds_periodic (const real *value, int idx, int count, real 
     value_max += bound_pad;
 }
 
-// find local extrema from a cell and its nonperiodic neighbors (for y and z directions)
+// find local extrema from one cell and its nonperiodic radial or polar neighbors
 __device__ __forceinline__
 static void _local_bounds (const real *value, int idx, int count, real &value_min, real &value_max)
 {

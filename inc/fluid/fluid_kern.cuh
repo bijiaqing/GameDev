@@ -8,6 +8,7 @@
 #include <const_defs.cuh>
 
 // =========================================================================================================================
+// conservative directional transport
 
 #ifdef FLUID_BLOCK_SWEEP
 
@@ -62,6 +63,7 @@ __global__ void advection_zth (
 #endif // FLUID_BLOCK_SWEEP
 
 // =========================================================================================================================
+// transport timestep rate
 
 __global__ void cfl_rate_calc (
     real *dev_cfl_rate, const real *dev_dustdens,
@@ -70,6 +72,7 @@ __global__ void cfl_rate_calc (
 );
 
 // =========================================================================================================================
+// conservative density diffusion
 
 #ifdef FLUID_BLOCK_SWEEP
 
@@ -108,6 +111,7 @@ __global__ void diffusion_zth (
 #endif // FLUID_BLOCK_SWEEP
 
 // =========================================================================================================================
+// evolved-state diagnostics
 
 __global__ void inf_cell_flag (
     const real *dev_dustdens,
@@ -120,6 +124,7 @@ __global__ void inf_cell_flag (
 );
 
 // =========================================================================================================================
+// field initialization
 
 __global__ void init_rho_calc (
     real *dev_dustdens, const real *dev_initdens
@@ -133,6 +138,7 @@ __global__ void init_vel_calc (
 );
 
 // =========================================================================================================================
+// primitive and conserved momentum synchronization
 
 __global__ void momentum_getv (
     const real *dev_dustdens,
@@ -147,11 +153,13 @@ __global__ void momentum_setv (
 );
 
 #ifdef RADIATION
+// radial optical-depth construction
 __global__ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens);
 __global__ void optdepth_csum (real *dev_optdepth);
 #endif
 
 // =========================================================================================================================
+// local drag and external-force update
 
 __global__ void source_update (
     real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz, 

@@ -4,6 +4,7 @@
 #include <const_defs.cuh>
 
 // =========================================================================================================================
+// orbital and vertically isothermal gas profiles
 
 __device__ __forceinline__
 real _get_omegaK (real R)
@@ -13,17 +14,18 @@ __device__ __forceinline__
 real _get_hg (real R)
 { return ASPR_0*pow(R / R_0, 0.5*(IDX_Q + 1.0)); }
 
-// the pressure gradient parameter η for gas velocity
+// calculate the radial pressure-support parameter used by the gas velocity
 __device__ __forceinline__
 real _get_eta (real R, real Z, real h_g)
 { return -0.5*((IDX_P + 0.5*IDX_Q - 1.5)*h_g*h_g + IDX_Q*(1.0 - R / sqrt(R*R + Z*Z))); }
 
-// the true gas stratification parameter in hydrostatic equilibrium (vertically isothermal)
+// calculate exact vertically isothermal hydrostatic stratification relative to the midplane
 __device__ __forceinline__
 real _get_gas_strat (real R, real Z, real h_g)
 { return exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g)); }
 
 // =========================================================================================================================
+// gas density and Epstein stopping-time profiles
 
 __device__ __forceinline__
 real _get_sigma_g (real R)
@@ -43,13 +45,14 @@ __device__ __forceinline__
 real _get_stokes (real R, real Z, real h_g)
 {
     real stokes = STOKES_0;
-    stokes /= pow(R / R_0, IDX_P);          // radial correction for gas density and sound speed
-    stokes /= _get_gas_strat(R, Z, h_g);    // vertical correction for gas stratification
+    stokes /= pow(R / R_0, IDX_P);          // apply inverse midplane surface-density scaling
+    stokes /= _get_gas_strat(R, Z, h_g);    // apply inverse vertical gas-stratification scaling
 
     return stokes;
 }
 
 #ifdef DIFFUSION
+// turbulent transport coefficients
 __device__ __forceinline__
 real _get_nu (real R, real h_g)
 {
@@ -107,7 +110,7 @@ real _get_alpha (real R, real h_g)
 }
 #endif // DIFFUSION
 
-// calculate the density-diffusion scale height used by 3D initialization
+// calculate the density-diffusion equilibrium scale height used by 3D initialization
 __device__ __forceinline__
 real _get_hd (real R, real h_g)
 {

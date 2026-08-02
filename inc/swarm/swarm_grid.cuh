@@ -12,8 +12,8 @@
 
 struct interp
 {
-    int  next_x, next_y, next_z;    // flattened offsets to the neighboring cells
-    real frac_x, frac_y, frac_z;    // weights assigned to the neighboring cells
+    int  next_x, next_y, next_z;    // flattened offsets to neighboring cells
+    real frac_x, frac_y, frac_z;    // weights assigned to neighboring cells
 };
 
 // =========================================================================================================================
@@ -24,40 +24,41 @@ struct interp
 __device__ __forceinline__
 void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
 {
-    if (N_X == 1)                   // if there is only one cell in X
+    if (N_X == 1)
     {
-        frac_x = 0.0;               // the share for the current cell is '1.0 - frac_x'
-        next_x = 0;                 // no other cells to share the particle
+        frac_x = 0.0;
+        next_x = 0;
     }
     else
     {
         real ref_x = 0.5;
         bool edge_x = loc_x < ref_x || loc_x > static_cast<real>(N_X) + ref_x - 1.0;
 
-        if (!edge_x)             // still in the interior of the X domain
+        if (!edge_x)
         {
-            if (deci_x >= ref_x)    // share with the cell on the right
+            if (deci_x >= ref_x)
             {
                 frac_x = deci_x - ref_x;
                 next_x = 1;
             }
-            else                    // share with the cell on the left
+            else
             {
                 frac_x = ref_x - deci_x;
                 next_x = -1;
             }
         }
-        else                        // too close to the inner or the outer X boundary 
+        else
         {
-            if (deci_x >= ref_x)    // too close to the outer X boundary
+            // wrap the neighboring stencil cell across the periodic seam
+            if (deci_x >= ref_x)
             {
                 frac_x = deci_x - ref_x;
-                next_x = 1 - N_X;   // share with the first cell of its row
+                next_x = 1 - N_X;
             }
-            else                    // too close to the inner X boundary
+            else
             {
                 frac_x = ref_x - deci_x;
-                next_x = N_X - 1;   // share with the last  cell of its row
+                next_x = N_X - 1;
             }
         }
     }
@@ -67,10 +68,10 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
 __device__ __forceinline__
 void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool outer_edge = false)
 {
-    if (N_Y == 1)                   // if there is only one cell in Y
+    if (N_Y == 1)
     {
-        frac_y = 0.0;               // the share for the current cell is '1.0 - frac_y'
-        next_y = 0;                 // no other cells to share the particle
+        frac_y = 0.0;
+        next_y = 0;
     }
     else
     {
@@ -79,7 +80,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
         
         if (outer_edge)
         {
-            ref_y = 1.0;            // outer edge of Y cell
+            ref_y = 1.0;
         }
         else
         {
@@ -93,35 +94,36 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
 
         if (outer_edge)
         {
-            if (!edge_y)         // still in the interior of the Y domain
+            if (!edge_y)
             {
                 frac_y = (dy - pow(dy, deci_y)) / (dy - 1.0);
-                next_y = -N_X;      // share with the cell on its left
+                next_y = -N_X;
             }
-            else                    // at the Y domain boundaries
+            else
             {
                 frac_y = (dy - pow(dy, deci_y)) / (dy - 1.0);
-                next_y = 0;         // the inner-face zero is applied after interpolation
+                next_y = 0;         // apply the inner-face optical-depth zero after interpolation
             }
         }
         else
         {
-            if (!edge_y)         // still in the interior of the Y domain
+            if (!edge_y)
             {
-                if (deci_y >= ref_y) // share with the cell on the right
+                if (deci_y >= ref_y)
                 {
                     frac_y = (pow(dy, deci_y - ref_y) - 1.0) / (dy - 1.0);
-                    next_y = N_X;   // the index distance to the next Y cell on the right is N_X
+                    next_y = N_X;
                 }
-                else                // share with the cell on the left
+                else
                 {
                     frac_y = (pow(dy, deci_y - ref_y) - 1.0) / (1.0 / dy - 1.0);
                     next_y = -N_X;
                 }
             }
-            else                    // at the Y domain boundaries
+            else
             {
-                frac_y = 0.0;       // the current cell take it all like N_Y = 1
+                // clamp a cell-centred stencil rather than reaching beyond the radial domain
+                frac_y = 0.0;
                 next_y = 0;
             }
         }
@@ -132,22 +134,22 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
 __device__ __forceinline__
 void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
 {
-    if (N_Z == 1)                   // if there is only one cell in Z
+    if (N_Z == 1)
     {
-        frac_z = 0.0;               // the share for the current cell is '1.0 - frac_z'
-        next_z = 0;                 // no other cells to share the particle
+        frac_z = 0.0;
+        next_z = 0;
     }
     else
     {
         real ref_z = 0.5;
         bool edge_z = loc_z < ref_z || loc_z > static_cast<real>(N_Z) + ref_z - 1.0;
         
-        if (!edge_z)             // still in the interior of the Z domain
+        if (!edge_z)
         {
             if (deci_z >= ref_z)
             {
                 frac_z = deci_z - ref_z;
-                next_z = N_X*N_Y;   // the index distance to the next Z cell on the right is N_X*N_Y
+                next_z = N_X*N_Y;
             }
             else
             {
@@ -155,8 +157,9 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
                 next_z = -N_X*N_Y;
             }
         }
-        else                        // at the Z domain boundaries, the current cell take it all like N_Z = 1
+        else
         {
+            // clamp the stencil rather than reaching beyond the polar domain
             frac_z = 0.0;
             next_z = 0;
         }

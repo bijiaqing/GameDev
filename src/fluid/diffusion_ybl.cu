@@ -6,7 +6,7 @@
 
 // =========================================================================================================================
 // kernel: diffusion_ybl
-// purpose: preserve radial Crank-Nicolson diffusion while moving each column solve into block-shared memory
+// purpose: solve geometry-aware radial Crank-Nicolson diffusion cooperatively in block-shared memory
 // =========================================================================================================================
 
 __device__ __forceinline__
@@ -27,6 +27,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     int idx_base = ix + iz*N_X*N_Y;
     real z = _get_zcent(iz);
 
+    // partition dynamic shared memory among density, CN coefficients, and reusable solve work arrays
     extern __shared__ real shared_work[];
     real *rhod = shared_work;
     real *cn_lower = rhod + N_Y;
@@ -38,6 +39,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     __shared__ int sub_count;
     __shared__ real dt_sub;
 
+    // load one density column and assemble full-step zero-flux CN coefficients
     for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
     {
         int idx_cell = idx_base + iy*N_X;
@@ -81,6 +83,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     }
     __syncthreads();
 
+    // advance density and donor momentum through every positivity-controlled CN substep
     for (int idx_sub = 0; idx_sub < sub_count; idx_sub++)
     {
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
@@ -95,6 +98,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
         if (threadIdx.x == 0)
         {
+            // solve the nonperiodic tridiagonal density system with Thomas elimination
             temp_work[0] = cn_upper[0] / cn_diag[0];
             rhod_work[0] /= cn_diag[0];
             for (int iy = 1; iy < N_Y; iy++)
@@ -110,6 +114,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
+        // reconstruct time-centred outward diffusive mass fluxes with zero boundary flux
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             if (iy == N_Y - 1)
@@ -176,7 +181,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
-        // restore the CN diagonal after all neighboring polar-momentum fluxes have been consumed
+        // restore the CN diagonal after all momentum components consume the reused workspace
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             cn_diag[iy] = 1.0 - cn_lower[iy] - cn_upper[iy];
@@ -184,6 +189,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         __syncthreads();
     }
 
+    // store density after all substeps
     for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
     {
         dev_dustdens[idx_base + iy*N_X] = rhod[iy];

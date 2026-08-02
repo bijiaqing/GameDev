@@ -110,7 +110,7 @@ real _get_ball_measure (real y, real z, real radius)
     return measure;
 }
 
-#ifndef CODE_UNIT // i.e., only when physical units are used
+#ifndef CODE_UNIT // physical units
 // calculate the Brownian relative speed and cap it at the sound speed
 __device__ __forceinline__
 real _get_vrel_b (real R, real size_i, real size_j, real h_g)

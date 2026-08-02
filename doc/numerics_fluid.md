@@ -51,6 +51,12 @@ Their common and distinct closures are
 | imported gas fields | absent | optional |
 | radiation pressure | optional | optional, with optional Poynting–Robertson drag |
 
+The diffusion-basis distinction is physical rather than merely an implementation detail. In a
+resolved vertical domain, fluid $D_y$ diffuses along spherical radius $r$, whereas swarm $D_R$
+diffuses along cylindrical radius $R$. Equal scalar coefficients therefore need not produce the
+same radial equilibrium away from the midplane; the two closures coincide radially only where
+$r=R$, including the vertically integrated model.
+
 The mathematical bridge between the branches is obtained from moments of a dust mass distribution
 $f_d(\boldsymbol x,\boldsymbol v,s,t)$:
 
@@ -293,6 +299,7 @@ geometry evolves: $\Sigma_d$ in a vertically integrated model and $\rho_d$ in 3D
 | `SCHMIDT_X/Y/Z` | directional Schmidt numbers $\mathrm{Sc}_{x,y,z}$ |
 | `BETA_0`, `KAPPA_0`, `T_BETA` | radiation ratio $\beta_0$, opacity $\kappa_0$, and ramp time $T_\beta$ |
 | `CFL_DYN`, `DT_MAX` | explicit Courant factor and global timestep ceiling |
+| `DT_OUT`, `SAVE_MAX` | interval between saved frames and final saved-frame index |
 | `POS_LIMIT` | upper bound controlling the Crank–Nicolson explicit-side coefficient sum |
 | `RHO_VAC` | density below which primitive velocity uses the regularized vacuum state |
 
@@ -364,17 +371,53 @@ v_K=R\Omega_K,
 c_s=h_gR\Omega_K.
 $$
 
-For the vertically isothermal gas pressure $P_g=\rho_gc_s^2$, radial pressure support is measured
-by
+At the midplane, the usual radial pressure-support parameter for the vertically isothermal gas
+pressure $P_g=\rho_gc_s^2$ is
 
 $$
-\eta=-\frac{1}{2\rho_gR\Omega_K^2}\frac{\partial P_g}{\partial R},
+\eta_{\rm mid}=-\frac{1}{2\rho_gR\Omega_K^2}\frac{\partial P_g}{\partial R}\bigg|_{Z=0},
 \qquad
-v_{\phi,g}^2=v_K^2(1-2\eta).
+\eta_{\rm mid}
+=-\frac{h_g^2}{2}\left(p+\frac q2-\frac32\right).
 $$
 
-Evaluating this derivative for the prescribed power laws and exact vertical stratification gives
-the explicit $\eta(R,Z)$ used in Section 3.3.
+Away from the midplane, the code variable `eta` is the effective rotation-support parameter after
+combining the cylindrical stellar gravity and pressure gradient, rather than the pressure term
+alone. This distinction follows the vertically structured disk force balance discussed by
+[Takeuchi & Lin (2002)](https://arxiv.org/abs/astro-ph/0208552). Define
+
+$$
+u=\frac{R}{\sqrt{R^2+Z^2}},
+\qquad
+A=p+\frac q2-\frac32.
+$$
+
+At fixed cylindrical height, differentiating the exact hydrostatic profile gives
+
+$$
+h_g^2\frac{\partial\ln P_g}{\partial\ln R}
+=Ah_g^2+q(1-u)+(1-u^3).
+$$
+
+The cylindrical component of stellar gravity is $u^3$ times its midplane value. Radial force
+balance therefore becomes
+
+$$
+\frac{v_{\phi,g}^2}{v_K^2}
+=u^3+h_g^2\frac{\partial\ln P_g}{\partial\ln R}
+=1+Ah_g^2+q(1-u)
+=1-2\eta(R,Z),
+$$
+
+with
+
+$$
+\eta(R,Z)=-\frac12\left[Ah_g^2+q(1-u)\right].
+$$
+
+Thus the $(1-u^3)$ pressure term exactly cancels the off-midplane weakening of cylindrical
+gravity. At $Z=0$, $u=1$ and this effective parameter reduces to the ordinary midplane
+pressure-support definition above. Section 3.3 uses this exact rotation target.
 
 The turbulent branch uses the $\alpha$ prescription of
 [Shakura & Sunyaev (1973)](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S). The viscosity
@@ -394,6 +437,44 @@ $$
 Thus $\Sigma_g/(\sqrt{2\pi}H_g)$ fixes the reference midplane density; because the vertical
 profile uses the exact point-mass potential rather than a Gaussian approximation, $\Sigma_g$ is
 not recovered by exactly integrating this expression over $Z$.
+
+For a finite resolved domain whose intersection at cylindrical radius $R$ consists of vertical
+intervals $[Z_{k,a},Z_{k,b}]$, the column implied by the prescribed volume profile is
+
+$$
+\Sigma_{g,\mathcal D}(R)=\Sigma_g(R)\,\mathcal C_g(R),
+$$
+
+$$
+\mathcal C_g(R)=\frac{1}{\sqrt{2\pi}H_g(R)}
+\sum_k\int_{Z_{k,a}}^{Z_{k,b}}
+\exp\left[
+\frac{R/\sqrt{R^2+Z^2}-1}{h_g(R)^2}
+\right]dZ.
+$$
+
+Thus $\mathcal C_g$ depends on the finite spherical radial and polar domain and need not equal one.
+In a vertically integrated model, $\Sigma_g$ is used directly and this 3D containment factor is not
+introduced.
+
+For comparison, on an untruncated vertical line let $x=Z/H_g$. The thin-disk expansion is
+
+$$
+\exp\left[
+\frac{R/\sqrt{R^2+Z^2}-1}{h_g^2}
+\right]
+=e^{-x^2/2}
+\left[1+\frac{3}{8}h_g^2x^4+O(h_g^4)\right],
+$$
+
+and the Gaussian fourth moment gives
+
+$$
+\mathcal C_{g,\infty}=1+\frac{9}{8}h_g^2+O(h_g^4).
+$$
+
+Finite spherical boundaries replace this asymptotic normalization by the exact containment factor
+above and can be especially important near a radial or polar edge.
 
 The monodisperse Stokes number assumes the linear, subsonic Epstein-drag scaling
 $t_s\propto(\rho_gc_s)^{-1}$ of
@@ -507,7 +588,7 @@ $$
 The initial velocity is the local no-backreaction drift relative to the pressure-supported gas,
 using the steady test-particle limit of
 [Nakagawa, Sekiya & Hayashi (1986)](<https://doi.org/10.1016/0019-1035(86)90121-1>).
-The pressure-support parameter and gas azimuthal target are
+The effective rotation-support parameter derived in Section 3.1 and the gas azimuthal target are
 
 $$
 \eta(R,Z)
@@ -575,6 +656,11 @@ v_{\theta,\mathrm{diff}}
 $$
 
 evaluated with one-sided boundary differences and centered interior differences.
+
+This initial vertical closure is not the same as the swarm initialization. The fluid adds this
+polar diffusive-balance velocity but does not add the swarm's terminal-settling velocity
+$v_Z=-\mathrm{St}\,\Omega_KZ$. The two branches therefore should not be assumed to begin from an
+identical vertical dynamical equilibrium.
 
 The cylindrical drift and polar balance are finally stored as
 
@@ -756,7 +842,16 @@ s_z=-\cos z.
 $$
 
 Boundary-adjacent internal faces use a two-cell linear interpolation where a complete four-cell
-stencil is unavailable. The pressureless flux uses the two-wave construction of
+stencil is unavailable. If $s_L$ and $s_R$ are the arithmetic centers of the adjacent cells in
+the appropriate volume coordinate and $s_f$ is their common face, then
+
+$$
+\omega=\frac{s_f-s_L}{s_R-s_L},
+\qquad
+q_f=(1-\omega)\bar q_L+\omega\bar q_R.
+$$
+
+The pressureless flux uses the two-wave construction of
 [Harten, Lax & van Leer (1983)](https://doi.org/10.1137/1025002) and retains its proper
 left-going, right-going, and two-wave branches.
 
@@ -968,6 +1063,12 @@ $$
 
 and the HLL normal speeds are the reconstructed residual angular speeds. This decomposition is
 algebraically a periodic integer translation followed by conservative residual transport.
+
+The allowed endpoint `CFL_DYN = 0.5` can make $c_i=1$ exactly when the half-cell frame offset and
+the bounded residual displacement align. This remains within the PPM tracing domain, but it leaves
+no roundoff margin at the one-cell limit. Choosing a smaller value such as 0.45 is an optional
+production safety margin, not a correction to the method or a requirement for the documented
+verification results.
 
 ### 5.3 Radial and polar integration and boundaries
 
@@ -1288,6 +1389,17 @@ $$
 
 and the same equation is cyclic, with the first and last rows coupled. Sherman–Morrison reduces
 that cyclic system to two ordinary tridiagonal solves without changing the matrix being solved.
+For the rank-one representation $A+\boldsymbol u\boldsymbol v^T$, the identity used is
+
+$$
+(A+\boldsymbol u\boldsymbol v^T)^{-1}\boldsymbol b
+=A^{-1}\boldsymbol b
+-\frac{A^{-1}\boldsymbol u\,\boldsymbol v^TA^{-1}\boldsymbol b}
+{1+\boldsymbol v^TA^{-1}\boldsymbol u}.
+$$
+
+The two tridiagonal solves evaluate $A^{-1}\boldsymbol b$ and $A^{-1}\boldsymbol u$; the remaining
+factor is a scalar correction.
 
 For a requested interval $\Delta t$, the kernels first form the full-step coefficients and choose
 
@@ -1360,10 +1472,28 @@ A_z^{1/2}A_y^{1/2}A_x^{1/2}
 D_z^{1/2}D_x^{1/2}D_y^{1/2}.
 $$
 
-The inactive polar operators are skipped. Velocity is recovered after every conservative operator.
-Each directional advection half-interval is independently subcycled. Before every launch, the
-global CFL rate is recomputed from the current state, so acceleration or an earlier sweep cannot
-leave a later sweep using stale velocities.
+One accepted production step can be summarized as
+
+```text
+choose dt from the current CFL state, DT_MAX, and the next output boundary
+apply Dy(dt/2), Dx(dt/2), Dz(dt/2); recover primitive velocity
+advance Ax(dt/2), Ay(dt/2), Az(dt/2), subcycling and recovering after every launch
+if radiation is active, reconstruct cumulative optical depth at this midpoint state
+apply the centered source update S(dt); rebuild conserved momenta
+advance Az(dt/2), Ay(dt/2), Ax(dt/2), again with fresh CFL substeps
+apply Dz(dt/2), Dx(dt/2), Dy(dt/2); recover primitive velocity
+validate the evolved state, advance clocks, and write any due output
+```
+
+Inactive diffusion, polar, and radiation operations are omitted without changing the relative
+order of the remaining operators.
+
+The inactive polar operators are skipped. Primitive velocity is recovered after every advection
+launch and after each three-direction diffusion group; the directional diffusion solves operate
+directly on density and conserved momenta and do not consume primitive velocity between their
+launches. Each directional advection half-interval is independently subcycled. Before every
+advection launch, the global CFL rate is recomputed from the current synchronized state, so
+acceleration or an earlier advection sweep cannot leave a later sweep using stale velocities.
 
 For a requested directional interval $h$, the driver repeatedly chooses
 
@@ -1407,7 +1537,9 @@ $$
 The maximum sine is set to one if the polar cell straddles the midplane. With `VISC_FLOW`, the
 same radial and polar geometrical rates are also evaluated for the gas target velocity before stiff
 drag can transfer that velocity to the dust. Vacuum cells contribute zero, while any nonfinite
-state contributes an infinite rate and therefore rejects the step. The host reduction then uses
+state makes its complete azimuthal ring contribute an infinite rate; the host reduction reports
+the first such cell and aborts the run before another operator is launched. For finite states, the
+host reduction uses
 
 $$
 \Delta t=\min\left(
@@ -1504,9 +1636,9 @@ The same PPM/HLL and Crank–Nicolson discretizations have two compile-time CUDA
 
 The thread implementation is the reference transcription and stores its line work in thread-local
 arrays. In particular, `advection_xth` contains 21 arrays of length `N_X`, a source-level footprint
-of approximately 172 KiB per thread at `N_X = 1024` if all arrays remain distinct. Compiler lifetime
-reuse can reduce that footprint, so `ptxas` resource reports and profiler local-memory traffic are
-the authoritative measures.
+of approximately 168 KiB (172 kB) per thread at `N_X = 1024` if all arrays remain distinct.
+Compiler lifetime reuse can reduce that footprint, so `ptxas` resource reports and profiler
+local-memory traffic are the authoritative measures.
 
 The block implementation replaces those advection arrays with 11 persistent full-grid workspace
 fields and places four azimuthal or six radial/polar diffusion work arrays in dynamic shared
@@ -1637,6 +1769,7 @@ possible long production evolution.
 - Huang & Bai (2022), [multifluid dust algorithms](https://arxiv.org/abs/2206.01023)
 - Youdin & Lithwick (2007), [particle stirring and settling](https://arxiv.org/abs/0707.2975)
 - Nakagawa, Sekiya & Hayashi (1986), [steady dust–gas drift](<https://doi.org/10.1016/0019-1035(86)90121-1>)
+- Takeuchi & Lin (2002), [vertically structured gas and dust drift](https://arxiv.org/abs/astro-ph/0208552)
 - Kanagawa et al. (2017), [viscous disk velocity](https://arxiv.org/abs/1706.08975)
 - Burns, Lamy & Soter (1979), [radiation forces on small particles](https://doi.org/10.1016/0019-1035(79)90050-2)
 - Shakura & Sunyaev (1973), [$\alpha$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)

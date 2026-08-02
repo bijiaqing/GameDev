@@ -1,9 +1,6 @@
 #include <fluid_kern.cuh>
 
-
-
-
-
+// isolate the cancellation-safe exact drag-force update over eight stiffness decades
 __global__
 void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     const real *dev_dustdens, real dt)

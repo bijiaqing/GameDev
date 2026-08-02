@@ -330,9 +330,18 @@ terminal output together when archiving a run. Analytical results are namespaced
 - Implement the full coupled 3D manufactured-solution harness specified in
   `qav/fluid/test_mms_3d/README.md`, including independent forcing and exact boundary data
 - Add production-settling equilibrium tests that quantify the initial polar transient
+- Add independent nonzero-$(p,q)$ tests of the midplane pressure-support target and the complete
+  3D gas rotation law, evaluating the fixed-$Z$ pressure gradient and cylindrical stellar gravity
+  separately before verifying their off-midplane cancellation
 - Add radial and polar cases whose nonzero support actually crosses an outflow boundary, plus a
   `HALFDISK` midplane-reflection case; current compact profiles remain away from those boundaries
-- Add restart-tolerance and flag-matrix regressions
+- Add a long-running periodic FARGO-plus-diffusion ring test that retains total mass and all three
+  globally integrated conserved momentum components to roundoff
+- Add a limiter stress test with converging streams and near-vacuum cells, requiring nonnegative
+  density, bounded momentum-to-density ratios, and no activation of the final vacuum fallback
+- Add a resolved-vertical `VISC_FLOW` test at several heights against the complete Kanagawa target
+- Add restart-tolerance and legal flag-matrix regressions, including `HALFDISK`, `DIFFUSION`,
+  `RADIATION`, `VISC_FLOW`, and both fluid sweep implementations where compatible
 - Add a CUDA diffusion case that forces `POS_LIMIT` to select more than one CN positivity substep;
   this path currently has only the supplementary CPU mock
 - Add finite, spatially varying radiation attenuation; current ring radiation cases deliberately

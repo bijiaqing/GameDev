@@ -739,7 +739,7 @@ def test_optdepth():
 # ======================================================================================================================
 
 def advect_y(dens, momy, dt, yf, d, w):
-    """Advance density and radial momentum with the earlier Euler operator"""
+    """Advance density and radial momentum with one forward-Euler operator evaluation"""
 
     N = len(dens)
     powy = float(d)
@@ -815,7 +815,7 @@ def cell_average(fun, yf, d, n_quad=4000):
     return out
 
 def test_y_advection():
-    """Check radial transport geometry and expose the former CFL=0.5 defect"""
+    """Check radial transport geometry and measure its CFL-dependent order"""
     a = 0.2
     t_end = 0.5
     lam = 1.0 + a*t_end
@@ -869,7 +869,7 @@ def test_y_advection():
 
 
 def advect_y_rk(dens, momy, dt, yf, d, w, order):
-    """Apply the earlier radial Euler operator with SSPRK2 or SSPRK3"""
+    """Apply the radial forward-Euler operator with SSPRK2 or SSPRK3"""
     N = len(dens)
     powy = float(d)
     vol = (yf[1:]**powy - yf[:-1]**powy)/powy
@@ -971,7 +971,7 @@ def test_ssprk3_fix():
 
 
 # ======================================================================================================================
-# Current radial invariant-domain transport
+# radial invariant-domain transport
 # ======================================================================================================================
 
 def hll_flux_vector(speed_l, speed_r, dens_l, primitive_l, dens_r, primitive_r):
@@ -1179,7 +1179,7 @@ def test_invariant_limiter():
 
 
 # =============================================================================
-# T10: exact mesh primitives (C12 batch A)
+# exact mesh primitives
 # =============================================================================
 
 def test_mesh_primitives():
@@ -1199,7 +1199,7 @@ def test_mesh_primitives():
         ok = ok and all(abs(ycent(i)*(dy - 1.0) - (ycent(i+1) - ycent(i))) < 1e-15 for i in range(63))
         report(f"T10 d={d} exact radial mesh primitives", ok, "telescoping, ordering, exact widths/distances")
 
-    # exact dr vs the former y*log(dy): exact at faces/logarithmic centers, small documented deviation
+    # compare exact cell width with the local logarithmic differential approximation y*log(dy)
     for n, tol in ((32, 0.031), (256, 0.004)):
         r = (Y_MAX/Y_MIN)**(1.0/n)
         yf = Y_MIN*r**np.arange(n+1)

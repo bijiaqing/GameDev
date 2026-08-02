@@ -4,7 +4,7 @@
 
 // =========================================================================================================================
 // kernel: advection_xbl
-// purpose: preserve the fiducial FARGO and PPM update while assigning one azimuthal ring to one block
+// purpose: reproduce the thread-sweep FARGO and PPM update with one cooperative block per azimuthal ring
 // workspace: reuse 11 explicit full-grid fields and retain serial invariant-domain correction order within each ring
 // =========================================================================================================================
 
@@ -75,6 +75,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     __shared__ real lx_frame;
     __shared__ int shift_count;
 
+    // choose one ring-mean integer FARGO shift before loading the shifted state
     if (threadIdx.x == 0)
     {
         real lx_avg = 0.0;
@@ -97,6 +98,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     }
     __syncthreads();
 
+    // load the circularly shifted conserved state and synchronized primitives
     for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
     {
         int ix_old = ((ix - shift_count) % N_X + N_X) % N_X;
@@ -110,6 +112,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     }
     __syncthreads();
 
+    // construct PPM and low-order HLL fluxes cooperatively at every periodic face
     for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
     {
         int ixp1 = (ix + 1) % N_X;
@@ -148,6 +151,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
 
     if (threadIdx.x == 0)
     {
+        // apply the low-order update in deterministic face order
         real flux_rhod_wrap, flux_mx_wrap, flux_my_wrap, flux_mz_wrap;
         _block_x_lowflux(
             N_X - 1, R, lx_frame, rhod, lx, vy, lz,
@@ -158,6 +162,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         real flux_my_i = flux_my_wrap;
         real flux_mz_i = flux_mz_wrap;
 
+        // advance the low-order conservative state through the periodic flux divergence
         for (int ix = 0; ix < N_X; ix++)
         {
             real flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o;
@@ -188,6 +193,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             flux_mz_i = flux_mz_o;
         }
 
+        // restore antidiffusive fluxes with one conservative invariant-domain scale per face
         for (int ix = 0; ix < N_X; ix++)
         {
             int ixp1 = (ix + 1) % N_X;
@@ -233,6 +239,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     }
     __syncthreads();
 
+    // store the corrected conserved ring
     for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
     {
         int idx_cell = idx_base + ix;

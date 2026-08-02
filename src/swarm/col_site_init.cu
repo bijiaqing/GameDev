@@ -37,6 +37,7 @@ void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
     dev_kdtree_node[idx].idx_old = idx;
     dev_kdtree_node[idx].image = 0;
 
+    // append both rotated wedge images when azimuth covers less than a complete period
     if (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12)
     {
         float width = static_cast<float>(X_MAX - X_MIN);
@@ -73,6 +74,7 @@ void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev
     real R = _get_cyl_R(y, z);
     real Z = _get_cyl_Z(y, z);
 
+    // retain only physical records because the Morton owner builds its compact ghost list later
     dev_morton_point[idx] = (N_X == 1 && N_Z == 1)
         ? make_float3(static_cast<float>(R), 0.0f, 0.0f)
         : make_float3(

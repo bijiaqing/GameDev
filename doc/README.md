@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation for the current merged GameDev project. It describes the active source tree, the verified numerical methods, the evidence retained in the repository, and future work that has not yet been promoted into production.
 
-Resolved audit diaries and rename histories are not canonical documents. Durable findings from the 2026-07-27 merged-code audit, the 2026-07-29 swarm-test audit, and the 2026-07-30 KNN audit have been incorporated into the documents below.
+Resolved audit diaries and rename histories are not canonical documents. Durable findings from the 2026-07-27 merged-code audit, the 2026-07-29 swarm-test audit, the 2026-07-30 KNN audit, and the 2026-08-01 static numerical audit have been incorporated into the documents below.
 
 ## Document map
 

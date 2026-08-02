@@ -38,6 +38,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     real col_rate_i = dev_col_rate[idx_old_i];
     if (col_rate_i <= 0.0) return;
 
+    // sample whether this representative experiences one event during the frozen-rate interval
     curs rngstate = dev_rngstate[idx_old_i];
     real event_prob = -expm1(-col_rate_i*dt_col);
     if (curand_uniform_double(&rngstate) > event_prob)
@@ -64,6 +65,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     #endif // COLLISION_UNIT_VOLUME
     if (measure <= 0.0) return;
 
+    // select the collision partner from cumulative pair propensity rather than neighbor rank
     real target = col_rate_i*curand_uniform_double(&rngstate);
     real cumulative = 0.0;
     int idx_old_j = -1;
@@ -89,6 +91,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     if (idx_old_j < 0) return;
 
     #ifdef MULTISIZE
+    // preserve represented mass while applying coagulation or sampled fragmentation
     real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
@@ -139,6 +142,8 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
 
     __shared__ bool run_event;
     __shared__ curs rngstate;
+
+    // let one thread advance the particle RNG before launching the cooperative search
     if (threadIdx.x == 0)
     {
         dev_morton_overflow[idx_old_i] = 0;
@@ -171,6 +176,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     __shared__ unsigned int stack_overflow;
     __shared__ real pair_rate[N_K];
 
+    // reconstruct the same frozen neighbor set used by the preceding rate calculation
     _morton_ghost_topk<N_K, MORTON_TPB, MORTON_WORK_SIZE, 256>(
         morton_data, dev_morton_point[idx_old_i], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
@@ -185,6 +191,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     __syncthreads();
     if (stack_overflow != 0) return;
 
+    // evaluate pair propensities cooperatively before serial inverse-CDF selection
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {
         pair_rate[idx_neighbor] = 0.0;
@@ -229,6 +236,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     if (idx_old_j < 0) return;
 
     #ifdef MULTISIZE
+    // preserve represented mass while applying coagulation or sampled fragmentation
     real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {

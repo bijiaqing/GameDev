@@ -72,7 +72,7 @@ do {                                                                            
 #endif // CUDA_SYNC_TRACE
 
 // =========================================================================================================================
-// precompute geometry-aware PPM face interpolation weights from cell averages
+// geometry-aware PPM interpolation weights
 
 // solve four-cell interpolation weights that reproduce cubic data at one interior face
 inline __host__
@@ -191,7 +191,7 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
 
     std::vector<real> z_face_s(N_Z + 1);
 
-    // map polar faces to the spherical volume coordinate minus cosine theta
+    // map polar faces to the spherical volume coordinate s=-cos(z)
     for (int iz = 0; iz <= N_Z; iz++)
     {
         z_face_s[iz] = _get_sz(_get_zface(iz));
@@ -201,7 +201,7 @@ void ppm_geometry_weights_calc (real *ppm_weight_y, real *ppm_weight_z)
 }
 
 // =========================================================================================================================
-// calculate the power-law surface density after convolution with a Gaussian kernel 
+// convolved initial surface-density profile
 
 inline __host__
 void initdens_calc (real *initdens)
@@ -223,7 +223,7 @@ void initdens_calc (real *initdens)
         conv_u[idx_dst] = R_min + static_cast<real>(idx_dst)*dR;
     }
 
-    // normalization factor for the Gaussian kernel
+    // normalize the Gaussian over physical cylindrical radius
     const real kernel_norm = 1.0 / (std::sqrt(2.0*M_PI)*kernel_std);
 
     for (int idx_src = 0; idx_src <= bin_count; idx_src++)
@@ -244,8 +244,7 @@ void initdens_calc (real *initdens)
 }
 
 // =========================================================================================================================
-// obtain the CFL time step based on the maximum CFL rate across all cells, 
-// and print information about the cell with the maximum rate if verbose is true
+// reduce cellwise CFL rates and optionally report the limiting cell
 
 inline __host__
 real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
@@ -276,7 +275,7 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     real dt_cfl = std::fmin(CFL_DYN / max_cfl_rate, DT_MAX);
     if (!verbose) return dt_cfl;
 
-    // print the cell with the maximum CFL rate and its corresponding velocity components
+    // reconstruct physical velocities in the residual FARGO frame for diagnostics
     int idx_cfl_max = static_cast<int>(max_cfl_rate_ptr - cfl_rate_ptr);
     int ix = idx_cfl_max % N_X;
     int iy = (idx_cfl_max / N_X) % N_Y;
@@ -315,7 +314,7 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
 }
 
 // =========================================================================================================================
-// diagnostic message output functions for simulation progress
+// simulation progress output
 
 inline __host__
 void msg_output (int idx_file)
@@ -358,7 +357,7 @@ void msg_step (int idx_from, real dt, real clock_out, real clock_sim)
 }
 
 // =========================================================================================================================
-// save and load binary data to/from files
+// binary field conversion and file I/O
 
 inline __host__
 std::string frame_num (int idx_file)
@@ -509,7 +508,7 @@ do {                                                                            
 } while(0)
 
 // =========================================================================================================================
-// saving variables to file 
+// runtime field transfers
 
 inline __host__
 bool save_variable (const std::string &file_name)
