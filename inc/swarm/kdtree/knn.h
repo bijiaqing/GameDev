@@ -1,5 +1,6 @@
 // ======================================================================== //
 // Copyright 2022-2023 Ingo Wald                                            //
+// Modified by Jiaqing Bi for integration into GameDev, 2026                //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -245,8 +246,8 @@ namespace kdtree {
     // interface for traversal/query routines to interact with this
     // ------------------------------------------------------------------
     inline __device__ float returnValue() const;
-    inline __device__ float returnDist2(int idx) const;   // added by jiaqing
-    inline __device__ int   returnIndex(int idx) const;   // added by jiaqing
+    inline __device__ float returnDist2(int idx) const;
+    inline __device__ int   returnIndex(int idx) const;
     inline __device__ float processCandidate(int candPrimID, float candDist2);
     inline __device__ float initialCullDist2() const;
     inline __device__ void  push(float dist, int pointID);
@@ -312,12 +313,12 @@ namespace kdtree {
 
   template<int k>
   inline __device__
-  float HeapCandidateList<k>::returnDist2(int idx) const  // added by jiaqing
+  float HeapCandidateList<k>::returnDist2(int idx) const
   { return decode_dist2(entry[idx]); }
 
   template<int k>
   inline __device__
-  int   HeapCandidateList<k>::returnIndex(int idx) const  // added by jiaqing
+  int   HeapCandidateList<k>::returnIndex(int idx) const
   { return decode_pointID(entry[idx]); }
   
   template<int k>

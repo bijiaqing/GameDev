@@ -638,4 +638,11 @@ A formal software citation is not yet provided. Until one is added, cite the rep
 commit used for a calculation and record the model constants, compile-time flags, CUDA toolkit,
 GPU architecture, and verification results relevant to the run.
 
-GameDev is distributed under the [MIT License](LICENSE). Copyright 2026 Jiaqing Bi.
+GameDev's original code is distributed under the [MIT License](LICENSE). Copyright 2026 Jiaqing Bi.
+
+GameDev includes modified portions of
+[cudaKDTree](https://github.com/ingowald/cudaKDTree), copyright 2018-2023 Ingo Wald, under the
+[Apache License 2.0](inc/swarm/kdtree/Apache-2.0.txt). Files under
+`inc/swarm/kdtree/cubit/` derive from
+[cudaBitonic](https://github.com/ingowald/cudaBitonic), copyright 2018-2023 Ingo Wald, under the
+same license. The original copyright and license notices are retained in the bundled source files.

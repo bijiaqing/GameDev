@@ -1,5 +1,6 @@
 // ======================================================================== //
 // Copyright 2019-2021 Ingo Wald                                            //
+// Modified by Jiaqing Bi for integration into GameDev, 2026                //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -258,4 +259,3 @@ namespace kdtree {
   };
 
 }
-

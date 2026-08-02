@@ -1,5 +1,6 @@
 // ======================================================================== //
 // Copyright 2019-2023 Ingo Wald                                            //
+// Modified by Jiaqing Bi for integration into GameDev, 2026                //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -25,5 +26,4 @@
     of points (e.g., float3's, float2s, some type of Photons for
     photon-mapping, etc), and the builder will simply re-arrange those
     data points in the array */
-
 

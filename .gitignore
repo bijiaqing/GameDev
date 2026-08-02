@@ -20,6 +20,8 @@ qav/swarm/test_knn/bin/
 
 # experimental files
 lab/
+!lab/
+lab/*
 
 # Python cache files
 __pycache__/
