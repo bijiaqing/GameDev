@@ -28,7 +28,7 @@ The fluid is monodisperse and does not back-react on the prescribed gas.
 
 Transport and source evolution are always active. `DIFFUSION` enables density diffusion,
 `RADIATION` enables attenuated radiation pressure, `VISC_FLOW` replaces the static gas radial
-target with the viscous prescription, and `HALFDISK` selects a reflecting upper midplane in 3D.
+target with the viscous prescription, and `HALF_DISK` selects a reflecting upper midplane in 3D.
 `VISC_FLOW` requires `DIFFUSION`, and every 3D fluid model requires `DIFFUSION` to support the dust
 layer vertically.
 
@@ -313,7 +313,7 @@ The production fluid branch is specialized at compilation rather than switched a
 | `RADIATION` | construct optical depth and add attenuated radiation pressure |
 | `VISC_FLOW` | use the viscous gas target velocity; requires `DIFFUSION` |
 | `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required |
-| `HALFDISK` | reflect the active polar boundary at the midplane |
+| `HALF_DISK` | reflect the active polar boundary at the midplane |
 | `FLUID_SWEEP=thread` | assign one CUDA thread to each complete directional line |
 | `FLUID_SWEEP=block` | assign one cooperative CUDA block to each directional line |
 
@@ -659,7 +659,9 @@ evaluated with one-sided boundary differences and centered interior differences.
 
 This initial vertical closure is not the same as the swarm initialization. The fluid adds this
 polar diffusive-balance velocity but does not add the swarm's terminal-settling velocity
-$v_Z=-\mathrm{St}\,\Omega_KZ$. The two branches therefore should not be assumed to begin from an
+$v_Z=-\mathrm{St}\,\Omega_KZ$. This asymmetry is intentional: the swarm evolves diffusion as a
+separate stochastic positional operator and does not encode that operator in its initialized
+deterministic velocity. The two branches therefore should not be assumed to begin from an
 identical vertical dynamical equilibrium.
 
 The cylindrical drift and polar balance are finally stored as
@@ -1075,7 +1077,7 @@ verification results.
 The radial and polar method-of-lines operators use the three-stage TVD Runge–Kutta construction
 of [Shu & Osher (1988)](https://doi.org/10.1016/0021-9991(88)90177-5), commonly denoted
 SSPRK(3,3). PPM provides spatial reconstruction; SSPRK supplies temporal integration. The radial boundaries
-are outflow-only. A full polar disk is outflow-only at both polar edges; `HALFDISK` reflects at the
+are outflow-only. A full polar disk is outflow-only at both polar edges; `HALF_DISK` reflects at the
 midplane and remains outflow-only at its other polar edge.
 
 If $L(\boldsymbol U)$ is one spatial flux-divergence evaluation, the stages are
@@ -1109,7 +1111,7 @@ a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
 F_{m_a}=F_\varrho u_a.
 $$
 
-At a reflecting `HALFDISK` midplane, all normal flux components are set to zero.
+At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero.
 
 PPM is formally high order on smooth fields, but the complete multidimensional solver should be
 described as second-order accurate: Strang composition, Crank–Nicolson diffusion, boundary fluxes,
@@ -1563,7 +1565,7 @@ The continuum boundary conditions paired with the operators are
 | azimuthal | periodic | periodic |
 | inner and outer radial | outflow only | zero normal flux |
 | full-disk polar | outflow only | zero normal flux |
-| `HALFDISK` midplane | reflecting | zero normal flux |
+| `HALF_DISK` midplane | reflecting | zero normal flux |
 
 Periodicity identifies
 

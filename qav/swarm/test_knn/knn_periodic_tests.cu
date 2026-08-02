@@ -203,6 +203,24 @@ periodic_case make_full_disk (int dim)
     };
 }
 
+periodic_case make_period_limit (int dim, bool use_images)
+{
+    float deficit = (use_images ? 2.0f : 0.5f)*1.0e-6f;
+    float width = 2.0f*static_cast<float>(M_PI) - deficit;
+    float x_min = -0.5f*width;
+    float x_max =  0.5f*width;
+    float Z = (dim == 2) ? 0.0f : 0.02f;
+    return {
+        std::string(use_images ? "period_limit_wedge_" : "period_limit_full_")
+            + std::to_string(dim) + "d",
+        dim, 0.09f, x_min, x_max,
+        make_wedge_points(dim, x_min, x_max),
+        {make_point(1.0f, x_min + 0.01f, Z)},
+        {x_min + 0.01f},
+        {use_images ? 3u : 1u}
+    };
+}
+
 // compare the periodic Morton result, image count, and overflow state with the reference
 bool run_case (const periodic_case &test)
 {
@@ -340,6 +358,8 @@ int main ()
             tests.push_back(make_interior(dim));
             tests.push_back(make_narrow_wedge(dim));
             tests.push_back(make_full_disk(dim));
+            tests.push_back(make_period_limit(dim, false));
+            tests.push_back(make_period_limit(dim, true));
         }
 
         int failed = 0;

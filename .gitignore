@@ -1,6 +1,10 @@
 # executable files
 gamedev
 
+# documentation files
+doc/future*
+doc/format*
+
 # build artifacts
 obj/*
 !obj/.gitkeep

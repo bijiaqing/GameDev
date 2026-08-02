@@ -341,7 +341,7 @@ The swarm executable is likewise a compile-time specialization:
 | `CONST_ST` | hold the analytical-gas Stokes number fixed apart from its size factor |
 | `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ for diffusion or collision turbulence |
 | `CODE_UNIT` | select the code-unit calibration of collision microphysics |
-| `HALFDISK` | reflect deterministic transport at the midplane |
+| `HALF_DISK` | reflect deterministic transport at the midplane |
 | `SAVE_DENS` | write the particle-deposited dust-density mesh field |
 | `LOGTIMING` | use logarithmically spaced mesh-output times |
 | `LOGOUTPUT` | retain linear evolution times but save particle checkpoints at logarithmic frame indices |
@@ -858,8 +858,10 @@ prescribe the gas flow.
 
 This differs from the fluid initialization: the swarm adds terminal settling but no deterministic
 velocity that balances its stochastic diffusive flux, whereas the fluid adds a polar
-diffusive-balance velocity but no terminal-settling term. The two branches therefore should not be
-assumed to begin from an identical vertical dynamical equilibrium.
+diffusive-balance velocity but no terminal-settling term. This asymmetry is intentional. Swarm
+diffusion remains a separate stochastic positional operator and is not folded into the initialized
+deterministic velocity. The two branches therefore should not be assumed to begin from an
+identical vertical dynamical equilibrium.
 
 The initialized cylindrical velocities are stored through
 
@@ -2198,6 +2200,33 @@ does not affect neighbor identity or collision normalization.
 
 ### 8.5 Periodic boundary ghosts
 
+Both collision backends use the shared float-scale tolerance
+
+$$
+\epsilon_{\rm period}=10^{-6}.
+$$
+
+An active azimuthal domain is treated as a partial periodic wedge only when
+
+$$
+\Delta\phi_w<2\pi-\epsilon_{\rm period};
+$$
+
+otherwise it is treated as a complete period and no image records are constructed. This convention
+matches the single-precision Cartesian search coordinates. It changes only deliberately configured
+near-full wedges whose missing angle is at most $10^{-6}$ radians; exact $2\pi$ domains and ordinary
+partial wedges retain their previous behavior. If the omitted angle is $\delta\phi$, the largest
+seam displacement introduced by this convention is
+
+$$
+2R\sin\left(\frac{\delta\phi}{2}\right)
+\le R\epsilon_{\rm period}.
+$$
+
+Consequently, a model whose KNN cutoff or relevant neighbor separation is comparable to
+$10^{-6}R$ should use an exactly full domain or a clearly partial wedge instead of relying on the
+tolerance transition.
+
 For a wedge, the Morton owner copies only source records whose Cartesian distance to either
 azimuthal face is no larger than
 
@@ -2361,7 +2390,7 @@ Boundary policies are operator-specific:
 
 - transport is periodic in azimuth
 - transport absorbs radial exits and full-disk polar exits
-- `HALFDISK` reflects transport at the midplane and absorbs at the other polar edge
+- `HALF_DISK` reflects transport at the midplane and absorbs at the other polar edge
 - diffusion is periodic in azimuth and reflecting at finite radial and polar boundaries in every
   supported geometry
 
@@ -2415,7 +2444,7 @@ z=\frac{\pi}{2},
 (\ell_\phi,v_r,\ell_\theta)=(0,0,0).
 $$
 
-An active `HALFDISK` configuration is accepted only when $Z_{\max}=\pi/2$; the swarm runtime checks
+An active `HALF_DISK` configuration is accepted only when $Z_{\max}=\pi/2$; the swarm runtime checks
 this before allocating or evolving particle state.
 
 An absorbed representative is parked at `y=0`, assigned zero stored velocity, and skipped by

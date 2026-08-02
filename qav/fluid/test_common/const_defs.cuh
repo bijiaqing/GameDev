@@ -185,8 +185,8 @@ static_assert(Z_MIN >= 0.0 && Z_MAX <= M_PI, "Invalid polar domain");
 static_assert(N_Z > 1 || (Z_MIN == 0.5*M_PI && Z_MAX == 0.5*M_PI), "N_Z=1 must be the midplane model");
 static_assert(N_Z == 1 || Z_MAX > Z_MIN, "An active polar grid needs nonzero extent");
 
-#ifdef HALFDISK
-static_assert(N_Z == 1 || Z_MAX == 0.5*M_PI, "HALFDISK must end at the midplane");
+#ifdef HALF_DISK
+static_assert(N_Z == 1 || Z_MAX == 0.5*M_PI, "HALF_DISK must end at the midplane");
 #else
 static_assert(N_Z == 1 || (Z_MIN < 0.5*M_PI && Z_MAX > 0.5*M_PI), "A full polar model must span the midplane");
 #endif

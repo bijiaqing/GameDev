@@ -16,7 +16,7 @@ void _block_z_lowflux (
 {
     if (iz == N_Z - 1)
     {
-        #ifdef HALFDISK
+        #ifdef HALF_DISK
         flux_rhod = flux_mx = flux_my = flux_mz = 0.0;
         #else
         real speed_o = lz[iz] / y;

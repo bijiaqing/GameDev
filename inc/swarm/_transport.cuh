@@ -39,11 +39,11 @@ __device__ __forceinline__
 bool _is_particle_active (real y, real z)
 {
     if (y < Y_MIN || y >= Y_MAX) return false;
-    #ifdef HALFDISK
+    #ifdef HALF_DISK
     if (N_Z > 1 && (z < Z_MIN || z > Z_MAX)) return false;
     #else
     if (N_Z > 1 && (z < Z_MIN || z >= Z_MAX)) return false;
-    #endif // HALFDISK
+    #endif // HALF_DISK
 
     return true;
 }
@@ -98,19 +98,19 @@ void _apply_transport_boundary (real &x, real &y, real &z, real &lx, real &vy, r
         return;
     }
 
-    #ifdef HALFDISK
+    #ifdef HALF_DISK
     if (N_Z > 1 && z > Z_MAX)
     {
         z = M_PI - z;
         lz = -lz;
     }
-    #endif // HALFDISK
+    #endif // HALF_DISK
 
-    #ifdef HALFDISK
+    #ifdef HALF_DISK
     bool polar_exit = N_Z > 1 && (z < Z_MIN || z > Z_MAX);
     #else
     bool polar_exit = N_Z > 1 && (z < Z_MIN || z >= Z_MAX);
-    #endif // HALFDISK
+    #endif // HALF_DISK
 
     if (polar_exit) _absorb_particle(y, z, lx, vy, lz);
 }

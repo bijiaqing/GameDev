@@ -119,15 +119,15 @@ static_assert(
     "an active polar grid requires Z_MAX > Z_MIN"
 );
 
-#ifdef HALFDISK
+#ifdef HALF_DISK
 static_assert(
     N_Z == 1 || Z_MAX == 0.5*M_PI,
-    "HALFDISK requires its reflecting outer polar boundary at Z_MAX = pi/2"
+    "HALF_DISK requires its reflecting outer polar boundary at Z_MAX = pi/2"
 );
 #else
 static_assert(
     N_Z == 1 || (Z_MIN < 0.5*M_PI && Z_MAX > 0.5*M_PI),
-    "an active polar domain without HALFDISK must span the midplane pi/2"
+    "an active polar domain without HALF_DISK must span the midplane pi/2"
 );
 #endif
 

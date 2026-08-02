@@ -210,7 +210,7 @@ specific momentum retained.
 Purpose: test the production polar CN operator and its $1/y^2$, $\sin z$, and $d(-\cos z)$ metric
 factors.
 
-The domain is the upper hemisphere $0\le z\le\pi/2$ with the production `HALFDISK` flag. The
+The domain is the upper hemisphere $0\le z\le\pi/2$ with the production `HALF_DISK` flag. The
 nonuniform production gas profile is retained deliberately. With $D=0.05$ and
 $P_2(\mu)=(3\mu^2-1)/2$,
 

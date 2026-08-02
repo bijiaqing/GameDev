@@ -206,7 +206,7 @@ const int NB_X = N_Y*N_Z / TPB + 1;         // number of blocks for X-direction 
 const int NB_Y = N_X*N_Z / TPB + 1;         // number of blocks for Y-direction parallelization
 
 #ifdef COLLISION_KDTREE
-const int N_T  = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12) ? 3*N_P : N_P; // physical and periodic-image tree nodes
+const int N_T  = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-6) ? 3*N_P : N_P; // physical and periodic-image tree nodes
 const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level parallelization
 #endif // COLLISION_KDTREE
 

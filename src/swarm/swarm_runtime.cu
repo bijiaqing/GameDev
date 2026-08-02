@@ -38,10 +38,10 @@ const std::string PATH = PATH_OUT; // convert the Makefile string literal to the
 
 int main (int argc, char **argv)
 {
-    #ifdef HALFDISK
+    #ifdef HALF_DISK
     if (N_Z > 1 && std::fabs(Z_MAX - 0.5*M_PI) > 16.0*std::numeric_limits<real>::epsilon())
-        throw std::runtime_error("HALFDISK requires Z_MAX = pi/2");
-    #endif // HALFDISK
+        throw std::runtime_error("HALF_DISK requires Z_MAX = pi/2");
+    #endif // HALF_DISK
 
     std::vector <real> mass_bank;
     initmass_calc(mass_bank);

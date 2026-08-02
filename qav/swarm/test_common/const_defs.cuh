@@ -242,7 +242,7 @@ constexpr int NB_X = N_Y*N_Z / TPB + 1;
 constexpr int NB_Y = N_X*N_Z / TPB + 1;
 
 #ifdef COLLISION_KDTREE
-constexpr int N_T = N_P;
+constexpr int N_T = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-6) ? 3*N_P : N_P;
 constexpr int NB_T = N_T / TPB + 1;
 #endif
 

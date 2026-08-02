@@ -34,5 +34,5 @@ N_X, N_Y, and N_Z together and use the same prescribed timestep history at a giv
 Before interpreting an MMS rate, independently verify the forcing harness on a source-only field
 whose exact integral is known. The exact solution must remain above `RHO_VAC`, and the limiter and
 positivity scaling must remain inactive. Radiation rows have a second-order floor from the
-production optical-depth quadrature. Both `HALFDISK` and full-disk polar boundary variants should
+production optical-depth quadrature. Both `HALF_DISK` and full-disk polar boundary variants should
 eventually be exercised.

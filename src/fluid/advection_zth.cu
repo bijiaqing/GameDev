@@ -67,7 +67,7 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         {
             if (iz == N_Z - 1)
             {
-                #ifdef HALFDISK
+                #ifdef HALF_DISK
                 // impose zero flux at the reflecting midplane boundary
                 flux_rhod[iz] = flux_mx[iz] = flux_my[iz] = flux_mz[iz] = 0.0;
                 #else

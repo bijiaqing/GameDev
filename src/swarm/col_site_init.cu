@@ -38,7 +38,7 @@ void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
     dev_kdtree_node[idx].image = 0;
 
     // append both rotated wedge images when azimuth covers less than a complete period
-    if (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-12)
+    if (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-6)
     {
         float width = static_cast<float>(X_MAX - X_MIN);
         float sin_width;

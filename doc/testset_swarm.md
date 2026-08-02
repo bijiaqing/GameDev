@@ -811,7 +811,7 @@ It compiles four drivers:
 - adversarial edge cases for ties, coincident points, cutoff equality, sparse neighborhoods, Morton
   split planes, and active-mask rejection of nearer absorbed records in both search backends
 - correctness-only periodic query-image cases covering both wedge faces, full-$2\pi$ geometry,
-  image overlap, and deduplication
+  image overlap, deduplication, and both sides of the shared $10^{-6}$ near-full-domain cutoff
 - periodic wedge benchmarks comparing the production three-copy KD-tree and compact
   boundary-ghost Morton owner, including a deliberately narrow seam clump that forces
   physical-identifier deduplication and the production $3N_K$ fallback rather than the ordinary
@@ -887,6 +887,12 @@ cutoff; this forces stable-identifier deduplication in the KD-tree and the $3N_K
 The compact Morton owner is also checked record by record: every stored Cartesian record must be
 the correct physical point or one-wedge rotation of its source identifier.
 
+The periodic adversarial driver now contains 14 cases. In both 2D and 3D it tests one domain whose
+width lies within $10^{-6}$ of $2\pi$ and must use the full-period path, and one just outside that
+tolerance that must construct periodic images. The independently evaluated reference uses the same
+numerical threshold, while expected image counts verify that the intended branch was actually
+selected.
+
 The ordinary and wedge matrices use 4096 quality queries and brute-force the first 32 by default.
 Every additional backend-disagreement query is also brute-forced, so KD-tree agreement is not used
 to adjudicate a disagreement. This is strong differential coverage but is not exhaustive CPU
@@ -908,6 +914,10 @@ and `suite_manifest.json` all report `"passed": true`.
 | ordinary smooth/ring/clump/radial matrix | 7 | 7/7 PASS |
 | compact-ghost periodic-wedge matrix | 10 | 10/10 PASS |
 | production collision links | 6 backend/model combinations | 6/6 PASS |
+
+This archived run predates the four near-full-domain transition cases, so its periodic-driver row
+correctly remains 10/10. The current driver contains 14 cases and requires a new native CUDA run
+before 14/14 can be recorded here.
 
 Across the seven ordinary cases, the records contain:
 
@@ -1303,7 +1313,7 @@ expected model as pending, running, passed, failed, or interrupted and prints a 
   surface density, gas targets, and enabled physics
 - Add end-to-end operator-combination tests for transport plus diffusion, transport plus radiation,
   transport plus collision, and all enabled swarm physics
-- Compile and run a small legal flag matrix covering `HALFDISK`, `DIFFUSION`, `RADIATION`,
+- Compile and run a small legal flag matrix covering `HALF_DISK`, `DIFFUSION`, `RADIATION`,
   `PR_EFFECT`, `COLLISION`, `MULTISIZE`, `IMPORTGAS`, `CONST_ST`, `VISC_FLOW`, and both KNN
   backends where compatible, while also requiring illegal combinations to fail at compile time
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
