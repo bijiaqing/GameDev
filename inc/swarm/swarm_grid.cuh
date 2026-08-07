@@ -34,9 +34,14 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
         real ref_x = 0.5;
         bool edge_x = loc_x < ref_x || loc_x > static_cast<real>(N_X) + ref_x - 1.0;
 
-        if (!edge_x)
+        if (deci_x == ref_x)
         {
-            if (deci_x >= ref_x)
+            frac_x = 0.0;
+            next_x = 0;
+        }
+        else if (!edge_x)
+        {
+            if (deci_x > ref_x)
             {
                 frac_x = deci_x - ref_x;
                 next_x = 1;
@@ -90,7 +95,9 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
             ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(dy, mesh_dim + 1.0) - 1.0) / (pow(dy, mesh_dim) - 1.0)) / log(dy);
         }
         
-        bool edge_y = loc_y < ref_y || loc_y > static_cast<real>(N_Y) + ref_y - 1.0;
+        bool edge_y = outer_edge
+            ? loc_y < ref_y || loc_y > static_cast<real>(N_Y) + ref_y - 1.0
+            : loc_y <= ref_y || loc_y >= static_cast<real>(N_Y) + ref_y - 1.0;
 
         if (outer_edge)
         {
@@ -142,7 +149,7 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
     else
     {
         real ref_z = 0.5;
-        bool edge_z = loc_z < ref_z || loc_z > static_cast<real>(N_Z) + ref_z - 1.0;
+        bool edge_z = loc_z <= ref_z || loc_z >= static_cast<real>(N_Z) + ref_z - 1.0;
         
         if (!edge_z)
         {

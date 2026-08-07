@@ -1,6 +1,6 @@
 # Lagrangian swarm verification
 
-## Purpose
+## Overview and scope
 
 The CUDA models under `qav/swarm/` compare production swarm kernels and device helpers with
 analytical or statistically exact reference problems. They are verification models, not
@@ -13,14 +13,47 @@ transport, stiff gas drag, cylindrical stochastic diffusion, radiation pressure,
 Robertson drag, collision-neighborhood measures, the three dimensionless coagulation kernels, and
 exact KD-tree/Morton neighbor search. Dedicated radial-only cases additionally test exact inactive
 coordinates, annular collision normalization, and imported surface-density Stokes/Reynolds scaling.
-It does not yet validate monodisperse initialization and initial drift together, complete stochastic collision events against an analytical or converged reference,
-boundary-event convergence, restart reproducibility, or long-term coupled evolution.
+It does not yet validate monodisperse initialization and initial drift together, complete stochastic
+collision events against an analytical or converged reference, boundary-event convergence, restart
+reproducibility, or long-term coupled evolution.
 
 This document defines what each test proves, what it does not prove, and what result is
 expected. Machine-readable results are written under `qav/swarm/out/`. The shorter implementation
 index in `qav/swarm/test_common/TEST_CASES.md` should remain consistent with this document.
 
-## Measurement protocol
+## Verification architecture and claim levels
+
+The swarm tests provide four complementary kinds of evidence:
+
+1. **Analytical device and kernel tests** compare deterministic grid, transport, drag, radiation,
+   boundary, collision-helper, and imported-gas calculations with independent CPU formulas
+2. **Statistical ensemble tests** compare diffusion and initialization samples with exact moments,
+   probability transforms, represented-mass closure, or distributional thresholds
+3. **Backend differential tests** compare KD-tree and Morton neighbor topology with independent
+   brute force adjudicating search disagreements; retained development records additionally compare
+   collision-rate probes and final collision distributions but are not current common-suite cases
+4. **Diagnostic performance records** report KNN construction time, query time, persistent memory,
+   record multiplicity, and traversal counters without making speed part of numerical `PASS`
+
+Most models invoke production kernels from a small test-local `swarm_runtime.cu`. Helper tests use
+small CUDA kernels only to call production device functions and return their values. The KNN family
+compiles standalone controlled drivers and also links the actual 1D, 2D, and 3D production collision
+translation units with each backend. The other GPU backend is never treated as analytical truth;
+backend disagreement is resolved by exhaustive CPU search where the test design promises it.
+
+Unlike the fluid analytical runner, the swarm runner implements numerical pass/fail criteria. Each
+analytical or statistical resolution writes `passed`, each model writes a manifest, each KNN
+component writes a component manifest, and the common dispatcher accepts a model only if its
+manifest reports `passed: true`. Therefore the final line
+
+```text
+SWARM TEST SUITE: PASS
+```
+
+means that every selected model completed and every implemented criterion passed. It does not
+extend the claim beyond the coverage limits stated in each test definition.
+
+## Measurement and acceptance protocol
 
 ### Deterministic errors
 
@@ -76,6 +109,20 @@ These six-standard-error bounds make a false rejection very unlikely while still
 $N_P^{-1/2}$. Every diffusion build initializes cuRAND with seed 17, so a given compiler, GPU, and
 resolution should be reproducible, but correctness is assessed through moments rather than the
 particular random sequence.
+
+### Reference independence and pass propagation
+
+Deterministic expected states are reconstructed in Python from test constants and raw CUDA output;
+the validator does not read a GPU result back as its own reference. Grid measures, optical-depth
+prefix sums, drag exponentials, viscous targets, boundary folds, collision measures, and imported
+gas scalings are evaluated independently. Initialization uses independent containment integrals and
+probability-integral transforms. KNN edge cases exhaustively enumerate every candidate, while large
+matrices brute-force a configured query subset and every backend disagreement.
+
+Every record must remain finite in addition to satisfying its case-specific tolerance. The model
+manifest passes only when all requested resolutions pass. The aggregate dispatcher then verifies
+the component manifest before advancing to the next model, so a failed numerical comparison cannot
+be hidden by later successful runs.
 
 ### Meaning of `--res`
 
@@ -139,7 +186,34 @@ The KNN runner leaves the ordinary and wedge manifests scoped to the files they 
 the cross-component state separately to `suite_manifest.json`. A skipped periodic or wedge
 component is stored as JSON `null`, distinguishing “not selected” from either pass or failure.
 
-## Analytical and statistical cases
+The common dispatcher rewrites `qav/swarm/out/manifest.json` for every invocation. A later focused
+group therefore replaces the earlier top-level all-suite index even though it does not delete other
+models' component directories. For a durable all-suite archive, copy the aggregate manifest and
+terminal transcript together immediately after the all-group run; component manifests alone cannot
+reconstruct which group was most recently requested.
+
+## Coverage matrix and case inventory
+
+The current CUDA matrix covers the following combinations:
+
+| Capability | 1D radial | 2D radial–azimuthal | full 3D |
+|---|---:|---:|---:|
+| grid deposition and optical depth | yes | yes | yes |
+| orbital transport and gas drag | yes | yes | no |
+| stochastic diffusion | cylindrical radial | azimuthal | cylindrical radial and vertical mapped to spherical storage |
+| finite-domain multisize initialization | no | no | yes |
+| radiation pressure and P-R drag | yes | yes | no |
+| deterministic boundary helpers | yes | narrow wedge | full disk and half disk |
+| collision measures and kernel numerators | annular | disk/circular cap | ball/radial and polar caps |
+| exact KD-tree/Morton search | collinear radial embedding | ordinary and periodic wedge | ordinary and periodic wedge |
+| end-to-end coupled evolution | no | no current registered case | no current registered case |
+
+The 1D model is vertically integrated and azimuthally symmetric but retains midplane dynamical
+closure. The 2D model evolves surface density in $R$ and azimuth. The 3D model stores spherical
+coordinates while diffusion is prescribed in cylindrical $R$ and $Z$; each test states explicitly
+which representation its analytical reference uses. The older collision-runtime differential
+records described below are development evidence, not directories registered in the current common
+suite, and therefore do not change the “no current registered case” entries.
 
 | Model | Production calculation exercised | Reference result |
 |---|---|---|
@@ -154,7 +228,7 @@ component is stored as JSON `null`, distinguishing “not selected” from eithe
 | `test_diffusion_1d` | direct cylindrical radial SDE | exact Itô mean and variance, invariant physical velocity, and exact inactive coordinates |
 | `test_diffusion_2d` | azimuthal cylindrical diffusion SDE and velocity reprojection | exact Gaussian angular moments and invariant Cartesian velocity |
 | `test_diffusion_3d` | cylindrical radial and vertical SDE mapped to spherical storage | exact radial/vertical moments including cylindrical Itô drift and invariant Cartesian velocity |
-| `test_initial_3d` | continuous finite-domain multisize initialization with unresolved settling | independent truncated-Gaussian containment, radial and vertical probability transforms, represented-mass closure, exact domain bounds, and invariance under changes to simulation $N_Z$ |
+| `test_initial_3d` | continuous finite-domain multisize initialization with geometrically thin size-dependent settling | independent truncated-Gaussian containment, radial and vertical probability transforms, represented-mass closure, exact domain bounds, and invariance under changes to simulation $N_Z$ |
 | `test_radiation_1d` | radial-only midpoint radiation split | exact radiation-modified frozen response and inactive-state invariants |
 | `test_radiation_2d` | midpoint radiation split without P-R damping | exact radiation-modified frozen response at zero optical depth |
 | `test_prdrag_1d` | radial-only gas plus P-R exponential response | exact component-dependent damping and inactive-state invariants |
@@ -198,9 +272,11 @@ matrix, backend agreement over all 4096 queries is supplemented rather than repl
 force: the first 32 queries are always exhaustively checked, and any later disagreement would
 also be exhaustively adjudicated.
 
-## Grid projection and optical depth
+## Detailed test definitions
 
-### Particle placement
+### Grid projection and optical depth
+
+#### Particle placement
 
 The 1D, 2D, and 3D grid cases put exactly one representative in every mesh cell and assign each
 representative mass
@@ -251,7 +327,7 @@ The expected cell measure is the annular area $\pi(R_o^2-R_i^2)$ rather than a C
 length. The same $5\times10^{-12}$ mass/density and $5\times10^{-11}$ optical-depth tolerances are
 used.
 
-### Expected density
+#### Expected density
 
 The exact spherical cell measure used by the production grid is
 
@@ -280,7 +356,7 @@ $$
 
 up to the same density tolerance used in the implementation.
 
-### Expected optical depth
+#### Expected optical depth
 
 In 3D the extinction weight of each monodisperse representative is
 
@@ -315,7 +391,7 @@ All azimuthal cells are identical, so the production ring-mean kernel should lea
 unchanged. The required maximum optical-depth error is $5\times10^{-11}$. These cases verify the
 opacity reconstruction itself, but not the subsequent factor $e^{-\tau}$ in a particle force.
 
-## Circular-orbit transport
+### Circular-orbit transport
 
 Every representative begins at
 
@@ -353,7 +429,7 @@ not expose the nominal temporal order: ratios of errors near machine precision f
 produce negative formal orders. This case verifies equilibrium preservation and long-orbit phase
 consistency, not general second-order convergence.
 
-## Frozen drag and radiation responses
+### Frozen drag and radiation responses
 
 The three one-step response tests use eight grain sizes
 
@@ -440,7 +516,7 @@ isolate force and damping algebra from opacity reconstruction. The validator con
 in $\ell_x$, $v_y$, and $y$ and requires $L_\infty<2\times10^{-13}$. This checks stiff responses
 from $\Delta t/t_s=0.078125$ through 10 without requiring explicit drag timesteps.
 
-## Vertically integrated viscous flow
+### Vertically integrated viscous flow
 
 `test_viscflow_1d` calls the production particle initializer at eight radii with constant kinematic
 viscosity. For the test parameters $p=2$, $q=-1$, and $\nu=0.02$, pressure support vanishes and the
@@ -470,7 +546,7 @@ $2\times10^{-13}$ and requires the inactive $x$, $z$, and $\ell_\theta$ fields t
 checks the radial `VISC_FLOW` closure and its use by production initialization; it does not yet
 measure a long-time viscous mass flux.
 
-## Imported radial gas scaling
+### Imported radial gas scaling
 
 `test_import_1d` stores a prescribed surface-density sequence
 
@@ -497,7 +573,7 @@ The case passes only when every GPU Stokes and inverse-Reynolds value agrees wit
 references to absolute error below $2\times10^{-13}$. It specifically detects treating imported
 $\Sigma_g$ as a volume density or retaining the analytical gas profile inside collision turbulence
 
-## Cylindrical stochastic diffusion
+### Cylindrical stochastic diffusion
 
 The diffusion tests use constant
 
@@ -524,7 +600,7 @@ kernel reconstructs the Cartesian velocity before displacement and projects that
 back into the new local spherical basis afterward. Both cases therefore require the reconstructed
 physical velocity to agree with the initial Cartesian vector to $2\times10^{-12}$.
 
-### Two-dimensional azimuthal diffusion
+#### Two-dimensional azimuthal diffusion
 
 `test_diffusion_2d` activates only $D_x$; radial diffusion is suppressed with an enormous Schmidt
 number. At $R=1$,
@@ -540,7 +616,7 @@ $$
 where $\xi\sim\mathcal N(0,1)$. Angular displacements are wrapped to $[-\pi,\pi)$ before their
 moments are measured.
 
-### One-dimensional radial diffusion
+#### One-dimensional radial diffusion
 
 `test_diffusion_1d` activates only $D_R=D$. At $R=1$, the exact one-step process is
 
@@ -557,7 +633,7 @@ spherical radius into $[Y_{\min},Y_{\max}]$. For vertically integrated models $y
 reflection does not change azimuth. The configured diffusion ensembles are far enough from the
 boundaries that reflection is not the source of their analytical moments
 
-### Three-dimensional radial and vertical diffusion
+#### Three-dimensional radial and vertical diffusion
 
 `test_diffusion_3d` suppresses azimuthal diffusion and activates $D_R=D_Z=D$. For constant
 diffusivity, cylindrical geometry supplies the Itô drift $D/R$:
@@ -594,7 +670,7 @@ $3.31\times10^{-4}$ at $N=128$, and $1.66\times10^{-4}$ at $N=256$. The $N=32$ a
 ensembles therefore check gross diffusion behavior but cannot independently resolve the Itô drift;
 the $N\ge128$ results provide that evidence.
 
-## Continuous finite-domain initialization
+### Continuous finite-domain initialization
 
 `test_initial_3d` exercises the host initialization path with `MULTISIZE` and `DIFFUSION`. It uses
 $N_Y=96$, $N_P=65\,536$, the broad size interval
@@ -657,7 +733,7 @@ accidental return of polar-cell-center quadrature to the initialization path. A 
 invocation still validates the analytical and statistical criteria but cannot establish the
 cross-`N_Z` byte comparison.
 
-## Deterministic boundary policies
+### Deterministic boundary policies
 
 The four fixed-resolution boundary models call the production `_apply_transport_boundary` and
 `_apply_diffusion_boundary` device helpers directly. No time integrator or test-local
@@ -719,7 +795,7 @@ policies, including repeated diffusion folding, but do not prove that a finite t
 stochastic step detects every continuous-time boundary crossing. That stronger claim requires
 the boundary-event convergence tests described below.
 
-## Collision helper mathematics
+### Collision helper mathematics
 
 The collision cases execute a test-local CUDA kernel that directly calls the production
 `_get_ball_measure` and `_get_col_rate_ij` device helpers. They do not build or query the KD tree.
@@ -802,7 +878,7 @@ independently evaluated CPU formulas above to the stated absolute tolerance. The
 not used as the reference, and resolution convergence is neither required nor implied because this
 is a direct device-helper test with fixed inputs.
 
-## Exact KNN and periodic-ghost tests
+## KNN implementation and periodic-ghost comparison
 
 `qav/swarm/test_knn/` is a standalone CUDA test family registered as the `knn` common-suite group.
 It compiles four drivers:
@@ -1030,7 +1106,7 @@ realization should follow the same trajectory. The retained runtime JSON files d
 earlier development implementation; regenerating them with the promoted source remains listed
 below.
 
-## Recorded native CUDA results
+## Recorded native CUDA evidence
 
 The then-current complete suite was run natively on the Vera CUDA cluster on 2026-07-31:
 
@@ -1043,6 +1119,11 @@ python3 qav/swarm/test_common/run_suite.py \
 The aggregate manifest reports `suite_passed: true`, `status: passed`, and 24/24 completed
 components. All 47 analytical builds passed, all four standalone KNN executables built, and all
 six production collision configurations linked. The run covered:
+
+That aggregate state was recorded immediately after the all-group run. In the current checkout,
+`qav/swarm/out/manifest.json` describes the later focused `initialization` invocation; the retained
+per-model and KNN component files below are therefore the durable evidence for the older all-group
+summary.
 
 | Group | Analytical builds or KNN cases | Result |
 |---|---:|---|
@@ -1174,10 +1255,14 @@ every ensemble.
 
 The archived JSON files are the authoritative records for the complete $L_1$, $L_2$,
 $L_\infty$, mass, and stochastic-moment values. The metadata and environment records document the
-compiled problem sizes and native CUDA platform, so the downloaded `qav/swarm/out/` directory now
-forms a complete machine-readable record of this verification run.
+compiled problem sizes and native CUDA platform. The component directories therefore preserve the
+machine-readable numerical evidence, while the mutable top-level manifest describes only the most
+recent suite invocation as explained above.
 
-## Running the suite
+## Running and archiving the suite
+
+The CUDA suite requires the ordinary project toolchain, Python 3.9 or newer, and NumPy. Optional
+GPU diagnostic commands are recorded when available but do not replace numerical validation.
 
 From the repository root, run a short workflow check with
 
@@ -1274,7 +1359,7 @@ The dispatcher maintains `qav/swarm/out/manifest.json` while the suite runs. It 
 expected model as pending, running, passed, failed, or interrupted and prints a final
 `SWARM TEST SUITE: PASS` only after every selected model has returned successfully.
 
-## Verification still required
+## Coverage limits and verification still required
 
 - Regenerate the four production collision-runtime comparisons with the promoted source for
   axisymmetry, partial wedges, full 3D, and $N_P=10^6$; the retained copies establish the earlier
@@ -1329,5 +1414,10 @@ tests still do not establish the statistical convergence of the complete event p
 - Ormel & Cuzzi (2007), [turbulent relative velocities](https://arxiv.org/abs/astro-ph/0702303)
 - Zsom & Dullemond (2008), [representative-particle coagulation](https://arxiv.org/abs/0807.5052)
 - Gillespie (1977), [stochastic reaction simulation](https://doi.org/10.1021/j100540a008)
+- Smoluchowski (1916), coagulation-equation moment evolution
 - Nakagawa, Sekiya & Hayashi (1986), [steady dust–gas drift](<https://doi.org/10.1016/0019-1035(86)90121-1>)
+- Kanagawa et al. (2017), [viscous disk gas flow](https://arxiv.org/abs/1706.08975)
 - Burns, Lamy & Soter (1979), [radiation pressure and P-R drag](<https://doi.org/10.1016/0019-1035(79)90050-2>)
+- Bentley (1975), [multidimensional binary search trees](https://doi.org/10.1145/361002.361007)
+- Morton (1966), [geodetic database and file sequencing](https://dominoweb.draco.res.ibm.com/0dabf9473b9c86d48525779800566a39.html)
+- Acklam (2000), *An algorithm for computing the inverse normal cumulative distribution function*
