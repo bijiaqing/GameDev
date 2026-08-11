@@ -21,7 +21,20 @@ python3 qav/swarm/test_common/run_suite.py --group all --res 32 64 128 256 --tar
 python3 qav/fluid/test_common/run_suite.py --group sweep --target gfx942
 ```
 
+The deliberate nonfinite-state branches can also be run independently:
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group failure --target gfx942
+python3 qav/swarm/test_common/run_suite.py --group failure --target gfx942
+```
+
+These tests expect the injected subprocesses to fail with the production diagnostic; a zero return,
+timeout, wrong target index, or HIP memory fault fails the test
+
 Fluid results are written below `qav/fluid/out/`; swarm and KNN results are written below `qav/swarm/out/`. Each suite records the HIP compiler, ROCm configuration, AMD device information, target architecture, numerical metrics, and an aggregate manifest
+
+Backend-comparison reports are written below `qav/out/`; all QA output directories are generated
+on demand and ignored by Git
 
 The ROCm-native checkpoint regression can be run independently with:
 

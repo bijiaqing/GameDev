@@ -1,5 +1,6 @@
 #include <chrono>           // std::chrono::system_clock
 #include <cmath>            // std::fabs, std::fmin, std::sin
+#include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
@@ -112,6 +113,9 @@ int main (int argc, char **argv)
     #ifdef COLLISION
     unsigned char *dev_col_active;
     HIP_CHECK(hipMalloc((void**)&dev_col_active, sizeof(unsigned char)*N_P));
+
+    int *dev_bad_part;
+    HIP_CHECK(hipMalloc((void**)&dev_bad_part, sizeof(int)));
 
     #ifdef COLLISION_KDTREE
     kdtree_boxf *dev_kdtree_box;
@@ -296,9 +300,18 @@ int main (int argc, char **argv)
     auto evolve_collisions = [&] (real duration)
     {
         // collisions change grain properties but not positions, so one search index serves the full interval
+        HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
         #ifdef COLLISION_KDTREE
-        col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle);
+        col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle, dev_bad_part);
         HIP_KERNEL_CHECK("col_site_init");
+        int bad_part = 0;
+        HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
+        if (bad_part != 0)
+        {
+            std::cerr << "Error: non-finite particle state before collision search at particle "
+                << bad_part - 1 << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
         kdtree::buildTree <kdtree_node, kdtree_traits> (
             dev_kdtree_node, N_T, dev_kdtree_box
         );
@@ -313,9 +326,17 @@ int main (int argc, char **argv)
         }
         #else  // COLLISION_MORTON
         col_site_init <<< NB_P, TPB >>> (
-            dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle
+            dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle, dev_bad_part
         );
         HIP_KERNEL_CHECK("col_site_init");
+        int bad_part = 0;
+        HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
+        if (bad_part != 0)
+        {
+            std::cerr << "Error: non-finite particle state before collision search at particle "
+                << bad_part - 1 << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
 
         thrust::device_ptr <const float> search_dist_ptr(dev_search_dist);
         float max_search_dist = *thrust::max_element(search_dist_ptr, search_dist_ptr + N_P);
@@ -355,6 +376,18 @@ int main (int argc, char **argv)
             );
             #endif // COLLISION_KDTREE
             HIP_KERNEL_CHECK("col_rate_calc");
+
+            HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
+            inf_rate_flag <<< NB_P, TPB >>> (dev_col_rate, dev_col_dist, dev_bad_part);
+            HIP_KERNEL_CHECK("inf_rate_flag");
+            int bad_result = 0;
+            HIP_CHECK(hipMemcpy(&bad_result, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
+            if (bad_result != 0)
+            {
+                std::cerr << "Error: non-finite collision result at particle "
+                    << bad_result - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
 
             #ifdef COLLISION_MORTON
             thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);

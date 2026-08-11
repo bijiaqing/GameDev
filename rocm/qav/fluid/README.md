@@ -24,6 +24,17 @@ python3 qav/fluid/test_common/run_suite.py --group sweep --quick --target gfx942
 python3 qav/fluid/test_common/run_suite.py --group sweep --sweep-dim all --target gfx942
 ```
 
+Run the controlled NaN/Inf rejection branch with:
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group failure --target gfx942
+```
+
+It exercises the production finite-state guard and CFL rejection path in 32 isolated subprocesses,
+including clean controls and NaN/Inf injection into density, momentum, primitive velocity, and
+optical-depth fields. Its build and case records are stored as JSON under
+`qav/fluid/out/failure/test_failure_2d/`
+
 The sweep runner prints a compact live simulation heartbeat every ten seconds while retaining the
 complete executable stream and parsed accepted-step history in each model's `run.json`; use
 `--progress-seconds N` to change the interval or `--progress-seconds 0` to suppress the heartbeat.

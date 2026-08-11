@@ -2,6 +2,12 @@
 
 This tracked top-level directory is a self-contained HIP/ROCm reproduction of the GameDev fluid and swarm models. It intentionally does not include, modify, or compile any CUDA source file, and it does not yet attempt to select CUDA and ROCm from one shared build system
 
+It may be copied by itself to a compute cluster and used as that deployment's project root. In that
+layout, run commands directly from the copied directory rather than from a nested `rocm/` path. The
+structural checker treats the root MIT license and CUDA-tree parity checks as development-repository
+metadata when the canonical parent tree is present; the bundled KD-tree Apache license remains part
+of the standalone copy
+
 The initial hardware target is AMD Instinct MI300A, whose HIP offload target is `gfx942`. Other AMDGPU targets can be selected with `AMDGPU_TARGET` or the QA runners' `--target` option
 
 ## Current implementation
@@ -94,7 +100,7 @@ AMD profiler evidence, and repeated production-scale timings remain pending. The
 tolerances, commands, and remaining procedures are maintained in
 [`../doc/future_rocm_support.md`](../doc/future_rocm_support.md).
 
-Raw RNG-state checkpoint files are backend-specific and must not be exchanged between CUDA and ROCm runs. Physical particle fields remain portable through their ordinary binary field files when scalar type, grid, and model configuration agree
+Raw RNG-state checkpoint files are backend-specific and must not be exchanged between CUDA and ROCm runs. GameDev does not support cross-backend restart, including continuation from ordinary physical field files
 
 ## Source synchronization
 
@@ -104,13 +110,14 @@ CUDA tree. Running it with its required `--force-overwrite` acknowledgement repl
 `tools/rocm_preserve.txt`. Newly introduced ROCm adaptations must be added to that manifest before
 the next refresh. The script never writes to the CUDA project
 
-See [NOTICE.md](NOTICE.md) for KD-tree and bitonic-sort attribution and
-[inc/swarm/kdtree/Apache-2.0.txt](inc/swarm/kdtree/Apache-2.0.txt) for their license
+The repository [README](../README.md#citation-and-license) records KD-tree and bitonic-sort
+attribution, and [inc/swarm/kdtree/Apache-2.0.txt](inc/swarm/kdtree/Apache-2.0.txt) retains their
+Apache License 2.0 text
 
 ## License
 
-GameDev's original code is distributed under the [MIT License](LICENSE). The modified cudaKDTree
-and cudaBitonic portions retain the Apache License 2.0 identified above
+GameDev's original code is distributed under the repository [MIT License](../LICENSE). The modified
+cudaKDTree and cudaBitonic portions retain the Apache License 2.0 identified above
 
 ## ROCm references
 

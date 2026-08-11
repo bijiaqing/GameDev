@@ -336,7 +336,7 @@ int main (int argc, char **argv)
     while (idx_from < SAVE_MAX)
     {
         // clip the global step at the next output time
-        real dt_cfl = recalc_dt_cfl(true);
+        real dt_cfl = recalc_dt_cfl(false);
         real dt = dt_cfl;
         real dt_to_out = DT_OUT - clock_out;
         bool output_due = (dt >= dt_to_out);

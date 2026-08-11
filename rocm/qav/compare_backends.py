@@ -299,7 +299,7 @@ def main() -> None:
         "--fluid-field-report", type=Path,
         help="passed raw polar-field report that supersedes derived polar error-norm comparison",
     )
-    parser.add_argument("--output", type=Path, default=script.parent/"backend_comparison.json")
+    parser.add_argument("--output", type=Path, default=script.parent/"out"/"backend_comparison.json")
     args = parser.parse_args()
 
     if args.cuda_qav is None:
@@ -317,7 +317,7 @@ def main() -> None:
 
     fluid_field_report = args.fluid_field_report
     if fluid_field_report is None:
-        default_field_report = args.rocm_qav/"backend_field_comparison_z.json"
+        default_field_report = args.rocm_qav/"out"/"backend_field_comparison_z.json"
         if default_field_report.is_file():
             fluid_field_report = default_field_report
 

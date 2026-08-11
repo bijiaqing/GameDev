@@ -28,7 +28,7 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
-        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep"),
+        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep", "failure"),
         default="all",
     )
     parser.add_argument("--sweep-dim", choices=("all", "2d", "3d"), default="all")
@@ -68,6 +68,17 @@ def main() -> None:
         if args.quick:
             command.append("--quick")
         subprocess.run(command, check=True, env=run_environment)
+        return
+
+    if args.group == "failure":
+        subprocess.run(
+            [
+                sys.executable, str(model_root/"test_failure_2d"/"run.py"),
+                "--target", args.target,
+            ],
+            check=True,
+            env=run_environment,
+        )
         return
 
     # Each entry contains the model directory name and model-specific command
@@ -132,6 +143,17 @@ def main() -> None:
         # check=True stops the suite immediately if compilation, execution, or
         # validation of any case fails, so later output cannot hide that failure.
         subprocess.run(command, check=True, env=run_environment)
+
+    if args.group == "all":
+        print("\n=== test_failure_2d ===", flush=True)
+        subprocess.run(
+            [
+                sys.executable, str(model_root/"test_failure_2d"/"run.py"),
+                "--target", args.target,
+            ],
+            check=True,
+            env=run_environment,
+        )
 
 
 if __name__ == "__main__":

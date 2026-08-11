@@ -15,10 +15,26 @@
 #ifdef COLLISION_KDTREE
 __global__
 void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
-    const swarm *dev_particle)
+    const swarm *dev_particle, int *dev_bad_part)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
+
+    bool finite = isfinite(dev_particle[idx].position.x)
+        && isfinite(dev_particle[idx].position.y)
+        && isfinite(dev_particle[idx].position.z)
+        && isfinite(dev_particle[idx].velocity.x)
+        && isfinite(dev_particle[idx].velocity.y)
+        && isfinite(dev_particle[idx].velocity.z);
+    #ifdef MULTISIZE
+    finite = finite && isfinite(dev_particle[idx].par_size) && isfinite(dev_particle[idx].par_numr);
+    #endif // MULTISIZE
+    if (!finite)
+    {
+        dev_col_active[idx] = 0;
+        atomicCAS(dev_bad_part, 0, idx + 1);
+        return;
+    }
 
     real x = dev_particle[idx].position.x;
     real y = dev_particle[idx].position.y;
@@ -61,10 +77,26 @@ void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
 #else  // COLLISION_MORTON
 __global__
 void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
-    unsigned char *dev_col_active, const swarm *dev_particle)
+    unsigned char *dev_col_active, const swarm *dev_particle, int *dev_bad_part)
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     if (idx >= N_P) return;
+
+    bool finite = isfinite(dev_particle[idx].position.x)
+        && isfinite(dev_particle[idx].position.y)
+        && isfinite(dev_particle[idx].position.z)
+        && isfinite(dev_particle[idx].velocity.x)
+        && isfinite(dev_particle[idx].velocity.y)
+        && isfinite(dev_particle[idx].velocity.z);
+    #ifdef MULTISIZE
+    finite = finite && isfinite(dev_particle[idx].par_size) && isfinite(dev_particle[idx].par_numr);
+    #endif // MULTISIZE
+    if (!finite)
+    {
+        dev_col_active[idx] = 0;
+        atomicCAS(dev_bad_part, 0, idx + 1);
+        return;
+    }
 
     real x = dev_particle[idx].position.x;
     real y = dev_particle[idx].position.y;

@@ -23,6 +23,7 @@ GROUPS = {
     "boundary": ["test_boundary_1d", "test_boundary_2d", "test_boundary_3d", "test_boundary_half"],
     "collision": ["test_collision_1d", "test_import_1d", "test_collision_2d", "test_collision_3d"],
     "knn": ["test_knn"],
+    "failure": ["test_failure_knn"],
 }
 
 RADIAL_MODELS = [
@@ -59,6 +60,7 @@ FIXED_RESOLUTION = {
     "test_boundary_half",
     "test_restart_2d",
     "test_knn",
+    "test_failure_knn",
 }
 
 
@@ -158,8 +160,9 @@ def main() -> None:
         "models_completed": 0,
         "analytical_builds_expected": sum(
             len(entry["resolutions"]) for entry in entries
-            if entry["model"] != "test_knn"
+            if entry["model"] not in {"test_knn", "test_failure_knn"}
         ),
+        "failure_backend_builds_expected": 2 if "test_failure_knn" in models else 0,
         "knn_standalone_builds_expected": (
             2 if args.group == "radial" else 4
         ) if "test_knn" in models else 0,

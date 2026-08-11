@@ -192,7 +192,7 @@ def main() -> None:
     parser.add_argument("--linf-tolerance", type=float, default=1.0e-5)
     parser.add_argument("--absolute-tolerance", type=float, default=1.0e-10)
     parser.add_argument("--velocity-weighted-tolerance", type=float, default=1.0e-5)
-    parser.add_argument("--output", type=Path, default=Path("qav/backend_field_comparison.json"))
+    parser.add_argument("--output", type=Path, default=Path("qav/out/backend_field_comparison.json"))
     args = parser.parse_args()
 
     cuda_model = args.cuda_qav/"fluid"/"out"/args.cuda_sweep/args.model

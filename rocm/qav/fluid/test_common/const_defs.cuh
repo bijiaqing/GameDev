@@ -56,6 +56,10 @@ constexpr int N_Z = VERIFY_RES;
 constexpr int N_X = 8;
 constexpr int N_Y = 1;
 constexpr int N_Z = 1;
+#elif defined(VERIFY_FAILURE)
+constexpr int N_X = 4;
+constexpr int N_Y = 3;
+constexpr int N_Z = 1;
 #elif defined(VERIFY_RING)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = VERIFY_RES;

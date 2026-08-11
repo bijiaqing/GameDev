@@ -343,3 +343,17 @@ No runnable model in this document claims full coupled 3D verification. The requ
 forcing and exact boundary implementation are specified in `test_mms_3d/README.md`. Until that
 harness exists, the spherical Y and polar Z cases verify their production directional operators,
 not their complete source/diffusion/radiation coupling.
+
+## `test_failure_2d`
+
+Purpose: verify controlled rejection of nonfinite fluid state on the native ROCm backend.
+
+Two clean controls must return zero. Separate subprocesses inject `NaN` and positive infinity into
+density, the three conserved momentum components, the three primitive fields, and optical depth.
+The state branch invokes the production `inf_cell_flag`; the CFL branch invokes production
+`cfl_rate_calc` and `get_dt_cfl` and requires the entire affected azimuthal ring to receive infinite
+CFL rate.
+
+Expected: all 30 injected cases return nonzero, identify the intended cell or affected ring, finish
+within 30 seconds, and contain no HIP illegal-access diagnostic. All case streams and decisions are
+stored in `out/failure/test_failure_2d/manifest.json`.

@@ -27,9 +27,21 @@ Run the full default matrix with:
 python3 qav/swarm/test_common/run_suite.py --group all --res 32 64 128 256 --target gfx942
 ```
 
-Available groups are `radial`, `grid`, `transport`, `diffusion`, `initialization`, `restart`, `radiation`, `boundary`, `collision`, and `knn`. Use `--build-only` to check all
+Available groups are `radial`, `grid`, `transport`, `diffusion`, `initialization`, `restart`, `radiation`, `boundary`, `collision`, `knn`, and `failure`. Use `--build-only` to check all
 HIP/ROCm configurations without executing them. All analytical and KNN outputs are written under
 `qav/swarm/out/`, with KNN records collected in `qav/swarm/out/test_knn/`.
+
+Run the controlled collision-search failure branch independently with:
+
+```bash
+python3 qav/swarm/test_common/run_suite.py --group failure --target gfx942
+```
+
+It builds both KD-tree and Morton variants, requires clean inputs to reach the corresponding index
+builder, and then runs 44 isolated NaN/Inf probes over particle state, collision rate, and KNN radius.
+The production collision path rejects bad particle state before index construction and rejects bad
+collision outputs before event sampling. The complete subprocess streams and decisions are stored in
+`qav/swarm/out/test_failure_knn/manifest.json`
 
 All active runners write compiler and GPU metadata as `environment.json`. Analytical HIP/ROCm drivers
 also write `meta_N*.json`, raw binary `*.dat` fields, and validator-generated
@@ -48,8 +60,9 @@ python3 qav/swarm/test_common/run_suite.py --group all --res 32 64 128 256 --reb
 The current analytical matrix performs 52 builds: four resolutions for the nine grid, orbit, diffusion, and initialization refinement cases,
 plus one build for each of the sixteen resolution-independent algebra, boundary, and restart cases. The KNN group adds four standalone HIP/ROCm drivers,
 links production collision sources in 1D, 2D, and 3D with both backends, and runs the
-$10^5$-particle ordinary, wedge, and narrow-wedge matrices.
-`--quick` reduces the analytical part to 34 builds; `--knn-full` adds the million- and ten-million-particle KNN matrices.
+$10^5$-particle ordinary, wedge, and narrow-wedge matrices. The failure group adds two backend
+builds. `--quick` reduces the analytical part to 34 builds; `--knn-full` adds the million- and
+ten-million-particle KNN matrices.
 
 See `doc/testset_swarm.md` for the complete setups, analytical solutions, pass criteria, and
 remaining coverage; `test_common/TEST_CASES.md` is the compact implementation index.

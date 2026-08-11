@@ -33,6 +33,7 @@ beside the implementation.
 | `test_boundary_3d` | full-disk 3D endpoint boundary helpers | exact azimuthal wrapping and radial/polar absorption or reflection |
 | `test_boundary_half` | half-disk 3D endpoint boundary helpers | exact lower-polar absorption and reflecting upper midplane |
 | `test_knn` | KD-tree and adaptive-Morton exact KNN search, radial-line embedding, block-parallel sorted Morton top-$K$, periodic-image correctness, and compact production boundary ghosts | independent brute-force neighbor identities, adversarial boundary cases, overflow checks, and production-relevant timing/memory records |
+| `test_failure_knn` | production collision-site finite-state guard and collision-result validator with both KD-tree and Morton builds | clean controls reach each index builder; 40 NaN/Inf cases return nonzero at the injected particle without a HIP memory fault |
 
 The default KNN run uses $N_P=10^5$. Passing `--knn-full` to the common suite extends both the
 ordinary and wedge matrices to $N_P=10^6$ and $10^7$. The focused radial run passed its

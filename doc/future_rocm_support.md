@@ -42,8 +42,9 @@ all of order $10^{-12}$. The swarm branch produced all 51 CUDA-comparable analyt
 every one of its 24 analytical component manifests reports `passed: true`. The subsequently
 archived native restart regression adds one model and one record. Together with the KNN component,
 the rebuilt ROCm aggregate reports 26 of 26 models and 52 analytical builds passed. This closes the
-implemented native ROCm numerical matrices at that archive revision. Deliberate nonfinite-state
-injection, AMD profiling, and production-scale performance characterization remain pending.
+implemented native ROCm numerical matrices at that archive revision. The subsequently executed
+nonfinite-state injection branch also passed natively on gfx942; AMD profiling and production-scale
+performance characterization remain pending.
 
 The first $N=256$ 3D swarm grid run then exposed a latent endpoint-stencil safety defect shared by
 the CUDA and HIP sources. An exact final radial or polar cell-centre coordinate could select a
@@ -223,11 +224,13 @@ vendor RNG structures are not cross-platform data formats. Consequently,
 - CUDA and ROCm stochastic trajectories need not be bitwise identical
 - CUDA `rngstate_*.dat` files must not be loaded by the HIP build, or vice versa
 - restart must be tested independently within each backend
-- physical particle fields remain portable when scalar type, model configuration, and field format
-  agree
+- a simulation started with one backend must be resumed only with that same backend
 
-A backend-neutral counter-based RNG checkpoint remains a possible future improvement, not a
-prerequisite for native ROCm validation.
+GameDev will not implement cross-backend restart. Even where density, position, or velocity files
+have an identical scalar layout, they are not accepted as a checkpoint for the other backend. Such
+files may still be read by external analysis software, but the simulation runtime must not use them
+to continue an evolution. A backend-neutral random-number checkpoint is therefore unnecessary for
+the planned production interface.
 
 The test-local `test_restart_2d` regression now exercises the production checkpoint functions. It
 evolves one reference state through two diffusion steps and a second state through one step,
@@ -332,7 +335,7 @@ sensitive reduction against the analytical solution; the direct solution compari
 that they are far below the discretization error. Together with the complete swarm and KNN results,
 this closes the current CUDA-versus-ROCm scientific comparison.
 
-When `qav/backend_field_comparison_z.json` is present and passed,
+When `qav/out/backend_field_comparison_z.json` is present and passed,
 `qav/compare_backends.py` uses that raw-field result for the eight polar records while continuing
 to require exact agreement of their case, resolution, final time, accepted-step count, and CFL
 metadata. The other 77 fluid records retain the ordinary strict recursive metric comparison. This
@@ -352,10 +355,10 @@ checker rejects missing and duplicate entries. Synchronization never writes to t
 
 ### Licensing
 
-The isolated port contains GameDev's MIT license. The HIP KD-tree directory also contains the full
-Apache License 2.0 text; `NOTICE.md` identifies cudaKDTree and cudaBitonic, and modified upstream
-headers carry file-level modification notices. The static checker verifies that both license files
-are byte-identical to their canonical copies in the CUDA repository.
+The repository MIT license covers GameDev's HIP implementation. The HIP KD-tree directory retains
+the full Apache License 2.0 text, the root README identifies cudaKDTree and cudaBitonic, and modified
+upstream headers carry file-level modification notices. The static checker verifies that the
+third-party license is byte-identical to its canonical copy in the CUDA implementation.
 
 ## Static verification completed
 
@@ -411,11 +414,11 @@ The first native campaign must establish all of the following:
 8. checkpoint/restart succeeds within the HIP backend
 9. compiler, driver, target, device, resource, timing, and test manifests are archived
 
-Items 1, 4, 6, 7, 8, and 9 are now established by the complete analytical, restart, KNN, and
+Items 1, 2, 4, 5, 6, 7, 8, and 9 are now established by the complete analytical, restart, KNN, and
 direct cross-backend fluid campaigns, including six production-backend links. The matched
 $512^2$ and $128^3$ fluid sweeps
 also establish the current thread/block equivalence evidence. The remaining requirements concern
-deliberate failure-path tests, larger-LDS launch coverage, and profiling.
+larger-LDS launch coverage and profiling.
 
 After the smoke tests pass, run the full matrices:
 
@@ -433,39 +436,29 @@ three activities must remain separate because they use different acceptance crit
 failure must terminate cleanly, a launch test must exercise a particular hardware resource boundary,
 and a benchmark must measure an uninstrumented workload repeatedly.
 
-The `failure`, `lds`, and `qav/perf` command interfaces described below are planned interfaces. They
-are not part of the current QA dispatcher and must not be presented as runnable commands until the
-corresponding models and runners have been added.
+The `failure` interface described below is implemented in the tracked ROCm QA dispatcher. The `lds`
+and `qav/perf` command interfaces remain planned and must not be presented as runnable commands until
+their models and runners have been added.
 
 ### Deliberate nonfinite-state injection
 
-The fluid test should exercise the production guard rather than merely asking Python whether a
-saved array is finite. The least intrusive end-to-end route is to generate a valid frame-zero
-checkpoint, copy it, replace exactly one stored double with a nonfinite value, and resume the
-production executable from that frame. Separate subprocesses should inject `NaN` and positive
-infinity into each of
+The fluid failure driver exercises the production guard rather than merely asking Python whether a
+saved array is finite. It initializes a valid test-local device state, replaces exactly one value,
+and invokes the same production `inf_cell_flag`, `cfl_rate_calc`, and `get_dt_cfl` paths used by the
+runtime. Separate subprocesses inject `NaN` and positive infinity into density, all three conserved
+momentum components, all three primitive variables, and radiation-enabled optical depth.
 
-- `dustdens`
-- `dustvelx`
-- `dustvely`
-- `dustvelz`
-
-The resumed process must return nonzero, print
+Each state-guard subprocess must return nonzero, print
 
 ```text
 Error: non-finite simulation state at cell (ix,iy,iz)
 ```
 
 and identify the deliberately corrupted cell. A HIP illegal-memory-access message, a hang, a
-nominally successful resume, or a reported cell different from the injected cell is a failure. The
-runner must restore the clean checkpoint after every subprocess and record the field, injected
-value, cell index, return code, matched diagnostic, and captured stream in JSON.
-
-Checkpoint corruption directly covers density and the three stored physical velocities. A small
-test-only injection kernel should additionally set one conserved momentum component or optical
-depth value after initialization and immediately invoke the same production `inf_cell_flag`
-call path. Only one cell should be corrupted per subprocess because the guard deliberately uses an
-atomic first-writer record. A radiation-enabled case is required for optical depth.
+nominally successful return, or a reported cell different from the injected cell is a failure. Only
+one cell is corrupted per subprocess because the guard deliberately uses an atomic first-writer
+record. The runner records the field, injected value, cell index, return code, matched diagnostic,
+and captured stream in JSON.
 
 The CFL rejection path needs its own case. After injecting a nonfinite primitive or momentum, the
 test should run `cfl_rate_calc` and `get_dt_cfl` and verify that the affected ring receives an
@@ -475,13 +468,15 @@ $$
 \operatorname{CFLrate}_{\rm bad}=\infty.
 $$
 
-Both collision-search backends also require deliberate invalid-input tests. One particle coordinate
-should be replaced by `NaN` and, in a separate run, by infinity. A third case should deliberately
-place a nonfinite distance in a test result before validation. KD-tree and Morton must reject the
-state deterministically before the neighbor list is scientifically consumed; silently dropping the
-particle or returning an apparently valid list is not acceptable.
+The swarm failure driver builds both collision-search backends. Clean controls must pass through the
+selected KD-tree or Morton builder. Separate subprocesses then inject `NaN` and infinity into each
+particle position, velocity, size, and represented-number field. The production `col_site_init`
+records the first bad particle and the host aborts before index construction. Additional probes place
+nonfinite values in collision rate and KNN radius arrays and invoke the production `inf_rate_flag`;
+the collision runtime applies this check before event sampling. Silently dropping the particle or
+returning an apparently valid list is therefore a failure.
 
-The planned interfaces are
+The implemented interfaces are
 
 ```bash
 python3 qav/fluid/test_common/run_suite.py --group failure --target gfx942
@@ -500,6 +495,13 @@ the subprocess terminates within its timeout
 
 Correctness builds must continue to omit blanket `-ffast-math`, because finite-only compiler
 assumptions can invalidate the very checks exercised by this branch.
+
+The native gfx942 campaign on 2026-08-11 passed all 32 fluid cases and all 44 swarm cases. The fluid
+set comprised two clean controls and 30 expected failures; the swarm set comprised two clean
+controls plus 20 expected failures for each of KD-tree and Morton. Every injected case returned one,
+reported the intended cell or particle, terminated within its timeout, and contained no HIP runtime
+fault. The downloaded manifests independently confirm zero timeouts and complete per-case pass
+status.
 
 ### Large-LDS launch coverage
 
@@ -724,22 +726,185 @@ No performance claim should be made from peak FLOP or bandwidth specifications a
 comparison requires matched grids, particle counts, physics flags, output cadence, accepted steps,
 and completed simulated time.
 
-## Promotion into the production build
+## Integration into one production tree
 
-The current ROCm reproduction is tracked in the repository but intentionally retains its own build
-root. A later integration may introduce backend selection in one Make interface, but it must not
-merge fluid and swarm source ownership or make the CUDA reference depend on HIP headers. Promotion
-requires:
+The final project should select CUDA or ROCm as one build-time GPU backend rather than maintain two
+complete copies of GameDev. Fluid and swarm remain independent physical representations; merging
+the GPU backends must not reintroduce shared fluid-swarm source ownership. The integration instead
+removes duplication between the CUDA and HIP implementations of the same fluid file or the same
+swarm file.
 
-- complete native ROCm test evidence
-- a maintained CUDA-versus-ROCm regression policy
-- documented backend-specific checkpoint restrictions
-- stable compiler and target requirements
-- performance evidence for the intended production configurations
-- a synchronization or generation strategy that cannot silently overwrite hand-maintained code
+### Proposed repository structure
 
-Until those conditions are met, CUDA remains the production reference and the HIP tree remains an
-experimental, independently testable reproduction.
+The target structure is
+
+```text
+.
+├── Makefile
+├── inc/
+│   ├── fluid/
+│   │   ├── *.cuh                 # backend-neutral fluid equations and algorithms
+│   │   ├── cuda/                 # CUDA-only fluid adapters when unavoidable
+│   │   └── rocm/                 # ROCm-only fluid adapters when unavoidable
+│   └── swarm/
+│       ├── *.cuh                 # backend-neutral swarm equations and algorithms
+│       ├── cuda/                 # CUDA-only swarm, RNG, and library adapters
+│       └── rocm/                 # ROCm-only swarm, RNG, and library adapters
+├── src/
+│   ├── fluid/
+│   │   ├── shared numerical translation units
+│   │   ├── cuda/                 # irreducibly CUDA-specific implementations
+│   │   └── rocm/                 # irreducibly ROCm-specific implementations
+│   └── swarm/
+│       ├── shared numerical translation units
+│       ├── cuda/
+│       └── rocm/
+├── mod/                          # one model configuration tree
+├── qav/                          # one analytical and regression test tree
+├── obj/<model>/<repr>/<backend>/ # generated backend-separated objects
+├── bin/<model>/<backend>/gamedev # generated backend-separated executables
+└── out/<model>/<backend>/        # generated backend-separated simulation state
+```
+
+Here, `shared numerical translation units` means source shared only between CUDA and ROCm for one
+representation. It does not mean sharing source between the fluid and swarm models. A numerical
+kernel should have one implementation when both compilers accept the same code and produce the
+validated behavior. A backend-specific copy should remain only when compiler syntax, runtime
+semantics, random-state types, device-library interfaces, or performance-critical implementations
+genuinely differ.
+
+The present `rocm/inc`, `rocm/src`, `rocm/mod`, and `rocm/qav` copies are temporary migration
+inputs. Once every required HIP difference has a home in the merged structure, the duplicated
+model and QA trees, synchronization script, preservation manifest, and standalone ROCm Makefile can
+be removed.
+
+### Backend selection
+
+The merged Makefile should expose exactly one variable:
+
+```make
+GPU_BACKEND := cuda
+```
+
+or
+
+```make
+GPU_BACKEND := rocm
+```
+
+For production models, `mod/<model>/flags.mk` should define this value explicitly. The ordinary
+build command then remains concise:
+
+```bash
+make MODEL=my_model
+```
+
+During initial model setup and QA, the backend may instead be selected explicitly on the command
+line:
+
+```bash
+make MODEL=my_model GPU_BACKEND=cuda CUDA_ARCH=sm_80
+make MODEL=my_model GPU_BACKEND=rocm AMDGPU_TARGET=gfx942
+```
+
+`GPU_BACKEND` must contain exactly one word and must be either `cuda` or `rocm`; there is no `auto`,
+`both`, or runtime-switching mode. A production model should not silently default to whichever
+compiler happens to be installed. The Makefile should fail before compilation when the selection is
+missing or invalid.
+
+The selection controls all backend-dependent build inputs:
+
+| Build property | `GPU_BACKEND=cuda` | `GPU_BACKEND=rocm` |
+|---|---|---|
+| compiler | `nvcc` | `hipcc` |
+| architecture | `CUDA_ARCH`, for example `sm_80` | `AMDGPU_TARGET`, for example `gfx942` |
+| runtime API | CUDA Runtime | HIP Runtime |
+| random-number API | cuRAND | hipRAND |
+| device primitives | CUB and Thrust | hipCUB and rocThrust |
+| source suffix or language mode | CUDA translation unit | HIP translation unit or `-x hip` |
+| predefined backend macro | `GAMEDEV_CUDA` | `GAMEDEV_ROCM` |
+
+Exactly one of `GAMEDEV_CUDA` and `GAMEDEV_ROCM` must be defined. Backend adapter headers should
+check this invariant at preprocessing time. CUDA builds must not include HIP headers, and ROCm
+builds must not include CUDA headers. The selected object directory, executable, output directory,
+dependency files, and QA archive must all include the backend name so changing the selection cannot
+reuse incompatible artifacts.
+
+### Model and checkpoint backend lock
+
+Backend selection is permanent for one simulation history. GameDev will neither support nor test
+
+```text
+CUDA checkpoint -> ROCm continuation
+ROCm checkpoint -> CUDA continuation
+```
+
+Every output series should contain a small JSON run manifest with at least
+
+```json
+{
+  "gpu_backend": "rocm",
+  "compiler": "hipcc",
+  "gpu_target": "gfx942",
+  "model": "my_model",
+  "dust_representation": "swarm"
+}
+```
+
+The restart configuration signature should also contain `gpu_backend=cuda` or
+`gpu_backend=rocm`. Before reading any density, momentum, particle, or RNG checkpoint array, the
+runtime must compare the stored backend with the compiled backend and terminate on disagreement.
+This is a policy check rather than an attempt to determine whether individual arrays happen to be
+binary-compatible.
+
+No cross-backend conversion utility, automatic fallback, or partial checkpoint import should be
+provided. To move a scientific setup to another platform, the user must start a new simulation from
+the model's initial conditions. CUDA and ROCm runs may still be compared as independently initialized
+verification or scientific experiments; that comparison does not make their checkpoint histories
+interchangeable.
+
+### One QA interface
+
+The final `qav/` tree should contain one definition of every analytical or statistical test. The
+same `GPU_BACKEND` selection should choose the compiler and runtime used by the test:
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group all --backend cuda
+python3 qav/fluid/test_common/run_suite.py --group all --backend rocm
+
+python3 qav/swarm/test_common/run_suite.py --group all --backend cuda
+python3 qav/swarm/test_common/run_suite.py --group all --backend rocm
+```
+
+The runners should translate `--backend` into `GPU_BACKEND` and store results below distinct
+`qav/*/out/<backend>/` roots. A model-local test definition, analytical validator, tolerance, and
+result schema must not be copied merely to support another backend. Backend-specific test source is
+permitted only for API behavior that has no common interface, such as raw vendor RNG-state restart.
+
+Cross-backend archive comparison may remain as a development qualification tool, but it is not a
+simulation mode and is not required for ordinary production runs. Each backend must first pass its
+own analytical, conservation, statistical, boundary, restart, and KNN gates.
+
+### Integration sequence
+
+The lowest-risk order is
+
+1. add `GPU_BACKEND` validation and backend-separated object, executable, output, and QA paths
+2. make the root Makefile reproduce the present CUDA build without changing numerical source
+3. add HIP compiler and library selection while still compiling the existing ROCm source copies
+4. move backend adapters into the corresponding `inc/fluid`, `inc/swarm`, `src/fluid`, and
+   `src/swarm` subdirectories
+5. consolidate source files only after CUDA and ROCm versions are shown to be mathematically and
+   operationally equivalent
+6. make the single root QA tree run both selections and rerun all native backend suites
+7. add and test the backend field in run manifests and restart signatures
+8. remove the duplicated `rocm/mod`, `rocm/qav`, synchronization machinery, and standalone build
+9. remove the remaining top-level `rocm/` staging tree only after no build or document references it
+
+Promotion still requires stable compiler and target requirements, native large-LDS qualification,
+production performance evidence, and a complete same-backend restart regression for
+both CUDA and ROCm. Until the integration sequence is complete, CUDA remains the production
+reference and the HIP tree remains an independently testable implementation.
 
 ## References
 
