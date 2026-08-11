@@ -1068,9 +1068,9 @@ algebraically a periodic integer translation followed by conservative residual t
 
 The allowed endpoint `CFL_DYN = 0.5` can make $c_i=1$ exactly when the half-cell frame offset and
 the bounded residual displacement align. This remains within the PPM tracing domain, but it leaves
-no roundoff margin at the one-cell limit. Choosing a smaller value such as 0.45 is an optional
-production safety margin, not a correction to the method or a requirement for the documented
-verification results.
+no roundoff margin at the one-cell limit. The production default is therefore `CFL_DYN = 0.45`;
+this safety margin is not a correction to the method or a requirement for the documented
+verification results at CFL 0.5.
 
 ### 5.3 Radial and polar integration and boundaries
 

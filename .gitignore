@@ -1,3 +1,6 @@
+# OS generated files
+.DS_Store
+
 # executable files
 gamedev
 
@@ -23,4 +26,3 @@ lab/*
 
 # Python cache files
 __pycache__/
-*.pyc

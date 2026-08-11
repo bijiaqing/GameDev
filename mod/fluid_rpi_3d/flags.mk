@@ -1,0 +1,7 @@
+
+DUST_REPR := fluid
+FLUID_SWEEP := thread
+
+NVCC += -DRADIATION
+NVCC += -DDIFFUSION
+NVCC += -DHALF_DISK

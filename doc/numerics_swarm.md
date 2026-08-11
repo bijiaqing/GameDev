@@ -1283,7 +1283,8 @@ the midpoint and approximating the nonlinear force by the midpoint angular state
 The runtime timestep is the inverse of the maximum active rate, capped by `DT_MAX`. The rate
 calculation bounds orbital motion, azimuthal/radial/polar cell crossing, net-force displacement,
 diffusion RMS displacement, deterministic diffusion drift, and radiation acceleration for the
-smallest allowed grain where applicable.
+smallest allowed grain where applicable. The production default `CFL_DYN = 0.45` keeps these
+displacement bounds below their limiting value with a modest numerical safety margin.
 
 The radial-only model retains the orbital rate because centrifugal and epicyclic dynamics remain
 active. It also limits radial particle and gas-target crossing, force-driven displacement,

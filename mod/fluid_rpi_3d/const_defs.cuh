@@ -15,16 +15,16 @@ const real  R_0         = 1.0;
 // =========================================================================================================================
 // mesh domain size and resolution
 
-constexpr int  N_X      = 1024;
+constexpr int  N_X      = 512;
 constexpr real X_MIN    = 0.0;
 constexpr real X_MAX    = 2.0*M_PI;
 
-constexpr int  N_Y      = 1024;
+constexpr int  N_Y      = 256;
 constexpr real Y_MIN    = 0.5;
 constexpr real Y_MAX    = 2.5;
 
-constexpr int  N_Z      = 1;
-constexpr real Z_MIN    = 0.5*M_PI;
+constexpr int  N_Z      = 64;
+constexpr real Z_MIN    = 0.5*M_PI - 0.1488899476095;
 constexpr real Z_MAX    = 0.5*M_PI;
 
 // =========================================================================================================================
@@ -37,7 +37,7 @@ const real  IDX_Q       = -0.4;         // radial power-law index of the gas tem
 
 #ifdef DIFFUSION
 #ifndef CONST_NU  // CONST_ALPHA
-const real  ALPHA       = 1.0e-03;
+const real  ALPHA       = 1.0e-04;
 #else             // CONST_NU
 const real  NU          = 1.0e-05;
 #endif // CONST_NU
@@ -47,7 +47,7 @@ const real  NU          = 1.0e-05;
 // dust parameters
 
 const real  METAL_Z     = 1.0e-02;      // dust-to-gas surface-density ratio for initialization
-const real  STOKES_0    = 1.0e-03;
+const real  STOKES_0    = 1.0e-04;
 
 #ifdef RADIATION
 const real  BETA_0      = 1.0e+01;      // radiation-pressure-to-gravity ratio
@@ -65,7 +65,7 @@ const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity
 // =========================================================================================================================
 // time step and output
 
-const int  SAVE_MAX     = 100;
+const int  SAVE_MAX     = 0;
 const real DT_OUT       = 2.0*M_PI;     // output interval
 const real DT_MAX       = 1.0e-01;
 
