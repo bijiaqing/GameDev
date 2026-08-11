@@ -1,8 +1,8 @@
-# Future AMD GPU and ROCm support
+# AMD GPU and ROCm support
 
 ## Status
 
-An isolated HIP/ROCm reproduction of GameDev now exists under `lab/codex/rocm`. It contains all
+The tracked HIP/ROCm reproduction of GameDev now exists under `rocm/`. It contains all
 22 fluid and 21 swarm production translation units, both fluid sweep implementations, both swarm
 collision-search backends, production model configurations, and local copies of the fluid and swarm
 verification suites. The CUDA source remains authoritative and was not modified to create the port.
@@ -43,8 +43,7 @@ every one of its 24 analytical component manifests reports `passed: true`. The s
 archived native restart regression adds one model and one record. Together with the KNN component,
 the rebuilt ROCm aggregate reports 26 of 26 models and 52 analytical builds passed. This closes the
 implemented native ROCm numerical matrices at that archive revision. Deliberate nonfinite-state
-injection, AMD profiling, production-scale performance characterization, and the complete
-CUDA-versus-ROCm archive gate remain pending.
+injection, AMD profiling, and production-scale performance characterization remain pending.
 
 The first $N=256$ 3D swarm grid run then exposed a latent endpoint-stencil safety defect shared by
 the CUDA and HIP sources. An exact final radial or polar cell-centre coordinate could select a
@@ -251,7 +250,7 @@ own analytical mean and variance bounds with matching case and resolution metada
 requires both native suites to pass and their ordinary, edge, periodic, wedge, and production-link
 coverage counts to agree. Performance timings are intentionally excluded from correctness.
 
-Run the comparison from `lab/codex/rocm` after both archives have been copied into their respective
+Run the comparison from `rocm/` after both archives have been copied into their respective
 `qav/*/out/` trees:
 
 ```bash
@@ -261,11 +260,84 @@ python3 qav/compare_backends.py --component all
 For a relocated ROCm tree, pass the CUDA archive explicitly with
 `--cuda-qav /path/to/cuda-project/qav`; `CUDA_QAV` provides the equivalent environment override.
 
-The current local archives already pass all 51 shared swarm analytical comparisons with zero
-metric mismatches. The complete cross-backend gate is not yet closed locally because the CUDA
-fluid archive is absent and the archived CUDA KNN manifest has ten periodic cases while the current
-ROCm manifest has fourteen; the CUDA fluid and current KNN suites must be archived before the full
-comparison can pass.
+The 2026-08-11 comparison has complete coverage: all 51 shared swarm records and the KNN component
+pass, while 79 of the 85 fluid records satisfy the original strict comparison of derived analytical
+metrics. All 77 reported values outside those metric tolerances were confined to six of the eight
+`test_z_transport_3d` records. Both backends used identical accepted-step counts and recovered
+effectively identical density convergence orders. The large apparent differences occurred in
+velocity norms at the compact profile's numerical-vacuum edge, where the old validator selected
+cells from analytical density alone even when the numerical state used a vacuum fallback velocity.
+Requiring both analytical and numerical density reduced the metric mismatches from 77 to 50 and
+the velocity subset from 34 to seven.
+
+Both validators now require analytical and numerical density to exceed $10^{-12}$ of the exact
+peak before including a cell in velocity norms. CUDA also supports an isolated
+`--math-mode precise` QA archive. Rerun only the eight polar records and compare them against the
+complete ROCm archive with:
+
+```bash
+python3 qav/fluid/test_z_transport_3d/run.py \
+    --math-mode precise --cfl 0.05 --res 32 64 128 256
+python3 qav/fluid/test_z_transport_3d/run.py \
+    --math-mode precise --cfl 0.5 --res 32 64 128 256
+
+python3 qav/compare_backends.py \
+    --component fluid \
+    --cuda-qav /path/to/cuda/qav \
+    --rocm-qav /path/to/rocm/qav \
+    --cuda-sweep thread_precise \
+    --rocm-sweep thread \
+    --allow-partial
+```
+
+The partial mode explicitly requires every CUDA record present to have a ROCm counterpart while
+allowing the ROCm side to retain its additional full-matrix records. It is not a substitute for
+the ordinary complete-archive gate.
+
+For a direct solution comparison, `qav/compare_fluid_fields.py` reads the matched raw arrays before
+analytical norm reduction. Initial density must be byte-identical. Final density and conserved
+momenta must satisfy relative $L_2$ and $L_\infty$ differences no larger than $10^{-5}$, with an
+absolute $10^{-10}$ fallback for a vanishing field. Physical velocities retain unweighted relative
+and maximum differences as diagnostics, but their acceptance criterion is the mass-weighted norm
+
+$$
+E_v=
+\left[
+\frac{\sum_i \bar\rho_i\left(v_i^{\rm ROCm}-v_i^{\rm CUDA}\right)^2}
+     {\sum_i \bar\rho_i\left(v_i^{\rm CUDA}\right)^2}
+\right]^{1/2}
+\le 10^{-5},
+\qquad
+\bar\rho_i=\frac{\rho_i^{\rm CUDA}+\rho_i^{\rm ROCm}}{2}.
+$$
+
+Only cells resolved above the common relative-density floor enter this velocity norm. This keeps
+low-mass compact-support tails visible in the diagnostic columns without allowing division by
+near-vacuum density to dominate the cross-backend correctness gate.
+
+The native direct-field comparison subsequently passed all eight polar records. Initial densities
+were byte-identical and every metadata record, final time, and accepted-step count agreed. Across
+final density and all three conserved momenta, the worst discrepancies were
+$L_{2,\mathrm{rel}}=1.93\times10^{-6}$ and
+$L_{\infty,\mathrm{rel}}=5.09\times10^{-6}$, both in the coarsest $N=32$, CFL-$0.5$ run and both
+below the $10^{-5}$ cross-vendor boundary. The largest mass-weighted velocity discrepancy over any
+component, resolution, or CFL value was only $6.59\times10^{-11}$. Unweighted velocity differences
+reached $2.06\times10^{-4}$ relatively in negligible compact-support tails, confirming why they
+must remain diagnostic rather than define the physical equivalence gate.
+
+The precise CUDA rerun produced conserved analytical error norms identical to the default
+fast-math CUDA records. Therefore `--use_fast_math` was not the cause of the residual derived-norm
+differences. Those differences arise from cross-vendor floating-point evolution followed by a
+sensitive reduction against the analytical solution; the direct solution comparison establishes
+that they are far below the discretization error. Together with the complete swarm and KNN results,
+this closes the current CUDA-versus-ROCm scientific comparison.
+
+When `qav/backend_field_comparison_z.json` is present and passed,
+`qav/compare_backends.py` uses that raw-field result for the eight polar records while continuing
+to require exact agreement of their case, resolution, final time, accepted-step count, and CFL
+metadata. The other 77 fluid records retain the ordinary strict recursive metric comparison. This
+allows the aggregate gate to report the scientifically relevant result without weakening global
+tolerances or silently ignoring the polar case.
 
 ### Source synchronization
 
@@ -287,7 +359,7 @@ are byte-identical to their canonical copies in the CUDA repository.
 
 ## Static verification completed
 
-Run from `lab/codex/rocm`:
+Run from `rocm/`:
 
 ```bash
 python3 tools/static_check.py
@@ -318,7 +390,7 @@ availability, or performance.
 On an MI300A node, begin with:
 
 ```bash
-cd lab/codex/rocm
+cd rocm
 
 python3 tools/static_check.py
 python3 qav/fluid/test_common/run_suite.py --group source --res 8 --target gfx942
@@ -339,11 +411,11 @@ The first native campaign must establish all of the following:
 8. checkpoint/restart succeeds within the HIP backend
 9. compiler, driver, target, device, resource, timing, and test manifests are archived
 
-Items 1, 4, 6, 8, and 9 are now established by the complete analytical, restart, and KNN
-campaigns, including six production-backend links. The matched $512^2$ and $128^3$ fluid sweeps
+Items 1, 4, 6, 7, 8, and 9 are now established by the complete analytical, restart, KNN, and
+direct cross-backend fluid campaigns, including six production-backend links. The matched
+$512^2$ and $128^3$ fluid sweeps
 also establish the current thread/block equivalence evidence. The remaining requirements concern
-deliberate failure-path tests, larger-LDS launch coverage, the complete cross-backend archive, and
-profiling.
+deliberate failure-path tests, larger-LDS launch coverage, and profiling.
 
 After the smoke tests pass, run the full matrices:
 
@@ -352,6 +424,288 @@ python3 qav/fluid/test_common/run_suite.py --group all --res 32 64 128 256 --tar
 python3 qav/swarm/test_common/run_suite.py --group all --res 32 64 128 256 --target gfx942
 python3 qav/fluid/test_common/run_suite.py --group sweep --target gfx942
 ```
+
+## Remaining ROCm qualification procedures
+
+The analytical and cross-backend matrices establish numerical portability, but they do not replace
+explicit testing of controlled failure paths, large-LDS launches, or production performance. These
+three activities must remain separate because they use different acceptance criteria: an expected
+failure must terminate cleanly, a launch test must exercise a particular hardware resource boundary,
+and a benchmark must measure an uninstrumented workload repeatedly.
+
+The `failure`, `lds`, and `qav/perf` command interfaces described below are planned interfaces. They
+are not part of the current QA dispatcher and must not be presented as runnable commands until the
+corresponding models and runners have been added.
+
+### Deliberate nonfinite-state injection
+
+The fluid test should exercise the production guard rather than merely asking Python whether a
+saved array is finite. The least intrusive end-to-end route is to generate a valid frame-zero
+checkpoint, copy it, replace exactly one stored double with a nonfinite value, and resume the
+production executable from that frame. Separate subprocesses should inject `NaN` and positive
+infinity into each of
+
+- `dustdens`
+- `dustvelx`
+- `dustvely`
+- `dustvelz`
+
+The resumed process must return nonzero, print
+
+```text
+Error: non-finite simulation state at cell (ix,iy,iz)
+```
+
+and identify the deliberately corrupted cell. A HIP illegal-memory-access message, a hang, a
+nominally successful resume, or a reported cell different from the injected cell is a failure. The
+runner must restore the clean checkpoint after every subprocess and record the field, injected
+value, cell index, return code, matched diagnostic, and captured stream in JSON.
+
+Checkpoint corruption directly covers density and the three stored physical velocities. A small
+test-only injection kernel should additionally set one conserved momentum component or optical
+depth value after initialization and immediately invoke the same production `inf_cell_flag`
+call path. Only one cell should be corrupted per subprocess because the guard deliberately uses an
+atomic first-writer record. A radiation-enabled case is required for optical depth.
+
+The CFL rejection path needs its own case. After injecting a nonfinite primitive or momentum, the
+test should run `cfl_rate_calc` and `get_dt_cfl` and verify that the affected ring receives an
+infinite rate and the host terminates instead of returning a finite or zero timestep:
+
+$$
+\operatorname{CFLrate}_{\rm bad}=\infty.
+$$
+
+Both collision-search backends also require deliberate invalid-input tests. One particle coordinate
+should be replaced by `NaN` and, in a separate run, by infinity. A third case should deliberately
+place a nonfinite distance in a test result before validation. KD-tree and Morton must reject the
+state deterministically before the neighbor list is scientifically consumed; silently dropping the
+particle or returning an apparently valid list is not acceptable.
+
+The planned interfaces are
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group failure --target gfx942
+python3 qav/swarm/test_common/run_suite.py --group failure --target gfx942
+```
+
+Every expected-failure case passes only when all of the following are true:
+
+```text
+return code is nonzero
+expected diagnostic is present
+reported object or cell equals the injected target
+no HIP runtime failure is reported
+the subprocess terminates within its timeout
+```
+
+Correctness builds must continue to omit blanket `-ffast-math`, because finite-only compiler
+assumptions can invalidate the very checks exercised by this branch.
+
+### Large-LDS launch coverage
+
+The existing $N=1024$ six-array diffusion launch requests exactly 48 KiB and therefore does not
+exercise the greater-than-48-KiB regime. In double precision, the dynamic LDS requests are
+
+$$
+S_x=32N_X\ \mathrm{B},
+\qquad
+S_y=48N_Y\ \mathrm{B},
+\qquad
+S_z=48N_Z\ \mathrm{B}.
+$$
+
+The launch tests must use anisotropic grids; a cubic $N=1280$ model would contain more than two
+billion cells and is neither necessary nor appropriate. The following compact models exercise the
+actual block diffusion kernels with substantial LDS requests:
+
+| Kernel | Test grid | Dynamic LDS |
+|---|---:|---:|
+| `diffusion_xbl` | $N_X=1792$, $N_Y=8$, $N_Z=1$ | 56 KiB |
+| `diffusion_ybl` | $N_X=8$, $N_Y=1280$, $N_Z=1$ | 60 KiB |
+| `diffusion_zbl` | $N_X=8$, $N_Y=8$, $N_Z=1280$ | 60 KiB |
+
+Each positive case must query the device LDS limit and the kernel attributes, launch the production
+kernel, synchronize, check the HIP launch status, verify finite density and momentum, verify mass
+conservation, and compare the result with either the thread solver or an analytical diffusion
+reference. Its JSON record should include at least
+
+```json
+{
+  "device_lds_limit": 65536,
+  "kernel_static_lds": 16,
+  "requested_dynamic_lds": 61440,
+  "total_lds": 61456,
+  "launch_succeeded": true,
+  "finite": true,
+  "mass_relative_error": 0.0
+}
+```
+
+The current host check compares only the requested dynamic LDS with the device limit. The block
+diffusion kernels also contain statically allocated shared scalars, so the rigorous launch condition
+is
+
+$$
+S_{\rm static}+S_{\rm dynamic}\leq S_{\rm device,max}.
+$$
+
+Before qualifying a near-limit launch, obtain `sharedSizeBytes` and
+`maxDynamicSharedSizeBytes` with `hipFuncGetAttributes` and require both the per-function dynamic
+limit and the static-plus-dynamic device limit to be satisfied. This distinction matters most for
+`diffusion_xbl`, which has more static shared scalars than the radial and polar solvers.
+
+A negative radial or polar case should use $N=1366$, for which
+
+$$
+48N=65568\ \mathrm{B}>64\ \mathrm{KiB}.
+$$
+
+The host capacity check must reject this configuration before launch with a controlled diagnostic.
+A later `hipErrorInvalidValue`, illegal access, or device fault does not pass the test. A near-limit
+$N=1365$ case may also be retained to verify the exact static-plus-dynamic accounting, but the
+60-KiB cases above provide the safer primary coverage.
+
+The planned interface is
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group lds --target gfx942
+```
+
+Successful launch does not imply good performance. A 60-KiB workgroup severely constrains
+LDS-based residency on a 64-KiB compute unit, so the positive cases should subsequently be profiled
+for occupancy, LDS traffic, and bank conflicts.
+
+### AMD profiling workflow
+
+Profiling should begin only after an uninstrumented benchmark has established a stable timing
+baseline. ROCm profilers add overhead, and ROCm Compute Profiler can replay kernels or the
+application to collect incompatible counter sets. Profiled wall time must therefore never be used
+as the reported production speed.
+
+Inside an exclusively allocated MI300A compute node, first record the available tools and counters:
+
+```bash
+module load rocm/7.2
+
+command -v rocprofv3
+command -v rocprof-compute
+rocprofv3 --version
+rocprof-compute --version
+rocprofv3 --list-avail
+rocprof-compute profile --list-available-metrics
+```
+
+Use `rocprofv3` on a short production-like run to identify dominant kernels and distinguish kernel,
+copy, allocation, synchronization, and scratch costs:
+
+```bash
+mkdir -p qav/perf/out/fluid_3d_trace
+
+rocprofv3 \
+    --runtime-trace \
+    --stats \
+    --output-format json \
+    --output-directory qav/perf/out/fluid_3d_trace \
+    --output-file fluid_3d \
+    -- qav/fluid/test_sweep_block_3d/gamedev
+```
+
+The trace should be used to rank kernels by total duration, average duration, call count, scratch
+traffic, and transfer or synchronization overhead. Likely candidates include the directional
+advection and diffusion kernels, `source_update`, `col_rate_calc`, `col_event_run`, and the KD-tree
+or Morton search kernels, but selection must follow the measured trace rather than this expectation.
+
+After identifying a hot kernel, use ROCm Compute Profiler with a kernel-name filter on a deliberately
+short run. For example,
+
+```bash
+ROCPROFCOMPUTE_COLOR=0 rocprof-compute profile \
+    --name gamedev_diffusion_ybl \
+    --no-roof \
+    --kernel diffusion_ybl \
+    -- qav/fluid/test_sweep_block_3d/gamedev
+
+rocprof-compute analyze \
+    --path workloads/gamedev_diffusion_ybl/MI300A
+```
+
+Use the tool's available-metric listing rather than assuming that report-block numbers are stable
+between ROCm releases. For fluid block kernels, collect wavefront occupancy, VGPR and SGPR pressure,
+scratch traffic, HBM and cache traffic, LDS utilization, LDS bank conflicts, instruction mix, and
+VALU utilization. The main question is whether the reduction in thread-private memory traffic
+compensates for additional LDS use, barriers, serial line work, and lower residency. This evidence
+is particularly important for explaining why the existing $128^3$ block sweep is slower than the
+thread sweep even though the block formulation removes the large thread-local arrays.
+
+For collision searches, separate tree construction, periodic-ghost construction, neighbor query,
+collision-rate evaluation, and event application. Report both isolated kernel costs and the complete
+collision-operator time; a faster search build does not imply a faster physical collision step.
+
+Profiler-native CSV, JSON, or ROCprofiler database files may be retained in their native formats.
+The GameDev QA layer should additionally write a compact JSON manifest containing the command,
+tool versions, selected kernels, source artifact paths, and principal derived metrics.
+
+### Production-scale performance matrix
+
+The unprofiled benchmark runner should execute stable, production-like models with radiation
+disabled for the primary timing baseline. Radiation may be measured separately with a physically
+stable setup, but an instability-induced CFL collapse is not a performance benchmark. Each case
+should save only its initial and final state and should advance at least 100 accepted steps so that
+initialization and file output are amortized.
+
+Recommended scale points are
+
+| Model | Baseline | Production | Large, if affordable |
+|---|---:|---:|---:|
+| fluid 2D | $512^2$ | $1024^2$ | $2048^2$ |
+| fluid 3D | $64^3$ | $128^3$ | $256^3$ |
+| swarm | $10^5$ particles | $10^6$ particles | $10^7$ particles |
+| collision search | KD tree and Morton | KD tree and Morton | same |
+
+Run one untimed warm-up followed by at least five measured repetitions from the same initial state
+on an otherwise idle APU. The grid, particle count, physics flags, output cadence, accepted-step
+count, completed simulated time, compiler options, and GPU target must match within each comparison.
+Report the median and interquartile range, and repeat a noisy campaign when the five-run wall-time
+spread exceeds roughly five percent.
+
+For a fluid calculation, normalize evolution cost as
+
+$$
+t_{\rm cell,step}
+=
+\frac{t_{\rm evolution}}
+{N_{\rm step}N_XN_YN_Z},
+\qquad
+\mathcal{R}_{\rm sim}
+=
+\frac{\Delta t_{\rm simulated}}{t_{\rm wall}}.
+$$
+
+For a swarm calculation, additionally report time per particle per dynamical step. Collision runs
+must record
+
+$$
+t_{\rm build},\qquad
+t_{\rm KNN},\qquad
+t_{\rm rate},\qquad
+t_{\rm event},\qquad
+\frac{N_{\rm collision}}{t_{\rm wall}},
+$$
+
+together with persistent search memory and Morton ghost-record ratio. Initialization, evolution,
+output, and total wall time should be stored separately. Every result must also record the ROCm and
+compiler versions, GPU identity, all physics flags, line-sweep or KNN backend, resolution or particle
+count, accepted steps, completed simulated time, and peak device memory.
+
+The planned performance interface is
+
+```bash
+python3 qav/perf/run_suite.py --group all --target gfx942 --repeat 5
+```
+
+This runner has not yet been implemented. When added, its aggregate JSON must point to the native
+profiler artifacts but keep unprofiled benchmark statistics separate from instrumented profiler
+measurements.
 
 ## Performance work after correctness
 
@@ -372,9 +726,10 @@ and completed simulated time.
 
 ## Promotion into the production build
 
-The current ROCm reproduction intentionally remains isolated. A later integration may introduce a
-backend selection in the root build, but it must not merge fluid and swarm source ownership or make
-the CUDA reference depend on HIP headers. Promotion requires:
+The current ROCm reproduction is tracked in the repository but intentionally retains its own build
+root. A later integration may introduce backend selection in one Make interface, but it must not
+merge fluid and swarm source ownership or make the CUDA reference depend on HIP headers. Promotion
+requires:
 
 - complete native ROCm test evidence
 - a maintained CUDA-versus-ROCm regression policy
@@ -394,5 +749,10 @@ experimental, independently testable reproduction.
 - AMD, [rocThrust documentation](https://rocm.docs.amd.com/projects/rocThrust/en/latest/)
 - AMD, [hipCUB documentation](https://rocm.docs.amd.com/projects/hipCUB/en/latest/)
 - AMD, [hipRAND documentation](https://rocm.docs.amd.com/projects/hipRAND/en/latest/)
+- AMD, [ROCprofiler-SDK and `rocprofv3` usage](https://rocm.docs.amd.com/projects/rocprofiler-sdk/en/latest/how-to/using-rocprofv3.html)
+- AMD, [ROCm Compute Profiler usage](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/latest/how-to/use.html)
+- AMD, [ROCm Compute Profiler analysis](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/latest/how-to/analyze/cli.html)
+- AMD, [ROCm Compute Profiler LDS metrics](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/docs-7.1.0/conceptual/local-data-share.html)
+- AMD, [HIP function attributes](https://rocm.docs.amd.com/projects/HIP/en/latest/doxygen/html/structhip_func_attributes.html)
 - LLVM, [Clang floating-point behavior](https://clang.llvm.org/docs/UsersManual.html#controlling-floating-point-behavior)
 - LLVM, [Clang HIP support](https://clang.llvm.org/docs/HIPSupport.html)

@@ -1,0 +1,540 @@
+{
+  "absolute_tolerance": 1e-11,
+  "components": [
+    {
+      "common_metrics": 85,
+      "complete": true,
+      "component": "fluid",
+      "cuda_metrics": 85,
+      "expected_metrics": 85,
+      "mismatch_count": 77,
+      "mismatches": [
+        {
+          "absolute_difference": 2.1269838554284146e-10,
+          "cuda": 0.00019909869351271984,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.density.l1",
+          "rocm": 0.0001990984808143343
+        },
+        {
+          "absolute_difference": 1.1988979932518046e-09,
+          "cuda": 0.0007846056630526263,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.density.l2",
+          "rocm": 0.0007846044641546331
+        },
+        {
+          "absolute_difference": 2.562574145936747e-07,
+          "cuda": 0.01205614733685953,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.density.linf",
+          "rocm": 0.012056403594274123
+        },
+        {
+          "absolute_difference": 1.4888887643399115e-10,
+          "cuda": 0.00013936908545891257,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momx.l1",
+          "rocm": 0.00013936893657003614
+        },
+        {
+          "absolute_difference": 8.392285929777546e-10,
+          "cuda": 0.0005492239641368358,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momx.l2",
+          "rocm": 0.0005492231249082429
+        },
+        {
+          "absolute_difference": 1.793801902016945e-07,
+          "cuda": 0.008439303135801643,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momx.linf",
+          "rocm": 0.008439482515991845
+        },
+        {
+          "absolute_difference": 1.0634918073000035e-11,
+          "cuda": 9.954934675635422e-06,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momy.l1",
+          "rocm": 9.954924040717349e-06
+        },
+        {
+          "absolute_difference": 5.99449000705213e-11,
+          "cuda": 3.923028315263112e-05,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momy.l2",
+          "rocm": 3.923022320773105e-05
+        },
+        {
+          "absolute_difference": 1.2812870698458712e-08,
+          "cuda": 0.0006028073668430129,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momy.linf",
+          "rocm": 0.0006028201797137114
+        },
+        {
+          "absolute_difference": 3.190475450699131e-11,
+          "cuda": 2.9864804026906835e-05,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momz.l1",
+          "rocm": 2.9864772122152328e-05
+        },
+        {
+          "absolute_difference": 1.798346984429591e-10,
+          "cuda": 0.0001176908494578925,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momz.l2",
+          "rocm": 0.00011769066962319406
+        },
+        {
+          "absolute_difference": 3.8438612084967794e-08,
+          "cuda": 0.001808422100529037,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.momz.linf",
+          "rocm": 0.001808460539141122
+        },
+        {
+          "absolute_difference": 0.0092779654743431,
+          "cuda": 2.06172689009627e-14,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.velx.l1",
+          "rocm": 0.009277965474363718
+        },
+        {
+          "absolute_difference": 0.05411579194307252,
+          "cuda": 1.1927055726031342e-13,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.velx.l2",
+          "rocm": 0.05411579194319179
+        },
+        {
+          "absolute_difference": 0.31564236208085084,
+          "cuda": 6.956657472301231e-13,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.velx.linf",
+          "rocm": 0.3156423620815465
+        },
+        {
+          "absolute_difference": 0.0012989028245136158,
+          "cuda": 4.006102503453743e-15,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.vely.l1",
+          "rocm": 0.001298902824517622
+        },
+        {
+          "absolute_difference": 0.007576138885192902,
+          "cuda": 2.3242910794504448e-14,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.vely.l2",
+          "rocm": 0.007576138885216145
+        },
+        {
+          "absolute_difference": 0.044189510812120594,
+          "cuda": 1.3556517020063552e-13,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.vely.linf",
+          "rocm": 0.04418951081225616
+        },
+        {
+          "absolute_difference": 0.0019060121378629813,
+          "cuda": 5.261404190951721e-15,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.velz.l1",
+          "rocm": 0.0019060121378682428
+        },
+        {
+          "absolute_difference": 0.011117238642328687,
+          "cuda": 3.0413626229556103e-14,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.velz.l2",
+          "rocm": 0.0111172386423591
+        },
+        {
+          "absolute_difference": 0.06484376073757793,
+          "cuda": 1.7731649482044531e-13,
+          "path": "test_z_transport_3d/metrics_N128_cfl0.5.json.errors.velz.linf",
+          "rocm": 0.06484376073775525
+        },
+        {
+          "absolute_difference": 1.520203519521648e-11,
+          "cuda": 2.9105120807173334e-11,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.velx.l1",
+          "rocm": 1.3903085611956851e-11
+        },
+        {
+          "absolute_difference": 2.2734204695697127e-10,
+          "cuda": 4.3479473715914737e-10,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.velx.l2",
+          "rocm": 2.074526902021761e-10
+        },
+        {
+          "absolute_difference": 3.3975795510343687e-09,
+          "cuda": 6.497914983860653e-09,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.velx.linf",
+          "rocm": 3.1003354328262844e-09
+        },
+        {
+          "absolute_difference": 3.3210175881994684e-11,
+          "cuda": 6.355837400453395e-11,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.vely.l2",
+          "rocm": 3.0348198122539264e-11
+        },
+        {
+          "absolute_difference": 4.963190969320408e-10,
+          "cuda": 9.498664077511876e-10,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.vely.linf",
+          "rocm": 4.535473108191468e-10
+        },
+        {
+          "absolute_difference": 7.29353175093285e-11,
+          "cuda": 1.395186742822884e-10,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.velz.l2",
+          "rocm": 6.658335677295991e-11
+        },
+        {
+          "absolute_difference": 1.0900030322780196e-09,
+          "cuda": 2.0850769444358264e-09,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.05.json.errors.velz.linf",
+          "rocm": 9.950739121578067e-10
+        },
+        {
+          "absolute_difference": 1.6210662640795542e-10,
+          "cuda": 3.519823945524097e-05,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.density.l1",
+          "rocm": 3.519840156186738e-05
+        },
+        {
+          "absolute_difference": 8.933850215164796e-09,
+          "cuda": 0.003956765070967844,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.density.linf",
+          "rocm": 0.0039567561371176285
+        },
+        {
+          "absolute_difference": 1.1347464610547719e-10,
+          "cuda": 2.4638767618673297e-05,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.momx.l1",
+          "rocm": 2.4638881093319402e-05
+        },
+        {
+          "absolute_difference": 6.2536951728198176e-09,
+          "cuda": 0.0027697355496775072,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.momx.linf",
+          "rocm": 0.0027697292959823344
+        },
+        {
+          "absolute_difference": 4.4669250763573753e-10,
+          "cuda": 0.00019783825354839114,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.momy.linf",
+          "rocm": 0.0001978378068558835
+        },
+        {
+          "absolute_difference": 2.43159920917916e-11,
+          "cuda": 5.279735918286269e-06,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.momz.l1",
+          "rocm": 5.279760234278361e-06
+        },
+        {
+          "absolute_difference": 1.340077528111383e-09,
+          "cuda": 0.0005935147606451682,
+          "path": "test_z_transport_3d/metrics_N256_cfl0.5.json.errors.momz.linf",
+          "rocm": 0.0005935134205676401
+        },
+        {
+          "absolute_difference": 7.437395302054006e-09,
+          "cuda": 0.0032833489863905276,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.density.l1",
+          "rocm": 0.0032833415489952255
+        },
+        {
+          "absolute_difference": 4.025746774567046e-08,
+          "cuda": 0.0075184059522625584,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.density.l2",
+          "rocm": 0.007518365694794813
+        },
+        {
+          "absolute_difference": 5.6635012799510775e-06,
+          "cuda": 0.06040127173614532,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.density.linf",
+          "rocm": 0.06039560823486537
+        },
+        {
+          "absolute_difference": 5.206176704151966e-09,
+          "cuda": 0.00229834429047338,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momx.l1",
+          "rocm": 0.002298339084296676
+        },
+        {
+          "absolute_difference": 2.8180227423270365e-08,
+          "cuda": 0.005262884166583783,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momx.l2",
+          "rocm": 0.00526285598635636
+        },
+        {
+          "absolute_difference": 3.964450895954652e-06,
+          "cuda": 0.04228089021530171,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momx.linf",
+          "rocm": 0.042276925764405754
+        },
+        {
+          "absolute_difference": 3.718697647991237e-10,
+          "cuda": 0.0001641674493195234,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momy.l1",
+          "rocm": 0.0001641670774497586
+        },
+        {
+          "absolute_difference": 2.0128733871208927e-09,
+          "cuda": 0.0003759202976131264,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momy.l2",
+          "rocm": 0.00037591828473973926
+        },
+        {
+          "absolute_difference": 2.831750639978141e-07,
+          "cuda": 0.0030200635868072663,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momy.linf",
+          "rocm": 0.0030197804117432685
+        },
+        {
+          "absolute_difference": 1.1156092930963285e-09,
+          "cuda": 0.000492502347958573,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momz.l1",
+          "rocm": 0.0004925012323492799
+        },
+        {
+          "absolute_difference": 6.03862015729692e-09,
+          "cuda": 0.0011277608928393812,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momz.l2",
+          "rocm": 0.001127754854219224
+        },
+        {
+          "absolute_difference": 8.495251919930086e-07,
+          "cuda": 0.009060190760421796,
+          "path": "test_z_transport_3d/metrics_N32_cfl0.5.json.errors.momz.linf",
+          "rocm": 0.009059341235229803
+        },
+        {
+          "absolute_difference": 0.015391692217056012,
+          "cuda": 7.15240370368088e-14,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.velx.l1",
+          "rocm": 0.015391692217127537
+        },
+        {
+          "absolute_difference": 0.06489760036376736,
+          "cuda": 2.982327795587639e-13,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.velx.l2",
+          "rocm": 0.0648976003640656
+        },
+        {
+          "absolute_difference": 0.273634534369663,
+          "cuda": 1.2571055307830648e-12,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.velx.linf",
+          "rocm": 0.2736345343709201
+        },
+        {
+          "absolute_difference": 0.0021549396814316245,
+          "cuda": 1.9956321434318842e-16,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.vely.l1",
+          "rocm": 0.002154939681431824
+        },
+        {
+          "absolute_difference": 0.009086097375218165,
+          "cuda": 1.3488983494442725e-15,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.vely.l2",
+          "rocm": 0.009086097375219515
+        },
+        {
+          "absolute_difference": 0.03831066188223051,
+          "cuda": 1.8415824420969784e-14,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.vely.linf",
+          "rocm": 0.03831066188224892
+        },
+        {
+          "absolute_difference": 0.003161971608700239,
+          "cuda": 3.4787021941113134e-15,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.velz.l1",
+          "rocm": 0.0031619716087037176
+        },
+        {
+          "absolute_difference": 0.01333215132742877,
+          "cuda": 1.371051688327923e-14,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.velz.l2",
+          "rocm": 0.013332151327442482
+        },
+        {
+          "absolute_difference": 0.0562137428838348,
+          "cuda": 6.042388811522414e-14,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.05.json.errors.velz.linf",
+          "rocm": 0.056213742883895225
+        },
+        {
+          "absolute_difference": 2.589565637227051e-09,
+          "cuda": 0.0010237355714668144,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.density.l1",
+          "rocm": 0.0010237329819011772
+        },
+        {
+          "absolute_difference": 2.1059606727762137e-08,
+          "cuda": 0.0030404178883055816,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.density.l2",
+          "rocm": 0.003040396828698854
+        },
+        {
+          "absolute_difference": 2.3252410537716317e-06,
+          "cuda": 0.038413723711416464,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.density.linf",
+          "rocm": 0.03841139847036269
+        },
+        {
+          "absolute_difference": 1.812695953735087e-09,
+          "cuda": 0.0007166149000267682,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momx.l1",
+          "rocm": 0.0007166130873308145
+        },
+        {
+          "absolute_difference": 1.4741724723744964e-08,
+          "cuda": 0.002128292521813909,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momx.l2",
+          "rocm": 0.002128277780089185
+        },
+        {
+          "absolute_difference": 1.6276687376248766e-06,
+          "cuda": 0.026889606597991517,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momx.linf",
+          "rocm": 0.026887978929253892
+        },
+        {
+          "absolute_difference": 1.2947828269618822e-10,
+          "cuda": 5.1186778573340457e-05,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momy.l1",
+          "rocm": 5.118664909505776e-05
+        },
+        {
+          "absolute_difference": 1.0529803361983715e-09,
+          "cuda": 0.00015202089441527895,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momy.l2",
+          "rocm": 0.00015201984143494275
+        },
+        {
+          "absolute_difference": 1.16262052689102e-07,
+          "cuda": 0.0019206861855708224,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momy.linf",
+          "rocm": 0.0019205699235181333
+        },
+        {
+          "absolute_difference": 3.8843485093459536e-10,
+          "cuda": 0.0001535603357200206,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momz.l1",
+          "rocm": 0.00015355994728516966
+        },
+        {
+          "absolute_difference": 3.1589410105195732e-09,
+          "cuda": 0.0004560626832458351,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momz.l2",
+          "rocm": 0.0004560595243048246
+        },
+        {
+          "absolute_difference": 3.487861580647039e-07,
+          "cuda": 0.00576205855671247,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.momz.linf",
+          "rocm": 0.005761709770554405
+        },
+        {
+          "absolute_difference": 0.005493232245183885,
+          "cuda": 0.005493232245271659,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.velx.l1",
+          "rocm": 8.777325605016636e-14
+        },
+        {
+          "absolute_difference": 0.023161689171397375,
+          "cuda": 0.02316168917176684,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.velx.l2",
+          "rocm": 3.694640755926834e-13
+        },
+        {
+          "absolute_difference": 0.09765905050579687,
+          "cuda": 0.09765905050735468,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.velx.linf",
+          "rocm": 1.5578094370027884e-12
+        },
+        {
+          "absolute_difference": 0.0007686724646602925,
+          "cuda": 0.0007686724646633009,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.vely.l1",
+          "rocm": 3.008372904887747e-15
+        },
+        {
+          "absolute_difference": 0.0032410340408750137,
+          "cuda": 0.003241034040887641,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.vely.l2",
+          "rocm": 1.2627444784589536e-14
+        },
+        {
+          "absolute_difference": 0.013665510522422923,
+          "cuda": 0.013665510522476165,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.vely.linf",
+          "rocm": 5.3242132924680163e-14
+        },
+        {
+          "absolute_difference": 0.0011283796023321886,
+          "cuda": 0.0011283796023353627,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.velz.l1",
+          "rocm": 3.1741052806069802e-15
+        },
+        {
+          "absolute_difference": 0.004757704835704604,
+          "cuda": 0.00475770483571785,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.velz.l2",
+          "rocm": 1.324506979989254e-14
+        },
+        {
+          "absolute_difference": 0.020060408090422456,
+          "cuda": 0.0200604080904783,
+          "path": "test_z_transport_3d/metrics_N64_cfl0.5.json.errors.velz.linf",
+          "rocm": 5.5844218138645374e-14
+        }
+      ],
+      "mismatches_truncated": false,
+      "missing_from_cuda": [],
+      "missing_from_rocm": [],
+      "passed": false,
+      "rocm_metrics": 85,
+      "stochastic_validation_only": 0
+    },
+    {
+      "common_metrics": 51,
+      "complete": true,
+      "component": "swarm",
+      "cuda_metrics": 51,
+      "expected_metrics": 51,
+      "mismatch_count": 0,
+      "mismatches": [],
+      "mismatches_truncated": false,
+      "missing_from_cuda": [],
+      "missing_from_rocm": [],
+      "passed": true,
+      "rocm_metrics": 51,
+      "stochastic_validation_only": 12
+    },
+    {
+      "both_native_suites_passed": true,
+      "component": "knn",
+      "coverage": {
+        "edge_cases": {
+          "cuda": 15,
+          "rocm": 15
+        },
+        "ordinary_cases": {
+          "cuda": 7,
+          "rocm": 7
+        },
+        "periodic_cases": {
+          "cuda": 14,
+          "rocm": 14
+        },
+        "production_links": {
+          "cuda": 6,
+          "rocm": 6
+        },
+        "scope": {
+          "cuda": "general",
+          "rocm": "general"
+        },
+        "wedge_cases": {
+          "cuda": 10,
+          "rocm": 10
+        }
+      },
+      "coverage_equal": true,
+      "cuda_manifest": "/viper/u2/jibi/cuda_qav/swarm/out/test_knn/suite_manifest.json",
+      "passed": true,
+      "rocm_manifest": "/viper/u2/jibi/gamedev/qav/swarm/out/test_knn/suite_manifest.json"
+    }
+  ],
+  "cuda_fluid_sweep": "thread",
+  "cuda_qav": "/viper/u2/jibi/cuda_qav",
+  "generated_utc": "2026-08-11T11:57:53.149414+00:00",
+  "passed": false,
+  "relative_tolerance": 1e-06,
+  "rocm_fluid_sweep": "thread",
+  "rocm_qav": "/viper/u2/jibi/gamedev/qav",
+  "schema": 1
+}

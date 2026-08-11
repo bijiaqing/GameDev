@@ -100,9 +100,9 @@ v_x=\frac{\ell_x}{R},
 v_z=\frac{\ell_z}{y}.
 $$
 
-Velocity norms exclude cells whose exact density is at or below $10^{-12}$. This mask prevents the
-production vacuum convention from being reported as a transport error while retaining the
-conserved-field error in every cell.
+Velocity norms include only cells where both the exact and numerical densities exceed $10^{-12}$
+of the exact peak density. This mask prevents the production vacuum convention from being reported
+as transport error while retaining the conserved-field error in every cell.
 
 ### Convergence interpretation
 
@@ -588,6 +588,29 @@ $h<10^{-4}$. Reanalysis of the unchanged native state reduced the largest compon
 from $2.22\times10^{-5}$ to $2.22\times10^{-16}$; the former value was cancellation in the Python
 reference, not a production-kernel error. Density and total mass are exact to the recorded precision.
 
+### CUDA-versus-ROCm polar transport
+
+The matched 2026-08-11 raw-field comparison covered both CFL values and all four resolutions of
+`test_z_transport_3d`. Initial density was byte-identical, metadata and accepted-step counts agreed,
+and all eight records passed. The worst final conserved-field differences were
+
+$$
+L_{2,\mathrm{rel}}=1.93\times10^{-6},
+\qquad
+L_{\infty,\mathrm{rel}}=5.09\times10^{-6},
+$$
+
+in the coarsest $N=32$, CFL-$0.5$ calculation. The disagreement decreased under refinement. The
+largest density-weighted velocity difference was $6.59\times10^{-11}$, although unweighted
+velocity differences in negligible compact-support tails reached $2.06\times10^{-4}$. The latter
+remain diagnostic because division by vanishing density is ill-conditioned; conserved fields and
+the mass-weighted velocity norm define the cross-backend equivalence gate.
+
+CUDA builds with and without `--use_fast_math` produced identical conserved analytical error norms
+for these runs. The residual CUDA-versus-ROCm differences in separately reduced analytical error
+norms therefore reflect ordinary cross-vendor evolution and reduction sensitivity rather than the
+CUDA fast-math option or a different polar discretization.
+
 ### Historical thread/block performance
 
 The development cross-comparisons motivating this branch found configuration-dependent performance.
@@ -701,6 +724,13 @@ JSON with `"passed": true` means all of its implemented tolerances were satisfie
 - Archive matched thread/block comparison JSON, build logs, `ptxas` resource reports, and profiler
   local-memory traffic for the production grids used in performance claims
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
+
+The CUDA QA runner supports this comparison directly through `--math-mode precise`.  Precise-math
+records are archived under `qav/fluid/out/thread_precise/` or `block_precise/`, so they cannot
+overwrite the default fast-math baseline.  Velocity norms exclude a cell unless both the exact and
+numerical densities exceed $10^{-12}$ of the exact peak density; this prevents deliberately assigned
+vacuum fallback velocities from masquerading as transport error while leaving all conserved-field
+norms unmasked.
 
 The directional 3D radial and polar tests do not establish complete 3D transport–diffusion–
 radiation coupling; that claim requires the manufactured-solution suite above.

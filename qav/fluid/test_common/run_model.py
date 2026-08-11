@@ -75,6 +75,11 @@ def run(model: str) -> None:
     parser.add_argument("--cfl", type=float, default=0.5)
     parser.add_argument("--power", type=float, default=-1.0)
     parser.add_argument("--shift", type=float, default=3.25)
+    parser.add_argument(
+        "--math-mode", choices=("fast", "precise"),
+        default=os.environ.get("CUDA_MATH", "fast"),
+        help="select the CUDA arithmetic mode without mixing its output archive",
+    )
     parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args()
 
@@ -84,7 +89,8 @@ def run(model: str) -> None:
     test_root = Path(__file__).resolve().parents[1]
     model_dir = test_root / model
     sweep = selected_sweep()
-    out_dir = test_root / "out" / sweep / model
+    archive_sweep = sweep if args.math_mode == "fast" else f"{sweep}_precise"
+    out_dir = test_root / "out" / archive_sweep / model
     if not model_dir.is_dir():
         raise SystemExit(f"Unknown model directory: {model_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -101,6 +107,7 @@ def run(model: str) -> None:
     # Record the compiler, GPU, and driver associated with these results.  The
     # information is written once per parameter variant rather than once per N.
     environment = {
+        "cuda_math": args.math_mode,
         "nvcc": capture(["nvcc", "--version"], project_root),
         "nvidia_smi": capture(
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"], project_root
@@ -119,10 +126,12 @@ def run(model: str) -> None:
         # the CUDA tests.  Cleaning before every resolution prevents an object
         # compiled with an earlier N or parameter value from being reused.
         subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}", "clean"
+            "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}",
+            f"CUDA_MATH={args.math_mode}", f"QAV_SWEEP={archive_sweep}", "clean"
         ], check=True)
         subprocess.run([
             "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}",
+            f"CUDA_MATH={args.math_mode}", f"QAV_SWEEP={archive_sweep}",
             f"RES={resolution}",
             f"CFL={args.cfl:.17g}", f"POWER={args.power:.17g}", f"SHIFT={args.shift:.17g}",
             f"OUT_TAG={variant}",

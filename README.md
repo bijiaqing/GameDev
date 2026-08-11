@@ -2,8 +2,9 @@
 
 **GameDev: GPU-Accelerated ModEl for Dust EVolution**
 
-GameDev is a CUDA research code for dust evolution in protoplanetary disks. It provides two
-independent numerical representations behind one model-oriented build system:
+GameDev is a GPU research code for dust evolution in protoplanetary disks. The primary production
+build targets NVIDIA CUDA, while a tracked HIP/ROCm reproduction is maintained under `rocm/` for
+AMD GPUs. Both backends provide two independent numerical representations:
 
 - an Eulerian, pressureless dust-fluid solver for conservative continuum evolution
 - a Lagrangian dust-swarm solver for particle trajectories, stochastic diffusion, and optional
@@ -40,7 +41,7 @@ Read the relevant numerical and verification guides before using results for sci
 
 ## Highlights
 
-- CUDA implementations of both continuum and representative-particle dust evolution
+- CUDA implementations and a separately built HIP/ROCm reproduction of both dust representations
 - logarithmic spherical-radial grids with radial-only, disk-plane, meridional, and full-3D support
   where permitted by the selected representation
 - gas drag, stellar gravity, disk geometry, radiation pressure, and optional viscous gas flow
@@ -160,7 +161,7 @@ quadrature, collision estimators, and literature references are documented in
 
 ## Requirements
 
-The production build currently targets NVIDIA CUDA.
+The root production build currently targets NVIDIA CUDA.
 
 - a CUDA-capable NVIDIA GPU
 - the CUDA toolkit, including `nvcc`, Thrust, and cuRAND
@@ -169,9 +170,15 @@ The production build currently targets NVIDIA CUDA.
 - Python 3 and NumPy for the verification runners and validators
 
 The root Makefile currently uses `-arch=sm_80`, `-O2`, `--use_fast_math`, and `-std=c++17` by
-default. `sm_80` targets NVIDIA Ampere GPUs such as the A100. Change the architecture option before
-building for a different CUDA compute capability. ROCm/AMD support is not yet implemented; see
-[`doc/future_rocm_support.md`](doc/future_rocm_support.md) for the portability assessment.
+default. Set `CUDA_MATH=precise` to omit `--use_fast_math` for matched-arithmetic verification.
+`sm_80` targets NVIDIA Ampere GPUs such as the A100. Change the architecture option before
+building for a different CUDA compute capability.
+
+The tracked `rocm/` tree requires `hipcc`, HIP Runtime, hipRAND, rocThrust, hipCUB, and an AMD GPU
+supported by the selected `AMDGPU_TARGET`; `gfx942` is the current MI300A target. It has its own
+Makefile and verification tree, so enter `rocm/` before using the HIP build. See
+[`doc/future_rocm_support.md`](doc/future_rocm_support.md) for current validation evidence and the
+remaining qualification work.
 
 There is no installation step. Executables are built inside their selected model directories.
 
@@ -206,6 +213,23 @@ Run it:
 ```bash
 mod/swarm_fiducial/gamedev
 ```
+
+### ROCm examples
+
+The AMD backend is built independently from its tracked top-level directory:
+
+```bash
+cd rocm
+
+make MODEL=fluid_fiducial AMDGPU_TARGET=gfx942
+mod/fluid_fiducial/gamedev
+
+make MODEL=swarm_fiducial AMDGPU_TARGET=gfx942
+mod/swarm_fiducial/gamedev
+```
+
+Return to the repository root before using the CUDA Makefile. CUDA and ROCm object files and
+executables remain in their respective trees.
 
 The supplied fiducial models are production-scale examples, not lightweight demonstrations. In
 particular, the default fluid grid is large and the default swarm model contains many
@@ -540,6 +564,7 @@ suite after numerical, compiler, architecture, or model changes.
 ├── qav/
 │   ├── fluid/                # fluid verification models and validators
 │   └── swarm/                # swarm verification models, validators, and KNN tests
+├── rocm/                     # tracked standalone HIP/ROCm source, models, and QA tree
 ├── doc/                      # canonical numerical and development documentation
 ├── obj/                      # generated model-specific object files
 └── out/                      # generated production outputs
@@ -558,7 +583,7 @@ verification interface.
 | [`doc/testset_fluid.md`](doc/testset_fluid.md) | fluid analytical cases, validators, commands, and retained results |
 | [`doc/testset_swarm.md`](doc/testset_swarm.md) | swarm analytical/statistical cases, KNN checks, commands, and retained results |
 | [`doc/format_variablename.md`](doc/format_variablename.md) | source formatting, naming, coordinates, fields, and branch-ownership conventions |
-| [`doc/future_rocm_support.md`](doc/future_rocm_support.md) | assessment and staged plan for AMD GPU support |
+| [`doc/future_rocm_support.md`](doc/future_rocm_support.md) | tracked ROCm status, validation, profiling, and remaining qualification work |
 
 For numerical behavior, current production source and machine-readable test results take precedence
 over prose. The authority order and documentation maintenance policy are stated in
@@ -609,7 +634,8 @@ relevant observables.
 - The collision timestep can become globally restrictive in dense or strongly clumped regions
 - Collision KNN searches use a local planar metric with a documented search-radius validity limit
 - Multi-GPU domain decomposition is not implemented
-- AMD/ROCm builds are not implemented
+- The ROCm backend is tracked but still uses a separate build root; unified backend selection,
+  deliberate failure-path tests, large-LDS qualification, and production profiling remain pending
 - `--use_fast_math`, backend choice, and CUDA architecture can change rounding and long-time
   trajectories; reproducibility claims must record the build environment
 - Some long-time, imported-gas, extreme-vacuum, and large-production collision regimes remain less

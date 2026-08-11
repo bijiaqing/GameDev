@@ -1,0 +1,574 @@
+#include <cmath>          // std::fmax, std::fmin
+#include <cstddef>        // std::size_t
+#include <cstdlib>        // std::exit, EXIT_FAILURE
+#include <filesystem>     // std::filesystem::create_directories
+#include <iostream>       // std::cerr, std::endl
+#include <sstream>        // std::stringstream
+#include <string>         // std::string
+#include <vector>         // std::vector
+
+#include <hip/hip_runtime.h> // hipDeviceSynchronize, hipFree, hipHostFree, ...
+
+#include <fluid_kern.cuh>
+#include <fluid_host.cuh>
+
+const std::string PATH = PATH_OUT;
+
+int main (int argc, char **argv)
+{
+    // allocate host output buffers and persistent device fields
+    real *dustdens, *dev_dustdens;
+    HIP_CHECK(hipHostMalloc((void**)&dustdens, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
+
+    real *dustvelx, *dev_dustvelx, *dev_dustmomx;
+    HIP_CHECK(hipHostMalloc((void**)&dustvelx, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustvelx, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustmomx, sizeof(real)*N_G));
+
+    real *dustvely, *dev_dustvely, *dev_dustmomy;
+    HIP_CHECK(hipHostMalloc((void**)&dustvely, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustvely, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustmomy, sizeof(real)*N_G));
+
+    real *dustvelz, *dev_dustvelz, *dev_dustmomz;
+    HIP_CHECK(hipHostMalloc((void**)&dustvelz, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustvelz, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_dustmomz, sizeof(real)*N_G));
+
+    real *dev_cfl_rate;
+    HIP_CHECK(hipMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
+
+    int  *dev_bad_cell;
+    HIP_CHECK(hipMalloc((void**)&dev_bad_cell, sizeof(int)));
+
+    real *dev_ppm_weight_y, *dev_ppm_weight_z;
+    HIP_CHECK(hipMalloc((void**)&dev_ppm_weight_y, sizeof(real)*4*(N_Y + 1)));
+    HIP_CHECK(hipMalloc((void**)&dev_ppm_weight_z, sizeof(real)*4*(N_Z + 1)));
+
+    #ifdef FLUID_BLOCK_SWEEP
+    real *dev_adv_work;
+    HIP_CHECK(hipMalloc(
+        (void**)&dev_adv_work,
+        sizeof(real)*static_cast<std::size_t>(BLOCK_ADV_FIELDS)*static_cast<std::size_t>(N_G)
+    ));
+
+    #ifdef DIFFUSION
+    int idx_device = 0;
+    int max_lds_bytes = 0;
+    HIP_CHECK(hipGetDevice(&idx_device));
+    HIP_CHECK(hipDeviceGetAttribute(
+        &max_lds_bytes, hipDeviceAttributeMaxSharedMemoryPerBlock, idx_device
+    ));
+
+    auto require_lds = [max_lds_bytes] (std::size_t required_bytes, const char *kernel_name)
+    {
+        if (required_bytes <= static_cast<std::size_t>(max_lds_bytes)) return;
+
+        std::cerr
+        << "Error: " << kernel_name << " requires " << required_bytes
+        << " bytes of LDS, but the active AMD device reports " << max_lds_bytes
+        << " bytes per block" << std::endl;
+        std::exit(EXIT_FAILURE);
+    };
+
+    require_lds(sizeof(real)*4*N_X, "diffusion_xbl");
+    require_lds(sizeof(real)*6*N_Y, "diffusion_ybl");
+    require_lds(sizeof(real)*6*N_Z, "diffusion_zbl");
+
+    // AMD devices ignore the CUDA-style dynamic-shared-memory opt-in hint
+    // so validate the required LDS explicitly and let each launch request it
+    #endif // DIFFUSION
+    #endif // FLUID_BLOCK_SWEEP
+
+    std::vector<real> ppm_weight_y(4*(N_Y + 1));
+    std::vector<real> ppm_weight_z(4*(N_Z + 1));
+
+    // precompute nonuniform PPM face weights and upload them once
+    ppm_geometry_weights_calc(ppm_weight_y.data(), ppm_weight_z.data());
+
+    HIP_CHECK(hipMemcpy(dev_ppm_weight_y, ppm_weight_y.data(), sizeof(real)*4*(N_Y + 1), hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(real)*4*(N_Z + 1), hipMemcpyHostToDevice));
+
+    #ifdef RADIATION
+    real *optdepth, *dev_optdepth;
+    HIP_CHECK(hipHostMalloc((void**)&optdepth, sizeof(real)*N_G));
+    HIP_CHECK(hipMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
+    #endif
+
+    // abort at the first cell containing a nonfinite evolved value
+    auto validate_finite_state = [&]()
+    {
+        HIP_CHECK(hipMemset(dev_bad_cell, 0, sizeof(int)));
+        inf_cell_flag <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz,
+            #ifdef RADIATION
+            dev_optdepth,
+            #endif
+            dev_bad_cell
+        );
+        HIP_KERNEL_CHECK("inf_cell_flag");
+
+        int bad_cell = 0;
+        HIP_CHECK(hipMemcpy(&bad_cell, dev_bad_cell, sizeof(int), hipMemcpyDeviceToHost));
+        if (bad_cell != 0)
+        {
+            int idx_bad = bad_cell - 1;
+            int ix_bad = idx_bad % N_X;
+            int iy_bad = (idx_bad / N_X) % N_Y;
+            int iz_bad = idx_bad / (N_X * N_Y);
+
+            std::cerr
+            << "Error: non-finite simulation state at cell ("
+            << ix_bad << "," << iy_bad << "," << iz_bad << ")"
+            << std::endl;
+
+            std::exit(EXIT_FAILURE);
+        }
+    };
+
+    int idx_from;
+    real clock_sim = 0.0;
+    real clock_out = 0.0;
+
+    if (argc <= 1)
+    {
+        idx_from = 0;
+
+        // initialize density from the convolved surface profile
+        real *initdens, *dev_initdens;
+        HIP_CHECK(hipHostMalloc((void**)&initdens, sizeof(real)*(N_Y + 1)));
+        HIP_CHECK(hipMalloc((void**)&dev_initdens, sizeof(real)*(N_Y + 1)));
+
+        initdens_calc(initdens);
+        HIP_CHECK(hipMemcpy(dev_initdens, initdens, sizeof(real)*(N_Y + 1), hipMemcpyHostToDevice));
+        HIP_CHECK(hipHostFree(initdens));
+
+        init_rho_calc <<< NB_G, TPB >>> (dev_dustdens, dev_initdens);
+        HIP_KERNEL_CHECK("init_rho_calc");
+
+        #ifdef RADIATION
+        // construct the initial cumulative radial optical depth
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
+        HIP_KERNEL_CHECK("optdepth_calc");
+
+        optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
+        HIP_KERNEL_CHECK("optdepth_csum");
+
+        HIP_CHECK(hipDeviceSynchronize());
+        #endif
+
+        // initialize primitive velocities and build their conserved fields
+        init_vel_calc <<< NB_G, TPB >>> (
+            dev_dustvelx, dev_dustvely, dev_dustvelz
+            #ifdef DIFFUSION
+            , dev_dustdens
+            #endif
+        );
+        HIP_KERNEL_CHECK("init_vel_calc");
+
+        momentum_setv <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
+        );
+        HIP_KERNEL_CHECK("momentum_setv");
+
+        HIP_CHECK(hipDeviceSynchronize());
+        HIP_CHECK(hipFree(dev_initdens));
+
+        validate_finite_state();
+
+        // create the output directory and save the initial state
+        std::filesystem::create_directories(PATH);
+        if (!save_variable(PATH + "variables.txt"))
+        {
+            std::cerr << "Error: failed to save simulation parameters" << std::endl;
+            return 1;
+        }
+
+        SAVE_DUSTDENS_TO_FILE(idx_from);
+        SAVE_DUST_VEL_TO_FILE(idx_from);
+        #ifdef RADIATION
+        SAVE_OPTDEPTH_TO_FILE(idx_from);
+        #endif
+
+        msg_output(0);
+    }
+    else
+    {
+        // restore density and linear velocity output from the selected frame
+        std::stringstream frame_stream{argv[1]};
+        if (!(frame_stream >> idx_from))
+        {
+            std::cerr << "Error: invalid resume frame number: " << argv[1] << "\n";
+            return 1;
+        }
+
+        LOAD_DUSTDATA_TO_VRAM(idx_from);
+
+        momentum_setv <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
+        );
+        HIP_KERNEL_CHECK("momentum_setv");
+
+        HIP_CHECK(hipDeviceSynchronize());
+
+        #ifdef RADIATION
+        // reconstruct optical depth from the restored density
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
+        HIP_KERNEL_CHECK("optdepth_calc");
+
+        optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
+        HIP_KERNEL_CHECK("optdepth_csum");
+
+        HIP_CHECK(hipDeviceSynchronize());
+        #endif
+
+        validate_finite_state();
+
+        msg_output(idx_from);
+    }
+
+    clock_sim = static_cast<real>(idx_from)*DT_OUT;
+
+    msg_step_title();
+
+    // recover synchronized primitives after every conservative operator
+    auto sync_dust_state = [&]()
+    {
+        momentum_getv <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+        );
+        HIP_KERNEL_CHECK("momentum_getv");
+    };
+
+    // recompute the global transport timestep from the current state
+    auto recalc_dt_cfl = [&](bool verbose)
+    {
+        cfl_rate_calc <<< NB_X, TPB >>> (
+            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+        );
+        HIP_KERNEL_CHECK("cfl_rate_calc");
+
+        HIP_CHECK(hipDeviceSynchronize());
+
+        return get_dt_cfl(dev_cfl_rate, dev_dustvelx, dev_dustvely, dev_dustvelz, verbose);
+    };
+
+    // advance each directional transport operator with fresh CFL-limited substeps
+    auto advance_advection_x = [&](real duration)
+    {
+        real remaining = duration;
+        while (remaining > 0.0)
+        {
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(
+                #ifdef HIP_SYNC_TRACE
+                true
+                #else
+                false
+                #endif
+            ));
+
+            #ifdef FLUID_BLOCK_SWEEP
+            advection_xbl <<< N_Y*N_Z, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt_sub
+            );
+            HIP_KERNEL_CHECK("advection_xbl");
+            #else // !FLUID_BLOCK_SWEEP
+            advection_xth <<< NB_X, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_sub
+            );
+            HIP_KERNEL_CHECK("advection_xth");
+            #endif // FLUID_BLOCK_SWEEP
+
+            sync_dust_state();
+            remaining -= dt_sub;
+        }
+    };
+
+    auto advance_advection_y = [&](real duration)
+    {
+        real remaining = duration;
+        while (remaining > 0.0)
+        {
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(
+                #ifdef HIP_SYNC_TRACE
+                true
+                #else
+                false
+                #endif
+            ));
+
+            #ifdef FLUID_BLOCK_SWEEP
+            advection_ybl <<< N_X*N_Z, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dev_adv_work, dt_sub
+            );
+            HIP_KERNEL_CHECK("advection_ybl");
+            #else // !FLUID_BLOCK_SWEEP
+            advection_yth <<< NB_Y, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dt_sub
+            );
+            HIP_KERNEL_CHECK("advection_yth");
+            #endif // FLUID_BLOCK_SWEEP
+
+            sync_dust_state();
+            remaining -= dt_sub;
+        }
+    };
+
+    auto advance_advection_z = [&](real duration)
+    {
+        real remaining = duration;
+        while (remaining > 0.0)
+        {
+            real dt_sub = std::fmin(remaining, recalc_dt_cfl(
+                #ifdef HIP_SYNC_TRACE
+                true
+                #else
+                false
+                #endif
+            ));
+
+            #ifdef FLUID_BLOCK_SWEEP
+            advection_zbl <<< N_X*N_Y, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dev_adv_work, dt_sub
+            );
+            HIP_KERNEL_CHECK("advection_zbl");
+            #else // !FLUID_BLOCK_SWEEP
+            advection_zth <<< NB_Z, TPB >>> (
+                dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt_sub
+            );
+            HIP_KERNEL_CHECK("advection_zth");
+            #endif // FLUID_BLOCK_SWEEP
+
+            sync_dust_state();
+            remaining -= dt_sub;
+        }
+    };
+
+    while (idx_from < SAVE_MAX)
+    {
+        // clip the global step at the next output time
+        real dt_cfl = recalc_dt_cfl(true);
+        real dt = dt_cfl;
+        real dt_to_out = DT_OUT - clock_out;
+        bool output_due = (dt >= dt_to_out);
+        if (output_due) dt = dt_to_out;
+
+        // apply the opening half of the symmetric diffusion composition
+        #ifdef DIFFUSION
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_ybl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_yth <<< NB_Y, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_yth");
+        #endif // FLUID_BLOCK_SWEEP
+
+        #ifdef HIP_SYNC_TRACE
+        sync_dust_state();
+        std::cout << "  [TRACE] state after diffusion y" << std::endl;
+        recalc_dt_cfl(true);
+        #endif // HIP_SYNC_TRACE
+
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_xbl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_xth <<< NB_X, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_xth");
+        #endif // FLUID_BLOCK_SWEEP
+
+        #ifdef HIP_SYNC_TRACE
+        sync_dust_state();
+        std::cout << "  [TRACE] state after diffusion x" << std::endl;
+        recalc_dt_cfl(true);
+        #endif // HIP_SYNC_TRACE
+
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_zbl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_zth <<< NB_Z, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_zth");
+        #endif // FLUID_BLOCK_SWEEP
+
+        #ifdef HIP_SYNC_TRACE
+        sync_dust_state();
+        std::cout << "  [TRACE] state after diffusion z" << std::endl;
+        recalc_dt_cfl(true);
+        #endif // HIP_SYNC_TRACE
+
+        momentum_getv <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+        );
+        HIP_KERNEL_CHECK("momentum_getv");
+        #endif
+
+        // apply the opening half of the symmetric directional transport composition
+        real dt_adv = 0.5*dt;
+
+        advance_advection_x(dt_adv);
+        advance_advection_y(dt_adv);
+
+        if (N_Z > 1)
+        {
+            advance_advection_z(dt_adv);
+        }
+
+        // evaluate optical depth at the source-step midpoint state
+        #ifdef RADIATION
+        optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
+        HIP_KERNEL_CHECK("optdepth_calc");
+
+        optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
+        HIP_KERNEL_CHECK("optdepth_csum");
+
+        validate_finite_state();
+        #endif
+
+        // ramp radiation pressure smoothly during the configured startup interval
+        #ifdef RADIATION
+        real taper_raw = (T_BETA > 0.0) ? (clock_sim + 0.5*dt) / T_BETA : 1.0;
+        taper_raw = std::fmin(std::fmax(taper_raw, 0.0), 1.0);
+        real beta_taper = taper_raw*taper_raw*(3.0 - 2.0*taper_raw);
+        #endif
+
+        // advance the centred source operator and synchronize conserved momentum
+        source_update <<< NB_G, TPB >>> (
+            dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
+            #ifdef RADIATION
+            dev_optdepth, beta_taper,
+            #endif
+            dt
+        );
+        HIP_KERNEL_CHECK("source_update");
+
+        momentum_setv <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustmomx, dev_dustmomy, dev_dustmomz
+        );
+        HIP_KERNEL_CHECK("momentum_setv");
+
+        // close the symmetric directional transport composition in reverse order
+        if (N_Z > 1)
+        {
+            advance_advection_z(dt_adv);
+        }
+
+        advance_advection_y(dt_adv);
+        advance_advection_x(dt_adv);
+
+        // close the symmetric diffusion composition in reverse order
+        #ifdef DIFFUSION
+        #ifdef FLUID_BLOCK_SWEEP
+        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_zbl");
+
+        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_xbl");
+
+        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_ybl");
+        #else // !FLUID_BLOCK_SWEEP
+        diffusion_zth <<< NB_Z, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_zth");
+
+        diffusion_xth <<< NB_X, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_xth");
+
+        diffusion_yth <<< NB_Y, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
+        );
+        HIP_KERNEL_CHECK("diffusion_yth");
+        #endif // FLUID_BLOCK_SWEEP
+
+        momentum_getv <<< NB_G, TPB >>> (
+            dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+        );
+        HIP_KERNEL_CHECK("momentum_getv");
+        #endif
+
+        validate_finite_state();
+
+        HIP_CHECK(hipDeviceSynchronize());
+
+        // advance simulation and output clocks after the accepted step
+        clock_sim += dt;
+        clock_out += dt;
+
+        msg_step(idx_from, dt, clock_out, clock_sim);
+
+        if (output_due)
+        {
+            // refresh derived output fields and save the completed frame
+            idx_from++;
+            clock_out = 0.0;
+
+            #ifdef RADIATION
+            optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
+            HIP_KERNEL_CHECK("optdepth_calc");
+
+            optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
+            HIP_KERNEL_CHECK("optdepth_csum");
+
+            validate_finite_state();
+            #endif
+
+            SAVE_DUSTDENS_TO_FILE(idx_from);
+            SAVE_DUST_VEL_TO_FILE(idx_from);
+            #ifdef RADIATION
+            SAVE_OPTDEPTH_TO_FILE(idx_from);
+            #endif
+
+            msg_output(idx_from);
+        }
+    }
+
+    // release all persistent host and device allocations
+    HIP_CHECK(hipHostFree(dustdens));
+    HIP_CHECK(hipFree(dev_dustdens));
+    HIP_CHECK(hipFree(dev_cfl_rate));
+    HIP_CHECK(hipFree(dev_bad_cell));
+    HIP_CHECK(hipFree(dev_ppm_weight_y));
+    HIP_CHECK(hipFree(dev_ppm_weight_z));
+    #ifdef FLUID_BLOCK_SWEEP
+    HIP_CHECK(hipFree(dev_adv_work));
+    #endif // FLUID_BLOCK_SWEEP
+    HIP_CHECK(hipHostFree(dustvelx));
+    HIP_CHECK(hipFree(dev_dustvelx));
+    HIP_CHECK(hipFree(dev_dustmomx));
+    HIP_CHECK(hipHostFree(dustvely));
+    HIP_CHECK(hipFree(dev_dustvely));
+    HIP_CHECK(hipFree(dev_dustmomy));
+    HIP_CHECK(hipHostFree(dustvelz));
+    HIP_CHECK(hipFree(dev_dustvelz));
+    HIP_CHECK(hipFree(dev_dustmomz));
+
+    #ifdef RADIATION
+    HIP_CHECK(hipHostFree(optdepth));
+    HIP_CHECK(hipFree(dev_optdepth));
+    #endif
+
+    return 0;
+}

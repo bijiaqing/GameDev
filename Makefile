@@ -2,20 +2,33 @@ ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 INC_FLUID_DIR = $(ROOT_DIR)/inc/fluid
 INC_SWARM_DIR = $(ROOT_DIR)/inc/swarm
-MOD_ROOT       = $(ROOT_DIR)/mod
-OBJ_ROOT       = $(ROOT_DIR)/obj
-OUT_ROOT       = $(ROOT_DIR)/out
-QAV_ROOT       = $(ROOT_DIR)/qav
-QAV_FLUID_DIR  = $(QAV_ROOT)/fluid
-QAV_SWARM_DIR  = $(QAV_ROOT)/swarm
+MOD_ROOT      = $(ROOT_DIR)/mod
+OBJ_ROOT      = $(ROOT_DIR)/obj
+OUT_ROOT      = $(ROOT_DIR)/out
+QAV_ROOT      = $(ROOT_DIR)/qav
+QAV_FLUID_DIR = $(QAV_ROOT)/fluid
+QAV_SWARM_DIR = $(QAV_ROOT)/swarm
 SRC_FLUID_DIR = $(ROOT_DIR)/src/fluid
 SRC_SWARM_DIR = $(ROOT_DIR)/src/swarm
 
 NVCC  = nvcc
 NVCC += -arch=sm_80
-NVCC += -O2 --use_fast_math
+NVCC += -O2
 NVCC += -std=c++17
 NVCC += --diag-suppress 177,550
+
+CUDA_MATH ?= fast
+ifneq ($(words $(CUDA_MATH)),1)
+$(error CUDA_MATH must be fast or precise)
+endif
+ifeq ($(filter fast precise,$(CUDA_MATH)),)
+$(error CUDA_MATH must be fast or precise)
+endif
+ifeq ($(CUDA_MATH),fast)
+NVCC += --use_fast_math
+endif
+
+CUDA_MATH_DIR = $(if $(filter precise,$(CUDA_MATH)),/precise)
 
 ifneq ($(MAKECMDGOALS),clean)
 ifndef MODEL
@@ -94,12 +107,13 @@ ifeq ($(filter fluid swarm,$(DUST_REPR)),)
 $(error DUST_REPR must be fluid or swarm)
 endif
 
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)$(CUDA_MATH_DIR)
 
 ifneq ($(filter $(QAV_ROOT)/%,$(MODEL_DIR)),)
 OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
 ifeq ($(DUST_REPR),fluid)
-OUT_DIR = $(QAV_ROOT)/$(DUST_REPR)/out/$(FLUID_SWEEP)/$(MODEL)$(OUT_TAG_DIR)
+QAV_SWEEP ?= $(FLUID_SWEEP)
+OUT_DIR = $(QAV_ROOT)/$(DUST_REPR)/out/$(QAV_SWEEP)/$(MODEL)$(OUT_TAG_DIR)
 else
 OUT_DIR = $(QAV_ROOT)/$(DUST_REPR)/out/$(MODEL)$(OUT_TAG_DIR)
 endif
@@ -118,7 +132,7 @@ _OBJ_FLUID_THREAD = \
     diffusion_yth.o \
     diffusion_zth.o
 
-_OBJ_FLUID_BLOCK = \
+_OBJ_FLUID_BLOCK =  \
     advection_xbl.o \
     advection_ybl.o \
     advection_zbl.o \
@@ -127,38 +141,38 @@ _OBJ_FLUID_BLOCK = \
     diffusion_zbl.o
 
 _OBJ_FLUID =        \
-    cfl_rate_calc.o  \
+    cfl_rate_calc.o \
+    fluid_runtime.o \
     inf_cell_flag.o \
-    fluid_runtime.o    \
+    init_rho_calc.o \
+    init_vel_calc.o \
     momentum_getv.o \
     momentum_setv.o \
-    init_rho_calc.o \
     optdepth_calc.o \
     optdepth_csum.o \
-    source_update.o \
-    init_vel_calc.o
+    source_update.o
 
-_OBJ_SWARM =       \
-    col_event_run.o  \
-    col_rate_calc.o  \
-    col_snap_save.o  \
-    col_site_init.o  \
-    diffusion_pos.o  \
-    dyn_rate_calc.o  \
-    dustdens_calc.o  \
-    dustdens_depo.o  \
-    dustdens_init.o  \
-    gas_lerp_calc.o  \
-    optdepth_calc.o  \
-    optdepth_csum.o  \
-    optdepth_depo.o  \
-    optdepth_init.o  \
-    optdepth_mean.o  \
-    particle_init.o  \
-    rngstate_init.o  \
-    ssa_substep_1.o  \
-    ssa_substep_2.o  \
-    ssa_transport.o  \
+_OBJ_SWARM =        \
+    col_event_run.o \
+    col_rate_calc.o \
+    col_snap_save.o \
+    col_site_init.o \
+    diffusion_pos.o \
+    dyn_rate_calc.o \
+    dustdens_calc.o \
+    dustdens_depo.o \
+    dustdens_init.o \
+    gas_lerp_calc.o \
+    optdepth_calc.o \
+    optdepth_csum.o \
+    optdepth_depo.o \
+    optdepth_init.o \
+    optdepth_mean.o \
+    particle_init.o \
+    rngstate_init.o \
+    ssa_substep_1.o \
+    ssa_substep_2.o \
+    ssa_transport.o \
     swarm_runtime.o
 
 ifdef MODEL
@@ -180,7 +194,7 @@ else
 _OBJ_FLUID += $(_OBJ_FLUID_THREAD)
 endif
 
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(FLUID_SWEEP)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(FLUID_SWEEP)$(CUDA_MATH_DIR)
 SRC_BRANCH_DIR = $(SRC_FLUID_DIR)
 INC_BRANCH_DIR = $(INC_FLUID_DIR)
 _OBJ = $(_OBJ_FLUID)
@@ -198,10 +212,10 @@ $(error COLLISION_SEARCH must be kdtree or morton)
 endif
 ifeq ($(COLLISION_SEARCH),morton)
 NVCC += -DCOLLISION_MORTON
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)$(CUDA_MATH_DIR)
 else
 NVCC += -DCOLLISION_KDTREE
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(DUST_REPR)/$(COLLISION_SEARCH)$(CUDA_MATH_DIR)
 endif
 endif
 
@@ -230,6 +244,7 @@ $(info Using representation constants: $(INC_BRANCH_DIR)/const_defs.cuh)
 endif
 $(foreach header,$(HEADER_OVERRIDE_PATHS),$(info Using header override: $(header)))
 $(info Using dust representation: $(DUST_REPR))
+$(info Using CUDA math: $(CUDA_MATH))
 ifeq ($(DUST_REPR),fluid)
 $(info Using fluid sweep: $(FLUID_SWEEP))
 else ifneq ($(filter -DCOLLISION,$(NVCC)),)
@@ -250,7 +265,7 @@ FORCE:
 
 $(OBJ_DIR)/%.o: %.cu $(MODEL_DIR)/flags.mk $(MODEL_CONST)
 	@mkdir -p $(dir $@)
-	@printf "%-12s %40s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
+	@printf "%-12s %50s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
 	@$(NVCC) --device-c -o $@ $< \
 		$(INC_SEARCH_FLAGS) \
 		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \

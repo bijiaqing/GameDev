@@ -1,9 +1,9 @@
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 
-#include <cmath>       // M_PI
+#include <cmath>        // M_PI
 
-using real  = double;
+using real = double;
 
 // =========================================================================================================================
 // code units
@@ -65,7 +65,7 @@ const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity
 // =========================================================================================================================
 // time step and output
 
-const int  SAVE_MAX     = 0;
+const int  SAVE_MAX     = 100;
 const real DT_OUT       = 2.0*M_PI;     // output interval
 const real DT_MAX       = 1.0e-01;
 

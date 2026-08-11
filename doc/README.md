@@ -13,7 +13,7 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian swarm user guide covering model selection, mass normalization, initialization, transport, diffusion, radiation, collisions, state semantics, and limitations |
 | [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
-| [`future_rocm_support.md`](future_rocm_support.md) | CUDA-to-ROCm portability assessment and implementation sequence |
+| [`future_rocm_support.md`](future_rocm_support.md) | tracked ROCm backend status, validation evidence, and remaining qualification work |
 
 Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior.
 
@@ -25,6 +25,7 @@ The active merged project is at the repository root:
 - `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
 - `mod/` contains production model configurations
 - `qav/fluid/` and `qav/swarm/` contain verification models and validators
+- `rocm/` contains the tracked, independently built HIP/ROCm reproduction and its QA tree
 
 The root Makefile requires `MODEL` and reads that model's `flags.mk`. `DUST_REPR := fluid` or `DUST_REPR := swarm` selects exactly one source branch. Fluid builds additionally select `FLUID_SWEEP := thread` or `FLUID_SWEEP := block`. A model-local `const_defs.cuh` has include priority; models without one inherit the selected representation's defaults. Collision-enabled swarm builds select `COLLISION_SEARCH := kdtree` or `COLLISION_SEARCH := morton`; the Morton backend always uses its validated block-parallel sorted top-$K$ merge.
 

@@ -27,6 +27,10 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
+        "--math-mode", choices=("fast", "precise"), default="fast",
+        help="select CUDA arithmetic while keeping precise results in a separate archive",
+    )
+    parser.add_argument(
         "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep"),
         default="all",
     )
@@ -106,7 +110,10 @@ def main() -> None:
     for model, extra in commands:
         # sys.executable reuses the Python interpreter that launched this suite,
         # avoiding accidental changes of environment between the two scripts.
-        command = [sys.executable, str(model_root/model/"run.py")]
+        command = [
+            sys.executable, str(model_root/model/"run.py"),
+            "--math-mode", args.math_mode,
+        ]
 
         # A model-specific --res, currently only the source test, takes priority
         # over the suite-wide resolution list.

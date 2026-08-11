@@ -70,6 +70,22 @@ Prefix any suite command with `FLUID_SWEEP=block` to validate the block sweep; o
 the reference thread sweep. Their artifacts are stored independently under `out/block/` and
 `out/thread/`, so a block run cannot overwrite the thread baseline.
 
+CUDA builds use `--use_fast_math` by default.  Use `--math-mode precise` for a matched-arithmetic
+backend check; this omits `--use_fast_math` and writes results below `out/thread_precise/` or
+`out/block_precise/` without replacing the ordinary archive.  For example, rerun only polar
+transport with:
+
+```bash
+python3 qav/fluid/test_z_transport_3d/run.py \
+    --math-mode precise \
+    --cfl 0.05 \
+    --res 32 64 128 256
+python3 qav/fluid/test_z_transport_3d/run.py \
+    --math-mode precise \
+    --cfl 0.5 \
+    --res 32 64 128 256
+```
+
 The separate implementation-comparison branch builds both methods and checks their outputs directly:
 
 ```bash

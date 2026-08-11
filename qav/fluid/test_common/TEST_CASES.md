@@ -28,8 +28,9 @@ L_\infty=\max_i|e_i|.
 $$
 
 It reports observed L1 order between successive resolutions and the relative total-mass change.
-Velocity norms exclude cells whose exact density is at or below $10^{-12}$, so the analytical
-comparison does not mistake the production vacuum velocity convention for transport error.
+Velocity norms include only cells where both the exact and numerical densities exceed $10^{-12}$
+of the exact peak, so the comparison does not mistake a production vacuum fallback velocity for
+transport error.
 
 Unless stated otherwise, the domain is
 

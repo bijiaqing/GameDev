@@ -370,10 +370,12 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     ):
         results["errors"][name] = norm_set(numerical - exact, volume)
 
-    # Velocity errors are meaningful only where the analytical density is not
-    # vacuum.  x and z conserved primitives are specific angular momenta, so
-    # divide by cylindrical R and spherical r respectively to obtain file values.
-    active = exact_dens > 1.0e-12
+    # Velocity errors are meaningful only where both solutions resolve dust
+    # density.  Requiring numerical density excludes cells where the production
+    # recovery deliberately writes a vacuum fallback velocity.  Scale the floor
+    # to the analytical solution so the mask remains dimensionally meaningful.
+    density_floor = 1.0e-12*float(np.max(np.abs(exact_dens)))
+    active = (exact_dens > density_floor) & (dens > density_floor)
     active_volume = np.where(active, volume, 0.0)
     radius = yc[None, :, None] * np.sin(zc)[:, None, None]
     sphere_radius = yc[None, :, None]
