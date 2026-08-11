@@ -185,18 +185,21 @@ are compile-time constants.
 | Artifact | Location and format | Purpose |
 |---|---|---|
 | raw analytical fields | `qav/fluid/out/SWEEP/MODEL[/VARIANT]/*.dat` | headerless binary `real` arrays in x-fastest order |
-| per-build metadata | `meta_N*.txt` beside the raw fields | realized grid, time, step count, CFL, shift, and power |
+| per-build metadata | `meta_N*.json` beside the raw fields | realized grid, time, step count, CFL, shift, and power |
 | analytical metrics | `qav/fluid/out/SWEEP/MODEL/metrics_*.json` | norms and mass change for one resolution and variant |
 | environment record | `environment.json` in the model or variant directory | `nvcc`, GPU, and driver diagnostics |
-| sweep build and run logs | `build.txt` and `run.txt` in each sweep-model directory | compilation resources and simulation transcript |
+| sweep build and run records | `build.json` and `run.json` in each sweep-model directory | commands, return states, compiler or runtime output, accepted steps, and wall time |
 | sweep timing | `timing.json` in each sweep-model directory | measured wall time for one implementation |
 | sweep assessment | `qav/fluid/out/sweep_comparison_2d.json` or `_3d.json` | automatic equivalence metrics and `passed: true` |
 
 `SWEEP` is `thread` or `block`. Parameter variants are kept separate as `shift*`, `cfl*`, or `p*`
 subdirectories so one run cannot overwrite another variant's raw data. The corresponding tag is
 also included in the metric filename. Unlike the swarm suite, the analytical fluid suite does not
-yet write per-model or aggregate manifests, so the terminal transcript and expected metric-file
+yet write per-model or aggregate manifests, so any captured transcript JSON and expected metric-file
 inventory must be archived with the results.
+
+Active QA runners create no persistent text result files. The retained clean archives therefore
+need no legacy text migration step.
 
 ## Coverage matrix and case inventory
 
@@ -657,13 +660,13 @@ python3 qav/fluid/test_x_transport_2d/run.py \
     --res 32 64 128 256 --shift 3.25
 ```
 
-Keep the JSON metrics, `environment.json`, and full terminal output together when archiving a run.
-For the sweep branch, also retain `build.txt`,
-`run.txt`, `timing.json`, and `sweep_comparison_*.json`. Analytical results are namespaced as
+Keep the JSON metrics, `environment.json`, and any captured terminal-output JSON together when archiving a run.
+For the sweep branch, also retain `build.json`,
+`run.json`, `variables.json`, `timing.json`, and `sweep_comparison_*.json`. Analytical results are namespaced as
 `qav/fluid/out/SWEEP/MODEL/`, where `SWEEP` is `thread` or `block`.
 
 Because the analytical branch has no aggregate manifest or automatic accuracy gate, an archive is
-complete only when its expected metric inventory and terminal transcript are present and the
+complete only when its expected metric inventory and captured transcript JSON are present and the
 convergence sequences have been assessed. The sweep branch is self-gating: a returned comparison
 JSON with `"passed": true` means all of its implemented tolerances were satisfied.
 

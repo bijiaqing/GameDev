@@ -6,12 +6,55 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import time
 from pathlib import Path
 
 from compare_sweeps import compare_pair
 from run_model import capture
+
+
+def write_json(path: Path, record: dict[str, object]) -> None:
+    """Write one deterministic JSON record with a final newline"""
+
+    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+
+
+def parse_step(line: str) -> tuple[int, float, float, float] | None:
+    """Parse one accepted-step row from the native executable stream"""
+
+    fields = line.split()
+    if len(fields) != 4:
+        return None
+    try:
+        return int(fields[0]), float(fields[1]), float(fields[2]), float(fields[3])
+    except ValueError:
+        return None
+
+
+def convert_variables(out_dir: Path) -> None:
+    """Convert the production parameter report to a structured sweep artifact"""
+
+    source = out_dir/"variables.txt"
+    if not source.is_file():
+        return
+
+    parameters: dict[str, int | float | str] = {}
+    for line in source.read_text().splitlines():
+        if "=" not in line:
+            continue
+        name, value = (part.strip() for part in line.split("=", 1))
+        if re.fullmatch(r"[+-]?\d+", value):
+            parameters[name] = int(value)
+            continue
+        try:
+            parameters[name] = float(value)
+        except ValueError:
+            parameters[name] = value
+
+    write_json(out_dir/"variables.json", {"schema": 1, "parameters": parameters})
+    source.unlink()
 
 
 def build_and_run(
@@ -28,24 +71,33 @@ def build_and_run(
     model_dir = test_root/model
     out_dir = test_root/"out"/sweep/model
     out_dir.mkdir(parents=True, exist_ok=True)
+    for legacy_name in ("build.txt", "run.txt", "variables.txt"):
+        (out_dir/legacy_name).unlink(missing_ok=True)
 
     # Model constants are compile-time values, so clean before applying a new benchmark configuration
     subprocess.run([
         "make", "-C", str(project_root), f"MODEL={model}", f"FLUID_SWEEP={sweep}", "clean"
     ], check=True)
+    build_command = [
+        "make", "-C", str(project_root), f"MODEL={model}",
+        f"FLUID_SWEEP={sweep}",
+        f"RES={resolution}", f"SAVE={save_max}", f"OUT_TIME={output_time:.17g}",
+    ]
     build = subprocess.run(
-        [
-            "make", "-C", str(project_root), f"MODEL={model}",
-            f"FLUID_SWEEP={sweep}",
-            f"RES={resolution}", f"SAVE={save_max}", f"OUT_TIME={output_time:.17g}",
-        ],
-        check=True,
+        build_command,
+        check=False,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    (out_dir/"build.txt").write_text(build.stdout)
+    write_json(out_dir/"build.json", {
+        "schema": 1,
+        "command": build_command,
+        "return_code": build.returncode,
+        "output": build.stdout,
+    })
     print(build.stdout, end="", flush=True)
+    build.check_returncode()
 
     environment = {
         "nvcc": capture(["nvcc", "--version"], project_root),
@@ -53,19 +105,53 @@ def build_and_run(
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"], project_root
         ),
     }
-    (out_dir/"environment.txt").unlink(missing_ok=True)
-    (out_dir/"environment.json").write_text(
-        json.dumps(environment, indent=2, sort_keys=True) + "\n"
-    )
+    write_json(out_dir/"environment.json", environment)
 
-    # Keep the verbose simulation stream in run.txt while reporting a compact elapsed time here
+    # Retain the native stream and accepted-step records inside one JSON log
     start = time.perf_counter()
-    with (out_dir/"run.txt").open("w") as run_log:
-        subprocess.run([str(model_dir/"gamedev")], cwd=project_root, check=True,
-                       stdout=run_log, stderr=subprocess.STDOUT)
+    run_command = [str(model_dir/"gamedev")]
+    simulation = subprocess.Popen(
+        run_command, cwd=project_root, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1,
+    )
+    if simulation.stdout is None:
+        raise RuntimeError("failed to capture simulation output")
+    run_lines = []
+    step_records: list[dict[str, int | float]] = []
+    for line in simulation.stdout:
+        print(line, end="", flush=True)
+        run_lines.append(line)
+        parsed = parse_step(line)
+        if parsed is not None:
+            frame, dt, clock_out, clock_sim = parsed
+            step_records.append({
+                "step": len(step_records) + 1,
+                "frame": frame,
+                "dt": dt,
+                "clock_out": clock_out,
+                "clock_sim": clock_sim,
+            })
+    return_code = simulation.wait()
     elapsed = time.perf_counter() - start
-    (out_dir/"timing.json").write_text(json.dumps({"wall_seconds": elapsed}, indent=2) + "\n")
-    print(f"{model}: {elapsed:.3f} wall seconds", flush=True)
+    write_json(out_dir/"run.json", {
+        "schema": 1,
+        "command": run_command,
+        "return_code": return_code,
+        "wall_seconds": elapsed,
+        "accepted_steps": len(step_records),
+        "last_step": step_records[-1] if step_records else None,
+        "steps": step_records,
+        "output": "".join(run_lines),
+    })
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, run_command)
+
+    convert_variables(out_dir)
+    write_json(out_dir/"timing.json", {"wall_seconds": elapsed})
+    print(
+        f"{model}: {elapsed:.3f} wall seconds, {len(step_records)} accepted steps",
+        flush=True,
+    )
     return elapsed
 
 

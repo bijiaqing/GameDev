@@ -513,8 +513,9 @@ python3 qav/swarm/test_knn/run.py
 python3 qav/swarm/test_knn/run.py --full
 ```
 
-Test output is archived below `qav/fluid/out/` or `qav/swarm/out/`, together with metrics and
-environment metadata where the individual runner provides them. Consult the test guides before
+Test output is archived below `qav/fluid/out/` or `qav/swarm/out/`. Small metadata, metric,
+manifest, environment, build, and run records use JSON; compact numerical field arrays remain
+binary. Consult the test guides before
 interpreting a pass: deterministic norms, convergence orders, conservation tolerances, statistical
 tests, and KNN topology criteria are intentionally different.
 

@@ -677,18 +677,20 @@ int main ()
 
     // Record the compile-time configuration and realized integration statistics beside the raw binary arrays.  Python uses
     // these values instead of inferring dimensions or final time from filenames and requested parameters.
-    std::ofstream meta(PATH + "meta_N" + std::to_string(VERIFY_RES) + ".txt");
+    std::ofstream meta(PATH + "meta_N" + std::to_string(VERIFY_RES) + ".json");
     meta << std::setprecision(17)
-         << "case=" << case_name() << '\n'
-         << "resolution=" << VERIFY_RES << '\n'
-         << "nx=" << N_X << '\n'
-         << "ny=" << N_Y << '\n'
-         << "nz=" << N_Z << '\n'
-         << "time=" << clock << '\n'
-         << "steps=" << steps << '\n'
-         << "cfl=" << CFL_DYN << '\n'
-         << "shift=" << static_cast<real>(VERIFY_SHIFT) << '\n'
-         << "power=" << static_cast<real>(VERIFY_POWER) << '\n';
+         << "{\n"
+         << "  \"case\": \"" << case_name() << "\",\n"
+         << "  \"resolution\": " << VERIFY_RES << ",\n"
+         << "  \"nx\": " << N_X << ",\n"
+         << "  \"ny\": " << N_Y << ",\n"
+         << "  \"nz\": " << N_Z << ",\n"
+         << "  \"time\": " << clock << ",\n"
+         << "  \"steps\": " << steps << ",\n"
+         << "  \"cfl\": " << CFL_DYN << ",\n"
+         << "  \"shift\": " << static_cast<real>(VERIFY_SHIFT) << ",\n"
+         << "  \"power\": " << static_cast<real>(VERIFY_POWER) << "\n"
+         << "}\n";
 
     // Release all device allocations; host std::vectors are released automatically when main returns.
     CUDA_CHECK(cudaFree(dev_dens));

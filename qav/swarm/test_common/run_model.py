@@ -38,7 +38,7 @@ def capture(command: list[str], cwd: Path) -> str:
 def clean_results(out_dir: Path) -> None:
     """Remove every artifact owned by one analytical model before a new run"""
 
-    for pattern in ("*.dat", "meta_N*.txt", "metrics_N*.json"):
+    for pattern in ("*.dat", "meta_N*.json", "meta_N*.txt", "metrics_N*.json"):
         for path in out_dir.glob(pattern):
             path.unlink()
     for name in ("environment.json", "environment.txt", "manifest.json"):

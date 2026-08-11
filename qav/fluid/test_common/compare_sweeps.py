@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 import numpy as np
@@ -59,17 +58,14 @@ def relative_l2(reference: np.ndarray, candidate: np.ndarray) -> float:
 
 
 def accepted_steps(path: Path) -> int:
-    """Count accepted-step rows in a production run log"""
+    """Read the accepted-step count from a structured production run record"""
 
     if not path.is_file():
         raise FileNotFoundError(f"missing run log: {path}")
-
-    pattern = re.compile(
-        r"^\s*\d+\s+[+-]?\d+(?:\.\d+)?[eE][+-]?\d+"
-        r"\s+[+-]?\d+(?:\.\d+)?[eE][+-]?\d+"
-        r"\s+[+-]?\d+(?:\.\d+)?[eE][+-]?\d+\s*$"
-    )
-    return sum(bool(pattern.match(line)) for line in path.read_text(errors="replace").splitlines())
+    record = json.loads(path.read_text())
+    if not isinstance(record, dict) or not isinstance(record.get("accepted_steps"), int):
+        raise ValueError(f"invalid structured run log: {path}")
+    return record["accepted_steps"]
 
 
 def compare_pair(
@@ -145,8 +141,8 @@ def compare_pair(
     ref_drift = (ref_mass1 - ref_mass0)/ref_mass0
     opt_drift = (opt_mass1 - opt_mass0)/opt_mass0
     mass_mismatch = (opt_mass1 - ref_mass1)/ref_mass1
-    ref_steps = accepted_steps(reference_dir/"run.txt")
-    opt_steps = accepted_steps(candidate_dir/"run.txt")
+    ref_steps = accepted_steps(reference_dir/"run.json")
+    opt_steps = accepted_steps(candidate_dir/"run.json")
 
     print()
     print(f"minimum density: thread={np.min(ref_dens1):.8e} block={np.min(opt_dens1):.8e}")

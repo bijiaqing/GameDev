@@ -32,7 +32,7 @@ CUDA configurations without executing them. All analytical and KNN outputs are w
 `qav/swarm/out/`, with KNN records collected in `qav/swarm/out/test_knn/`.
 
 All active runners write compiler and GPU metadata as `environment.json`. Analytical CUDA drivers
-also write `meta_N*.txt`, raw binary `*.dat` fields, and validator-generated
+also write `meta_N*.json`, raw binary `*.dat` fields, and validator-generated
 `metrics_N*.json`; KNN runners store configuration and metrics together in result JSON files and
 index each matrix with `manifest.json` and the complete KNN group with `suite_manifest.json`.
 The dispatcher writes `qav/swarm/out/manifest.json` after every model and prints an explicit final

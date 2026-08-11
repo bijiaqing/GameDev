@@ -38,13 +38,13 @@ The complete native analytical campaign is now also archived. The fluid branch p
 records with the thread sweep and all 85 with the block sweep at the requested resolutions and
 parameter variants. Corresponding records agree throughout; the only differences exceeding the
 archive comparison's roundoff threshold are two $N=256$ radial-diffusion velocity $L_\infty$ values,
-all of order $10^{-12}$. The swarm branch produced all 51 analytical records, and every one of its
-24 analytical component manifests reports `passed: true`. Together with the KNN component, the
-reconstructed aggregate swarm manifest reports 25 of 25 models passed. This closes the implemented
-ROCm numerical matrices at that archive revision. A native restart regression and an automated
-CUDA/ROCm archive comparator have since been implemented and await their final cluster archive;
-deliberate nonfinite-state injection, AMD profiling, and production-scale performance
-characterization remain pending.
+all of order $10^{-12}$. The swarm branch produced all 51 CUDA-comparable analytical records, and
+every one of its 24 analytical component manifests reports `passed: true`. The subsequently
+archived native restart regression adds one model and one record. Together with the KNN component,
+the rebuilt ROCm aggregate reports 26 of 26 models and 52 analytical builds passed. This closes the
+implemented native ROCm numerical matrices at that archive revision. Deliberate nonfinite-state
+injection, AMD profiling, production-scale performance characterization, and the complete
+CUDA-versus-ROCm archive gate remain pending.
 
 The first $N=256$ 3D swarm grid run then exposed a latent endpoint-stencil safety defect shared by
 the CUDA and HIP sources. An exact final radial or polar cell-centre coordinate could select a
@@ -166,8 +166,7 @@ ROCm QA metadata and transcripts now use JSON consistently. Analytical drivers w
 `meta_N*.json`; sweep runs write `build.json`, `run.json`, `variables.json`, `timing.json`, and the
 aggregate `sweep_comparison_*.json`. The raw compiler and runtime streams are retained as escaped
 strings inside the corresponding JSON objects, while accepted steps and parameters are also stored
-as typed fields. `tools/convert_qa_text.py` migrates older downloaded QA text artifacts without
-discarding their contents.
+as typed fields.
 Sweep artifacts include resolution, output count, and output interval in a configuration tag, so
 quick and full runs coexist rather than silently replacing one another.
 
@@ -340,11 +339,10 @@ The first native campaign must establish all of the following:
 8. checkpoint/restart succeeds within the HIP backend
 9. compiler, driver, target, device, resource, timing, and test manifests are archived
 
-Items 1, 4, and 6 are now established by the complete analytical and KNN campaigns, including six
-production-backend links. The matched $512^2$ and $128^3$ fluid sweeps also establish the current
-thread/block equivalence evidence. The restart test and cross-backend comparator are implemented
-but require their final native archives. The remaining requirements concern deliberate failure-path
-tests, larger-LDS launch coverage, the complete cross-backend archive, restart execution, and
+Items 1, 4, 6, 8, and 9 are now established by the complete analytical, restart, and KNN
+campaigns, including six production-backend links. The matched $512^2$ and $128^3$ fluid sweeps
+also establish the current thread/block equivalence evidence. The remaining requirements concern
+deliberate failure-path tests, larger-LDS launch coverage, the complete cross-backend archive, and
 profiling.
 
 After the smoke tests pass, run the full matrices:

@@ -95,6 +95,8 @@ def run(model: str) -> None:
     variant = output_tag(model, args.cfl, args.power, args.shift)
     data_dir = out_dir / variant if variant else out_dir
     data_dir.mkdir(parents=True, exist_ok=True)
+    for legacy in data_dir.glob("meta_N*.txt"):
+        legacy.unlink()
 
     # Record the compiler, GPU, and driver associated with these results.  The
     # information is written once per parameter variant rather than once per N.
@@ -128,7 +130,7 @@ def run(model: str) -> None:
         if args.build_only:
             continue
 
-        # The executable writes binary fields and a small metadata file into
+        # The executable writes binary fields and a small JSON metadata file into
         # data_dir through PATH_OUT.  analyze then constructs the analytical
         # cell averages and compares them with those files.
         subprocess.run([str(model_dir / "gamedev")], cwd=project_root, check=True)

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 
@@ -25,13 +26,12 @@ INIT_SMIN = 0.05
 INIT_SMAX = 6.4
 
 
-def read_meta(path: Path) -> dict[str, str]:
-    """Read the simple key=value metadata emitted by the CUDA driver"""
+def read_meta(path: Path) -> dict[str, object]:
+    """Read and validate the structured metadata emitted by the CUDA driver"""
 
-    values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        key, value = line.split("=", 1)
-        values[key] = value
+    values = json.loads(path.read_text())
+    if not isinstance(values, dict):
+        raise ValueError(f"metadata root must be an object: {path}")
     return values
 
 
@@ -666,7 +666,7 @@ def analyze_boundary(out_dir: Path, resolution: int, meta: dict[str, str]) -> di
 def analyze(out_dir: Path, resolution: int) -> dict:
     """Dispatch one recorded case and raise immediately when its criteria fail"""
 
-    meta = read_meta(out_dir / f"meta_N{resolution}.txt")
+    meta = read_meta(out_dir / f"meta_N{resolution}.json")
     if int(meta["resolution"]) != resolution:
         raise ValueError(
             f"metadata resolution {meta['resolution']} does not match requested N={resolution}"

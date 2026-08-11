@@ -148,24 +148,26 @@ void write_state (const std::vector<swarm> &particle)
 // record the grid and integration parameters needed to reconstruct the analytical reference
 void write_meta (real dt, real time)
 {
-    std::string path = output_path + "meta_N" + std::to_string(VERIFY_RES) + ".txt";
+    std::string path = output_path + "meta_N" + std::to_string(VERIFY_RES) + ".json";
     std::ofstream file(path);
     if (!file) throw std::runtime_error("cannot open metadata file: " + path);
     file << std::setprecision(17);
-    file << "case=" << case_name() << '\n';
-    file << "resolution=" << VERIFY_RES << '\n';
-    file << "np=" << N_P << '\n';
-    file << "nx=" << N_X << '\n';
-    file << "ny=" << N_Y << '\n';
-    file << "nz=" << N_Z << '\n';
-    file << "x_min=" << X_MIN << '\n';
-    file << "x_max=" << X_MAX << '\n';
-    file << "y_min=" << Y_MIN << '\n';
-    file << "y_max=" << Y_MAX << '\n';
-    file << "z_min=" << Z_MIN << '\n';
-    file << "z_max=" << Z_MAX << '\n';
-    file << "dt=" << dt << '\n';
-    file << "time=" << time << '\n';
+    file << "{\n";
+    file << "  \"case\": \"" << case_name() << "\",\n";
+    file << "  \"resolution\": " << VERIFY_RES << ",\n";
+    file << "  \"np\": " << N_P << ",\n";
+    file << "  \"nx\": " << N_X << ",\n";
+    file << "  \"ny\": " << N_Y << ",\n";
+    file << "  \"nz\": " << N_Z << ",\n";
+    file << "  \"x_min\": " << X_MIN << ",\n";
+    file << "  \"x_max\": " << X_MAX << ",\n";
+    file << "  \"y_min\": " << Y_MIN << ",\n";
+    file << "  \"y_max\": " << Y_MAX << ",\n";
+    file << "  \"z_min\": " << Z_MIN << ",\n";
+    file << "  \"z_max\": " << Z_MAX << ",\n";
+    file << "  \"dt\": " << dt << ",\n";
+    file << "  \"time\": " << time << "\n";
+    file << "}\n";
     file.close();
     if (!file) throw std::runtime_error("cannot write metadata file: " + path);
 }

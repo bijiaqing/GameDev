@@ -160,25 +160,23 @@ The active QA runners use file formats according to the role of each artifact:
 | Artifact | Format | Purpose |
 |---|---|---|
 | raw CUDA fields | `*.dat` | headerless binary `real` arrays read by NumPy |
-| per-build metadata | `meta_N*.txt` | small `key=value` records written directly by the CUDA driver |
+| per-build metadata | `meta_N*.json` | structured grid, time, and case parameters written directly by the CUDA driver |
 | numerical assessment | `metrics_N*.json` | machine-readable errors, statistics, thresholds, and pass state |
 | KNN benchmark record | `<distribution>_<dimension>d_N<particles>.json` | search configuration, correctness counters, timing, memory, and pass state |
 | model or matrix index | `manifest.json` | authoritative list of current result JSON files and component pass state |
 | KNN aggregate | `suite_manifest.json` | ordinary, edge, periodic, wedge, and production-link pass states |
 | swarm aggregate | `qav/swarm/out/manifest.json` | requested suite, live model states, referenced component manifests, and final pass state |
 | compiler and GPU record | `environment.json` | structured compiler, GPU, driver, and test-specific build settings |
-| build, run, and terminal transcript | `*.txt` | unstructured human-readable diagnostic output |
+| optional captured transcript | `*.json` | command, return state, and escaped human-readable output from a build or run |
 
-The analytical and KNN harnesses originally evolved independently: analytical models wrote
-`environment.txt`, whereas KNN benchmarks wrote `environment.json`. There was no physical or
-validation reason for the distinction. The runners are now standardized on `environment.json`
-for swarm analytical tests, fluid analytical tests, fluid sweep comparisons, and KNN benchmarks.
-The complete 2026-07-31 swarm archive was generated after this normalization and contains no
-legacy `environment.txt` records.
+The analytical and KNN harnesses originally evolved independently and used a mixture of text and
+JSON records. There was no physical or validation reason for the distinction. Active runners now
+use JSON for metadata, environments, metrics, manifests, and persistent build or run records, and
+both current QA trees contain no persistent text results.
 
-The remaining format differences are intentional. Metadata stays as text because it is emitted
-directly by a compact CUDA test driver, while calculated metrics and manifests use JSON because
-Python consumes and aggregates them. KNN tests do not need separate `meta_N*.txt` files because
+The remaining format differences are intentional. Raw numerical arrays remain compact binary
+files, while small descriptive and diagnostic records use JSON. KNN tests do not need separate
+`meta_N*.json` files because
 their result JSON already contains the particle count, physical and search dimensions, cutoff,
 $K$, tree parameters, and quality-query counts. An active manifest is authoritative; obsolete
 development JSON files elsewhere in an output directory are not included in validation.
@@ -188,9 +186,9 @@ component is stored as JSON `null`, distinguishing “not selected” from eithe
 
 The common dispatcher rewrites `qav/swarm/out/manifest.json` for every invocation. A later focused
 group therefore replaces the earlier top-level all-suite index even though it does not delete other
-models' component directories. For a durable all-suite archive, copy the aggregate manifest and
-terminal transcript together immediately after the all-group run; component manifests alone cannot
-reconstruct which group was most recently requested.
+models' component directories. For a durable all-suite archive, preserve the aggregate manifest
+immediately after the all-group run; component manifests alone cannot reconstruct which group was
+most recently requested.
 
 ## Coverage matrix and case inventory
 
@@ -1138,10 +1136,10 @@ summary.
 | periodic-wedge KNN matrix | 10 cases | 10/10 PASS |
 | production KD-tree/Morton collision links | 6 configurations | 6/6 PASS |
 
-The archive contains 47 `metrics_N*.json` files, 47 matching `meta_N*.txt` files, 23 analytical
+The archive contains 47 `metrics_N*.json` files, 47 matching `meta_N*.json` files, 23 analytical
 model manifests, the ordinary and wedge KNN manifests, individual edge, periodic, and
 production-link records, the KNN aggregate, and the live top-level aggregate. Every referenced
-component manifest reports `"passed": true`; the terminal transcript ends with
+component manifest reports `"passed": true`; the captured transcript JSON ends with
 `SWARM TEST SUITE: PASS`.
 
 All environment records agree on:
@@ -1182,7 +1180,7 @@ were
 For the geometric-mean grain size, interpolation between the two central size knots differed from
 a directly integrated midpoint reference by $4.07\times10^{-9}$ in CDF $L_\infty$ and
 $6.61\times10^{-9}$ in contained mass. These are fidelity diagnostics rather than acceptance
-thresholds. The archived `metrics_N*.json`, `meta_N*.txt`, `manifest.json`, and `environment.json`
+thresholds. The archived `metrics_N*.json`, `meta_N*.json`, `manifest.json`, and `environment.json`
 files under `qav/swarm/out/test_initial_3d/` are the native machine-readable record.
 
 The archived JSON was generated immediately before the midpoint normalization mirror in the Python
@@ -1339,7 +1337,7 @@ are compile-time constants. Output is stored as
 qav/swarm/out/MODEL/
 ```
 
-with raw binary arrays, `meta_N*.txt`, `metrics_N*.json`, `environment.json`, and a per-model
+with raw binary arrays, `meta_N*.json`, `metrics_N*.json`, `environment.json`, and a per-model
 `manifest.json`. Each selected model removes its previous owned artifacts before execution, so the
 manifest cannot silently mix the new run with older resolutions.
 

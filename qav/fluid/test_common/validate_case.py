@@ -29,15 +29,12 @@ K2 = 1.694299217770420
 K3 = 1.874562003084784
 
 
-def read_meta(path: Path) -> dict[str, str]:
-    """Read the CUDA driver's simple ``key=value`` metadata format"""
+def read_meta(path: Path) -> dict[str, object]:
+    """Read and validate the CUDA driver's structured metadata record"""
 
-    values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        # maxsplit=1 preserves any additional '=' characters in the value,
-        # although the current metadata values are all simple numbers or names.
-        key, value = line.split("=", 1)
-        values[key] = value
+    values = json.loads(path.read_text())
+    if not isinstance(values, dict):
+        raise ValueError(f"metadata root must be an object: {path}")
     return values
 
 
@@ -140,7 +137,7 @@ def analyze(out_dir: Path, resolution: int) -> dict:
 
     # Metadata tells the validator which compile-time branch produced the files
     # and provides the realized grid and final integration time.
-    meta = read_meta(out_dir / f"meta_N{resolution}.txt")
+    meta = read_meta(out_dir / f"meta_N{resolution}.json")
     case = meta["case"]
     nx, ny, nz = int(meta["nx"]), int(meta["ny"]), int(meta["nz"])
     time = float(meta["time"])
