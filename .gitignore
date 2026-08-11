@@ -8,17 +8,11 @@ gamedev
 doc/future*
 doc/format*
 
-# build artifacts
-obj/*
-!obj/.gitkeep
+# generated object and output directories at every depth
+**/obj/
+**/out/
 
-# output files
-out/*
-!out/.gitkeep
-
-# quality assurance validation (qav) output files
-qav/*/out/*
-!qav/*/out/.gitkeep
+# quality assurance validation (qav) executables
 qav/swarm/test_knn/bin/
 
 # experimental files

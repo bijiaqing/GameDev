@@ -1,8 +1,7 @@
-obj/
-out/
+**/obj/
+**/out/
 **/bin/
 **/gamedev
 **/__pycache__/
 *.pyc
 .dry_*.txt
-

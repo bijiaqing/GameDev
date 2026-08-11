@@ -249,8 +249,10 @@ endif
 
 all: $(EXEC)
 
-$(EXEC): $(OBJ) $(MODEL_DIR)/flags.mk $(MODEL_CONST) $(RELINK_TRIGGER)
-	@mkdir -p $(OUT_DIR)
+$(OUT_DIR):
+	@mkdir -p $@
+
+$(EXEC): $(OBJ) $(MODEL_DIR)/flags.mk $(MODEL_CONST) $(RELINK_TRIGGER) | $(OUT_DIR)
 	@printf "%-12s %-20s %s\n" "Linking" "$@" "from $(words $(OBJ)) HIP objects"
 	@$(HIPCC) $(HIPFLAGS) -o $@ $(OBJ)
 
