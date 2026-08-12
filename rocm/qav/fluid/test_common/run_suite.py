@@ -28,7 +28,7 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
-        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep", "failure"),
+        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep", "failure", "lds"),
         default="all",
     )
     parser.add_argument("--sweep-dim", choices=("all", "2d", "3d"), default="all")
@@ -74,6 +74,17 @@ def main() -> None:
         subprocess.run(
             [
                 sys.executable, str(model_root/"test_failure_2d"/"run.py"),
+                "--target", args.target,
+            ],
+            check=True,
+            env=run_environment,
+        )
+        return
+
+    if args.group == "lds":
+        subprocess.run(
+            [
+                sys.executable, str(common/"run_lds.py"),
                 "--target", args.target,
             ],
             check=True,

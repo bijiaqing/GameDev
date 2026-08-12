@@ -15,13 +15,13 @@ const real  R_0         = 1.0;
 // =========================================================================================================================
 // mesh domain size and resolution
 
-constexpr int  N_X      = 16384;
+constexpr int  N_X      = 4096;
 constexpr real X_MIN    = 0.0;
-constexpr real X_MAX    = 2.0*M_PI;
+constexpr real X_MAX    = 0.25*M_PI;
 
-constexpr int  N_Y      = 4096;
-constexpr real Y_MIN    = 0.5;
-constexpr real Y_MAX    = 2.5;
+constexpr int  N_Y      = 3072;
+constexpr real Y_MIN    = 0.75;
+constexpr real Y_MAX    = 1.25;
 
 constexpr int  N_Z      = 1;
 constexpr real Z_MIN    = 0.5*M_PI;
@@ -37,7 +37,7 @@ const real  IDX_Q       = -0.4;         // radial power-law index of the gas tem
 
 #ifdef DIFFUSION
 #ifndef CONST_NU  // CONST_ALPHA
-const real  ALPHA       = 1.0e-02;
+const real  ALPHA       = 1.0e-04;
 #else             // CONST_NU
 const real  NU          = 1.0e-07;
 #endif // CONST_NU
@@ -50,7 +50,7 @@ const real  METAL_Z     = 1.0e-02;      // dust-to-gas surface-density ratio for
 const real  STOKES_0    = 1.0e-03;
 
 #ifdef RADIATION
-const real  BETA_0      = 1.0e+00;      // radiation-pressure-to-gravity ratio
+const real  BETA_0      = 1.0e+01;      // radiation-pressure-to-gravity ratio
 const real  KAPPA_0     = 5.0e+04;      // opacity coefficient
 const real  T_BETA      = 2.0*M_PI;     // smoothly turn radiation on over time
 #endif
@@ -65,8 +65,8 @@ const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity
 // =========================================================================================================================
 // time step and output
 
-const int  SAVE_MAX     = 100;
-const real DT_OUT       = 20.*M_PI;     // output interval
+const int  SAVE_MAX     = 20;
+const real DT_OUT       = 2.0*M_PI;     // output interval
 const real DT_MAX       = 0.2*M_PI;
 
 constexpr real CFL_DYN  = 0.45;         // CFL number for the explicit advection step (0 < CFL_DYN <= 0.5)

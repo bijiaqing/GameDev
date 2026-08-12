@@ -89,7 +89,11 @@ const real DT_OUT       = 2.0*M_PI;     // output interval
 #endif // TEST_DT_OUT
 const real DT_MAX       = 1.0e-01;
 
-constexpr real CFL_DYN  = 0.5;          // CFL number for the explicit advection step (0 < CFL_DYN <= 0.5)
+#ifdef TEST_CFL
+constexpr real CFL_DYN  = TEST_CFL;
+#else
+constexpr real CFL_DYN  = 0.5;          // verification default at the formal CFL limit
+#endif // TEST_CFL
 const real RHO_VAC      = 1.0e-30;      // vacuum density for the dust density positivity limiter
 
 // =========================================================================================================================

@@ -35,6 +35,18 @@ including clean controls and NaN/Inf injection into density, momentum, primitive
 optical-depth fields. Its build and case records are stored as JSON under
 `qav/fluid/out/failure/test_failure_2d/`
 
+Run the native large-LDS qualification branch with:
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group lds --target gfx942
+```
+
+It launches the production block diffusion kernels with 56 KiB in azimuth and 60 KiB in the radial
+and polar directions, checks their compiled static LDS use and per-kernel dynamic limit, and validates
+an analytically stationary uniform state for finiteness and conservation. A fourth case requests
+65568 dynamic bytes and passes only when the host guard rejects it before launch. Build, process, and
+metric records are stored as JSON under `qav/fluid/out/lds/` and `qav/fluid/out/block/test_lds_*/`
+
 The sweep runner prints a compact live simulation heartbeat every ten seconds while retaining the
 complete executable stream and parsed accepted-step history in each model's `run.json`; use
 `--progress-seconds N` to change the interval or `--progress-seconds 0` to suppress the heartbeat.

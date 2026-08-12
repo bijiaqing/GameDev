@@ -1,6 +1,6 @@
 
 DUST_REPR := fluid
-FLUID_SWEEP := thread
+FLUID_SWEEP := block
 
 NVCC += -DRADIATION
 NVCC += -DDIFFUSION

@@ -34,7 +34,12 @@ constexpr real M_S = 1.0;
 constexpr real R_0 = 1.0;
 constexpr real S_0 = 1.0;
 
-#if defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
+#if defined(TEST_PERF_COLLISION_2D)
+#ifndef PERF_PARTICLES
+#define PERF_PARTICLES 100000
+#endif
+constexpr int N_P = PERF_PARTICLES;
+#elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
 constexpr int N_P = 16*VERIFY_RES*VERIFY_RES;
 #elif defined(TEST_INITIAL_3D)
 constexpr int N_P = 65536;
@@ -59,7 +64,11 @@ constexpr int N_P = 1;
 constexpr int N_P = 64;
 #endif
 
-#if defined(TEST_GRID_1D)
+#if defined(TEST_PERF_COLLISION_2D)
+constexpr int N_X = 100;
+constexpr int N_Y = 100;
+constexpr int N_Z = 1;
+#elif defined(TEST_GRID_1D)
 constexpr int N_X = 1;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = 1;
@@ -192,7 +201,11 @@ constexpr real INIT_SMAX = 6.4;
 #ifdef COLLISION
 constexpr real REYNOLDS_0 = 1.0e8;
 constexpr int COAG_KERNEL = 0;
+#ifdef TEST_PERF_COLLISION_2D
+constexpr int N_K = 200;
+#else
 constexpr int N_K = 2;
+#endif
 constexpr real H_SEARCH = 1.0;
 constexpr real V_FRAG = 1.0;
 constexpr real CFL_COL = 0.01;
@@ -205,8 +218,16 @@ constexpr int MORTON_MAX_LEVEL = 20;
 constexpr int MORTON_WORK_SIZE = 1024;
 #endif
 
+#if defined(TEST_PERF_COLLISION_2D) && defined(TEST_SAVE_MAX)
+constexpr int SAVE_MAX = TEST_SAVE_MAX;
+#else
 constexpr int SAVE_MAX = 1;
+#endif
+#if defined(TEST_PERF_COLLISION_2D) && defined(TEST_DT_OUT)
+constexpr real DT_OUT = TEST_DT_OUT;
+#else
 constexpr real DT_OUT = 1.0;
+#endif
 constexpr real DT_MAX = 1.0;
 constexpr real CFL_DYN = 0.5;
 constexpr int LIN_BASE = 1;

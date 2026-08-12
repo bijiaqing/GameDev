@@ -414,11 +414,10 @@ The first native campaign must establish all of the following:
 8. checkpoint/restart succeeds within the HIP backend
 9. compiler, driver, target, device, resource, timing, and test manifests are archived
 
-Items 1, 2, 4, 5, 6, 7, 8, and 9 are now established by the complete analytical, restart, KNN, and
-direct cross-backend fluid campaigns, including six production-backend links. The matched
-$512^2$ and $128^3$ fluid sweeps
-also establish the current thread/block equivalence evidence. The remaining requirements concern
-larger-LDS launch coverage and profiling.
+All nine requirements are now established by the complete analytical, restart, KNN, failure-path,
+large-LDS, and direct cross-backend fluid campaigns, including six production-backend links. The
+matched $512^2$ and $128^3$ fluid sweeps also establish the current thread/block equivalence
+evidence. Production-scale performance profiling remains separate from these correctness gates.
 
 After the smoke tests pass, run the full matrices:
 
@@ -436,9 +435,11 @@ three activities must remain separate because they use different acceptance crit
 failure must terminate cleanly, a launch test must exercise a particular hardware resource boundary,
 and a benchmark must measure an uninstrumented workload repeatedly.
 
-The `failure` interface described below is implemented in the tracked ROCm QA dispatcher. The `lds`
-and `qav/perf` command interfaces remain planned and must not be presented as runnable commands until
-their models and runners have been added.
+The `failure` and `lds` interfaces described below are implemented in the tracked ROCm QA dispatcher.
+The separate `qav/perf` interface is also implemented for uninstrumented timing, warm-up memory
+sampling, runtime tracing, and focused hardware-counter collection. Native MI300A performance
+results have not yet been archived, so the implementation is ready to run but supports no speed
+claim yet.
 
 ### Deliberate nonfinite-state injection
 
@@ -543,9 +544,8 @@ reference. Its JSON record should include at least
 }
 ```
 
-The current host check compares only the requested dynamic LDS with the device limit. The block
-diffusion kernels also contain statically allocated shared scalars, so the rigorous launch condition
-is
+The shared production host check queries both kernel attributes and the active device. The block
+diffusion kernels contain statically allocated shared scalars, so the rigorous launch condition is
 
 $$
 S_{\rm static}+S_{\rm dynamic}\leq S_{\rm device,max}.
@@ -567,11 +567,34 @@ A later `hipErrorInvalidValue`, illegal access, or device fault does not pass th
 $N=1365$ case may also be retained to verify the exact static-plus-dynamic accounting, but the
 60-KiB cases above provide the safer primary coverage.
 
-The planned interface is
+The implemented interface is
 
 ```bash
 python3 qav/fluid/test_common/run_suite.py --group lds --target gfx942
 ```
+
+The three positive models launch the production kernels on a uniform density and momentum state.
+This is an exact zero-gradient diffusion solution, so the runner requires finite output, a maximum
+stationary-state error no larger than $10^{-11}$, and relative finite-volume mass error no larger
+than $10^{-12}$. The negative $N_Y=1366$ model must return nonzero with the controlled host-capacity
+diagnostic and without a HIP runtime fault. Each record stores the device limit, compiled static LDS,
+kernel dynamic limit, requested dynamic LDS, total LDS, process status, and conservation metrics in
+JSON.
+
+The native gfx942 campaign on 2026-08-11 passed all four cases without compiler diagnostics,
+timeouts, or HIP runtime faults. The measured results were
+
+| Kernel | Static LDS | Dynamic LDS | Total LDS | Maximum stationary error | Relative mass error |
+|---|---:|---:|---:|---:|---:|
+| `diffusion_xbl` | 80 B | 57344 B | 57424 B | $2.22\times10^{-16}$ | $1.39\times10^{-16}$ |
+| `diffusion_ybl` | 16 B | 61440 B | 61456 B | $4.44\times10^{-16}$ | $2.26\times10^{-17}$ |
+| `diffusion_zbl` | 16 B | 61440 B | 61456 B | $4.44\times10^{-16}$ | $1.79\times10^{-17}$ |
+
+The device reported a 65536-byte per-block LDS limit. The compiled X kernel reported a 65456-byte
+dynamic limit after its 80-byte static allocation; Y and Z each reported 65520 dynamic bytes after
+16 static bytes. The negative radial case requested 65568 dynamic and 65584 total bytes, returned
+one through the controlled host diagnostic, and never attempted a kernel launch. This completes the
+native large-LDS correctness qualification.
 
 Successful launch does not imply good performance. A 60-KiB workgroup severely constrains
 LDS-based residency on a 64-KiB compute unit, so the positive cases should subsequently be profiled
@@ -699,15 +722,68 @@ output, and total wall time should be stored separately. Every result must also 
 compiler versions, GPU identity, all physics flags, line-sweep or KNN backend, resolution or particle
 count, accepted steps, completed simulated time, and peak device memory.
 
-The planned performance interface is
+The implemented uninstrumented interfaces are
 
 ```bash
-python3 qav/perf/run_suite.py --group all --target gfx942 --repeat 5
+python3 qav/perf/run_suite.py --group all --scale baseline --target gfx942 --repeat 5
+python3 qav/perf/run_suite.py --group all --scale production --target gfx942 --repeat 5
 ```
 
-This runner has not yet been implemented. When added, its aggregate JSON must point to the native
-profiler artifacts but keep unprofiled benchmark statistics separate from instrumented profiler
-measurements.
+The optional `--scale large` branch selects $2048^2$, $256^3$, and $10^7$-particle cases. Each case
+is compiled once, run once as an excluded warm-up, and then repeated from the same deterministic
+initial condition. It saves only the initial and final state and rejects any run that completes
+fewer than 100 accepted fluid steps or frozen-rate collision batches. The warm-up alone is sampled
+with `amd-smi`; measured timing runs have no memory-sampling process. Case JSON records the resolved
+HIP compile commands, source revision and dirty state when available, a standalone-tree SHA-256
+fingerprint, tool versions, target, native output path,
+initialization/evolution/output times, accepted work, simulated time, median, quartiles, spread, and
+normalized cost. A spread above five percent is labelled noisy.
+
+Profiler collection is invoked independently, for example,
+
+```bash
+python3 qav/perf/profile.py --case fluid_3d_production --tool trace --target gfx942
+ROCPROFCOMPUTE_COLOR=0 python3 qav/perf/profile.py \
+    --case fluid_3d_production --tool compute --kernel diffusion_ybl --target gfx942
+```
+
+The profiler manifest explicitly marks the run as instrumented and unsuitable as a timing
+baseline. Profiler-native artifacts remain in their native formats and are referenced, rather than
+rewritten, by the JSON manifest. Collision build, query, rate, and event breakdowns are derived from
+these short profiler collections; the uninstrumented collision benchmark reports only the complete
+operator cost so event instrumentation cannot bias the production timing.
+
+### Native uninstrumented results on MI300A
+
+The first gfx942 campaign on 2026-08-12 completed the full baseline matrix and both production fluid
+cases. All completed cases returned normally, repeated an identical accepted-work count, and stayed
+well below the five-percent noise threshold:
+
+| Case | Size | Work units | Median wall time | Median evolution time | Spread | Normalized evolution cost |
+|---|---:|---:|---:|---:|---:|---:|
+| fluid 2D baseline | $512^2$ | 126 steps | 4.604 s | 4.298 s | 0.340% | $1.301\times10^{-7}$ s cell$^{-1}$ step$^{-1}$ |
+| fluid 2D production | $1024^2$ | 126 steps | 11.456 s | 11.116 s | 0.851% | $8.414\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
+| fluid 3D baseline | $64^3$ | 491 steps | 8.536 s | 8.271 s | 0.118% | $6.426\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
+| fluid 3D production | $128^3$ | 1090 steps | 118.228 s | 117.926 s | 0.511% | $5.159\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
+| swarm KD-tree baseline | $10^5$ particles | 6631 batches | 60.838 s | 60.514 s | 1.361% | $9.126\times10^{-8}$ s particle$^{-1}$ batch$^{-1}$ |
+| swarm Morton baseline | $10^5$ particles | 6637 batches | 83.404 s | 83.044 s | 0.045% | $1.251\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
+
+The larger fluid cases have lower normalized cell-step costs, consistent with improved accelerator
+saturation; this is a throughput observation, not a convergence claim. At $10^5$ particles the
+Morton collision operator costs about 1.37 times the KD-tree operator end to end, so no speed benefit
+is established for Morton at this scale. Its lower-memory and decomposition advantages remain
+separate questions for the profiler and larger cases.
+
+The original $10^6$-particle collision interval of $2\times10^{-3}$ was excessive: it produced
+23020 batches and required roughly 55.5--56.2 minutes for each of the two completed KD-tree repeats,
+then the Slurm allocation expired during the third. These partial repeats are not combined with the
+five-repeat results. The production interval is now $2\times10^{-5}$, which extrapolates to about
+230 batches while preserving the same particle state, $N_K=200$, `CFL_COL=0.01`, and search kernels.
+
+Process-memory sampling was attempted during every excluded warm-up, but ROCm 7.2 `amd-smi process`
+reported no per-process memory value on this MI300A APU. Timing evidence is complete; peak-memory
+evidence remains unavailable rather than being interpreted as zero. The runner now records the
+first unparsed AMD SMI response and an explicit availability flag for diagnosis in the next run.
 
 ## Performance work after correctness
 
@@ -901,10 +977,10 @@ The lowest-risk order is
 8. remove the duplicated `rocm/mod`, `rocm/qav`, synchronization machinery, and standalone build
 9. remove the remaining top-level `rocm/` staging tree only after no build or document references it
 
-Promotion still requires stable compiler and target requirements, native large-LDS qualification,
-production performance evidence, and a complete same-backend restart regression for
-both CUDA and ROCm. Until the integration sequence is complete, CUDA remains the production
-reference and the HIP tree remains an independently testable implementation.
+Promotion still requires stable compiler and target requirements, production performance evidence,
+and completion of the integration sequence above. Native large-LDS qualification and same-backend
+restart regression have passed for the current HIP tree. Until integration is complete, CUDA remains
+the production reference and the HIP tree remains an independently testable implementation.
 
 ## References
 

@@ -27,6 +27,8 @@ exercised, finite-volume comparison, and expected result.
 | `test_ring_diffusion_2d` | Above plus production X/Y diffusion | Rotating Fourier rings with ring-dependent exponential damping |
 | `test_ring_radiation_2d` | Above plus production optical depth and radiation source | Optically thin reduced-gravity Fourier rings |
 | `test_ring_all_2d` | Transport, diffusion, radiation, drag, and gravity | Damped optically thin reduced-gravity Fourier rings |
+| `test_lds_x`, `test_lds_y`, `test_lds_z` | Production block diffusion with 56--60 KiB dynamic LDS | Uniform zero-gradient state remains stationary and conservative |
+| `test_lds_reject` | Shared production LDS capacity guard | Over-limit 65568-byte request is rejected before launch |
 
 The constant-diffusivity operator cases use `test_common/param_phys.cuh`. It wraps the
 production helper header and replaces only `_get_nu` and `_get_alpha`; PPM, HLL,
@@ -96,6 +98,17 @@ radiation. The legacy thread X sweep needs a 172,048-byte stack frame at $N=1024
 $1024^2$ size. Production-scale $1024^2$ HIP models use the block sweep, which does not allocate
 line-sized thread-local arrays. Override the comparison resolutions with `--sweep-res-2d` and
 `--sweep-res-3d`. This fixed-work branch is intentionally not included in `--group all`.
+
+The hardware-resource branch is also separate from the analytical matrix:
+
+```bash
+python3 qav/fluid/test_common/run_suite.py --group lds --target gfx942
+```
+
+It launches all three production block diffusion directions above 48 KiB of dynamic LDS and checks
+the compiled static allocation, per-kernel dynamic limit, finite output, the exact stationary
+uniform solution, and finite-volume mass conservation. A fourth subprocess deliberately exceeds
+64 KiB and passes only when the production host guard rejects it before any kernel launch.
 
 Only NumPy is required by the validator. The d=2/d=3 shell references are independently integrated
 with a fine-grid RK4 solve; they do not use the HIP/ROCm helpers or the production diffusion matrix.

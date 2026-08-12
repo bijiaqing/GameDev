@@ -69,7 +69,7 @@ const int  SAVE_MAX     = 100;
 const real DT_OUT       = 2.0*M_PI;     // output interval
 const real DT_MAX       = 1.0e-01;
 
-constexpr real CFL_DYN  = 0.5;          // CFL number for the explicit advection step (0 < CFL_DYN <= 0.5)
+constexpr real CFL_DYN  = 0.45;         // CFL number for the explicit advection step (0 < CFL_DYN <= 0.5)
 const real RHO_VAC      = 1.0e-30;      // vacuum density for the dust density positivity limiter
 
 // =========================================================================================================================

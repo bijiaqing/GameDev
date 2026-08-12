@@ -389,28 +389,9 @@ int main ()
     ));
 
     #ifdef DIFFUSION
-    // HIP launches request LDS directly, so reject unsupported line lengths without a CUDA-style opt-in attribute
-    int idx_device = 0;
-    int max_lds_bytes = 0;
-    HIP_CHECK(hipGetDevice(&idx_device));
-    HIP_CHECK(hipDeviceGetAttribute(
-        &max_lds_bytes, hipDeviceAttributeMaxSharedMemoryPerBlock, idx_device
-    ));
-
-    auto require_lds = [max_lds_bytes] (std::size_t required_bytes, const char *kernel_name)
-    {
-        if (required_bytes <= static_cast<std::size_t>(max_lds_bytes)) return;
-
-        std::cerr
-        << "Error: " << kernel_name << " requires " << required_bytes
-        << " bytes of LDS, but the active AMD device reports " << max_lds_bytes
-        << " bytes per block" << std::endl;
-        std::exit(EXIT_FAILURE);
-    };
-
-    require_lds(sizeof(real)*4*N_X, "diffusion_xbl");
-    require_lds(sizeof(real)*6*N_Y, "diffusion_ybl");
-    require_lds(sizeof(real)*6*N_Z, "diffusion_zbl");
+    require_lds(reinterpret_cast<const void*>(diffusion_xbl), sizeof(real)*4*N_X, "diffusion_xbl");
+    require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
+    require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 

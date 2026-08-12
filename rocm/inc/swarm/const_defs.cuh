@@ -148,7 +148,7 @@ const real DT_OUT       = 1.0;
 
 #ifdef TRANSPORT
 const real DT_MAX       = 0.1;
-const real CFL_DYN      = 0.5;              // maximum fraction of a local mesh scale crossed in one dynamics step
+const real CFL_DYN      = 0.45;             // maximum fraction of a local mesh scale crossed in one dynamics step
 #endif // TRANSPORT
 
 #if defined(LOGTIMING) || defined(LOGOUTPUT)

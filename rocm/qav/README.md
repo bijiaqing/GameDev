@@ -21,15 +21,28 @@ python3 qav/swarm/test_common/run_suite.py --group all --res 32 64 128 256 --tar
 python3 qav/fluid/test_common/run_suite.py --group sweep --target gfx942
 ```
 
-The deliberate nonfinite-state branches can also be run independently:
+The deliberate nonfinite-state and hardware-resource branches can also be run independently:
 
 ```bash
 python3 qav/fluid/test_common/run_suite.py --group failure --target gfx942
 python3 qav/swarm/test_common/run_suite.py --group failure --target gfx942
+python3 qav/fluid/test_common/run_suite.py --group lds --target gfx942
 ```
 
 These tests expect the injected subprocesses to fail with the production diagnostic; a zero return,
 timeout, wrong target index, or HIP memory fault fails the test
+
+Production-like timing and profiling are intentionally separate from the correctness dispatcher:
+
+```bash
+python3 qav/perf/run_suite.py --group all --scale baseline --target gfx942 --repeat 5
+python3 qav/perf/run_suite.py --group all --scale production --target gfx942 --repeat 5
+python3 qav/perf/profile.py --case fluid_3d_production --tool trace --target gfx942
+```
+
+The timing runner performs one excluded warm-up, at least 100 work units per measured run, and five
+repetitions by default. Profiler collections use short instrumented workloads and are never treated
+as timing baselines. See `qav/perf/README.md` for the case matrix and focused-counter workflow
 
 Fluid results are written below `qav/fluid/out/`; swarm and KNN results are written below `qav/swarm/out/`. Each suite records the HIP compiler, ROCm configuration, AMD device information, target architecture, numerical metrics, and an aggregate manifest
 

@@ -32,6 +32,43 @@ Velocity norms include only cells where both the exact and numerical densities e
 of the exact peak, so the comparison does not mistake a production vacuum fallback velocity for
 transport error.
 
+## `test_lds_x`, `test_lds_y`, `test_lds_z`, and `test_lds_reject`
+
+Purpose: qualify the dynamic local-data-share requests made by the production block diffusion
+kernels near the gfx942 per-workgroup hardware limit. In double precision, the three positive
+requests are
+
+$$
+S_x=4N_X\,\mathrm{sizeof}(\mathrm{real})=56\ \mathrm{KiB},
+$$
+
+$$
+S_y=6N_Y\,\mathrm{sizeof}(\mathrm{real})=60\ \mathrm{KiB},
+\qquad
+S_z=6N_Z\,\mathrm{sizeof}(\mathrm{real})=60\ \mathrm{KiB}.
+$$
+
+Each kernel receives the uniform state
+
+$$
+\rho_d=1,
+\qquad
+(m_x,m_y,m_z)=(2,-0.5,0.25),
+$$
+
+which is an exact stationary solution of every zero-flux or periodic density-diffusion operator.
+The test queries `sharedSizeBytes` and `maxDynamicSharedSizeBytes`, checks static plus dynamic LDS
+against the active device limit, launches and synchronizes the production kernel, and then requires
+finite output, maximum state error at most $10^{-11}$, and relative finite-volume mass error at most
+$10^{-12}$. The negative radial case uses $N_Y=1366$, hence
+
+$$
+6N_Y\,\mathrm{sizeof}(\mathrm{real})=65568\ \mathrm{B},
+$$
+
+and passes only when the common host guard returns a controlled error before launch without a HIP
+runtime fault. These are hardware launch and conservation tests, not diffusion convergence tests.
+
 Unless stated otherwise, the domain is
 
 $$

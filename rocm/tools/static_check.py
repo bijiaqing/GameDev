@@ -103,6 +103,25 @@ def check_source_inventory(errors: list[str]) -> None:
         errors.append(f"unexpected CUDA translation unit: {path.relative_to(ROCM_ROOT)}")
 
 
+def check_numerical_defaults(errors: list[str]) -> None:
+    """Reject drift in production constants that should match both backends"""
+
+    if not (CUDA_ROOT/"inc").is_dir():
+        return
+    pattern = re.compile(r"(?:const|constexpr)\s+real\s+CFL_DYN\s*=\s*([^;]+);")
+    for branch in ("fluid", "swarm"):
+        cuda_path = CUDA_ROOT/"inc"/branch/"const_defs.cuh"
+        rocm_path = ROCM_ROOT/"inc"/branch/"const_defs.cuh"
+        cuda_match = pattern.search(cuda_path.read_text())
+        rocm_match = pattern.search(rocm_path.read_text())
+        if cuda_match is None or rocm_match is None:
+            errors.append(f"{branch}: unable to resolve production CFL_DYN")
+        elif cuda_match.group(1).strip() != rocm_match.group(1).strip():
+            errors.append(
+                f"{branch}: ROCm CFL_DYN differs from the canonical CUDA default"
+            )
+
+
 def check_language_files(errors: list[str]) -> None:
     """Parse Python and reject CUDA-only spellings in buildable HIP sources"""
 
@@ -220,12 +239,40 @@ def check_make_resolution(errors: list[str]) -> None:
             "AMDGPU_TARGET=gfx942",
         ],
         [
+            "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_lds_x",
+            "AMDGPU_TARGET=gfx942",
+        ],
+        [
+            "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_lds_reject",
+            "AMDGPU_TARGET=gfx942",
+        ],
+        [
+            "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_sweep_block_2d",
+            "RES=512", "CFL=0.45", "SAVE=1", "OUT_TIME=12.566370614359172",
+            "FLUID_SWEEP=block", "AMDGPU_TARGET=gfx942",
+        ],
+        [
+            "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_sweep_block_3d",
+            "RES=64", "CFL=0.45", "SAVE=1", "OUT_TIME=10.0",
+            "FLUID_SWEEP=block", "AMDGPU_TARGET=gfx942",
+        ],
+        [
             "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_failure_knn",
             "COLLISION_SEARCH=kdtree", "AMDGPU_TARGET=gfx942",
         ],
         [
             "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_failure_knn",
             "COLLISION_SEARCH=morton", "AMDGPU_TARGET=gfx942",
+        ],
+        [
+            "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_perf_collision_2d",
+            "PARTICLES=100000", "COLLISION_SEARCH=kdtree", "SAVE=1",
+            "OUT_TIME=0.002", "AMDGPU_TARGET=gfx942",
+        ],
+        [
+            "make", "-n", "-C", str(ROCM_ROOT), "MODEL=test_perf_collision_2d",
+            "PARTICLES=100000", "COLLISION_SEARCH=morton", "SAVE=1",
+            "OUT_TIME=0.002", "AMDGPU_TARGET=gfx942",
         ],
         [
             "make", "-n", "-C", str(ROCM_ROOT/"qav"/"swarm"/"test_knn"),
@@ -246,6 +293,7 @@ def check_make_resolution(errors: list[str]) -> None:
 def main() -> None:
     errors: list[str] = []
     check_source_inventory(errors)
+    check_numerical_defaults(errors)
     check_language_files(errors)
     check_build_and_runner_backend(errors)
     check_port_metadata(errors)

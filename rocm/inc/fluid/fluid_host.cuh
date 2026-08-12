@@ -71,6 +71,65 @@ do {                                                                            
 } while (0)
 #endif // HIP_SYNC_TRACE
 
+// describe the static, dynamic, and device-wide LDS limits for one kernel launch
+struct lds_usage
+{
+    std::size_t device_limit;
+    std::size_t kernel_static;
+    std::size_t kernel_dynamic_limit;
+    std::size_t requested_dynamic;
+    std::size_t total;
+    bool kernel_limit_reported;
+};
+
+// query the active device and compiled kernel before requesting dynamic LDS
+inline __host__
+lds_usage get_lds_usage (const void *kernel, std::size_t requested_dynamic)
+{
+    int idx_device = 0;
+    int device_limit = 0;
+    hipFuncAttributes attributes = {};
+    HIP_CHECK(hipGetDevice(&idx_device));
+    HIP_CHECK(hipDeviceGetAttribute(
+        &device_limit, hipDeviceAttributeMaxSharedMemoryPerBlock, idx_device
+    ));
+    HIP_CHECK(hipFuncGetAttributes(&attributes, kernel));
+
+    std::size_t kernel_static = attributes.sharedSizeBytes;
+    bool kernel_limit_reported = attributes.maxDynamicSharedSizeBytes > 0;
+    std::size_t kernel_dynamic_limit = kernel_limit_reported ?
+        static_cast<std::size_t>(attributes.maxDynamicSharedSizeBytes) :
+        static_cast<std::size_t>(device_limit) - std::min(
+            static_cast<std::size_t>(device_limit), kernel_static
+        );
+
+    return {
+        static_cast<std::size_t>(device_limit),
+        kernel_static,
+        kernel_dynamic_limit,
+        requested_dynamic,
+        kernel_static + requested_dynamic,
+        kernel_limit_reported,
+    };
+}
+
+// reject an unsupported LDS request before launching the kernel
+inline __host__
+lds_usage require_lds (const void *kernel, std::size_t requested_dynamic, const char *kernel_name)
+{
+    lds_usage usage = get_lds_usage(kernel, requested_dynamic);
+    bool dynamic_supported = usage.requested_dynamic <= usage.kernel_dynamic_limit;
+    bool total_supported = usage.total <= usage.device_limit;
+    if (dynamic_supported && total_supported) return usage;
+
+    std::cerr
+    << "Error: " << kernel_name << " requires " << usage.requested_dynamic
+    << " dynamic LDS bytes and " << usage.total << " total LDS bytes, but the active AMD device permits "
+    << usage.kernel_dynamic_limit << " dynamic bytes for this kernel and " << usage.device_limit
+    << " total bytes per block" << std::endl;
+    std::exit(EXIT_FAILURE);
+}
+
 // =========================================================================================================================
 // geometry-aware PPM interpolation weights
 

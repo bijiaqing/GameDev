@@ -36,7 +36,23 @@ const real R_0 = 1.0;
 
 // Refine only the direction under test for isolated kernels and refine both active directions for ring tests.  Four cells in
 // an inactive transverse direction are enough to expose indexing mistakes without making every convergence run expensive.
-#if defined(VERIFY_X_TRANSPORT) || defined(VERIFY_X_DIFFUSION)
+#if defined(VERIFY_LDS_X)
+constexpr int N_X = 1792;
+constexpr int N_Y = 8;
+constexpr int N_Z = 1;
+#elif defined(VERIFY_LDS_Y)
+constexpr int N_X = 8;
+constexpr int N_Y = 1280;
+constexpr int N_Z = 1;
+#elif defined(VERIFY_LDS_Z)
+constexpr int N_X = 8;
+constexpr int N_Y = 8;
+constexpr int N_Z = 1280;
+#elif defined(VERIFY_LDS_REJECT)
+constexpr int N_X = 8;
+constexpr int N_Y = 1366;
+constexpr int N_Z = 1;
+#elif defined(VERIFY_X_TRANSPORT) || defined(VERIFY_X_DIFFUSION)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = 4;
 constexpr int N_Z = 1;
@@ -78,7 +94,8 @@ constexpr real Y_MAX = 2.5;
 #if defined(VERIFY_Z_DIFFUSION)
 constexpr real Z_MIN = 0.0;
 constexpr real Z_MAX = 0.5*M_PI;
-#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_DIFFUSION_SPH)
+#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_DIFFUSION_SPH) \
+    || defined(VERIFY_LDS_Z)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
 #else
@@ -122,19 +139,20 @@ const real T_BETA = 1.0;
 #ifdef DIFFUSION
 // A Schmidt number of one activates diffusion in the direction being tested.  A numerically enormous value makes diffusion
 // negligible in every other direction while preserving the same production kernel interface.
-#if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_RING_DIFFUSION)
+#if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_RING_DIFFUSION) || defined(VERIFY_LDS_X)
 const real SCHMIDT_X = 1.0;
 #else
 const real SCHMIDT_X = 1.0e300;
 #endif
 
-#if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
+#if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH) || defined(VERIFY_LDS_Y) \
+    || defined(VERIFY_LDS_REJECT)
 const real SCHMIDT_Y = 1.0;
 #else
 const real SCHMIDT_Y = 1.0e300;
 #endif
 
-#if defined(VERIFY_Z_DIFFUSION)
+#if defined(VERIFY_Z_DIFFUSION) || defined(VERIFY_LDS_Z)
 const real SCHMIDT_Z = 1.0;
 #else
 const real SCHMIDT_Z = 1.0e300;

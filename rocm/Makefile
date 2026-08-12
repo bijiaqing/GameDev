@@ -74,6 +74,9 @@ endif
 ifneq ($(strip $(OUT_TIME)),)
 HIPFLAGS += -DTEST_DT_OUT=$(OUT_TIME)
 endif
+ifneq ($(strip $(PARTICLES)),)
+HIPFLAGS += -DPERF_PARTICLES=$(PARTICLES)
+endif
 endif
 
 ifneq ($(strip $(MODEL_PARENT)),)
