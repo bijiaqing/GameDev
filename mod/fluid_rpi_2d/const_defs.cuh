@@ -17,11 +17,11 @@ const real  R_0         = 1.0;
 
 constexpr int  N_X      = 4096;
 constexpr real X_MIN    = 0.0;
-constexpr real X_MAX    = 0.25*M_PI;
+constexpr real X_MAX    = 0.5*M_PI;
 
 constexpr int  N_Y      = 3072;
-constexpr real Y_MIN    = 0.75;
-constexpr real Y_MAX    = 1.25;
+constexpr real Y_MIN    = 0.5;
+constexpr real Y_MAX    = 1.5;
 
 constexpr int  N_Z      = 1;
 constexpr real Z_MIN    = 0.5*M_PI;
@@ -37,7 +37,7 @@ const real  IDX_Q       = -0.4;         // radial power-law index of the gas tem
 
 #ifdef DIFFUSION
 #ifndef CONST_NU  // CONST_ALPHA
-const real  ALPHA       = 1.0e-04;
+const real  ALPHA       = 1.0e-03;
 #else             // CONST_NU
 const real  NU          = 1.0e-07;
 #endif // CONST_NU
@@ -65,7 +65,7 @@ const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity
 // =========================================================================================================================
 // time step and output
 
-const int  SAVE_MAX     = 20;
+const int  SAVE_MAX     = 100;
 const real DT_OUT       = 2.0*M_PI;     // output interval
 const real DT_MAX       = 0.2*M_PI;
 

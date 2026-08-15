@@ -176,8 +176,17 @@ V_{ijk}=\Delta x\,
 \end{cases}
 $$
 
-Radial fluxes use $A_{y,j+1/2}=y_{j+1/2}^{d-1}$, while polar fluxes use
-$A_{z,k+1/2}=\sin z_{k+1/2}$.
+Radial fluxes use $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution
+to a polar face area is
+
+$$
+\Delta A_{z,j}
+=\int_{y_{j-1/2}}^{y_{j+1/2}}y\,dy
+=\frac{y_{j+1/2}^2-y_{j-1/2}^2}{2},
+$$
+
+so the separated polar face factor is
+$A_{z,j,k+1/2}=\Delta A_{z,j}\sin z_{k+1/2}$.
 
 ### 2.2 Primitive and conserved variables
 
@@ -821,15 +830,20 @@ $$
 $$
 
 For azimuth, $V_i=\Delta x$ and $A=1$. For radial transport, $V_i=\Delta V_{y,i}$ and
-$A_{i+1/2}=y_{i+1/2}^{d-1}$. For polar transport, the prefactor is instead
+$A_{i+1/2}=y_{i+1/2}^{d-1}$. For polar transport through radial cell $j$, the exact
+finite-volume update is
 
 $$
-\boldsymbol U_k^{\rm FE}
-=\boldsymbol U_k^n
--\frac{\Delta t}{r\Delta V_{z,k}}
+\boldsymbol U_{j,k}^{\rm FE}
+=\boldsymbol U_{j,k}^n
+-\Delta t\frac{\Delta A_{z,j}}{\Delta V_{y,j}\Delta V_{z,k}}
 \left(\sin z_{k+1/2}\boldsymbol F_{k+1/2}
 -\sin z_{k-1/2}\boldsymbol F_{k-1/2}\right).
 $$
+
+Here $\Delta A_{z,j}=(y_{j+1/2}^2-y_{j-1/2}^2)/2$ and
+$\Delta V_{y,j}=(y_{j+1/2}^3-y_{j-1/2}^3)/3$. Their ratio is the exact radial
+face-area-to-volume factor; it is not approximated by $1/y_j$.
 
 The reconstruction is the piecewise parabolic method of
 [Colella & Woodward (1984)](<https://doi.org/10.1016/0021-9991(84)90143-8>). The uniform azimuthal
@@ -1521,7 +1535,8 @@ $$
 \qquad
 |v_r|\frac{A_y}{V_y},
 \qquad
-\frac{|v_\theta|}{r}\frac{\max(\sin z_i,\sin z_o)}{\Delta(-\cos z)}.
+|v_\theta|\frac{\Delta A_z}{\Delta V_y}
+\frac{\max(\sin z_i,\sin z_o)}{\Delta(-\cos z)}.
 $$
 
 In a cell, the precise maximum is
@@ -1531,8 +1546,9 @@ $$
 \frac{|\ell_\phi-\bar\ell_\phi|}{R^2\Delta x},
 |v_r|\frac{A_{y,j+1/2}}{\Delta V_{y,j}},
 \left|\frac{\ell_\theta}{r}\right|
+\frac{\Delta A_{z,j}}{\Delta V_{y,j}}
 \frac{\max_{z\in[z_{k-1/2},z_{k+1/2}]}\sin z}
-{r\Delta V_{z,k}}
+{\Delta V_{z,k}}
 \right].
 $$
 

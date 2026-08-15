@@ -29,7 +29,7 @@ passes, making it suitable for a lightweight regression job.
 | T7 | the former radial Euler operator at small and production CFL numbers |
 | T8 | the accuracy improvement from SSPRK2 to SSPRK(3,3) |
 | T9 | the current HLL/PPM invariant-domain radial transport update |
-| T10 | logarithmic-radial and polar mesh measures |
+| T10 | logarithmic-radial and polar mesh measures, including the integrated polar-face radial factor |
 
 Each output line starts with `PASS` or `FAIL`, followed by the property being
 tested and diagnostic numbers. The final line reports how many checks passed.

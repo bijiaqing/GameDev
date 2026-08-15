@@ -37,7 +37,7 @@ void cfl_rate_calc (
         real sin_max = fmax(sin(z_i), sin(z_o));
         if (z_i <= 0.5*M_PI && z_o >= 0.5*M_PI) sin_max = 1.0;
 
-        cfl_invlen_z = sin_max / (y*vol_z);
+        cfl_invlen_z = sin_max*_get_area_z(iy) / (vol_y*vol_z);
     }
 
     real lx_avg = 0.0;

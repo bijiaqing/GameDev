@@ -150,7 +150,10 @@ def memory_candidates(value: object, path: tuple[str, ...] = ()) -> list[int]:
             result.extend(memory_candidates(child, path))
     elif path and (
         path[-1] == "mem"
-        or any(token in "_".join(path) for token in ("vram_mem", "gtt_mem", "memory_usage"))
+        or any(
+            token in "_".join(path)
+            for token in ("vram_mem", "gtt_mem", "memory_usage", "mem_usage")
+        )
     ):
         parsed = parse_bytes(value)
         if parsed is not None:
@@ -356,6 +359,7 @@ def configurations(group: str, scale: str) -> list[dict]:
             for dimension, resolution in table[name]:
                 records.append({
                     "case": f"fluid_{dimension}_{name}",
+                    "scale": name,
                     "component": "fluid",
                     "model": f"test_sweep_block_{dimension}",
                     "sweep": "block",
@@ -375,6 +379,7 @@ def configurations(group: str, scale: str) -> list[dict]:
             for backend in ("kdtree", "morton"):
                 records.append({
                     "case": f"swarm_collision_{backend}_{name}",
+                    "scale": name,
                     "component": "swarm",
                     "model": "test_perf_collision_2d",
                     "sweep": None,
@@ -600,12 +605,15 @@ def main() -> None:
         )
 
     passed = all(summary["passed"] for summary in summaries)
+    selected_scales = sorted({summary["case"]["scale"] for summary in summaries})
+    selected_components = sorted({summary["case"]["component"] for summary in summaries})
     manifest = {
         "suite": "rocm_performance",
         "instrumented": False,
         "target": args.target,
-        "group": args.group,
-        "scale": args.scale,
+        "selection": "explicit" if args.case is not None else "matrix",
+        "group": selected_components[0] if len(selected_components) == 1 else "all",
+        "scale": selected_scales[0] if len(selected_scales) == 1 else "mixed",
         "repeat": args.repeat,
         "warmup": not args.skip_warmup,
         "started_utc": started_utc,

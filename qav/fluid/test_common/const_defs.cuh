@@ -158,7 +158,7 @@ const real VERIFY_Q0  = 1.0;
 const real VERIFY_EPS = 0.1;
 const int  VERIFY_M   = 2;
 const real VERIFY_A   = 0.2;
-const real VERIFY_LZ  = 0.15;
+const real VERIFY_RATE_Z = 0.15;
 const real VERIFY_D   = 5.0e-2;
 
 // Final times are long enough to produce measurable translation or decay but short enough to keep fine-grid suites practical.

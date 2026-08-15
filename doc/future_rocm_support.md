@@ -43,8 +43,9 @@ every one of its 24 analytical component manifests reports `passed: true`. The s
 archived native restart regression adds one model and one record. Together with the KNN component,
 the rebuilt ROCm aggregate reports 26 of 26 models and 52 analytical builds passed. This closes the
 implemented native ROCm numerical matrices at that archive revision. The subsequently executed
-nonfinite-state injection branch also passed natively on gfx942; AMD profiling and production-scale
-performance characterization remain pending.
+nonfinite-state injection and large-LDS branches also passed natively on gfx942. The baseline and
+production performance matrices and a production 3D runtime trace are now archived; focused
+hardware-counter collection remains pending.
 
 The first $N=256$ 3D swarm grid run then exposed a latent endpoint-stencil safety defect shared by
 the CUDA and HIP sources. An exact final radial or polar cell-centre coordinate could select a
@@ -645,13 +646,13 @@ short run. For example,
 
 ```bash
 ROCPROFCOMPUTE_COLOR=0 rocprof-compute profile \
-    --name gamedev_diffusion_ybl \
+    --name gamedev_advection_ybl \
     --no-roof \
-    --kernel diffusion_ybl \
+    --kernel advection_ybl \
     -- qav/fluid/test_sweep_block_3d/gamedev
 
 rocprof-compute analyze \
-    --path workloads/gamedev_diffusion_ybl/MI300A
+    --path workloads/gamedev_advection_ybl/MI300A
 ```
 
 Use the tool's available-metric listing rather than assuming that report-block numbers are stable
@@ -744,7 +745,7 @@ Profiler collection is invoked independently, for example,
 ```bash
 python3 qav/perf/profile.py --case fluid_3d_production --tool trace --target gfx942
 ROCPROFCOMPUTE_COLOR=0 python3 qav/perf/profile.py \
-    --case fluid_3d_production --tool compute --kernel diffusion_ybl --target gfx942
+    --case fluid_3d_production --tool compute --kernel advection_ybl --target gfx942
 ```
 
 The profiler manifest explicitly marks the run as instrumented and unsuitable as a timing
@@ -756,8 +757,9 @@ operator cost so event instrumentation cannot bias the production timing.
 ### Native uninstrumented results on MI300A
 
 The first gfx942 campaign on 2026-08-12 completed the full baseline matrix and both production fluid
-cases. All completed cases returned normally, repeated an identical accepted-work count, and stayed
-well below the five-percent noise threshold:
+cases; the production swarm pair followed on 2026-08-14. Every case returned normally and repeated
+an identical accepted-work count. Seven cases stayed below the five-percent noise threshold; the
+production KD-tree case is retained but labelled noisy:
 
 | Case | Size | Work units | Median wall time | Median evolution time | Spread | Normalized evolution cost |
 |---|---:|---:|---:|---:|---:|---:|
@@ -767,23 +769,52 @@ well below the five-percent noise threshold:
 | fluid 3D production | $128^3$ | 1090 steps | 118.228 s | 117.926 s | 0.511% | $5.159\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
 | swarm KD-tree baseline | $10^5$ particles | 6631 batches | 60.838 s | 60.514 s | 1.361% | $9.126\times10^{-8}$ s particle$^{-1}$ batch$^{-1}$ |
 | swarm Morton baseline | $10^5$ particles | 6637 batches | 83.404 s | 83.044 s | 0.045% | $1.251\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
+| swarm KD-tree production | $10^6$ particles | 1156 batches | 170.785 s | 170.236 s | 6.339% | $1.473\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
+| swarm Morton production | $10^6$ particles | 1162 batches | 203.565 s | 202.997 s | 0.028% | $1.747\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
 
 The larger fluid cases have lower normalized cell-step costs, consistent with improved accelerator
-saturation; this is a throughput observation, not a convergence claim. At $10^5$ particles the
-Morton collision operator costs about 1.37 times the KD-tree operator end to end, so no speed benefit
-is established for Morton at this scale. Its lower-memory and decomposition advantages remain
-separate questions for the profiler and larger cases.
+saturation; this is a throughput observation, not a convergence claim. Morton costs 1.37 times the
+KD-tree operator per particle-batch at $10^5$ particles and 1.19 times at $10^6$ particles. The gap
+therefore narrows at the production particle count, but Morton does not establish an end-to-end
+speed advantage in either case. Its decomposition advantages remain separate questions. The
+KD-tree production repeats have a 6.34% full spread and are consequently labelled noisy; their
+median is useful but should be repeated on an idle APU before quoting a precise backend ratio.
 
 The original $10^6$-particle collision interval of $2\times10^{-3}$ was excessive: it produced
 23020 batches and required roughly 55.5--56.2 minutes for each of the two completed KD-tree repeats,
 then the Slurm allocation expired during the third. These partial repeats are not combined with the
-five-repeat results. The production interval is now $2\times10^{-5}$, which extrapolates to about
-230 batches while preserving the same particle state, $N_K=200$, `CFL_COL=0.01`, and search kernels.
+five-repeat results. The production interval is now $2\times10^{-5}$ and completed 1156 KD-tree or
+1162 Morton batches while preserving the same particle state, $N_K=200$, `CFL_COL=0.01`, and search
+kernels.
 
-Process-memory sampling was attempted during every excluded warm-up, but ROCm 7.2 `amd-smi process`
-reported no per-process memory value on this MI300A APU. Timing evidence is complete; peak-memory
-evidence remains unavailable rather than being interpreted as zero. The runner now records the
-first unparsed AMD SMI response and an explicit availability flag for diagnosis in the next run.
+Process-memory sampling was attempted during every excluded warm-up. ROCm 7.2 returned the value
+under `mem_usage`, while the original parser recognized only alternate AMD SMI field spellings, so
+the archived summaries correctly mark peak memory unavailable rather than interpreting it as zero.
+The first raw samples report about 348 MB for KD-tree and 352 MB for Morton at $10^6$ particles, but
+they are not peaks and do not support a memory comparison. The parser now accepts this schema for
+future campaigns.
+
+### Native runtime trace on MI300A
+
+The instrumented `fluid_3d_production` trace completed normally on 2026-08-14 and recorded 8673
+kernel dispatches over the shortened one-code-time workload. Its 12.947 s aggregate kernel time is
+distributed primarily as follows:
+
+| Kernel | Calls | Mean duration | Fraction of kernel time |
+|---|---:|---:|---:|
+| `advection_ybl` | 242 | 24.765 ms | 46.29% |
+| `advection_zbl` | 242 | 21.522 ms | 40.23% |
+| `advection_xbl` | 242 | 3.183 ms | 5.95% |
+| `cfl_rate_calc` | 845 | 0.506 ms | 3.30% |
+| all three diffusion kernels | 714 | -- | 3.43% |
+
+Directional advection therefore accounts for 92.47% of measured kernel time, with the radial and
+polar block sweeps alone accounting for 86.52%. This trace changes the first counter target from
+`diffusion_ybl` to `advection_ybl`, followed by `advection_zbl`. Both compiled at 128 architectural
+VGPRs in this trace; the kernel metadata also reports 68 bytes of private storage for Y and 12 bytes
+for Z per work item. Hardware counters are still needed to decide whether VGPR-limited occupancy,
+scratch traffic, memory access, barriers, or serial line work dominates. The instrumented trace is
+used only for attribution and not as a wall-time baseline.
 
 ## Performance work after correctness
 
@@ -794,7 +825,7 @@ Only after the native matrices pass should the port evaluate:
 - device-only fast math with finite-value semantics restored
 - removal of `-fgpu-rdc` after a successful non-RDC link and full regression
 - synchronous versus asynchronous KD-tree allocation
-- KD-tree versus Morton build, query, memory, and end-to-end collision cost
+- KD-tree versus Morton build, query, and peak-memory breakdown
 - LDS occupancy, bank conflicts, scratch use, HBM traffic, and kernel duration through AMD profiling
 - MI300A unified-memory opportunities without changing numerical ownership or I/O semantics
 

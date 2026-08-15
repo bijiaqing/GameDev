@@ -257,16 +257,18 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_momy[:] = line_momy[None, :, None]
         exact_momz[:] = 0.11 * exact_dens
     elif case == "z_transport":
-        # Constant polar specific angular momentum gives dz/dt=Lz/R**2 on each
-        # radial shell, so the compact bump translates by a radius-dependent
-        # angular shift while retaining its finite-volume polar average.
-        for j, radius in enumerate(yc):
-            shift = 0.15 * time / (radius * radius)
+        # Choose one shell representative polar velocity so the exact integrated
+        # polar face-area-to-volume factor gives angular rate 0.15 at every y.
+        area_z = 0.5 * (y1**2 - y0**2)
+        geom_z = area_z / radial_volume
+        shell_lz = 0.15 * yc / geom_z
+        shift = 0.15 * time
+        for j in range(ny):
             rho_int = gauss_average(lambda z: compact_bump(z - shift, 0.80, 1.30), zf[:-1], zf[1:])
             exact_dens[:, j, :] = (rho_int / polar_volume)[:, None]
         exact_momx[:] = 0.7 * exact_dens
         exact_momy[:] = 0.05 * exact_dens
-        exact_momz[:] = 0.15 * exact_dens
+        exact_momz[:] = shell_lz[None, :, None] * exact_dens
     elif case.startswith("y_diffusion"):
         # A radial Laplacian eigenmode preserves its shape and decays globally as
         # exp(-D*k**2*t).  The 2D and 3D cases use their corresponding eigenvalue

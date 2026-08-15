@@ -60,6 +60,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     real *anti_mz = _block_field(dev_adv_work, BLOCK_ANTI_MZ, idx_col, N_Z);
 
     real y = _get_ycent(iy);
+    real geom_z = _get_area_z(iy) / _get_vol_y(iy);
 
     // load one conserved polar column into the explicit workspace
     for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
@@ -142,10 +143,10 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 real z_i = _get_zface(iz);
                 real z_o = _get_zface(iz + 1);
                 real vol_z = _get_vol_z(iz);
-                rhod[iz] -= dt*(sin(z_o)*flux_rhod_o - sin(z_i)*flux_rhod_i) / (y*vol_z);
-                mx[iz] -= dt*(sin(z_o)*flux_mx_o - sin(z_i)*flux_mx_i) / (y*vol_z);
-                my[iz] -= dt*(sin(z_o)*flux_my_o - sin(z_i)*flux_my_i) / (y*vol_z);
-                mz[iz] -= dt*(sin(z_o)*flux_mz_o - sin(z_i)*flux_mz_i) / (y*vol_z);
+                rhod[iz] -= dt*geom_z*(sin(z_o)*flux_rhod_o - sin(z_i)*flux_rhod_i) / vol_z;
+                mx[iz] -= dt*geom_z*(sin(z_o)*flux_mx_o - sin(z_i)*flux_mx_i) / vol_z;
+                my[iz] -= dt*geom_z*(sin(z_o)*flux_my_o - sin(z_i)*flux_my_i) / vol_z;
+                mz[iz] -= dt*geom_z*(sin(z_o)*flux_mz_o - sin(z_i)*flux_mz_i) / vol_z;
                 if (rhod[iz] < 0.0) rhod[iz] = mx[iz] = my[iz] = mz[iz] = 0.0;
 
                 flux_rhod_i = flux_rhod_o;
@@ -160,14 +161,14 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 real area_f = sin(_get_zface(iz + 1));
                 real vol_L = _get_vol_z(iz);
                 real vol_R = _get_vol_z(iz + 1);
-                real corr_rhod_L = -dt*area_f*anti_rhod[iz] / (y*vol_L);
-                real corr_mx_L = -dt*area_f*anti_mx[iz] / (y*vol_L);
-                real corr_my_L = -dt*area_f*anti_my[iz] / (y*vol_L);
-                real corr_mz_L = -dt*area_f*anti_mz[iz] / (y*vol_L);
-                real corr_rhod_R = dt*area_f*anti_rhod[iz] / (y*vol_R);
-                real corr_mx_R = dt*area_f*anti_mx[iz] / (y*vol_R);
-                real corr_my_R = dt*area_f*anti_my[iz] / (y*vol_R);
-                real corr_mz_R = dt*area_f*anti_mz[iz] / (y*vol_R);
+                real corr_rhod_L = -dt*geom_z*area_f*anti_rhod[iz] / vol_L;
+                real corr_mx_L = -dt*geom_z*area_f*anti_mx[iz] / vol_L;
+                real corr_my_L = -dt*geom_z*area_f*anti_my[iz] / vol_L;
+                real corr_mz_L = -dt*geom_z*area_f*anti_mz[iz] / vol_L;
+                real corr_rhod_R = dt*geom_z*area_f*anti_rhod[iz] / vol_R;
+                real corr_mx_R = dt*geom_z*area_f*anti_mx[iz] / vol_R;
+                real corr_my_R = dt*geom_z*area_f*anti_my[iz] / vol_R;
+                real corr_mz_R = dt*geom_z*area_f*anti_mz[iz] / vol_R;
 
                 real lx_min_L, lx_max_L, vy_min_L, vy_max_L, lz_min_L, lz_max_L;
                 real lx_min_R, lx_max_R, vy_min_R, vy_max_R, lz_min_R, lz_max_R;

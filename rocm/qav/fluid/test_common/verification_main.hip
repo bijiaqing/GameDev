@@ -218,17 +218,20 @@ void initialize_state (std::vector<real> &dens, std::vector<real> &momx,
                 momy[idx] = momy_int/volume;
                 momz[idx] = 0.11*dens[idx];
 #elif defined(VERIFY_Z_TRANSPORT)
-                // Average the compact bump with the polar finite-volume measure.  VERIFY_LZ is constant specific polar
-                // angular momentum, so each radial shell has a known angular translation rate.
+                // Average the compact bump with the polar finite-volume measure and choose the shell momentum so the exact
+                // integrated polar face-area-to-volume factor gives the same known angular rate in every radial shell.
                 real volume = cos(z0) - cos(z1);
                 real rho_int = gauss8([&](real z)
                 {
                     return compact_bump(z, 0.80, 1.30);
                 }, z0, z1);
+                real area_z = 0.5*(y1*y1 - y0*y0);
+                real vol_y = (y1*y1*y1 - y0*y0*y0) / 3.0;
+                real lz = VERIFY_RATE_Z*yc*vol_y / area_z;
                 dens[idx] = rho_int/volume;
                 momx[idx] = 0.7*dens[idx];
                 momy[idx] = 0.05*dens[idx];
-                momz[idx] = VERIFY_LZ*dens[idx];
+                momz[idx] = lz*dens[idx];
 #elif defined(VERIFY_X_DIFFUSION)
                 // A periodic Fourier mode is an exact azimuthal diffusion eigenfunction.  Constant primitive momentum ratios
                 // also test whether diffusing mass transports all three conserved momentum components consistently.

@@ -61,6 +61,16 @@ real _get_zcent (int iz) { return Z_MIN + (static_cast<real>(iz) + 0.5)*_get_dz(
 __host__ __device__ __forceinline__
 real _get_area_y (int iy) { return pow(_get_yface(iy), _get_mesh_dim() - 1.0); }
 
+// radial contribution to an integrated polar face area
+__host__ __device__ __forceinline__
+real _get_area_z (int iy)
+{
+    real dy = _get_dy();
+    real y_i = _get_yface(iy);
+
+    return 0.5*y_i*y_i*(dy*dy - 1.0);
+}
+
 // radial cell measure y0^d*(dy^d - 1)/d
 __host__ __device__ __forceinline__
 real _get_vol_y (int iy)

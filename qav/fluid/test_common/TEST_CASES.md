@@ -116,31 +116,38 @@ global CFL timestep.
 
 ## `test_z_transport_3d`
 
-Purpose: isolate the production polar PPM/HLL sweep, including $\sin z$ face areas and
-$d(-\cos z)$ cell volumes.
+Purpose: isolate the production polar PPM/HLL sweep, including the integrated radial face factor,
+$\sin z$ face areas, and $d(-\cos z)$ cell volumes.
 
 On $0.35\le z\le\pi-0.35$, define the same compact function with support $0.80<z<1.30$ and call it
-$B(z)$. At each radius,
+$B(z)$. In radial shell $j$, define
 
 $$
-\rho_d(z,0)\sin z=B(z),\qquad \ell_z=L=0.15.
+G_j=\frac{(y_{j+1/2}^2-y_{j-1/2}^2)/2}
+{(y_{j+1/2}^3-y_{j-1/2}^3)/3}.
 $$
 
-The angular characteristic speed is
+The initial fields are
 
 $$
-c_z=\frac{L}{y^2},
+\rho_d(z,0)\sin z=B(z),
+\qquad
+\ell_{z,j}=\frac{\omega y_j}{G_j},
+\qquad
+\omega=0.15.
 $$
 
-and the exact solution is
+Because $G_j(\ell_{z,j}/y_j)=\omega$, the exact finite-volume solution is
 
 $$
-\rho_d(z,t)=\frac{B(z-c_zt)}{\sin z},\qquad
-\rho_d\ell_z=L\rho_d.
+\rho_d(z,t)=\frac{B(z-\omega t)}{\sin z},
+\qquad
+\rho_d\ell_z=\ell_{z,j}\rho_d.
 $$
 
 Constant transverse specific fields $\ell_x=0.7$ and $v_y=0.05$ test conservative transport of all
-components. The final time is $T=0.30$ and the support remains separated from both boundaries.
+components. The final time is $T=0.30$ and the support remains separated from both boundaries. The
+fixed coarse $N_Y=4$ mesh makes the old $1/y_j$ metric approximation fail visibly.
 
 Expected with SSPRK(3,3): mass conservation near roundoff and at least second-order convergence.
 The native post-limiter CFL-0.5 density orders at $N=32,64,128,256$ are

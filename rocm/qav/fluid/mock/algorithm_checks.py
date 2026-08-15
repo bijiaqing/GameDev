@@ -1217,6 +1217,20 @@ def test_mesh_primitives():
     report("T10 polar measure telescopes to the hemisphere", abs(vol_z_sum - 1.0) < 1e-15,
            f"sum={vol_z_sum:.16f}")
 
+    # The radial part of a polar face is integral(y dy), while the 3D cell
+    # volume contains integral(y**2 dy).  Their ratio must be used by both the
+    # polar finite-volume divergence and its matching CFL rate.
+    yf = np.array([yface(i) for i in range(65)])
+    area_z = 0.5*(yf[1:]**2 - yf[:-1]**2)
+    vol_y = (yf[1:]**3 - yf[:-1]**3)/3.0
+    geom_z = area_z/vol_y
+    exact = 1.5*(yf[1:] + yf[:-1])/(yf[1:]**2 + yf[1:]*yf[:-1] + yf[:-1]**2)
+    center_approx = 1.0/np.sqrt(yf[1:]*yf[:-1])
+    ok = np.allclose(geom_z, exact, rtol=5e-15, atol=0.0)
+    ok = ok and np.max(np.abs(geom_z/center_approx - 1.0)) > 1e-6
+    report("T10 exact polar face-area-to-volume factor", ok,
+           f"former center approximation differs by {np.max(np.abs(geom_z/center_approx - 1.0)):.3e}")
+
 # =============================================================================
 
 if __name__ == "__main__":

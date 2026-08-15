@@ -324,26 +324,41 @@ expected to be asymptotic; the finer intervals supply the convergence evidence.
 
 `test_z_transport_3d` isolates the polar PPM/HLL operator on
 $0.35\le z\le\pi-0.35$. Let $B(z)$ be the same smooth compact bump with support
-$0.80<z<1.30$, and initialize
+$0.80<z<1.30$. For radial shell $j$, define
+
+$$
+G_j=\frac{\Delta A_{z,j}}{\Delta V_{y,j}}
+=\frac{(y_{j+1/2}^2-y_{j-1/2}^2)/2}
+{(y_{j+1/2}^3-y_{j-1/2}^3)/3}.
+$$
+
+The test initializes
 
 $$
 \rho_d(z,0)\sin z=B(z),
 \qquad
-\ell_z=L=0.15.
-$$
-
-At each radius the constant polar characteristic speed is
-
-$$
-c_z=\frac{L}{y^2},
+\ell_{z,j}=\frac{\omega y_j}{G_j},
 \qquad
-\rho_d(z,t)=\frac{B(z-c_zt)}{\sin z}.
+\omega=0.15.
 $$
+
+The physical face speed represented by the shell is $v_{\theta,j}=\ell_{z,j}/y_j=\omega/G_j$.
+Consequently, the exact finite-volume polar face-area-to-volume factor gives
+
+$$
+G_jv_{\theta,j}=\omega,
+\qquad
+\rho_d(z,t)=\frac{B(z-\omega t)}{\sin z}
+$$
+
+in every radial shell. The coarse fixed $N_Y=4$ mesh makes replacing $G_j$ by $1/y_j$ a visible
+error rather than a negligible fine-grid approximation.
 
 The transverse values $\ell_x=0.7$ and $v_y=0.05$ again expose component errors. The final time is
 $T=0.30$, so the compact support remains away from both polar boundaries. The test therefore
-validates the $\sin z$ face measure, the $d(-\cos z)$ cell volume, shell-dependent characteristic
-speed, and conservative transport, but not an actual polar outflow or midplane reflection.
+validates the integrated radial polar-face measure, the $\sin z$ face measure, the
+$d(-\cos z)$ cell volume, and conservative transport, but not an actual polar outflow or
+midplane reflection.
 
 ### Diffusion eigenmodes
 
@@ -518,6 +533,12 @@ log, and environment. This branch tests discrete equivalence and performance on 
 not a grid-convergence sequence and does not use one implementation as analytical truth.
 
 ## Recorded native CUDA evidence
+
+**Source-status note (2026-08-16).** The polar advection and CFL operators now use the exact
+radial polar-face factor $\Delta A_z/\Delta V_y$ instead of the former $1/y_c$ approximation.
+The supplementary T10 mesh regression passes for the corrected formula, but the native polar
+transport, complete-3D, and CUDA-versus-ROCm results recorded below predate this change and are
+historical until those cases are rerun with the current source.
 
 ### Complete analytical run of 2026-07-26
 
@@ -710,6 +731,8 @@ JSON with `"passed": true` means all of its implemented tolerances were satisfie
   separately before verifying their off-midplane cancellation
 - Add radial and polar cases whose nonzero support actually crosses an outflow boundary, plus a
   `HALF_DISK` midplane-reflection case; current compact profiles remain away from those boundaries
+- Run polar transport at fixed $N_Z$ while varying $N_Y$ independently, and verify both the exact
+  $\Delta A_z/\Delta V_y$ radial metric and conservation under the complete 3D cell measure
 - Add a long-running periodic FARGO-plus-diffusion ring test that retains total mass and all three
   globally integrated conserved momentum components to roundoff
 - Add a limiter stress test with converging streams and near-vacuum cells, requiring nonnegative

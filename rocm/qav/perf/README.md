@@ -74,9 +74,13 @@ hardware counters for one measured hot kernel, for example:
 ROCPROFCOMPUTE_COLOR=0 python3 qav/perf/profile.py \
     --case fluid_3d_production \
     --tool compute \
-    --kernel diffusion_ybl \
+    --kernel advection_ybl \
     --target gfx942
 ```
+
+The archived MI300A runtime trace identifies `advection_ybl` and `advection_zbl` as the dominant
+3D kernels, so counter collection should start with `advection_ybl`. Recompute the ranking after
+material source, compiler, grid, or physics changes rather than treating this target as fixed.
 
 Equivalent swarm cases are named `swarm_collision_kdtree_baseline`,
 `swarm_collision_morton_baseline`, and their `production` or `large` variants. Profiler-native JSON,

@@ -27,6 +27,7 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     int iy = idx_col / N_X;
 
     real y = _get_ycent(iy);
+    real geom_z = _get_area_z(iy) / _get_vol_y(iy);
 
     // load one polar column from global memory
     real rhod[N_Z], mx[N_Z], my[N_Z], mz[N_Z];
@@ -135,10 +136,10 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             real z_o = _get_zface(1);
             real vol_z = _get_vol_z(0);
 
-            rhod[0] -= dt*(sin(z_o)*flux_rhod[0] - sin(z_i)*flux_rhod_i) / (y*vol_z);
-            mx[0] -= dt*(sin(z_o)*flux_mx[0] - sin(z_i)*flux_mx_i) / (y*vol_z);
-            my[0] -= dt*(sin(z_o)*flux_my[0] - sin(z_i)*flux_my_i) / (y*vol_z);
-            mz[0] -= dt*(sin(z_o)*flux_mz[0] - sin(z_i)*flux_mz_i) / (y*vol_z);
+            rhod[0] -= dt*geom_z*(sin(z_o)*flux_rhod[0] - sin(z_i)*flux_rhod_i) / vol_z;
+            mx[0] -= dt*geom_z*(sin(z_o)*flux_mx[0] - sin(z_i)*flux_mx_i) / vol_z;
+            my[0] -= dt*geom_z*(sin(z_o)*flux_my[0] - sin(z_i)*flux_my_i) / vol_z;
+            mz[0] -= dt*geom_z*(sin(z_o)*flux_mz[0] - sin(z_i)*flux_mz_i) / vol_z;
 
             if (rhod[0] < 0.0) rhod[0] = mx[0] = my[0] = mz[0] = 0.0;
         }
@@ -150,10 +151,10 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             real z_o = _get_zface(iz + 1);
             real vol_z = _get_vol_z(iz);
 
-            rhod[iz] -= dt*(sin(z_o)*flux_rhod[iz] - sin(z_i)*flux_rhod[iz - 1]) / (y*vol_z);
-            mx[iz] -= dt*(sin(z_o)*flux_mx[iz] - sin(z_i)*flux_mx[iz - 1]) / (y*vol_z);
-            my[iz] -= dt*(sin(z_o)*flux_my[iz] - sin(z_i)*flux_my[iz - 1]) / (y*vol_z);
-            mz[iz] -= dt*(sin(z_o)*flux_mz[iz] - sin(z_i)*flux_mz[iz - 1]) / (y*vol_z);
+            rhod[iz] -= dt*geom_z*(sin(z_o)*flux_rhod[iz] - sin(z_i)*flux_rhod[iz - 1]) / vol_z;
+            mx[iz] -= dt*geom_z*(sin(z_o)*flux_mx[iz] - sin(z_i)*flux_mx[iz - 1]) / vol_z;
+            my[iz] -= dt*geom_z*(sin(z_o)*flux_my[iz] - sin(z_i)*flux_my[iz - 1]) / vol_z;
+            mz[iz] -= dt*geom_z*(sin(z_o)*flux_mz[iz] - sin(z_i)*flux_mz[iz - 1]) / vol_z;
 
             if (rhod[iz] < 0.0) rhod[iz] = mx[iz] = my[iz] = mz[iz] = 0.0;
         }
@@ -166,14 +167,14 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             real vol_L = _get_vol_z(iz);
             real vol_R = _get_vol_z(iz + 1);
 
-            real corr_rhod_L = -dt*area_f*face_work_rhod[iz] / (y*vol_L);
-            real corr_mx_L = -dt*area_f*face_work_x[iz] / (y*vol_L);
-            real corr_my_L = -dt*area_f*face_work_y[iz] / (y*vol_L);
-            real corr_mz_L = -dt*area_f*face_work_z[iz] / (y*vol_L);
-            real corr_rhod_R =  dt*area_f*face_work_rhod[iz] / (y*vol_R);
-            real corr_mx_R =  dt*area_f*face_work_x[iz] / (y*vol_R);
-            real corr_my_R =  dt*area_f*face_work_y[iz] / (y*vol_R);
-            real corr_mz_R =  dt*area_f*face_work_z[iz] / (y*vol_R);
+            real corr_rhod_L = -dt*geom_z*area_f*face_work_rhod[iz] / vol_L;
+            real corr_mx_L = -dt*geom_z*area_f*face_work_x[iz] / vol_L;
+            real corr_my_L = -dt*geom_z*area_f*face_work_y[iz] / vol_L;
+            real corr_mz_L = -dt*geom_z*area_f*face_work_z[iz] / vol_L;
+            real corr_rhod_R =  dt*geom_z*area_f*face_work_rhod[iz] / vol_R;
+            real corr_mx_R =  dt*geom_z*area_f*face_work_x[iz] / vol_R;
+            real corr_my_R =  dt*geom_z*area_f*face_work_y[iz] / vol_R;
+            real corr_mz_R =  dt*geom_z*area_f*face_work_z[iz] / vol_R;
 
             real lx_min_L, lx_max_L, vy_min_L, vy_max_L, lz_min_L, lz_max_L;
             real lx_min_R, lx_max_R, vy_min_R, vy_max_R, lz_min_R, lz_max_R;
