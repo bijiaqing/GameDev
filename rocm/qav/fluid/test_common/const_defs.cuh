@@ -169,7 +169,7 @@ const real RHO_VAC = 1.0e-15;
 
 // Kernel launch counts correspond to one thread per cell, x ring, y column, or z column.  The extra block is harmless because
 // every kernel begins with an out-of-range return.
-const int TPB  = 32;
+const int TPB  = 64;
 const int N_G  = N_X*N_Y*N_Z;
 const int NB_G = N_G     / TPB + 1;
 const int NB_X = N_Y*N_Z / TPB + 1;

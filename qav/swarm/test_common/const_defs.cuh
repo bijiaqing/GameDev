@@ -235,7 +235,7 @@ struct kdtree_traits
 };
 #endif
 
-constexpr int TPB = 32;
+constexpr int TPB = 64;
 constexpr int NB_P = N_P / TPB + 1;
 constexpr int NB_G = N_G / TPB + 1;
 constexpr int NB_X = N_Y*N_Z / TPB + 1;

@@ -25,7 +25,7 @@ The initial hardware target is AMD Instinct MI300A, whose HIP offload target is 
 
 The physical equations and discretizations are unchanged. Differences in floating-point reduction order, wavefront scheduling, random-number streams, and library algorithms mean that ROCm results are expected to agree in norms, invariants, convergence order, and distributions rather than byte for byte with CUDA output
 
-`TPB=32` is deliberately retained from the validated numerical baseline. It does not rely on warp-synchronous behavior, but it occupies only half of a 64-lane AMD wavefront; testing 64, 128, and 256 threads per block is a pending performance step
+`TPB=64` is the common CUDA and ROCm baseline for ordinary kernels and fills one native 64-lane AMD wavefront; testing 128 and 256 threads per block remains a pending performance step
 
 ## Requirements
 

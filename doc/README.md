@@ -14,6 +14,7 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
 | [`future_rocm_support.md`](future_rocm_support.md) | tracked ROCm backend status, validation evidence, and remaining qualification work |
+| [`backend_merge_plan.md`](backend_merge_plan.md) | proposed whole-file CUDA/ROCm ownership, complete production tree, QA tree, and staged integration order |
 
 Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior.
 

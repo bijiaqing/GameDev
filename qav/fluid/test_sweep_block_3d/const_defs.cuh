@@ -95,7 +95,7 @@ const real RHO_VAC      = 1.0e-30;      // vacuum density for the dust density p
 // =========================================================================================================================
 // CUDA kernel launch parameters
 
-const int TPB   = 32;
+const int TPB   = 64;
 const int N_G   = N_X*N_Y*N_Z;
 
 const int NB_G  = N_G     / TPB + 1;

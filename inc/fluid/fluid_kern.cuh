@@ -12,7 +12,7 @@
 
 #ifdef FLUID_BLOCK_SWEEP
 
-const int TPB_BLOCK = TPB;
+const int TPB_BLOCK = 32;
 
 enum BlockAdvField
 {

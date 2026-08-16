@@ -198,7 +198,7 @@ struct kdtree_traits                        // traits for kdtree::builder
 // cuda numerical parameters
 // =========================================================================================================================
 
-const int TPB = 32; // number of threads per block
+const int TPB = 64; // number of threads per block
 
 const int NB_P = N_P     / TPB + 1;         // number of blocks for swarm-level parallelization
 const int NB_G = N_G     / TPB + 1;         // number of blocks for grid-level  parallelization

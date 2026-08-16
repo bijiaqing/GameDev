@@ -106,10 +106,12 @@ suite before it is accepted.
 
 ### Wavefront geometry
 
-`TPB=32` is retained for correctness bring-up. The kernels do not use warp masks, warp shuffles,
+`TPB=32` was retained for correctness bring-up. The kernels do not use warp masks, warp shuffles,
 implicit warp synchronization, or other 32-lane assumptions, so a 64-lane AMD wavefront changes
-occupancy rather than numerical meaning. Values such as 64, 128, and 256 should be benchmarked only
-after the reference tests pass.
+launch grouping and occupancy rather than the intended numerical method. The backend-merge plan
+therefore adopts `TPB=64` as the common CUDA and ROCm baseline for ordinary fluid and swarm
+kernels. This change still requires the complete numerical suites and performance comparison;
+values such as 128 and 256 remain later tuning candidates.
 
 ### Fluid block-line LDS
 
@@ -883,8 +885,8 @@ nonzero resource-admission stalls instead show meaningful register/private-memor
 counter set does not isolate scratch traffic from the other flat-memory operations.
 
 The corresponding low-risk source changes are now implemented. ROCm block sweeps launch 64
-work-items per workgroup, filling one native wave;
-ordinary elementwise and thread-line kernels retain their existing `TPB`. All three block-advection
+work-items per workgroup, filling one native wave; ordinary elementwise and thread-line kernels now
+use the common `TPB=64` baseline on both backends. All three block-advection
 directions now compute the low-order cell update cooperatively through a twelfth full-grid workspace
 field that stages the updated density, and the radial and polar SSPRK combinations are cooperative.
 The CUDA source uses the same staged update for cross-backend algorithmic parity while retaining its
@@ -951,42 +953,10 @@ swarm file.
 
 ### Proposed repository structure
 
-The target structure is
-
-```text
-.
-├── Makefile
-├── inc/
-│   ├── fluid/
-│   │   ├── *.cuh                 # backend-neutral fluid equations and algorithms
-│   │   ├── cuda/                 # CUDA-only fluid adapters when unavoidable
-│   │   └── rocm/                 # ROCm-only fluid adapters when unavoidable
-│   └── swarm/
-│       ├── *.cuh                 # backend-neutral swarm equations and algorithms
-│       ├── cuda/                 # CUDA-only swarm, RNG, and library adapters
-│       └── rocm/                 # ROCm-only swarm, RNG, and library adapters
-├── src/
-│   ├── fluid/
-│   │   ├── shared numerical translation units
-│   │   ├── cuda/                 # irreducibly CUDA-specific implementations
-│   │   └── rocm/                 # irreducibly ROCm-specific implementations
-│   └── swarm/
-│       ├── shared numerical translation units
-│       ├── cuda/
-│       └── rocm/
-├── mod/                          # one model configuration tree
-├── qav/                          # one analytical and regression test tree
-├── obj/<model>/<repr>/<backend>/ # generated backend-separated objects
-├── bin/<model>/<backend>/gamedev # generated backend-separated executables
-└── out/<model>/<backend>/        # generated backend-separated simulation state
-```
-
-Here, `shared numerical translation units` means source shared only between CUDA and ROCm for one
-representation. It does not mean sharing source between the fluid and swarm models. A numerical
-kernel should have one implementation when both compilers accept the same code and produce the
-validated behavior. A backend-specific copy should remain only when compiler syntax, runtime
-semantics, random-state types, device-library interfaces, or performance-critical implementations
-genuinely differ.
+The complete file-by-file inventory and canonical backend-first tree are recorded in
+[`backend_merge_plan.md`](backend_merge_plan.md). Backend-owned files use `inc/cuda`, `inc/rocm`,
+`src/cuda`, and `src/rocm`, with the representation as the next path component. Files are shared
+only as complete files, and fluid and swarm remain separate physical representations.
 
 The present `rocm/inc`, `rocm/src`, `rocm/mod`, and `rocm/qav` copies are temporary migration
 inputs. Once every required HIP difference has a home in the merged structure, the duplicated
