@@ -8,13 +8,11 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 
 | Document | Responsibility |
 |---|---|
-| [`numerics_fluid.md`](numerics_fluid.md) | Eulerian dust-fluid user guide covering model selection, initialization, equations, discretization, composition, state semantics, and limitations |
-| [`testset_fluid.md`](testset_fluid.md) | Fluid analytical cases, measurement protocol, historical native results, commands, and missing verification |
-| [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian swarm user guide covering model selection, mass normalization, initialization, transport, diffusion, radiation, collisions, state semantics, and limitations |
-| [`testset_swarm.md`](testset_swarm.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
-| [`format_variablename.md`](format_variablename.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
-| [`future_rocm_support.md`](future_rocm_support.md) | tracked ROCm backend status, validation evidence, and remaining qualification work |
-| [`backend_merge_plan.md`](backend_merge_plan.md) | proposed whole-file CUDA/ROCm ownership, complete production tree, QA tree, and staged integration order |
+| [`fluid_numeric.md`](fluid_numeric.md) | Eulerian dust-fluid user guide covering model selection, initialization, equations, discretization, composition, state semantics, and limitations |
+| [`fluid_testset.md`](fluid_testset.md) | Fluid analytical cases, measurement protocol, historical native results, commands, and missing verification |
+| [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm user guide covering model selection, mass normalization, initialization, transport, diffusion, radiation, collisions, state semantics, and limitations |
+| [`swarm_testset.md`](swarm_testset.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
+| [`naming.md`](naming.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
 
 Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior.
 
@@ -22,26 +20,39 @@ Numerical equations belong in the two `numerics_*` documents. Test definitions a
 
 The active merged project is at the repository root:
 
-- `inc/fluid/` and `src/fluid/` contain the Eulerian fluid implementation
-- `inc/swarm/` and `src/swarm/` contain the Lagrangian swarm implementation
+- `inc/comm/fluid/`, `inc/comm/swarm/`, `src/comm/fluid/`, and `src/comm/swarm/` contain complete backend-neutral files
+- `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files
 - `mod/` contains production model configurations
-- `qav/fluid/` and `qav/swarm/` contain verification models and validators
-- `rocm/` contains the tracked, independently built HIP/ROCm reproduction and its QA tree
+- `qav/comm/fluid/` and `qav/comm/swarm/` contain shared verification definitions, criteria, and analyzers
+- `qav/cuda/` and `qav/rocm/` contain backend test drivers and backend-owned test source
+- `qav/tool/` contains backend-neutral QA utilities, while generated evidence is written below the
+  ignored `qav/logs/` tree
+- `qav/rocm/bench/` documents and runs the uninstrumented MI300A benchmark and profiler workflow
 
-The root Makefile requires `MODEL` and reads that model's `flags.mk`. `DUST_REPR := fluid` or `DUST_REPR := swarm` selects exactly one source branch. Fluid builds additionally select `FLUID_SWEEP := thread` or `FLUID_SWEEP := block`. A model-local `const_defs.cuh` has include priority; models without one inherit the selected representation's defaults. Collision-enabled swarm builds select `COLLISION_SEARCH := kdtree` or `COLLISION_SEARCH := morton`; the Morton backend always uses its validated block-parallel sorted top-$K$ merge.
+The root Makefile requires `MODEL`; `GPU_BACKEND=cuda|rocm` selects one compiler/backend and
+`DUST_REPR := fluid|swarm` in the model flags selects one physical representation. Fluid builds
+additionally select `FLUID_SWEEP := thread|block`. Collision-enabled swarm builds select
+`COLLISION_SEARCH := kdtree|morton`.
 
 Model-local source files override same-named production translation units. Verification models use this mechanism only when an analytical setup cannot be expressed through the production interface.
 
-The branches do not share headers or translation units. Related algorithms, including optical-depth construction, remain independently implemented and tested.
+The fluid and swarm representations do not share headers or translation units with one another
+inside `comm/`. Related algorithms, including optical-depth construction, remain independently
+implemented and tested. Backend-neutral complete files are shared between CUDA and ROCm.
+
+The backend ownership rule is deliberately conservative: share a file only when the complete file
+is backend-neutral, and otherwise keep complete CUDA and ROCm versions. The selected build may use
+only `inc/comm`, `src/comm`, and one backend tree. Generated objects, executables, production
+outputs, and QA records include the backend name, so CUDA and ROCm artifacts cannot be linked or
+overwritten accidentally. Checkpoints are not supported across backends.
 
 ## Evidence status
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | 85 thread-sweep and 85 block-sweep metric records under `qav/fluid/out/`; the block matrix was regenerated after the exact polar-metric correction | the current block archive provides the native analytical baseline; the retained thread polar records predate the correction and remain historical |
-| fluid thread/block comparison | passing current CUDA comparisons at $1024^2$ and $128^3$, with build, run, timing, variable, and comparison JSON records | both implementations are numerically equivalent within the automatic tolerances; block is faster in the recorded 2D case and slower in the recorded 3D case |
-| swarm analytical suite | 51 metrics, 51 metadata files, 25 top-level model manifests, and a passing focused initialization aggregate under `qav/swarm/out/` | the retained all-group baseline and the newer continuous-initialization supplement passed natively on the recorded A100 environment; rerun `--group all` to regenerate one current aggregate manifest |
-| adaptive-Morton KNN | the current archive passes 7 ordinary cases, 15 edge checks, 10 periodic checks, 10 wedge cases, and all 6 production backend links at $N_P=10^5$ | the validated block-parallel sorted top-$K$ merge is the sole Morton selection path; larger historical matrices are development evidence, while current end-to-end collision timing still requires regeneration |
+| fluid analytical suite | source definitions for the 85-case analytical matrix and thread/block comparisons | native CUDA and ROCm runs previously passed; generated records are intentionally not tracked and must be regenerated for current evidence |
+| swarm analytical suite | source definitions for the 51-build analytical/statistical matrix, initialization, boundaries, collisions, and failure paths | native CUDA and ROCm runs previously passed; generated records are intentionally not tracked and must be regenerated for current evidence |
+| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link harnesses for both backends | the validated block-parallel sorted top-$K$ merge remains implemented; regenerate backend manifests before making a current-machine claim |
 
 The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files.
 
@@ -55,14 +66,14 @@ Both branches use spherical computational coordinates and the same cylindrical c
 - fluid density-diffusion momentum closure versus velocity-preserving stochastic particle displacement
 - fluid pressureless Riemann evolution versus swarm KNN collision sampling
 
-These are parallel scientific and naming conventions, not shared-code interfaces. The exact ownership rules are maintained in [`format_variablename.md`](format_variablename.md).
+These are parallel scientific and naming conventions, not shared-code interfaces. The exact ownership rules are maintained in [`naming.md`](naming.md).
 
 ## Authority and maintenance
 
 When statements disagree, use this order:
 
 1. current production source, model constants, and model flags
-2. current machine-readable native results retained under `qav/`
+2. freshly generated machine-readable native results under the ignored `qav/logs/` tree
 3. the canonical documents in this directory
 4. transcribed historical results, laboratory notes, and Git history
 

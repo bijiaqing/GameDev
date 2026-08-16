@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+
+"""Check the merged CUDA and ROCm source tree without requiring either compiler"""
+
+from __future__ import annotations
+
+import ast
+import re
+import subprocess
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+EXPECTED_PRODUCTION_UNITS = {
+    "fluid": {
+        "advection_xbl", "advection_xth", "advection_ybl", "advection_yth",
+        "advection_zbl", "advection_zth", "cfl_rate_calc", "diffusion_xbl",
+        "diffusion_xth", "diffusion_ybl", "diffusion_yth", "diffusion_zbl",
+        "diffusion_zth", "fluid_runtime", "inf_cell_flag", "init_rho_calc",
+        "init_vel_calc", "momentum_getv", "momentum_setv", "optdepth_calc",
+        "optdepth_csum", "source_update",
+    },
+    "swarm": {
+        "col_event_run", "col_rate_calc", "col_site_init", "col_snap_save",
+        "diffusion_pos", "dustdens_calc", "dustdens_depo", "dustdens_init",
+        "dyn_rate_calc", "gas_lerp_calc", "optdepth_calc", "optdepth_csum",
+        "optdepth_depo", "optdepth_init", "optdepth_mean", "particle_init",
+        "rngstate_init", "ssa_substep_1", "ssa_substep_2", "ssa_transport",
+        "swarm_runtime",
+    },
+}
+
+ROCM_FORBIDDEN_PATTERNS = (
+    r"#include\s*<cuda",
+    r"#include\s*<curand",
+    r"\bCUDART_",
+    r"\b__CUDA_ARCH__\b",
+    r"\bcudaDeviceSynchronize\b",
+    r"\bcudaGetLastError\b",
+    r"\bcudaMalloc\w*\b",
+    r"\bcudaMemcpy\w*\b",
+    r"\bcudaMemset\w*\b",
+    r"\bcudaFree\w*\b",
+    r"\bcurand_init\b",
+    r"\bcurand_uniform\w*\b",
+    r"\bcurand_normal\w*\b",
+    r"\bcuRAND\b",
+    r"(?<!hip)\bcub::",
+)
+
+PRODUCTION_NAMING_PATTERNS = {
+    r"\b(?:init_zspan|_get_init_zspan|z_polar_lo|z_polar_hi|z_outer|z_inner|z_neg_hi|z_pos_lo)\b":
+        "use uppercase Z for cylindrical vertical coordinates",
+    r"\bgasdens\b": "use gas_dens, rhog, or sigma_g according to the stored quantity",
+    r"\bouter_edge\b|\bedge_[xyz]\b": "use face for interfaces and bound for boundary booleans",
+    r"\bmorton_(?:query|checksum)\s*\(": "production GPU kernels must retain their canonical 13-character names",
+}
+
+GPU_KERNEL_PATTERN = re.compile(
+    r"__global__\s+(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*\("
+)
+
+
+def translation_units(backend: str, branch: str) -> set[str]:
+    """Return the shared and selected-backend production source stems"""
+
+    shared = {
+        path.stem for path in (PROJECT_ROOT/"src"/"comm"/branch).glob("*.cu")
+    }
+    suffix = ".cu" if backend == "cuda" else ".hip"
+    specific = {
+        path.stem for path in (PROJECT_ROOT/"src"/backend/branch).glob(f"*{suffix}")
+    }
+    overlap = shared & specific
+    if overlap:
+        raise ValueError(
+            f"{backend}/{branch}: duplicate shared and backend source stems: "
+            f"{', '.join(sorted(overlap))}"
+        )
+    return shared | specific
+
+
+def check_source_inventory(errors: list[str]) -> None:
+    """Require each backend to resolve exactly the canonical production inventory"""
+
+    for backend in ("cuda", "rocm"):
+        for branch, expected in EXPECTED_PRODUCTION_UNITS.items():
+            try:
+                actual = translation_units(backend, branch)
+            except ValueError as error:
+                errors.append(str(error))
+                continue
+            missing = sorted(expected - actual)
+            extra = sorted(actual - expected)
+            if missing:
+                errors.append(f"{backend}/{branch}: missing units: {', '.join(missing)}")
+            if extra:
+                errors.append(f"{backend}/{branch}: unexpected units: {', '.join(extra)}")
+
+
+def check_numerical_defaults(errors: list[str]) -> None:
+    """Reject drift in constants intentionally common to both backends"""
+
+    patterns = {
+        "CFL_DYN": re.compile(r"(?:const|constexpr)\s+real\s+CFL_DYN\s*=\s*([^;]+);"),
+        "TPB": re.compile(r"(?:const|constexpr)\s+int\s+TPB\s*=\s*([^;]+);"),
+    }
+    for branch in ("fluid", "swarm"):
+        paths = {
+            backend: PROJECT_ROOT/"inc"/backend/branch/"const_defs.cuh"
+            for backend in ("cuda", "rocm")
+        }
+        for name, pattern in patterns.items():
+            values = {}
+            for backend, path in paths.items():
+                match = pattern.search(path.read_text())
+                if match is None:
+                    errors.append(f"{backend}/{branch}: unable to resolve {name}")
+                else:
+                    values[backend] = match.group(1).strip()
+            if len(values) == 2 and values["cuda"] != values["rocm"]:
+                errors.append(f"{branch}: CUDA and ROCm {name} defaults differ")
+
+
+def check_python(errors: list[str]) -> None:
+    """Parse every tracked Python source below qav"""
+
+    for root in (PROJECT_ROOT/"qav",):
+        for path in root.rglob("*.py"):
+            if any(part in {"out", "bin", "__pycache__"} for part in path.parts):
+                continue
+            try:
+                ast.parse(path.read_text(), filename=str(path))
+            except SyntaxError as error:
+                errors.append(f"{path.relative_to(PROJECT_ROOT)}: Python syntax error: {error}")
+
+
+def check_rocm_sources(errors: list[str]) -> None:
+    """Reject CUDA-only APIs from files selected exclusively by the ROCm backend"""
+
+    roots = (
+        PROJECT_ROOT/"inc"/"rocm",
+        PROJECT_ROOT/"src"/"rocm",
+        PROJECT_ROOT/"qav"/"rocm",
+    )
+    suffixes = {".h", ".hpp", ".cuh", ".hip", ".py", ".mk"}
+    for root in roots:
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in suffixes:
+                continue
+            text = path.read_text(errors="replace")
+            for pattern in ROCM_FORBIDDEN_PATTERNS:
+                if re.search(pattern, text):
+                    errors.append(
+                        f"{path.relative_to(PROJECT_ROOT)}: forbidden ROCm pattern {pattern!r}"
+                    )
+            if "-ffast-math" in text and "-fno-finite-math-only" not in text:
+                errors.append(
+                    f"{path.relative_to(PROJECT_ROOT)}: -ffast-math disables NaN/Inf semantics"
+                )
+
+
+def check_naming(errors: list[str]) -> None:
+    """Enforce the production spelling contract without rewriting vendored KD-tree APIs"""
+
+    suffixes = {".cu", ".hip", ".cuh", ".h", ".hpp"}
+    roots = (
+        PROJECT_ROOT/"inc"/"comm",
+        PROJECT_ROOT/"inc"/"cuda",
+        PROJECT_ROOT/"inc"/"rocm",
+        PROJECT_ROOT/"src"/"comm",
+        PROJECT_ROOT/"src"/"cuda",
+        PROJECT_ROOT/"src"/"rocm",
+    )
+    for root in roots:
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in suffixes or "kdtree" in path.parts:
+                continue
+
+            source = path.read_text(errors="replace")
+            for pattern, guidance in PRODUCTION_NAMING_PATTERNS.items():
+                if re.search(pattern, source):
+                    errors.append(
+                        f"{path.relative_to(PROJECT_ROOT)}: naming violation {pattern!r}; {guidance}"
+                    )
+
+            for kernel_name in GPU_KERNEL_PATTERN.findall(source):
+                if len(kernel_name) != 13:
+                    errors.append(
+                        f"{path.relative_to(PROJECT_ROOT)}: GPU kernel {kernel_name!r} "
+                        f"has {len(kernel_name)} characters instead of 13"
+                    )
+
+
+def check_metadata(errors: list[str]) -> None:
+    """Check repository and third-party licensing plus generated-file cleanliness"""
+
+    if not (PROJECT_ROOT/"LICENSE").is_file():
+        errors.append("missing repository MIT LICENSE")
+    for backend in ("cuda", "rocm"):
+        license_path = PROJECT_ROOT/"inc"/backend/"swarm"/"kdtree"/"Apache-2.0.txt"
+        if not license_path.is_file():
+            errors.append(f"missing {license_path.relative_to(PROJECT_ROOT)}")
+
+    generated = []
+    for path in (PROJECT_ROOT/"qav").rglob("*"):
+        if any(part == "logs" for part in path.parts):
+            continue
+        if path.is_file() and (path.name == "gamedev" or path.suffix in {".dat", ".json", ".txt"}):
+            generated.append(path.relative_to(PROJECT_ROOT))
+    if generated:
+        errors.append(
+            "generated QA artifacts outside qav/logs: "
+            + ", ".join(str(path) for path in generated[:10])
+        )
+
+
+def check_make_resolution(errors: list[str]) -> None:
+    """Ask Make to resolve representative backend and QA dependency graphs"""
+
+    commands = (
+        ["make", "-n", "MODEL=fluid_fiducial", "GPU_BACKEND=cuda", "GPU_TARGET=sm_80"],
+        ["make", "-n", "MODEL=fluid_fiducial", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
+        ["make", "-n", "MODEL=swarm_fiducial", "GPU_BACKEND=cuda", "GPU_TARGET=sm_80"],
+        ["make", "-n", "MODEL=swarm_fiducial", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
+        ["make", "-n", "MODEL=test_collision_3d", "GPU_BACKEND=cuda", "RES=32", "COLLISION_SEARCH=kdtree"],
+        ["make", "-n", "MODEL=test_collision_3d", "GPU_BACKEND=rocm", "RES=32", "COLLISION_SEARCH=morton"],
+        ["make", "-n", "MODEL=test_failure_2d", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
+        ["make", "-n", "MODEL=test_lds_x", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
+    )
+    for command in commands:
+        result = subprocess.run(
+            command, cwd=PROJECT_ROOT, check=False, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        if result.returncode != 0:
+            errors.append(
+                f"Make dependency check failed for {' '.join(command[2:])}:\n{result.stdout}"
+            )
+
+    knn_commands = (
+        ["make", "-n", "-C", str(PROJECT_ROOT/"qav"/"cuda"/"swarm"/"test_knn"), "suite", "ARCH=sm_80", "K=200"],
+        ["make", "-n", "-C", str(PROJECT_ROOT/"qav"/"rocm"/"swarm"/"test_knn"), "suite", "AMDGPU_TARGET=gfx942", "K=200"],
+    )
+    for command in knn_commands:
+        result = subprocess.run(
+            command, check=False, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        if result.returncode != 0:
+            errors.append(f"KNN Make dependency check failed:\n{result.stdout}")
+
+
+def main() -> None:
+    errors: list[str] = []
+    check_source_inventory(errors)
+    check_numerical_defaults(errors)
+    check_python(errors)
+    check_rocm_sources(errors)
+    check_naming(errors)
+    check_metadata(errors)
+    check_make_resolution(errors)
+
+    if errors:
+        print("Merged backend static check: FAIL")
+        for error in errors:
+            print(f"- {error}")
+        raise SystemExit(1)
+
+    print("Merged backend static check: PASS")
+    print("static analysis passed; native CUDA and ROCm execution remains required")
+
+
+if __name__ == "__main__":
+    main()

@@ -11,9 +11,8 @@ doc/format*
 # generated object and output directories at every depth
 **/obj/
 **/out/
-
-# quality assurance validation (qav) executables
-qav/swarm/test_knn/bin/
+**/bin/
+qav/logs/
 
 # experimental files
 lab/*

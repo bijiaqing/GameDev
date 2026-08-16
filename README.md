@@ -2,9 +2,9 @@
 
 **GameDev: GPU-Accelerated ModEl for Dust EVolution**
 
-GameDev is a GPU research code for dust evolution in protoplanetary disks. The primary production
-build targets NVIDIA CUDA, while a tracked HIP/ROCm reproduction is maintained under `rocm/` for
-AMD GPUs. Both backends provide two independent numerical representations:
+GameDev is a GPU research code for dust evolution in protoplanetary disks. One build system selects
+either the NVIDIA CUDA or AMD HIP/ROCm backend. Both backends provide two independent numerical
+representations:
 
 - an Eulerian, pressureless dust-fluid solver for conservative continuum evolution
 - a Lagrangian dust-swarm solver for particle trajectories, stochastic diffusion, and optional
@@ -41,7 +41,7 @@ Read the relevant numerical and verification guides before using results for sci
 
 ## Highlights
 
-- CUDA implementations and a separately built HIP/ROCm reproduction of both dust representations
+- CUDA and HIP/ROCm implementations selected from one repository and one Makefile
 - logarithmic spherical-radial grids with radial-only, disk-plane, meridional, and full-3D support
   where permitted by the selected representation
 - gas drag, stellar gravity, disk geometry, radiation pressure, and optional viscous gas flow
@@ -156,12 +156,12 @@ deterministic pointwise order claim.
 
 Full equations, finite-volume measures, initial mass normalization, boundary policies, source
 quadrature, collision estimators, and literature references are documented in
-[`doc/numerics_fluid.md`](doc/numerics_fluid.md) and
-[`doc/numerics_swarm.md`](doc/numerics_swarm.md).
+[`doc/fluid_numeric.md`](doc/fluid_numeric.md) and
+[`doc/swarm_numeric.md`](doc/swarm_numeric.md).
 
 ## Requirements
 
-The root production build currently targets NVIDIA CUDA.
+The CUDA backend requires:
 
 - a CUDA-capable NVIDIA GPU
 - the CUDA toolkit, including `nvcc`, Thrust, and cuRAND
@@ -169,18 +169,18 @@ The root production build currently targets NVIDIA CUDA.
 - a C++17-compatible host compiler supported by the installed CUDA toolkit
 - Python 3 and NumPy for the verification runners and validators
 
-The root Makefile currently uses `-arch=sm_80`, `-O2`, `--use_fast_math`, and `-std=c++17` by
-default. Set `CUDA_MATH=precise` to omit `--use_fast_math` for matched-arithmetic verification.
-`sm_80` targets NVIDIA Ampere GPUs such as the A100. Change the architecture option before
-building for a different CUDA compute capability.
+The CUDA backend uses `GPU_TARGET=sm_80`, `-O2`, `--use_fast_math`, and `-std=c++17` by default.
+Set `CUDA_MATH=precise` to omit `--use_fast_math` for matched-arithmetic verification. `sm_80`
+targets NVIDIA Ampere GPUs such as the A100.
 
-The tracked `rocm/` tree requires `hipcc`, HIP Runtime, hipRAND, rocThrust, hipCUB, and an AMD GPU
-supported by the selected `AMDGPU_TARGET`; `gfx942` is the current MI300A target. It has its own
-Makefile and verification tree, so enter `rocm/` before using the HIP build. See
-[`doc/future_rocm_support.md`](doc/future_rocm_support.md) for current validation evidence and the
-remaining qualification work.
+The ROCm backend requires `hipcc`, HIP Runtime, hipRAND, rocThrust, hipCUB, and an AMD GPU supported
+by the selected `GPU_TARGET`; `gfx942` is the current MI300A target. ROCm correctness builds omit
+blanket `-ffast-math` because finite-only assumptions can invalidate the production NaN/Inf guards.
+The numerical guides document backend-dependent arithmetic and execution details, the test guides
+record native validation, and [`qav/rocm/bench/README.md`](qav/rocm/bench/README.md) defines the
+MI300A profiling and performance workflow.
 
-There is no installation step. Executables are built inside their selected model directories.
+There is no installation step. Executables are written below `bin/MODEL/GPU_BACKEND/`.
 
 ## Building and running
 
@@ -191,13 +191,13 @@ All commands below are run from the repository root.
 Build the fiducial fluid model:
 
 ```bash
-make MODEL=fluid_fiducial
+make MODEL=fluid_fiducial GPU_BACKEND=cuda GPU_TARGET=sm_80
 ```
 
 Run it:
 
 ```bash
-mod/fluid_fiducial/gamedev
+bin/fluid_fiducial/cuda/gamedev
 ```
 
 ### Swarm example
@@ -205,31 +205,29 @@ mod/fluid_fiducial/gamedev
 Build the fiducial swarm model:
 
 ```bash
-make MODEL=swarm_fiducial
+make MODEL=swarm_fiducial GPU_BACKEND=cuda GPU_TARGET=sm_80
 ```
 
 Run it:
 
 ```bash
-mod/swarm_fiducial/gamedev
+bin/swarm_fiducial/cuda/gamedev
 ```
 
 ### ROCm examples
 
-The AMD backend is built independently from its tracked top-level directory:
+Select the AMD backend from the same repository root:
 
 ```bash
-cd rocm
+make MODEL=fluid_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
+bin/fluid_fiducial/rocm/gamedev
 
-make MODEL=fluid_fiducial AMDGPU_TARGET=gfx942
-mod/fluid_fiducial/gamedev
-
-make MODEL=swarm_fiducial AMDGPU_TARGET=gfx942
-mod/swarm_fiducial/gamedev
+make MODEL=swarm_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
+bin/swarm_fiducial/rocm/gamedev
 ```
 
-Return to the repository root before using the CUDA Makefile. CUDA and ROCm object files and
-executables remain in their respective trees.
+Object files, executables, production output, and QA output contain the backend name, so switching
+backends cannot reuse incompatible artifacts.
 
 The supplied fiducial models are production-scale examples, not lightweight demonstrations. In
 particular, the default fluid grid is large and the default swarm model contains many
@@ -264,8 +262,8 @@ mod/
     └── const_defs.cuh    # optional
 ```
 
-The build searches `mod/`, `qav/fluid/`, and `qav/swarm/` for the requested `MODEL`. The name must
-resolve to exactly one directory.
+The build searches `mod/`, `qav/comm/fluid/`, and `qav/comm/swarm/` for the requested `MODEL`.
+The name must resolve to exactly one directory.
 
 ### Fluid model flags
 
@@ -336,10 +334,12 @@ Collision-enabled builds must select exactly one search backend. The Makefile tr
 
 If a model needs different physical parameters, grid dimensions, particle count, cadence, or CUDA
 launch settings, place a complete `const_defs.cuh` in the model directory. The build gives this file
-priority over the representation default:
+priority over the backend and representation default:
 
-- [`inc/fluid/const_defs.cuh`](inc/fluid/const_defs.cuh)
-- [`inc/swarm/const_defs.cuh`](inc/swarm/const_defs.cuh)
+- [`inc/cuda/fluid/const_defs.cuh`](inc/cuda/fluid/const_defs.cuh)
+- [`inc/rocm/fluid/const_defs.cuh`](inc/rocm/fluid/const_defs.cuh)
+- [`inc/cuda/swarm/const_defs.cuh`](inc/cuda/swarm/const_defs.cuh)
+- [`inc/rocm/swarm/const_defs.cuh`](inc/rocm/swarm/const_defs.cuh)
 
 Models that do not need different constants should omit the local header and inherit the selected
 representation's defaults. Do not add preprocessor parameters to the production constant headers
@@ -360,13 +360,13 @@ under `mod/`; files in the child model keep priority.
 Pass a saved frame index to the executable:
 
 ```bash
-mod/fluid_fiducial/gamedev 10
+bin/fluid_fiducial/cuda/gamedev 10
 ```
 
 or:
 
 ```bash
-mod/swarm_fiducial/gamedev 10
+bin/swarm_fiducial/cuda/gamedev 10
 ```
 
 The physical restart time is reconstructed from the model's output schedule. The fluid branch loads
@@ -438,7 +438,7 @@ from pathlib import Path
 import numpy as np
 
 nx, ny, nz = 1024, 1024, 1
-path = Path("out/fluid_fiducial/dustdens_00000.dat")
+path = Path("out/fluid_fiducial/cuda/dustdens_00000.dat")
 
 dustdens = np.fromfile(path, dtype=np.float64)
 dustdens = dustdens.reshape(nz, ny, nx)
@@ -455,7 +455,7 @@ from pathlib import Path
 
 import numpy as np
 
-output = Path("out/swarm_fiducial")
+output = Path("out/swarm_fiducial/cuda")
 config = ConfigParser()
 config.read(output / "variables.txt")
 
@@ -478,13 +478,13 @@ Verification models, validators, generated metrics, and standalone numerical che
 Run the quick fluid suite:
 
 ```bash
-python3 qav/fluid/test_common/run_suite.py --group all --res 32 64 --quick
+python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 --quick
 ```
 
 Run the quick swarm suite:
 
 ```bash
-python3 qav/swarm/test_common/run_suite.py --group all --res 32 64 --quick
+python3 qav/cuda/swarm/test_common/run_suite.py --group all --res 32 64 --quick
 ```
 
 These commands still compile multiple model variants; they are regression suites rather than a
@@ -493,7 +493,7 @@ single smoke-test executable.
 ### Full fluid suite
 
 ```bash
-python3 qav/fluid/test_common/run_suite.py \
+python3 qav/cuda/fluid/test_common/run_suite.py \
     --group all \
     --res 32 64 128 256
 ```
@@ -503,19 +503,19 @@ complete analytical matrix contains 85 builds/runs at the four standard resoluti
 equivalence is a separate group:
 
 ```bash
-python3 qav/fluid/test_common/run_suite.py --group sweep --sweep-dim all
+python3 qav/cuda/fluid/test_common/run_suite.py --group sweep --sweep-dim all
 ```
 
 The implementation-independent algorithm checks can be run without CUDA:
 
 ```bash
-python3 qav/fluid/mock/algorithm_checks.py
+python3 qav/comm/fluid/mock/algorithm_checks.py
 ```
 
 ### Full swarm suite
 
 ```bash
-python3 qav/swarm/test_common/run_suite.py \
+python3 qav/cuda/swarm/test_common/run_suite.py \
     --group all \
     --res 32 64 128 256
 ```
@@ -527,19 +527,20 @@ resolution builds, followed by the KNN and production-backend checks selected by
 Run only the KNN group:
 
 ```bash
-python3 qav/swarm/test_common/run_suite.py --group knn --res 32
+python3 qav/cuda/swarm/test_common/run_suite.py --group knn --res 32
 ```
 
 Or run the standalone KNN harness directly:
 
 ```bash
-python3 qav/swarm/test_knn/run.py
-python3 qav/swarm/test_knn/run.py --full
+python3 qav/cuda/swarm/test_knn/run.py
+python3 qav/cuda/swarm/test_knn/run.py --full
 ```
 
-Test output is archived below `qav/fluid/out/` or `qav/swarm/out/`. Small metadata, metric,
-manifest, environment, build, and run records use JSON; compact numerical field arrays remain
-binary. Consult the test guides before
+ROCm uses the corresponding `qav/rocm/fluid/` and `qav/rocm/swarm/` runners and accepts
+`--target gfx942`. Generated results are written below `qav/logs/REPRESENTATION/BACKEND/`. They are
+ignored by Git and are not part of the source test set. Metadata, metrics, manifests, environment,
+build, and run records use JSON; compact numerical field arrays remain binary. Consult the test guides before
 interpreting a pass: deterministic norms, convergence orders, conservation tolerances, statistical
 tests, and KNN topology criteria are intentionally different.
 
@@ -551,20 +552,24 @@ suite after numerical, compiler, architecture, or model changes.
 
 ```text
 .
-├── Makefile                  # model selection and CUDA build rules
+├── Makefile                  # model, representation, and GPU-backend build rules
 ├── README.md                 # project entry point
 ├── LICENSE                   # MIT license
 ├── inc/
-│   ├── fluid/                # fluid headers and default constants
-│   └── swarm/                # swarm headers, KD tree, Morton search, and defaults
+│   ├── comm/                 # backend-neutral headers by representation
+│   ├── cuda/                 # complete CUDA-owned headers by representation
+│   └── rocm/                 # complete ROCm-owned headers by representation
 ├── src/
-│   ├── fluid/                # Eulerian CUDA kernels and runtime
-│   └── swarm/                # Lagrangian CUDA kernels and runtime
+│   ├── comm/                 # backend-neutral translation units by representation
+│   ├── cuda/                 # CUDA-owned translation units
+│   └── rocm/                 # ROCm-owned translation units
 ├── mod/                      # production model configurations
 ├── qav/
-│   ├── fluid/                # fluid verification models and validators
-│   └── swarm/                # swarm verification models, validators, and KNN tests
-├── rocm/                     # tracked standalone HIP/ROCm source, models, and QA tree
+│   ├── comm/                 # backend-neutral test definitions by representation
+│   ├── cuda/                 # CUDA test drivers and backend-specific cases
+│   ├── rocm/                 # ROCm test drivers, failure cases, and profiling
+│   ├── tool/                 # backend-neutral QA and comparison utilities
+│   └── logs/                 # generated, backend-separated QA records and fields
 ├── doc/                      # canonical numerical and development documentation
 ├── obj/                      # generated model-specific object files
 └── out/                      # generated production outputs
@@ -578,12 +583,11 @@ verification interface.
 | Document | Purpose |
 |---|---|
 | [`doc/README.md`](doc/README.md) | canonical document map, repository conventions, and evidence status |
-| [`doc/numerics_fluid.md`](doc/numerics_fluid.md) | fluid equations, initialization, numerics, state semantics, references, and limitations |
-| [`doc/numerics_swarm.md`](doc/numerics_swarm.md) | swarm equations, mass weighting, transport, diffusion, collisions, KNN methods, and limitations |
-| [`doc/testset_fluid.md`](doc/testset_fluid.md) | fluid analytical cases, validators, commands, and retained results |
-| [`doc/testset_swarm.md`](doc/testset_swarm.md) | swarm analytical/statistical cases, KNN checks, commands, and retained results |
-| [`doc/format_variablename.md`](doc/format_variablename.md) | source formatting, naming, coordinates, fields, and branch-ownership conventions |
-| [`doc/future_rocm_support.md`](doc/future_rocm_support.md) | tracked ROCm status, validation, profiling, and remaining qualification work |
+| [`doc/fluid_numeric.md`](doc/fluid_numeric.md) | fluid equations, initialization, numerics, state semantics, references, and limitations |
+| [`doc/swarm_numeric.md`](doc/swarm_numeric.md) | swarm equations, mass weighting, transport, diffusion, collisions, KNN methods, and limitations |
+| [`doc/fluid_testset.md`](doc/fluid_testset.md) | fluid analytical cases, validators, commands, and retained results |
+| [`doc/swarm_testset.md`](doc/swarm_testset.md) | swarm analytical/statistical cases, KNN checks, commands, and retained results |
+| [`doc/naming.md`](doc/naming.md) | source formatting, naming, coordinates, fields, and branch-ownership conventions |
 
 For numerical behavior, current production source and machine-readable test results take precedence
 over prose. The authority order and documentation maintenance policy are stated in
@@ -611,7 +615,7 @@ relevant observables.
 | Symptom | Check |
 |---|---|
 | `MODEL is not defined` | run `make MODEL=<directory-name>` from the repository root |
-| model not found or ambiguous | ensure the name occurs exactly once under `mod/`, `qav/fluid/`, or `qav/swarm/` |
+| model not found or ambiguous | ensure the name occurs exactly once under `mod/`, `qav/comm/fluid/`, or `qav/comm/swarm/` |
 | missing `flags.mk` | every model requires a local `flags.mk` containing `DUST_REPR` |
 | unsupported GPU architecture | replace the Makefile's `-arch=sm_80` with the target CUDA architecture and rebuild |
 | feature-dependency compile error | review the fluid or swarm flag constraints in [Configuring a model](#configuring-a-model) |
@@ -634,8 +638,8 @@ relevant observables.
 - The collision timestep can become globally restrictive in dense or strongly clumped regions
 - Collision KNN searches use a local planar metric with a documented search-radius validity limit
 - Multi-GPU domain decomposition is not implemented
-- The ROCm backend is tracked but still uses a separate build root; unified backend selection
-  remains pending
+- CUDA and ROCm are selected from one build tree, but checkpoints and vendor RNG-state files are
+  intentionally not portable between them
 - `--use_fast_math`, backend choice, and CUDA architecture can change rounding and long-time
   trajectories; reproducibility claims must record the build environment
 - Some long-time, imported-gas, extreme-vacuum, and large-production collision regimes remain less
@@ -653,7 +657,7 @@ When changing a numerical method or physical prescription:
 3. add or update an analytical, statistical, boundary, or regression test under `qav/`
 4. archive sufficient metrics and environment information to support the new claim
 5. update the relevant `doc/testset_*.md` evidence summary
-6. follow [`doc/format_variablename.md`](doc/format_variablename.md) for names, comments, includes,
+6. follow [`doc/naming.md`](doc/naming.md) for names, comments, includes,
    formatting, and coordinate conventions
 
 Avoid recording resolved work as a permanent audit diary. Distill surviving invariants,
@@ -669,7 +673,7 @@ GameDev's original code is distributed under the [MIT License](LICENSE). Copyrig
 
 GameDev includes modified portions of
 [cudaKDTree](https://github.com/ingowald/cudaKDTree), copyright 2018-2023 Ingo Wald, under the
-[Apache License 2.0](inc/swarm/kdtree/Apache-2.0.txt). Files under
-`inc/swarm/kdtree/cubit/` derive from
+[Apache License 2.0](inc/cuda/swarm/kdtree/Apache-2.0.txt). The license is retained beside both
+backend implementations. Files under the CUDA and ROCm `swarm/kdtree/cubit/` directories derive from
 [cudaBitonic](https://github.com/ingowald/cudaBitonic), copyright 2018-2023 Ingo Wald, under the
 same license. The original copyright and license notices are retained in the bundled source files.
