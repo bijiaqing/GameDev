@@ -9,6 +9,18 @@ import re
 import subprocess
 from pathlib import Path
 
+from qav_config import (
+    EXPECTED_FLUID_METRICS,
+    EXPECTED_PUBLICATION_FLUID_METRICS,
+    EXPECTED_PUBLICATION_SWARM_METRICS,
+    EXPECTED_SWARM_METRICS,
+    FLUID_GROUPS,
+    SWARM_FIXED_RESOLUTION,
+    SWARM_GROUPS,
+    fluid_metric_tiers,
+    swarm_metric_tiers,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -216,6 +228,78 @@ def check_metadata(errors: list[str]) -> None:
         )
 
 
+def check_qav_contract(errors: list[str]) -> None:
+    """Keep both native matrices and the archive comparator on one definition"""
+
+    fluid_cases = [case for group in FLUID_GROUPS.values() for case in group]
+    fluid_metrics = sum(1 if "--res" in arguments else 4 for _, arguments in fluid_cases)
+    if fluid_metrics != EXPECTED_FLUID_METRICS:
+        errors.append(
+            f"fluid QAV registry yields {fluid_metrics} metrics; expected {EXPECTED_FLUID_METRICS}"
+        )
+    fluid_tiers = fluid_metric_tiers(fluid_cases, 4)
+    if fluid_tiers["publication"] != EXPECTED_PUBLICATION_FLUID_METRICS:
+        errors.append(
+            f"fluid publication tier yields {fluid_tiers['publication']} metrics; "
+            f"expected {EXPECTED_PUBLICATION_FLUID_METRICS}"
+        )
+
+    swarm_models = [model for group in SWARM_GROUPS.values() for model in group]
+    swarm_metrics = sum(
+        0 if model == "test_knn" else (1 if model in SWARM_FIXED_RESOLUTION else 4)
+        for model in swarm_models
+    )
+    if swarm_metrics != EXPECTED_SWARM_METRICS:
+        errors.append(
+            f"swarm QAV registry yields {swarm_metrics} metrics; expected {EXPECTED_SWARM_METRICS}"
+        )
+    swarm_tiers = swarm_metric_tiers(swarm_models, [32, 64, 128, 256])
+    if swarm_tiers["publication"] != EXPECTED_PUBLICATION_SWARM_METRICS:
+        errors.append(
+            f"swarm publication tier yields {swarm_tiers['publication']} metrics; "
+            f"expected {EXPECTED_PUBLICATION_SWARM_METRICS}"
+        )
+
+    for component, names in (
+        ("fluid", {model for model, _ in fluid_cases}),
+        ("swarm", set(swarm_models)),
+    ):
+        for model in sorted(names):
+            common = PROJECT_ROOT/"qav"/"comm"/component/model
+            if not common.is_dir():
+                errors.append(f"missing common QAV model definition: {common.relative_to(PROJECT_ROOT)}")
+            elif model != "test_knn" and not (common/"flags.mk").is_file():
+                errors.append(f"missing common QAV flags: {(common/'flags.mk').relative_to(PROJECT_ROOT)}")
+            overlay_files = {}
+            for backend in ("cuda", "rocm"):
+                native = PROJECT_ROOT/"qav"/backend/component/model
+                if not native.is_dir():
+                    errors.append(
+                        f"missing {backend} QAV model overlay: {native.relative_to(PROJECT_ROOT)}"
+                    )
+                    continue
+                if not (native/"run.py").is_file():
+                    errors.append(f"missing QAV wrapper: {(native/'run.py').relative_to(PROJECT_ROOT)}")
+                overlay_files[backend] = {
+                    f"{path.stem}.gpu" if path.suffix in {".cu", ".hip"} else path.name
+                    for path in native.iterdir() if path.is_file()
+                }
+            if len(overlay_files) == 2 and overlay_files["cuda"] != overlay_files["rocm"]:
+                errors.append(
+                    f"{component}/{model}: CUDA and ROCm overlay file sets differ after "
+                    "normalizing .cu/.hip suffixes"
+                )
+
+    forbidden_paths = ("qav/out", "backend_field_comparison_z.json")
+    for path in (PROJECT_ROOT/"qav").rglob("*.py"):
+        if "__pycache__" in path.parts or path == Path(__file__).resolve():
+            continue
+        text = path.read_text(errors="replace")
+        for stale in forbidden_paths:
+            if stale in text:
+                errors.append(f"{path.relative_to(PROJECT_ROOT)}: stale QAV path {stale!r}")
+
+
 def check_make_resolution(errors: list[str]) -> None:
     """Ask Make to resolve representative backend and QA dependency graphs"""
 
@@ -239,9 +323,38 @@ def check_make_resolution(errors: list[str]) -> None:
                 f"Make dependency check failed for {' '.join(command[2:])}:\n{result.stdout}"
             )
 
+    scope_checks = (
+        (
+            [
+                "make", "-n", "MODEL=test_x_transport_2d", "GPU_BACKEND=cuda",
+                "GPU_TARGET=sm_80", "RES=32", "QAV_SCOPE=transport",
+            ],
+            "qav/logs/fluid/cuda/thread/groups/transport/test_x_transport_2d",
+        ),
+        (
+            [
+                "make", "-n", "MODEL=test_grid_2d", "GPU_BACKEND=rocm",
+                "GPU_TARGET=gfx942", "RES=32", "QAV_SCOPE=grid",
+            ],
+            "qav/logs/swarm/rocm/groups/grid/test_grid_2d",
+        ),
+    )
+    for command, expected in scope_checks:
+        result = subprocess.run(
+            command, cwd=PROJECT_ROOT, check=False, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        if result.returncode != 0 or expected not in result.stdout:
+            errors.append(
+                f"QAV scope resolution failed for {' '.join(command[2:])}:\n{result.stdout}"
+            )
+
     knn_commands = (
         ["make", "-n", "-C", str(PROJECT_ROOT/"qav"/"cuda"/"swarm"/"test_knn"), "suite", "ARCH=sm_80", "K=200"],
-        ["make", "-n", "-C", str(PROJECT_ROOT/"qav"/"rocm"/"swarm"/"test_knn"), "suite", "AMDGPU_TARGET=gfx942", "K=200"],
+        [
+            "make", "-n", "-C", str(PROJECT_ROOT/"qav"/"rocm"/"swarm"/"test_knn"),
+            "suite", "AMDGPU_TARGET=gfx942", "K=200",
+        ],
     )
     for command in knn_commands:
         result = subprocess.run(
@@ -260,6 +373,7 @@ def main() -> None:
     check_rocm_sources(errors)
     check_naming(errors)
     check_metadata(errors)
+    check_qav_contract(errors)
     check_make_resolution(errors)
 
     if errors:

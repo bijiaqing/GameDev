@@ -1,17 +1,17 @@
-# CUDA verification models
+# Fluid verification models
 
 These model directories implement the analytical tests summarized in
-`doc/fluid_testset.md` as cluster-runnable CUDA cases without changing `inc`, `src`,
-or production `mod`. Model-local `fluid_runtime.cu` files include the shared driver in this
-directory. The Makefile still selects production kernels from `src/` unless a test explicitly
-supplies a model-local replacement.
+`doc/fluid_testset.md` as cluster-runnable CUDA and ROCm cases without changing production models.
+Backend-local runtime drivers include the shared verification driver from this directory. The
+Makefile still selects production kernels unless a test explicitly supplies a model-local
+replacement.
 
 See `TEST_CASES.md` for each model's exact initialization, analytical solution, production kernels
 exercised, finite-volume comparison, and expected result.
 
 ## Prepared cases
 
-| Model | CUDA code exercised | Analytical reference |
+| Model | Production code exercised | Analytical reference |
 |---|---|---|
 | `test_x_transport_2d` | Production FARGO/PPM/HLL X sweep | Periodic rotating Fourier mode after one revolution |
 | `test_y_transport_cyl` | Production radial PPM/HLL sweep with cylindrical volume | Compact homologous expansion with d=2 |
@@ -35,7 +35,7 @@ test necessarily replaces `source_update.cu`, because the production interface c
 arbitrary constant gas velocities and force endpoints. Its scope is the exponential quadrature,
 not the disk force calculation.
 
-## Running on a CUDA cluster
+## Running on a GPU cluster
 
 Run one complete refinement sequence from the repository root, for example:
 
@@ -50,13 +50,20 @@ Exercise the FARGO integer/fractional shift cases separately with `--shift 3`, `
 `3.75`. The value is the nominal number of azimuthal cells traversed per full operator step; the
 last step is shortened to land exactly at one revolution.
 
-Each wrapper performs `make clean`, builds with the requested `RES`, runs the executable, compares
+Each backend wrapper performs `make clean`, builds with the requested `RES`, runs the executable, compares
 the binary output with independently evaluated finite-volume averages, writes tagged
-`qav/logs/fluid/cuda/SWEEP/MODEL/metrics_N*.json` records, and prints an error/order table. `SWEEP` is
+`qav/logs/fluid/BACKEND/SWEEP/groups/manual/MODEL/metrics_N*.json` records, writes a variant-specific assessment
+manifest, and prints an error/order table. `SWEEP` is
 `thread` by default and `block` when selected through `FLUID_SWEEP`. Raw data from
 CFL, FARGO-shift, and optical-depth-power sweeps are separated into correspondingly tagged
 subdirectories. Cleaning between resolutions is required because changing a Make variable alone
 does not invalidate existing object files.
+
+The complete suite writes `manifest_all.json` beside the canonical model directories. Focused
+groups write all their evidence below `groups/GROUP/`, and direct wrappers use `groups/manual/`.
+Every runner returns nonzero if a model violates its finite-value, mass, accuracy, or convergence
+regression gate. The canonical matrix and expected record count are defined once in
+`qav/tool/qav_config.py` for both GPU backends.
 
 Run the entire prepared matrix, or a selected group, with:
 
@@ -67,12 +74,14 @@ python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
 Prefix any suite command with `FLUID_SWEEP=block` to validate the block sweep; omitting it selects
-the reference thread sweep. Their artifacts are stored independently under `out/block/` and
-`out/thread/`, so a block run cannot overwrite the thread baseline.
+the backend default. Artifacts are stored independently under
+`qav/logs/fluid/BACKEND/block/` and `qav/logs/fluid/BACKEND/thread/`, so one sweep cannot overwrite
+the other.
 
-CUDA builds use `--use_fast_math` by default.  Use `--math-mode precise` for a matched-arithmetic
-backend check; this omits `--use_fast_math` and writes results below `out/thread_precise/` or
-`out/block_precise/` without replacing the ordinary archive.  For example, rerun only polar
+CUDA builds use `--use_fast_math` by default. Use `--math-mode precise` for a matched-arithmetic
+backend check; this omits `--use_fast_math` and writes results below
+`qav/logs/fluid/cuda/thread_precise/` or `qav/logs/fluid/cuda/block_precise/` without replacing the
+ordinary archive. For example, rerun only polar
 transport with:
 
 ```bash
@@ -99,7 +108,7 @@ radiation. Override the resolutions with `--sweep-res-2d` and `--sweep-res-3d`. 
 branch is intentionally not included in `--group all`.
 
 Only NumPy is required by the validator. The d=2/d=3 shell references are independently integrated
-with a fine-grid RK4 solve; they do not use the CUDA helpers or the production diffusion matrix.
+with a fine-grid RK4 solve; they do not use the GPU helpers or the production diffusion matrix.
 
 Each test model owns a local `const_defs.cuh` that selects its analytical case before including the
 shared verification constants. Its `flags.mk` contains only include routing, sweep selection, and

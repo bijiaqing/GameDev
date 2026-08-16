@@ -7,10 +7,17 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 from validate_case import analyze
+
+QAV_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(QAV_ROOT/"tool"))
+
+from qav_config import swarm_model_tier, swarm_resolution_tiers
 
 
 def orders(errors: list[float]) -> list[float]:
@@ -75,7 +82,10 @@ def run(model: str) -> None:
     project_root = Path(__file__).resolve().parents[4]
     swarm_root = Path(__file__).resolve().parents[1]
     model_dir = swarm_root/model
-    out_dir = project_root/"qav"/"logs"/"swarm"/"cuda"/model
+    archive_root = project_root/"qav"/"logs"/"swarm"/"cuda"
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    out_dir = scope_root/model
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.build_only:
@@ -85,6 +95,7 @@ def run(model: str) -> None:
         # This is especially important for stochastic tests and CUDA regressions,
         # whose performance and last-bit results can depend on the environment.
         environment = {
+            "gpu_target": os.environ.get("CUDA_ARCH", "sm_80"),
             "nvcc": capture(["nvcc", "--version"], project_root),
             "nvidia_smi": capture(
                 ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"], project_root
@@ -94,12 +105,23 @@ def run(model: str) -> None:
             json.dumps(environment, indent=2, sort_keys=True) + "\n"
         )
 
+    resolution_tiers = swarm_resolution_tiers(model, args.res)
+    tier_by_resolution = {
+        int(record["resolution"]): str(record["tier"]) for record in resolution_tiers
+    }
     records = []
+    target = os.environ.get("CUDA_ARCH", "sm_80")
     for resolution in args.res:
         # Every test constant is compiled into CUDA code.  Cleaning prevents an
         # object built for a previous TEST_RES value from being reused.
-        subprocess.run(["make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda", "clean"], check=True)
-        subprocess.run(["make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda", f"RES={resolution}"], check=True)
+        subprocess.run([
+            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda",
+            f"GPU_TARGET={target}", f"QAV_SCOPE={scope}", "clean",
+        ], check=True)
+        subprocess.run([
+            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda",
+            f"GPU_TARGET={target}", f"QAV_SCOPE={scope}", f"RES={resolution}",
+        ], check=True)
         if args.build_only:
             continue
         executable = project_root/"bin"/model/"cuda"/"gamedev"
@@ -108,6 +130,7 @@ def run(model: str) -> None:
         # The CUDA driver writes raw values only.  All expected values and pass
         # thresholds are constructed independently by validate_case.py.
         record = analyze(out_dir, resolution)
+        record["tier"] = tier_by_resolution[resolution]
         expected_case = model.removeprefix("test_")
         if record["case"] != expected_case or record["resolution"] != resolution:
             raise RuntimeError(
@@ -122,8 +145,13 @@ def run(model: str) -> None:
 
     passed = all(record["passed"] for record in records)
     manifest = {
+        "schema": 1,
         "model": model,
         "case": records[0]["case"],
+        "backend": "cuda",
+        "gpu_target": target,
+        "tier": swarm_model_tier(model),
+        "resolution_tiers": resolution_tiers,
         "resolutions": [record["resolution"] for record in records],
         "files": [f"metrics_N{record['resolution']}.json" for record in records],
         "environment": "environment.json",
@@ -139,3 +167,5 @@ def run(model: str) -> None:
     if records[0]["case"] in {"orbit_1d", "orbit_2d"} and len(records) > 1:
         values = [record["errors"]["state"]["l2"] for record in records]
         print("observed orders:", " ".join(f"{value:.4f}" for value in orders(values)))
+    if not passed:
+        raise SystemExit(1)

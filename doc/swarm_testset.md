@@ -45,6 +45,25 @@ compiles standalone controlled drivers and also links the actual 1D, 2D, and 3D 
 translation units with each backend. The other GPU backend is never treated as analytical truth;
 backend disagreement is resolved by exhaustive CPU search where the test design promises it.
 
+### Evidence tiers
+
+The common archive retains narrow regressions but distinguishes them from code-paper evidence:
+
+- **Publication:** one representative resolution of each exact grid-geometry case and the
+  stationary radial orbit; the full 2D-orbit and stochastic-diffusion sequences; the endpoint
+  polar-resolution comparison for continuous initialization; drag, viscous-flow, radiation,
+  P-R drag, imported-gas, collision-measure, collision-kernel, and compact KNN checks
+- **Release:** extra resolutions of exact grid and stationary-orbit cases, the intermediate
+  initialization repetitions, and the four deterministic boundary-policy helper models
+- **Qualification:** restart, deliberate KNN/collision failure injection, extended million- and
+  ten-million-particle KNN runs, and performance/profiling campaigns
+
+With the standard four requested resolutions, the 51 analytical swarm metrics partition into 33
+publication and 18 release-only records. The compact KNN suite is publication evidence for exact
+neighbor search; `--knn-full` adds qualification evidence rather than strengthening a physical
+convergence claim. These labels are stored in model and aggregate manifests and do not remove any
+test from the release gate.
+
 Unlike the fluid analytical runner, the swarm runner implements numerical pass/fail criteria. Each
 analytical or statistical resolution writes `passed`, each model writes a manifest, each KNN
 component writes a component manifest, and the common dispatcher accepts a model only if its
@@ -169,7 +188,8 @@ The active QA runners use file formats according to the role of each artifact:
 | KNN benchmark record | `<distribution>_<dimension>d_N<particles>.json` | search configuration, correctness counters, timing, memory, and pass state |
 | model or matrix index | `manifest.json` | authoritative list of current result JSON files and component pass state |
 | KNN aggregate | `suite_manifest.json` | ordinary, edge, periodic, wedge, and production-link pass states |
-| swarm aggregate | `qav/logs/swarm/BACKEND/manifest.json` | requested suite, live model states, referenced component manifests, and final pass state |
+| full swarm aggregate | `qav/logs/swarm/BACKEND/manifest_all.json` | complete common-matrix live state and final pass state |
+| focused swarm aggregate | `qav/logs/swarm/BACKEND/groups/GROUP/manifest.json` | isolated focused-group state and final pass state |
 | compiler and GPU record | `environment.json` | structured backend compiler, GPU, driver, and test-specific build settings |
 | optional captured transcript | `*.json` | command, return state, and escaped human-readable output from a build or run |
 
@@ -188,11 +208,16 @@ The KNN runner leaves the ordinary and wedge manifests scoped to the files they 
 the cross-component state separately to `suite_manifest.json`. A skipped periodic or wedge
 component is stored as JSON `null`, distinguishing “not selected” from either pass or failure.
 
-The selected backend dispatcher rewrites `qav/logs/swarm/BACKEND/manifest.json` for every invocation. A later focused
-group therefore replaces the earlier top-level all-suite index even though it does not delete other
-models' component directories. For a durable all-suite archive, preserve the aggregate manifest
-immediately after the all-group run; component manifests alone cannot reconstruct which group was
-most recently requested.
+The complete `all` dispatcher writes the canonical model directories and `manifest_all.json`.
+Focused groups write their model records and manifest below `groups/GROUP/`, and direct model
+wrappers use `groups/manual/`. Consequently, no focused or exploratory run can alter the completed
+common-matrix archive used for transfer and cross-backend comparison. `--rebuild-manifest`
+reconstructs one selected group from copied component manifests without rerunning native
+executables.
+
+The complete `qav/tool/run_all.py` campaign also records a SHA-256 fingerprint of the Makefile and
+every compiled or interpreted QAV source. Cross-backend comparison rejects two complete campaign
+archives when those fingerprints differ, so source drift cannot masquerade as a CUDA/ROCm result.
 
 ## Coverage matrix and case inventory
 
@@ -1119,14 +1144,12 @@ python3 qav/cuda/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The aggregate manifest reports `suite_passed: true`, `status: passed`, and 24/24 completed
+The historical aggregate manifest reported `suite_passed: true`, `status: passed`, and 24/24 completed
 components. All 47 analytical builds passed, all four standalone KNN executables built, and all
 six production collision configurations linked. The run covered:
 
-That aggregate state was recorded immediately after the all-group run. In the current checkout,
-`qav/logs/swarm/cuda/manifest.json` describes the later focused `initialization` invocation; the retained
-per-model and KNN component files below are therefore the durable evidence for the older all-group
-summary.
+Current runners use the unambiguous `passed` field and preserve the complete state in
+`qav/logs/swarm/cuda/manifest_all.json`; focused group manifests coexist beside it.
 
 | Group | Analytical builds or KNN cases | Result |
 |---|---:|---|
@@ -1188,6 +1211,13 @@ python3 qav/tool/compare_backends.py --component swarm
 CUDA and ROCm stochastic paths are compared through analytical moments, mass conservation, KNN
 topology, collision-rate probes, and output distributions rather than byte-equal trajectories.
 Vendor RNG-state files are tested only by same-backend restart cases.
+
+The common `all` group is identical on both backends; ROCm restart and deliberate failure paths are
+separate native-only groups. `qav/tool/run_all.py` runs and checks the transferable common archive,
+while group-specific directories below `groups/GROUP/` prevent a later focused run from replacing
+any part of the full archive. Either backend may run first; after both backend archives are copied
+into one QAV tree, the comparison is a Python-only operation. See `qav/README.md` for the complete
+backend-neutral transfer workflow.
 
 ### Continuous-initialization supplement
 
@@ -1341,7 +1371,7 @@ In this command, the KNN entry is deliberately radial-only. It builds the ordina
 drivers, links only `test_collision_1d` with KD-tree and Morton backends, runs the collinear radial
 matrix plus radial-line and inactive-particle rejection checks, and skips the unrelated generic
 2D/3D, periodic, and wedge matrices. Its default result is
-`qav/logs/swarm/cuda/test_knn/radial/radial_1d_N100000.json`; `--knn-full` adds the $10^6$- and
+`qav/logs/swarm/cuda/groups/radial/test_knn/radial_1d_N100000.json`; `--knn-full` adds the $10^6$- and
 $10^7$-particle radial cases in the same directory.
 
 The KNN group can also be run directly:
@@ -1370,7 +1400,7 @@ Each resolution is cleaned and rebuilt because the mesh sizes, particle count, o
 are compile-time constants. Output is stored as
 
 ```text
-qav/logs/swarm/cuda/MODEL/
+qav/logs/swarm/cuda/groups/manual/MODEL/
 ```
 
 with raw binary arrays, `meta_N*.json`, `metrics_N*.json`, `environment.json`, and a per-model
@@ -1386,12 +1416,13 @@ qav/logs/swarm/cuda/test_knn/
 The focused radial-group KNN JSON, environment record, and manifest are stored under
 
 ```text
-qav/logs/swarm/cuda/test_knn/radial/
+qav/logs/swarm/cuda/groups/radial/test_knn/
 ```
 
-The dispatcher maintains `qav/logs/swarm/cuda/manifest.json` while the suite runs. It records every
-expected model as pending, running, passed, failed, or interrupted and prints a final
-`SWARM TEST SUITE: PASS` only after every selected model has returned successfully.
+The complete dispatcher maintains `qav/logs/swarm/cuda/manifest_all.json`; a focused dispatcher
+maintains `qav/logs/swarm/cuda/groups/GROUP/manifest.json`. It records every expected model as
+pending, running, passed, failed, or interrupted and prints a final `SWARM TEST SUITE: PASS` only
+after every selected model has returned successfully.
 
 ## Coverage limits and verification still required
 

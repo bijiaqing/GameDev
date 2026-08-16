@@ -13,10 +13,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
+import sys
 from pathlib import Path
 
 from validate_case import analyze
+
+QAV_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(QAV_ROOT/"tool"))
+
+from qav_config import fluid_case_tier
 
 
 def observed_orders(errors: list[float]) -> list[float]:
@@ -47,7 +54,7 @@ def environment_record(project_root: Path) -> dict[str, str]:
     """Record the HIP toolchain and AMD device used by one verification run"""
 
     return {
-        "amdgpu_target": os.environ.get("AMDGPU_TARGET", "gfx942"),
+        "gpu_target": os.environ.get("AMDGPU_TARGET", "gfx942"),
         "hipcc": capture(["hipcc", "--version"], project_root),
         "hipconfig": capture(["hipconfig", "--full"], project_root),
         "amd_smi": capture(["amd-smi", "static"], project_root),
@@ -78,6 +85,81 @@ def selected_sweep() -> str:
     return sweep
 
 
+def clean_results(out_dir: Path, data_dir: Path, variant: str) -> None:
+    """Remove stale records owned by one model variant before rerunning it"""
+
+    for path in data_dir.glob("*.dat"):
+        path.unlink()
+    for path in data_dir.glob("meta_N*.json"):
+        path.unlink()
+    (data_dir/"environment.json").unlink(missing_ok=True)
+
+    for path in out_dir.glob("metrics_N*.json"):
+        owned = path.name.endswith(f"_{variant}.json") if variant else bool(
+            re.fullmatch(r"metrics_N\d+\.json", path.name)
+        )
+        if owned:
+            path.unlink()
+    (out_dir/f"manifest_{variant or 'default'}.json").unlink(missing_ok=True)
+
+
+def assess_records(
+    model: str, records: list[dict], shift: float, power: float,
+) -> dict[str, object]:
+    """Apply broad regression gates to one analytical convergence sequence"""
+
+    import math
+
+    scalar_values = []
+    for record in records:
+        for errors in record["errors"].values():
+            scalar_values.extend(errors.values())
+        if "mass_relative_change" in record:
+            scalar_values.append(record["mass_relative_change"])
+    finite = all(math.isfinite(float(value)) for value in scalar_values)
+    mass_max = max((record.get("mass_relative_change", 0.0) for record in records), default=0.0)
+    mass_passed = mass_max <= 1.0e-8
+
+    primary = "optdepth" if records[0]["case"] == "optdepth" else "density"
+    errors = [record["errors"][primary]["l1"] for record in records]
+    exact_case = (
+        (model == "test_x_transport_2d" and abs(shift - round(shift)) <= 1.0e-12)
+        or (model == "test_optdepth" and abs(power) <= 1.0e-12)
+    )
+    if model == "test_source_drag":
+        accuracy_passed = max(
+            values["linf"] for values in records[0]["errors"].values()
+        ) <= 1.0e-12
+        convergence_orders: list[float] = []
+        convergence_passed = True
+    elif exact_case:
+        accuracy_passed = errors[-1] <= 1.0e-10
+        convergence_orders = []
+        convergence_passed = True
+    else:
+        accuracy_passed = errors[-1] <= 2.0e-2
+        convergence_orders = observed_orders(errors) \
+            if len(errors) > 1 and all(error > 0.0 for error in errors) else []
+        minimum_order = 1.5 if len(records) >= 4 else 0.75
+        convergence_passed = len(records) == 1 or (
+            bool(convergence_orders) and convergence_orders[-1] >= minimum_order
+        )
+
+    return {
+        "finite": finite,
+        "mass_max": mass_max,
+        "mass_tolerance": 1.0e-8,
+        "mass_passed": mass_passed,
+        "primary_field": primary,
+        "finest_l1": errors[-1],
+        "accuracy_tolerance": 1.0e-12 if model == "test_source_drag" else (1.0e-10 if exact_case else 2.0e-2),
+        "accuracy_passed": accuracy_passed,
+        "orders": convergence_orders,
+        "convergence_passed": convergence_passed,
+        "passed": finite and mass_passed and accuracy_passed and convergence_passed,
+    }
+
+
 def run(model: str) -> None:
     """Build and run one named verification model for all requested resolutions"""
 
@@ -95,7 +177,10 @@ def run(model: str) -> None:
     test_root = Path(__file__).resolve().parents[1]
     model_dir = test_root / model
     sweep = selected_sweep()
-    out_dir = project_root / "qav" / "logs" / "fluid" / "rocm" / sweep / model
+    archive_root = project_root/"qav"/"logs"/"fluid"/"rocm"/sweep
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    out_dir = scope_root/model
     if not model_dir.is_dir():
         raise SystemExit(f"Unknown model directory: {model_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -104,8 +189,18 @@ def run(model: str) -> None:
     # out/thread/test_x_transport_2d/shift3.25, while their metrics JSON files
     # remain in the model's top-level output directory with the same tag in the name.
     variant = output_tag(model, args.cfl, args.power, args.shift)
+    tier_arguments: tuple[str, ...] = ()
+    if model == "test_x_transport_2d":
+        tier_arguments = ("--shift", str(args.shift))
+    elif model in {"test_y_transport_cyl", "test_y_transport_sph", "test_z_transport_3d"}:
+        tier_arguments = ("--cfl", str(args.cfl))
+    elif model == "test_optdepth":
+        tier_arguments = ("--power", str(args.power))
+    evidence_tier = fluid_case_tier(model, tier_arguments)
     data_dir = out_dir / variant if variant else out_dir
     data_dir.mkdir(parents=True, exist_ok=True)
+    if not args.build_only:
+        clean_results(out_dir, data_dir, variant)
 
     # Record the compiler, GPU, and driver associated with these results.  The
     # information is written once per parameter variant rather than once per N.
@@ -122,10 +217,13 @@ def run(model: str) -> None:
         # the HIP tests.  Cleaning before every resolution prevents an object
         # compiled with an earlier N or parameter value from being reused.
         subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm", f"FLUID_SWEEP={sweep}", "clean"
+            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
+            f"FLUID_SWEEP={sweep}", f"QAV_SCOPE={scope}", "clean"
         ], check=True)
         subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm", f"GPU_TARGET={os.environ.get('AMDGPU_TARGET', 'gfx942')}", f"FLUID_SWEEP={sweep}",
+            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
+            f"GPU_TARGET={os.environ.get('AMDGPU_TARGET', 'gfx942')}",
+            f"FLUID_SWEEP={sweep}", f"QAV_SCOPE={scope}",
             f"RES={resolution}",
             f"CFL={args.cfl:.17g}", f"POWER={args.power:.17g}", f"SHIFT={args.shift:.17g}",
             f"OUT_TAG={variant}",
@@ -139,6 +237,7 @@ def run(model: str) -> None:
         executable = project_root / "bin" / model / "rocm" / "gamedev"
         subprocess.run([str(executable)], cwd=project_root, check=True)
         record = analyze(data_dir, resolution)
+        record["tier"] = evidence_tier
 
         # Keep a machine-readable result per resolution so cluster output can be
         # downloaded and reassessed without rerunning the HIP executable.
@@ -150,6 +249,29 @@ def run(model: str) -> None:
 
     if args.build_only or not records:
         return
+
+    assessment = assess_records(model, records, args.shift, args.power)
+    passed = assessment["passed"] is True
+    manifest = {
+        "schema": 1,
+        "model": model,
+        "case": records[0]["case"],
+        "backend": "rocm",
+        "sweep": sweep,
+        "variant": variant,
+        "tier": evidence_tier,
+        "resolutions": [record["resolution"] for record in records],
+        "files": [
+            f"metrics_N{record['resolution']}{f'_{variant}' if variant else ''}.json"
+            for record in records
+        ],
+        "environment": f"{variant + '/' if variant else ''}environment.json",
+        "assessment": assessment,
+        "passed": passed,
+    }
+    (out_dir/f"manifest_{variant or 'default'}.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
 
     # Optical depth is the primary field only for the zero-step quadrature test;
     # every dynamical test reports density in the compact terminal table.
@@ -167,6 +289,9 @@ def run(model: str) -> None:
         # Orders are printed only for L1 here; L2 and Linf remain available in
         # every metrics JSON file for more detailed post-processing.
         print("L1 orders:", " ".join(f"{order:.4f}" for order in observed_orders(l1_errors)))
+    print(f"{model}{f'/{variant}' if variant else ''}: {'PASS' if passed else 'FAIL'}")
+    if not passed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

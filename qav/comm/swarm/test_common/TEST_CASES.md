@@ -3,6 +3,12 @@
 The canonical detailed description is `doc/swarm_testset.md`. This file remains a compact index
 beside the implementation.
 
+The `publication` tier contains the scientifically interpreted models, using only one resolution
+for exact grid geometry and the stationary 1D orbit and the two endpoint resolutions for
+`test_initial_3d`. Extra repetitions and the four boundary-helper models are `release` regressions.
+Restart, deliberate failure, extended KNN, and performance cases are `qualification` evidence.
+All remain in the repository; the common `all` command continues to run publication plus release.
+
 ## Implemented CUDA cases
 
 | Model | Production calculation exercised | Analytical or statistical truth |
@@ -42,7 +48,7 @@ When selected through `--group radial`, `test_knn` runs only the collinear physi
 case and the radial-line and inactive-particle edge checks. The Morton implementation still embeds
 the line as $(R,0)$ in its two-coordinate container, but the result is named `radial_1d_*` and
 records `physical_dimension: 1`. These focused records are isolated under
-`qav/logs/swarm/cuda/test_knn/radial/`.
+`qav/logs/swarm/BACKEND/groups/radial/test_knn/`.
 
 Diffusion tests use six-standard-error acceptance bands for sample means and variances.  Increasing `--res` raises the
 ensemble as $N_P=16N^2$ and therefore tightens those statistical bounds without pretending that stochastic trajectories

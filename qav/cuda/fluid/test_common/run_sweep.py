@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from compare_sweeps import compare_pair
-from run_model import capture
+from run_model import environment_record
 
 
 def write_json(path: Path, record: dict[str, object]) -> None:
@@ -38,7 +38,7 @@ def convert_variables(out_dir: Path) -> None:
 
     source = out_dir/"variables.txt"
     if not source.is_file():
-        return
+        raise FileNotFoundError(f"missing simulation parameter report: {source}")
 
     parameters: dict[str, int | float | str] = {}
     for line in source.read_text().splitlines():
@@ -57,6 +57,13 @@ def convert_variables(out_dir: Path) -> None:
     source.unlink()
 
 
+def sweep_tag(resolution: int, save_max: int, output_time: float) -> str:
+    """Name a sweep configuration so quick and full records cannot collide"""
+
+    time_tag = f"{output_time:.8g}".replace("-", "m").replace("+", "").replace(".", "p")
+    return f"N{resolution}_save{save_max}_tout{time_tag}"
+
+
 def build_and_run(
     project_root: Path,
     test_root: Path,
@@ -65,22 +72,30 @@ def build_and_run(
     resolution: int,
     save_max: int,
     output_time: float,
+    target: str,
+    math_mode: str,
+    tag: str,
 ) -> float:
     """Clean-build one model, save its logs, execute it, and return wall seconds"""
 
-    out_dir = project_root/"qav"/"logs"/"fluid"/"cuda"/sweep/model
+    archive_sweep = sweep if math_mode == "fast" else f"{sweep}_precise"
+    out_dir = project_root/"qav"/"logs"/"fluid"/"cuda"/archive_sweep/model/tag
     out_dir.mkdir(parents=True, exist_ok=True)
     for legacy_name in ("build.txt", "run.txt", "variables.txt"):
         (out_dir/legacy_name).unlink(missing_ok=True)
 
     # Model constants are compile-time values, so clean before applying a new benchmark configuration
     subprocess.run([
-        "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda", f"FLUID_SWEEP={sweep}", "clean"
+        "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda",
+        f"GPU_TARGET={target}", f"FLUID_SWEEP={sweep}", f"CUDA_MATH={math_mode}",
+        f"QAV_SWEEP={archive_sweep}", "QAV_SCOPE=all", f"OUT_TAG={tag}", "clean"
     ], check=True)
     build_command = [
         "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda",
-        f"FLUID_SWEEP={sweep}",
+        f"GPU_TARGET={target}", f"FLUID_SWEEP={sweep}", f"CUDA_MATH={math_mode}",
+        f"QAV_SWEEP={archive_sweep}", "QAV_SCOPE=all",
         f"RES={resolution}", f"SAVE={save_max}", f"OUT_TIME={output_time:.17g}",
+        f"OUT_TAG={tag}",
     ]
     build = subprocess.run(
         build_command,
@@ -98,12 +113,8 @@ def build_and_run(
     print(build.stdout, end="", flush=True)
     build.check_returncode()
 
-    environment = {
-        "nvcc": capture(["nvcc", "--version"], project_root),
-        "nvidia_smi": capture(
-            ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"], project_root
-        ),
-    }
+    environment = environment_record(project_root, math_mode)
+    environment["gpu_target"] = target
     write_json(out_dir/"environment.json", environment)
 
     # Retain the native stream and accepted-step records inside one JSON log
@@ -161,18 +172,24 @@ def run_pair(
     resolution: int,
     save_max: int,
     output_time: float,
+    target: str,
+    math_mode: str,
 ) -> None:
     """Run one dimensional pair and apply the automatic equivalence checks"""
 
     thread_model = f"test_sweep_thread_{dimension}"
     block_model = f"test_sweep_block_{dimension}"
+    tag = sweep_tag(resolution, save_max, output_time)
+    archive_suffix = "" if math_mode == "fast" else "_precise"
     print(f"\n=== sweep comparison {dimension} at N={resolution} ===", flush=True)
 
     thread_time = build_and_run(
-        project_root, test_root, thread_model, "thread", resolution, save_max, output_time
+        project_root, test_root, thread_model, "thread", resolution, save_max, output_time,
+        target, math_mode, tag
     )
     block_time = build_and_run(
-        project_root, test_root, block_model, "block", resolution, save_max, output_time
+        project_root, test_root, block_model, "block", resolution, save_max, output_time,
+        target, math_mode, tag
     )
 
     if dimension == "2d":
@@ -184,8 +201,8 @@ def run_pair(
         z_max = 1.7207963267948966
 
     result = compare_pair(
-        project_root/"qav"/"logs"/"fluid"/"cuda"/"thread"/thread_model,
-        project_root/"qav"/"logs"/"fluid"/"cuda"/"block"/block_model,
+        project_root/"qav"/"logs"/"fluid"/"cuda"/f"thread{archive_suffix}"/thread_model/tag,
+        project_root/"qav"/"logs"/"fluid"/"cuda"/f"block{archive_suffix}"/block_model/tag,
         save_max,
         nx, ny, nz, z_min, z_max,
     )
@@ -193,7 +210,12 @@ def run_pair(
     result["block_wall_seconds"] = block_time
     result["block_over_thread_wall"] = block_time/thread_time
 
-    result_path = project_root/"qav"/"logs"/"fluid"/"cuda"/f"sweep_comparison_{dimension}.json"
+    result["configuration"] = tag
+    result["math_mode"] = math_mode
+    result_path = (
+        project_root/"qav"/"logs"/"fluid"/"cuda"/
+        f"sweep_comparison_{dimension}_{tag}{archive_suffix}.json"
+    )
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(f"wall-time ratio block/thread: {block_time/thread_time:.4f}")
     print(f"saved comparison: {result_path}")
@@ -206,6 +228,8 @@ def main() -> None:
     parser.add_argument("--res-3d", type=int, default=128)
     parser.add_argument("--save", type=int, default=10)
     parser.add_argument("--out-time", type=float, default=2.0*3.141592653589793)
+    parser.add_argument("--target", default="sm_80")
+    parser.add_argument("--math-mode", choices=("fast", "precise"), default="fast")
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
 
@@ -219,9 +243,15 @@ def main() -> None:
     project_root = Path(__file__).resolve().parents[4]
     test_root = Path(__file__).resolve().parents[1]
     if args.dimension in {"all", "2d"}:
-        run_pair(project_root, test_root, "2d", args.res_2d, args.save, args.out_time)
+        run_pair(
+            project_root, test_root, "2d", args.res_2d, args.save, args.out_time,
+            args.target, args.math_mode,
+        )
     if args.dimension in {"all", "3d"}:
-        run_pair(project_root, test_root, "3d", args.res_3d, args.save, args.out_time)
+        run_pair(
+            project_root, test_root, "3d", args.res_3d, args.save, args.out_time,
+            args.target, args.math_mode,
+        )
 
 
 if __name__ == "__main__":

@@ -58,14 +58,15 @@ def relative_l2(reference: np.ndarray, candidate: np.ndarray) -> float:
 
 
 def accepted_steps(path: Path) -> int:
-    """Read the accepted-step count from a structured production run record"""
+    """Read the accepted-step count from a structured run record"""
 
     if not path.is_file():
-        raise FileNotFoundError(f"missing run log: {path}")
+        raise FileNotFoundError(f"missing run record: {path}")
     record = json.loads(path.read_text())
-    if not isinstance(record, dict) or not isinstance(record.get("accepted_steps"), int):
-        raise ValueError(f"invalid structured run log: {path}")
-    return record["accepted_steps"]
+    count = record.get("accepted_steps")
+    if not isinstance(count, int) or count < 0:
+        raise ValueError(f"invalid accepted_steps in {path}")
+    return count
 
 
 def compare_pair(
@@ -160,6 +161,7 @@ def compare_pair(
     if abs(mass_mismatch) > 1.0e-10:
         raise AssertionError("thread/block mass mismatch exceeds 1e-10")
     result: dict[str, object] = {
+        "tier": "qualification",
         "frame": frame,
         "shape": [nz, ny, nx],
         "fields": metrics,

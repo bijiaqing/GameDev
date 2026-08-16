@@ -41,12 +41,33 @@ third answers whether two implementations intended to realize the same discrete 
 equivalent. Agreement between thread and block sweeps is not an independent proof that their shared
 equations are correct; that conclusion comes from the analytical cases.
 
-The analytical runner currently writes metrics and prints convergence orders but does **not** turn
-those errors into a `passed` Boolean, per-model manifest, or aggregate numerical gate. A zero process
-exit means compilation, execution, file loading, and reference evaluation completed; it does not by
-itself mean that an accuracy threshold was satisfied. The assessments in the historical tables were
-made from the recorded convergence sequences. By contrast, the dedicated sweep comparator already
-raises an error when its explicit tolerances are exceeded.
+### Evidence tiers
+
+The tier controls how evidence should be presented, not whether a test is retained:
+
+- **Publication:** one fractional FARGO sequence (`shift=3.25`), the low-CFL cylindrical,
+  spherical-radial, and polar transport convergence sequences, all four directional diffusion
+  cases, source quadrature, logarithmic and generic optical-depth profiles, and all four coupled
+  ring models
+- **Release:** the integer and additional fractional FARGO shifts, operational-CFL radial and
+  polar transport repetitions, and the constant-opacity exact optical-depth branch
+- **Qualification:** matched thread/block sweeps, deliberate failure paths, large-LDS launches,
+  and performance/profiling records
+
+The four-resolution common archive deliberately retains both publication and release tiers: 57 of
+its 85 metrics support the compact publication matrix and 28 are release-only regressions.
+Per-case, per-model, and aggregate JSON manifests store these labels directly.
+
+The analytical runner writes every metric, applies a deliberately broad regression gate, and records
+the assessment in a variant-specific model manifest. Non-finite metrics, relative mass change above
+$10^{-8}$, failure of an exact/source tolerance, a finest-grid primary $L_1$ error above $2\times
+10^{-2}$, or loss of the established refinement trend makes the model and suite return nonzero. A
+four-resolution non-degenerate sequence requires its final observed order to be at least $1.5$;
+short workflow checks require $0.75$. Exact integer-shift and $p=0$ optical-depth cases use a
+$10^{-10}$ finest-error gate rather than a meaningless roundoff order, while the source test uses a
+$10^{-12}$ maximum error gate. These are regression limits around the substantially better archived
+results, not claims that errors near the limits are scientifically adequate. The dedicated sweep
+comparator continues to apply its tighter differential tolerances.
 
 ## Measurement and acceptance protocol
 
@@ -191,13 +212,16 @@ are compile-time constants.
 | environment record | `environment.json` in the model or variant directory | backend compiler, GPU, and driver diagnostics |
 | sweep build and run records | `build.json` and `run.json` in each sweep-model directory | commands, return states, compiler or runtime output, accepted steps, and wall time |
 | sweep timing | `timing.json` in each sweep-model directory | measured wall time for one implementation |
-| sweep assessment | `qav/logs/fluid/BACKEND/sweep_comparison_2d.json` or `_3d.json` | automatic equivalence metrics and `passed: true` |
+| model assessment | `qav/logs/fluid/BACKEND/SWEEP/MODEL/manifest_VARIANT.json` | metric inventory, regression assessment, and pass state |
+| full suite assessment | `qav/logs/fluid/BACKEND/SWEEP/manifest_all.json` | complete common-matrix live state and final pass state |
+| focused suite assessment | `qav/logs/fluid/BACKEND/SWEEP/groups/GROUP/manifest.json` | isolated focused-group state and final pass state |
+| sweep assessment | `qav/logs/fluid/BACKEND/sweep_comparison_DIM_CONFIGURATION*.json` | automatic equivalence metrics and `passed: true` |
 
 `SWEEP` is `thread` or `block`. Parameter variants are kept separate as `shift*`, `cfl*`, or `p*`
 subdirectories so one run cannot overwrite another variant's raw data. The corresponding tag is
-also included in the metric filename. Unlike the swarm suite, the analytical fluid suite does not
-yet write per-model or aggregate manifests, so any captured transcript JSON and expected metric-file
-inventory must be archived with the results.
+also included in the metric filename. Per-model manifests apply finite-value, mass, accuracy, and
+convergence gates, while group-specific suite manifests retain the complete run inventory without
+being overwritten by later focused groups.
 
 Active QA runners create no persistent text result files. The retained clean archives therefore
 need no legacy text migration step.
@@ -553,8 +577,8 @@ python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 The suite uses the reference thread sweep by default. Prefix the same command with
 `FLUID_SWEEP=block` to compile and analyze the block implementation through the identical
 analytical cases. The Makefile stores the builds in separate object directories, and the runner
-stores their fields, metrics, and environment records under `out/thread/` and `out/block/` so the
-two evidence sets coexist.
+stores their fields, metrics, and environment records under the separate `thread/` and `block/`
+branches of `qav/logs/fluid/cuda/`, so the two evidence sets coexist.
 
 The historical thread run completed all 85 builds and simulations without a compilation failure,
 runtime failure, Python traceback, or non-finite metric. The corrected output naming included CFL values in
@@ -569,8 +593,8 @@ expected behavior. Except for polar transport, the values below are unchanged fr
 baseline to the displayed precision. The polar rows report the current block-sweep results.
 
 The following density $L_1$ orders use $N=32,64,128,256$ and list the three successive refinement
-intervals. “Pass” in this table is the recorded scientific assessment of the sequence,
-not a `passed` field emitted by the current analytical runner.
+intervals. “Pass” in this historical table is consistent with the current automated regression
+criteria; each model manifest retains the actual finest error and observed-order sequence.
 
 | Case | Successive $L_1$ orders | Assessment |
 |---|---|---|
@@ -578,11 +602,11 @@ not a `passed` field emitted by the current analytical runner.
 | FARGO shift 3.50 | 2.3079, 2.3029, 2.4658 | pass |
 | FARGO shift 3.75 | 2.0579, 2.4278, 2.4282 | pass |
 | radial transport, $d=2$, CFL 0.05 | 1.6429, 2.2371, 2.6991 | pass; coarsest compact profile is under-resolved |
-| radial transport, $d=2$, CFL 0.5 | 1.5555, 2.4004, 2.7963 | pass; same qualification |
-| radial transport, $d=3$, CFL 0.05 | 1.5876, 2.2031, 2.7182 | pass; same qualification |
-| radial transport, $d=3$, CFL 0.5 | 1.5235, 2.3568, 2.8012 | pass; same qualification |
+| radial transport, $d=2$, CFL 0.5 | 1.5555, 2.4004, 2.7963 | pass; same caveat |
+| radial transport, $d=3$, CFL 0.05 | 1.5876, 2.2031, 2.7182 | pass; same caveat |
+| radial transport, $d=3$, CFL 0.5 | 1.5235, 2.3568, 2.8012 | pass; same caveat |
 | polar transport, CFL 0.05 | 1.1055, 2.2062, 2.3834 | pass; the coarse $N_Z=32$ profile is pre-asymptotic |
-| polar transport, CFL 0.5 | 1.1642, 2.0916, 2.8261 | pass; same qualification |
+| polar transport, CFL 0.5 | 1.1642, 2.0916, 2.8261 | pass; same caveat |
 | azimuthal diffusion | 1.9952, 1.9988, 1.9997 | pass |
 | radial diffusion, $d=2$ | 1.9903, 1.9937, 1.9993 | pass |
 | radial diffusion, $d=3$ | 1.9796, 1.9969, 1.9980 | pass |
@@ -592,7 +616,7 @@ not a `passed` field emitted by the current analytical runner.
 | coupled transport | 2.1396, 2.2254, 2.2565 | pass |
 | coupled transport + diffusion | 3.2074, 3.1870, 2.8243 | pass; pre-asymptotic superconvergence is not a third-order claim |
 | coupled transport + radiation | 2.1483, 2.2076, 2.2699 | pass |
-| coupled all physics | 3.1804, 3.1817, 2.6870 | pass; same qualification |
+| coupled all physics | 3.1804, 3.1817, 2.6870 | pass; same caveat |
 
 The low- and production-CFL transport step sequences are:
 
@@ -684,6 +708,14 @@ Cross-backend archive and raw-field comparison use `qav/tool/compare_backends.py
 replace direct conserved-field comparison when two vendors independently accumulate nearly equal
 errors against an exact solution.
 
+For a transferable full campaign, the first backend runs `qav/tool/run_all.py` normally, which now
+means native-only. After copying the full project and ignored `qav/logs/` tree, the second backend
+runs the same command with `--compare`; it writes only its backend-owned paths and executes both
+cross-backend comparators automatically. CUDA may run first or second. Each campaign records a
+source-tree SHA-256 fingerprint, and the final comparison fails if the archives were generated from
+different source snapshots. Once both archives exist, comparison requires only Python and NumPy,
+not either GPU runtime. The complete procedure and archive tree are specified in `qav/README.md`.
+
 ### Current thread/block comparison and performance
 
 The current CUDA cross-comparisons use byte-identical initial states and the corrected source. At
@@ -759,18 +791,17 @@ python3 qav/cuda/fluid/test_x_transport_2d/run.py \
 Keep the JSON metrics, `environment.json`, and any captured terminal-output JSON together when archiving a run.
 For the sweep branch, also retain `build.json`,
 `run.json`, `variables.json`, `timing.json`, and `sweep_comparison_*.json`. Analytical results are namespaced as
-`qav/logs/fluid/cuda/SWEEP/MODEL/`, where `SWEEP` is `thread` or `block`.
+`qav/logs/fluid/cuda/SWEEP/groups/manual/MODEL/`, where `SWEEP` is `thread` or `block`.
 
-Because the analytical branch has no aggregate manifest or automatic accuracy gate, an archive is
-complete only when its expected metric inventory and captured transcript JSON are present and the
-convergence sequences have been assessed. The sweep branch is self-gating: a returned comparison
-JSON with `"passed": true` means all of its implemented tolerances were satisfied.
+The full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 85
+metric files are present, and `qav/tool/check_archive.py` accepts the archive. Focused groups write
+their models and manifest below `groups/GROUP/`, while direct wrappers use `groups/manual/`; neither
+can overwrite any full-suite artifact. The sweep branch is
+self-gating: a returned comparison JSON with `"passed": true` means all of its implemented
+tolerances were satisfied.
 
 ## Coverage limits and verification still required
 
-- Add explicit per-case accuracy and order criteria to the analytical validator, write per-model and
-  aggregate manifests, and make `--group all` fail when a numerical criterion fails; thresholds
-  should be based on the established asymptotic ranges rather than one coarse-grid value
 - Implement the full coupled 3D manufactured-solution harness specified in
   `qav/comm/fluid/test_mms_3d/README.md` under the planned `test_mms_3d` model, including independent
   forcing and exact boundary data
@@ -807,8 +838,9 @@ JSON with `"passed": true` means all of its implemented tolerances were satisfie
 - Repeat important publication runs without `--use_fast_math`, or document and measure its effect
 
 The CUDA QA runner supports this comparison directly through `--math-mode precise`.  Precise-math
-records are archived under `qav/logs/fluid/cuda/thread_precise/` or `block_precise/`, so they cannot
-overwrite the default fast-math baseline.  Velocity norms exclude a cell unless both the exact and
+records are archived below the `groups/manual/` branch of
+`qav/logs/fluid/cuda/thread_precise/` or `block_precise/`, so they cannot overwrite the default
+fast-math baseline. Velocity norms exclude a cell unless both the exact and
 numerical densities exceed $10^{-12}$ of the exact peak density; this prevents deliberately assigned
 vacuum fallback velocities from masquerading as transport error while leaving all conserved-field
 norms unmasked.

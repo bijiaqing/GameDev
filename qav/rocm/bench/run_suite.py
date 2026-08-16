@@ -607,6 +607,7 @@ def main() -> None:
     selected_components = sorted({summary["case"]["component"] for summary in summaries})
     manifest = {
         "suite": "rocm_performance",
+        "tier": "qualification",
         "instrumented": False,
         "target": args.target,
         "selection": "explicit" if args.case is not None else "matrix",

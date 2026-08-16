@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 
@@ -12,7 +13,10 @@ def load_records(test_root: Path, backend: str) -> dict[str, dict]:
     """Load the completed periodic-wedge matrix"""
 
     project_root = test_root.parents[3]
-    result_root = project_root / "qav" / "logs" / "swarm" / backend / "test_knn" / "wedge"
+    archive_root = project_root/"qav"/"logs"/"swarm"/backend
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    result_root = scope_root/"test_knn"/"wedge"
     manifest_path = result_root / "manifest.json"
     if not manifest_path.exists():
         raise SystemExit("missing wedge manifest")

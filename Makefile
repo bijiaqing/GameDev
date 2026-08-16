@@ -164,11 +164,13 @@ ifeq ($(IS_QAV),)
 OUT_DIR = $(OUT_ROOT)/$(MODEL)/$(GPU_BACKEND)
 else
 OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
+QAV_SCOPE ?= all
+QAV_SCOPE_DIR = $(if $(filter all,$(QAV_SCOPE)),,/groups/$(QAV_SCOPE))
 ifeq ($(DUST_REPR),fluid)
 QAV_SWEEP ?= $(FLUID_SWEEP)
-OUT_DIR = $(QAV_ROOT)/logs/fluid/$(GPU_BACKEND)/$(QAV_SWEEP)/$(MODEL)$(OUT_TAG_DIR)
+OUT_DIR = $(QAV_ROOT)/logs/fluid/$(GPU_BACKEND)/$(QAV_SWEEP)$(QAV_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
 else
-OUT_DIR = $(QAV_ROOT)/logs/swarm/$(GPU_BACKEND)/$(MODEL)$(OUT_TAG_DIR)
+OUT_DIR = $(QAV_ROOT)/logs/swarm/$(GPU_BACKEND)$(QAV_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
 endif
 endif
 endif

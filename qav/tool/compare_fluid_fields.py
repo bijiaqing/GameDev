@@ -11,6 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
+from qav_config import archive_fingerprint
+
 
 CONSERVED_FIELDS = (
     "dustdens_initial",
@@ -190,8 +192,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="compare raw CUDA and ROCm fluid fields for one QA model",
     )
-    parser.add_argument("--cuda-qav", type=Path, required=True)
-    parser.add_argument("--rocm-qav", type=Path, required=True)
+    parser.add_argument(
+        "--cuda-root", "--cuda-qav", dest="cuda_root", type=Path, default=qav_root,
+        help="qav root containing logs/fluid/cuda",
+    )
+    parser.add_argument(
+        "--rocm-root", "--rocm-qav", dest="rocm_root", type=Path, default=qav_root,
+        help="qav root containing logs/fluid/rocm",
+    )
     parser.add_argument("--cuda-sweep", default="thread_precise")
     parser.add_argument("--rocm-sweep", default="thread")
     parser.add_argument("--model", default="test_z_transport_3d")
@@ -208,8 +216,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    cuda_model = fluid_output(args.cuda_qav, "cuda", args.cuda_sweep)/args.model
-    rocm_model = fluid_output(args.rocm_qav, "rocm", args.rocm_sweep)/args.model
+    cuda_model = fluid_output(args.cuda_root, "cuda", args.cuda_sweep)/args.model
+    rocm_model = fluid_output(args.rocm_root, "rocm", args.rocm_sweep)/args.model
     if not cuda_model.is_dir():
         parser.error(f"CUDA model archive does not exist: {cuda_model}")
     if not rocm_model.is_dir():
@@ -243,10 +251,17 @@ def main() -> None:
         )
         for path in metric_paths
     ]
+    cuda_archive_sha256, cuda_archive_files = archive_fingerprint(cuda_model)
+    rocm_archive_sha256, rocm_archive_files = archive_fingerprint(rocm_model)
     report = {
         "schema": 1,
-        "cuda_qav": str(args.cuda_qav.resolve()),
-        "rocm_qav": str(args.rocm_qav.resolve()),
+        "tier": "qualification",
+        "cuda_root": str(args.cuda_root.resolve()),
+        "rocm_root": str(args.rocm_root.resolve()),
+        "cuda_archive_sha256": cuda_archive_sha256,
+        "cuda_archive_files": cuda_archive_files,
+        "rocm_archive_sha256": rocm_archive_sha256,
+        "rocm_archive_files": rocm_archive_files,
         "cuda_sweep": args.cuda_sweep,
         "rocm_sweep": args.rocm_sweep,
         "model": args.model,

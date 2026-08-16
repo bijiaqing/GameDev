@@ -14,10 +14,32 @@ to the short ``run.py`` wrapper inside that model directory.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+QAV_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(QAV_ROOT/"tool"))
+
+from qav_config import FLUID_GROUPS, fluid_case_tier, fluid_cases, fluid_metric_tiers
+
+
+def utc_now() -> str:
+    """Return one ISO-formatted UTC timestamp for suite manifests"""
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def write_json(path: Path, record: dict[str, object]) -> None:
+    """Atomically update one machine-readable suite record"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    temporary.replace(path)
 
 
 def main() -> None:
@@ -28,7 +50,7 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
-        "--group", choices=("all", "transport", "diffusion", "source", "radiation", "ring", "sweep", "failure", "lds"),
+        "--group", choices=("all", *FLUID_GROUPS, "sweep", "failure", "lds"),
         default="all",
     )
     parser.add_argument("--sweep-dim", choices=("all", "2d", "3d"), default="all")
@@ -46,6 +68,7 @@ def main() -> None:
 
     run_environment = os.environ.copy()
     run_environment["AMDGPU_TARGET"] = args.target
+    run_environment["QAV_SCOPE"] = args.group
 
     resolutions = args.res[:2] if args.quick else args.res
 
@@ -53,6 +76,7 @@ def main() -> None:
     # is the directory containing both test_common and every model directory.
     common = Path(__file__).resolve().parent
     model_root = common.parent
+    project_root = common.parents[3]
 
     # Sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence.  It remains a
     # separate branch because the full 128^3 pair is substantially more expensive than the analytical matrix.
@@ -92,54 +116,46 @@ def main() -> None:
         )
         return
 
-    # Each entry contains the model directory name and model-specific command
-    # line options.  Keeping variants as separate entries gives each one an
-    # independent compilation, run, validation, and convergence report.
-    commands: list[tuple[str, list[str]]] = []
-    if args.group in {"all", "transport"}:
-        # Exercise integer and fractional FARGO shifts because the fractional
-        # remap is the part that contributes interpolation error.
-        for shift in (3.0, 3.25, 3.5, 3.75):
-            commands.append(("test_x_transport_2d", ["--shift", str(shift)]))
+    commands = fluid_cases(args.group)
+    selected_sweep = os.environ.get("FLUID_SWEEP", "thread")
+    archive_root = project_root/"qav"/"logs"/"fluid"/"rocm"/selected_sweep
+    scope_root = archive_root if args.group == "all" \
+        else archive_root/"groups"/args.group
+    manifest_path = scope_root/("manifest_all.json" if args.group == "all" else "manifest.json")
+    entries = [
+        {
+            "model": model,
+            "arguments": list(extra),
+            "tier": fluid_case_tier(model, extra),
+            "status": "pending",
+        }
+        for model, extra in commands
+    ]
+    metric_tiers = fluid_metric_tiers(commands, len(resolutions))
+    included_tiers = [tier for tier, count in metric_tiers.items() if count > 0]
+    manifest: dict[str, object] = {
+        "schema": 1,
+        "suite": "fluid",
+        "backend": "rocm",
+        "group": args.group,
+        "sweep": selected_sweep,
+        "requested_resolutions": args.res,
+        "effective_resolutions": resolutions,
+        "gpu_target": args.target,
+        "campaign_tier": "release" if "release" in included_tiers else "publication",
+        "included_tiers": included_tiers,
+        "metric_tiers": metric_tiers,
+        "cases_expected": len(entries),
+        "cases_completed": 0,
+        "status": "running",
+        "passed": None,
+        "started_utc": utc_now(),
+        "finished_utc": None,
+        "cases": entries,
+    }
+    write_json(manifest_path, manifest)
 
-        # Radial and polar transport are each tested at a small CFL number and
-        # at the production CFL number to separate spatial and temporal effects.
-        commands.extend([
-            ("test_y_transport_cyl", ["--cfl", "0.05"]),
-            ("test_y_transport_cyl", ["--cfl", "0.5"]),
-            ("test_y_transport_sph", ["--cfl", "0.05"]),
-            ("test_y_transport_sph", ["--cfl", "0.5"]),
-            ("test_z_transport_3d", ["--cfl", "0.05"]),
-            ("test_z_transport_3d", ["--cfl", "0.5"]),
-        ])
-    if args.group in {"all", "diffusion"}:
-        # Cover periodic azimuthal diffusion, cylindrical radial diffusion,
-        # spherical radial diffusion, and polar diffusion separately.
-        commands.extend([
-            ("test_x_diffusion_2d", []),
-            ("test_y_diffusion_cyl", []),
-            ("test_y_diffusion_sph", []),
-            ("test_z_diffusion_3d", []),
-        ])
-    if args.group in {"all", "source"}:
-        # The source test stores eight drag stiffnesses in eight x cells, so it
-        # uses one fixed resolution instead of a spatial convergence sequence.
-        commands.append(("test_source_drag", ["--res", "8"]))
-    if args.group in {"all", "radiation"}:
-        # These density powers exercise both the logarithmic p=-1 optical-depth
-        # integral and the ordinary power-law antiderivative.
-        for power in (0.0, -1.0, 1.0):
-            commands.append(("test_optdepth", ["--power", str(power)]))
-    if args.group in {"all", "ring"}:
-        # The ring cases test operator combinations rather than isolated kernels.
-        commands.extend([
-            ("test_ring_transport_2d", []),
-            ("test_ring_diffusion_2d", []),
-            ("test_ring_radiation_2d", []),
-            ("test_ring_all_2d", []),
-        ])
-
-    for model, extra in commands:
+    for index, (model, extra) in enumerate(commands):
         # sys.executable reuses the Python interpreter that launched this suite,
         # avoiding accidental changes of environment between the two scripts.
         command = [sys.executable, str(model_root/model/"run.py")]
@@ -148,23 +164,32 @@ def main() -> None:
         # over the suite-wide resolution list.
         if "--res" not in extra:
             command += ["--res", *(str(value) for value in resolutions)]
-        command += extra
+        command += list(extra)
         print("\n===", model, " ".join(extra), "===", flush=True)
 
         # check=True stops the suite immediately if compilation, execution, or
         # validation of any case fails, so later output cannot hide that failure.
-        subprocess.run(command, check=True, env=run_environment)
+        entries[index]["status"] = "running"
+        write_json(manifest_path, manifest)
+        result = subprocess.run(command, check=False, env=run_environment)
+        if result.returncode != 0:
+            entries[index]["status"] = "failed"
+            entries[index]["return_code"] = result.returncode
+            manifest["status"] = "failed"
+            manifest["passed"] = False
+            manifest["finished_utc"] = utc_now()
+            write_json(manifest_path, manifest)
+            raise SystemExit(result.returncode)
+        entries[index]["status"] = "passed"
+        entries[index]["return_code"] = 0
+        manifest["cases_completed"] = index + 1
+        write_json(manifest_path, manifest)
 
-    if args.group == "all":
-        print("\n=== test_failure_2d ===", flush=True)
-        subprocess.run(
-            [
-                sys.executable, str(model_root/"test_failure_2d"/"run.py"),
-                "--target", args.target,
-            ],
-            check=True,
-            env=run_environment,
-        )
+    manifest["status"] = "passed"
+    manifest["passed"] = True
+    manifest["finished_utc"] = utc_now()
+    write_json(manifest_path, manifest)
+    print(f"\nFLUID TEST SUITE: PASS  cases={len(entries)}/{len(entries)}  manifest={manifest_path}")
 
 
 if __name__ == "__main__":

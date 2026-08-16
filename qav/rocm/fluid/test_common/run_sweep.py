@@ -89,12 +89,12 @@ def build_and_run(
     # Model constants are compile-time values, so clean before applying a new benchmark configuration
     subprocess.run([
         "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm", f"FLUID_SWEEP={sweep}",
-        f"GPU_TARGET={target}", f"OUT_TAG={tag}", "clean"
+        f"GPU_TARGET={target}", "QAV_SCOPE=all", f"OUT_TAG={tag}", "clean"
     ], check=True)
     build_command = [
         "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
         f"FLUID_SWEEP={sweep}",
-        f"GPU_TARGET={target}",
+        f"GPU_TARGET={target}", "QAV_SCOPE=all",
         f"RES={resolution}", f"SAVE={save_max}", f"OUT_TIME={output_time:.17g}",
         f"OUT_TAG={tag}",
     ]
@@ -122,7 +122,7 @@ def build_and_run(
         raise subprocess.CalledProcessError(return_code, build_command)
 
     environment = environment_record(project_root)
-    environment["amdgpu_target"] = target
+    environment["gpu_target"] = target
     write_json(out_dir/"environment.json", environment)
 
     # Retain the native stream in run.json while reporting a throttled live heartbeat

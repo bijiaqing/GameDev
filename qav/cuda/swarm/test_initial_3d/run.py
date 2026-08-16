@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,10 @@ run(model)
 # The continuous initializer must therefore produce identical host results
 if "--build-only" not in sys.argv:
     project_root = Path(__file__).resolve().parents[4]
-    out_dir = project_root/"qav"/"logs"/"swarm"/"cuda"/model
+    archive_root = project_root/"qav"/"logs"/"swarm"/"cuda"
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    out_dir = scope_root/model
     manifest_path = out_dir/"manifest.json"
     manifest = json.loads(manifest_path.read_text())
     resolutions = manifest["resolutions"]

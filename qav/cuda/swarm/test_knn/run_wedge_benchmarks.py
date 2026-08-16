@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -35,7 +36,10 @@ def main() -> None:
     test_root = Path(__file__).resolve().parent
     executable = test_root / "bin" / "knn_wedge_benchmark"
     project_root = test_root.parents[3]
-    result_root = project_root / "qav" / "logs" / "swarm" / "cuda" / "test_knn" / "wedge"
+    archive_root = project_root/"qav"/"logs"/"swarm"/"cuda"
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    result_root = scope_root/"test_knn"/"wedge"
     result_root.mkdir(parents=True, exist_ok=True)
     distributions = args.distribution or ["smooth", "ring", "interior_clump", "seam_clump"]
 
@@ -86,6 +90,8 @@ def main() -> None:
                     raise RuntimeError(
                         f"wedge benchmark labels in {output} do not match case {name}"
                     )
+                record["tier"] = "publication" if particles == 100_000 else "qualification"
+                output.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
                 completed.append((name, record))
                 print(
                     f"pass={record['passed']}  "
@@ -113,6 +119,10 @@ def main() -> None:
     passed = all(record["passed"] for _, record in completed)
     manifest = {
         "component": "wedge",
+        "tier": "publication",
+        "extended_tier": "qualification" if any(
+            particles != 100_000 for particles in args.particles
+        ) else None,
         "cases": len(completed),
         "all_quality_passed": passed,
         "passed": passed,

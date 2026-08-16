@@ -6,11 +6,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+QAV_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(QAV_ROOT/"tool"))
+
+from qav_config import PUBLICATION_TIER, QUALIFICATION_TIER
 
 
 def write_json(path: Path, record: dict) -> None:
@@ -49,6 +55,7 @@ def run_adversarial(command: list[str], component: str, output: Path) -> dict:
     ]
     record = {
         "component": component,
+        "tier": PUBLICATION_TIER,
         "cases": len(checks),
         "passed_cases": sum(check["passed"] for check in checks),
         "checks": checks,
@@ -83,8 +90,12 @@ def main() -> None:
 
     test_dir = Path(__file__).resolve().parent
     project_root = test_dir.parents[3]
-    output_root = project_root/"qav"/"logs"/"swarm"/"cuda"/"test_knn"
-    result_root = output_root/"radial" if args.radial_only else output_root
+    archive_root = project_root/"qav"/"logs"/"swarm"/"cuda"
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    output_root = scope_root/"test_knn"
+    result_root = output_root/"radial" if args.radial_only and scope != "radial" \
+        else output_root
     python = sys.executable
 
     if not args.build_only:
@@ -99,7 +110,7 @@ def main() -> None:
                     ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"],
                     project_root,
                 ),
-                "arch": args.arch,
+                "gpu_target": args.arch,
                 "k": 200,
             },
         )
@@ -152,6 +163,7 @@ def main() -> None:
                     result_root/"production_links.json",
                     {
                         "component": "production_links",
+                        "tier": PUBLICATION_TIER,
                         "cases": len(production_links),
                         "links": production_links,
                         "passed": all(record["passed"] for record in production_links),
@@ -181,12 +193,14 @@ def main() -> None:
 
     particles = [100_000, 1_000_000, 10_000_000] if args.full else [100_000]
     common = ["--particles", *(str(value) for value in particles), "--arch", args.arch]
-    if args.radial_only:
+    if args.radial_only and scope != "radial":
         common.extend(("--distribution", "radial", "--dim", "2", "--output-subdir", "radial"))
+    elif args.radial_only:
+        common.extend(("--distribution", "radial", "--dim", "2"))
     subprocess.run([python, str(test_dir/"run_benchmarks.py"), *common], check=True)
     analyze_root = project_root/"qav"/"comm"/"swarm"/"test_knn"
     analyze_command = [python, str(analyze_root/"analyze_results.py"), "--backend", "cuda"]
-    if args.radial_only:
+    if args.radial_only and scope != "radial":
         analyze_command.extend(("--output-subdir", "radial"))
     subprocess.run(analyze_command, check=True)
 
@@ -205,6 +219,8 @@ def main() -> None:
     passed = passed and production_passed
     suite = {
         "component": "knn",
+        "tier": PUBLICATION_TIER,
+        "extended_tier": QUALIFICATION_TIER if args.full else None,
         "scope": "radial" if args.radial_only else "general",
         "particles": particles,
         "environment": "environment.json",

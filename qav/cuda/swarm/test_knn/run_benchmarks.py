@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -53,7 +54,10 @@ def main() -> None:
     test_root = Path(__file__).resolve().parent
     executable = test_root / "bin" / "knn_benchmark"
     project_root = test_root.parents[3]
-    result_root = project_root / "qav" / "logs" / "swarm" / "cuda" / "test_knn"
+    archive_root = project_root/"qav"/"logs"/"swarm"/"cuda"
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    result_root = scope_root/"test_knn"
     if args.output_subdir:
         result_root = result_root / args.output_subdir
     result_root.mkdir(parents=True, exist_ok=True)
@@ -75,7 +79,7 @@ def main() -> None:
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv"],
             test_root,
         ),
-        "arch": args.arch,
+        "gpu_target": args.arch,
         "k": args.k,
     }
     (result_root / "environment.txt").unlink(missing_ok=True)
@@ -124,6 +128,8 @@ def main() -> None:
                     raise RuntimeError(
                         f"ordinary benchmark labels in {output} do not match case {name}"
                     )
+                record["tier"] = "publication" if particles == 100_000 else "qualification"
+                output.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
                 completed.append((name, record))
                 print(
                     f"pass={record['passed']}  "
@@ -150,6 +156,10 @@ def main() -> None:
     passed = all(record["passed"] for _, record in completed)
     manifest = {
         "component": "ordinary",
+        "tier": "publication",
+        "extended_tier": "qualification" if any(
+            particles != 100_000 for particles in args.particles
+        ) else None,
         "cases": len(completed),
         "all_quality_passed": passed,
         "passed": passed,

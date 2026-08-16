@@ -161,6 +161,7 @@ def compare_pair(
     if abs(mass_mismatch) > 1.0e-10:
         raise AssertionError("thread/block mass mismatch exceeds 1e-10")
     result: dict[str, object] = {
+        "tier": "qualification",
         "frame": frame,
         "shape": [nz, ny, nx],
         "fields": metrics,

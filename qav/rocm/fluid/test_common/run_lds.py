@@ -35,7 +35,10 @@ def build_model(project_root: Path, model: str, target: str, output_dir: Path) -
     """Clean and build one model while preserving compiler output as JSON"""
 
     executable = project_root/"bin"/model/"rocm"/"gamedev"
-    base = ["make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm", f"GPU_TARGET={target}"]
+    base = [
+        "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
+        f"GPU_TARGET={target}", "QAV_SCOPE=all",
+    ]
     clean = subprocess.run(
         [*base, "clean"], check=False, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -48,7 +51,7 @@ def build_model(project_root: Path, model: str, target: str, output_dir: Path) -
     print(build.stdout, end="", flush=True)
     record = {
         "model": model,
-        "target": target,
+        "gpu_target": target,
         "clean_command": [*base, "clean"],
         "clean_return_code": clean.returncode,
         "clean_output": clean.stdout,
@@ -161,7 +164,8 @@ def main() -> None:
     passed = all(record["passed"] for record in records)
     manifest = {
         "suite": "fluid_large_lds",
-        "target": args.target,
+        "tier": "qualification",
+        "gpu_target": args.target,
         "started_utc": started_utc,
         "finished_utc": utc_now(),
         "build_only": args.build_only,

@@ -14,7 +14,9 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`swarm_testset.md`](swarm_testset.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
 | [`naming.md`](naming.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
 
-Numerical equations belong in the two `numerics_*` documents. Test definitions and evidence belong in the two `testset_*` documents. Future designs must not be described as active production behavior.
+Numerical equations belong in the two `*_numeric.md` documents. Test definitions and evidence
+belong in the two `*_testset.md` documents. Future designs must not be described as active
+production behavior.
 
 ## Repository and build layout
 
@@ -33,6 +35,11 @@ The root Makefile requires `MODEL`; `GPU_BACKEND=cuda|rocm` selects one compiler
 `DUST_REPR := fluid|swarm` in the model flags selects one physical representation. Fluid builds
 additionally select `FLUID_SWEEP := thread|block`. Collision-enabled swarm builds select
 `COLLISION_SEARCH := kdtree|morton`.
+
+`qav/tool/run_all.py` is the canonical transferable campaign entry point. It writes disjoint CUDA
+and ROCm archives, checks each archive before transfer, and runs the cross-backend field and metric
+comparisons after both archives are present. The exact command sequence is documented in
+`qav/README.md`.
 
 Model-local source files override same-named production translation units. Verification models use this mechanism only when an analytical setup cannot be expressed through the production interface.
 

@@ -48,7 +48,7 @@ def run_command(command: list[str], cwd: Path, timeout: int = 30) -> dict:
         )
         return {
             "command": command,
-            "returncode": result.returncode,
+            "return_code": result.returncode,
             "timed_out": False,
             "output": result.stdout,
             "started_utc": started,
@@ -60,7 +60,7 @@ def run_command(command: list[str], cwd: Path, timeout: int = 30) -> dict:
             output = output.decode(errors="replace")
         return {
             "command": command,
-            "returncode": None,
+            "return_code": None,
             "timed_out": True,
             "output": output,
             "started_utc": started,
@@ -75,7 +75,7 @@ def assess(record: dict, expected_return: int, diagnostic: str) -> bool:
     forbidden = ("illegal memory access", "HIP error", "Memory access fault")
     return (
         not record["timed_out"]
-        and record["returncode"] == expected_return
+        and record["return_code"] == expected_return
         and diagnostic in output
         and not any(message.lower() in output.lower() for message in forbidden)
     )
@@ -90,13 +90,17 @@ def main() -> None:
 
     model_dir = Path(__file__).resolve().parent
     project_root = model_dir.parents[3]
-    out_dir = project_root/"qav"/"logs"/"swarm"/"rocm"/model_dir.name
+    archive_root = project_root/"qav"/"logs"/"swarm"/"rocm"
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    out_dir = scope_root/model_dir.name
     out_dir.mkdir(parents=True, exist_ok=True)
     executable = project_root/"bin"/model_dir.name/"rocm"/"gamedev"
 
     manifest = {
         "model": model_dir.name,
-        "amdgpu_target": args.target,
+        "tier": "qualification",
+        "gpu_target": args.target,
         "injected_particle": IDX_BAD,
         "backends": {},
         "passed": True,
@@ -115,7 +119,7 @@ def main() -> None:
              f"GPU_TARGET={args.target}"],
             project_root, timeout=600,
         )
-        build_passed = clean["returncode"] == 0 and build["returncode"] == 0
+        build_passed = clean["return_code"] == 0 and build["return_code"] == 0
         backend_record = {
             "build_passed": build_passed,
             "clean": clean,

@@ -32,6 +32,22 @@ Velocity norms include only cells where both the exact and numerical densities e
 of the exact peak, so the comparison does not mistake a production vacuum fallback velocity for
 transport error.
 
+The model manifest applies broad regression limits: all metrics must be finite, relative mass
+change must remain below $10^{-8}$, the finest primary $L_1$ error must remain below $2\times10^{-2}$,
+and the final observed order must exceed $1.5$ for a four-resolution sequence or $0.75$ for a short
+workflow check. Exact integer-shift and $p=0$ optical-depth cases instead require a finest error
+below $10^{-10}$; the closed-form source case requires every $L_\infty$ error below $10^{-12}$.
+These permissive regression gates catch broken calculations without replacing interpretation of
+the full convergence sequence.
+
+## Evidence-tier assignment
+
+The release suite retains every case. Publication evidence comprises `test_x_transport_2d` at
+`shift=3.25`, the three radial/polar transport cases at CFL 0.05, all diffusion and ring cases,
+`test_source_drag`, and `test_optdepth` at powers -1 and +1. Other FARGO shifts, CFL 0.5 directional
+transport repetitions, and the power-zero optical-depth exact branch are release-only regressions.
+Thread/block sweeps and backend robustness/performance cases are qualification evidence.
+
 Unless stated otherwise, the domain is
 
 $$

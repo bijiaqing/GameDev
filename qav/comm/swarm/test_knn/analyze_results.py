@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 
@@ -13,7 +14,10 @@ def load_records(test_root: Path, backend: str, include_all: bool, output_subdir
     """Load the canonical matrix without mixing in stale experiments"""
 
     project_root = test_root.parents[3]
-    result_root = project_root / "qav" / "logs" / "swarm" / backend / "test_knn"
+    archive_root = project_root/"qav"/"logs"/"swarm"/backend
+    scope = os.environ.get("QAV_SCOPE", "manual")
+    scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
+    result_root = scope_root/"test_knn"
     if output_subdir:
         result_root = result_root / output_subdir
     manifest_path = result_root / "manifest.json"

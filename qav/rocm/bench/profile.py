@@ -119,6 +119,7 @@ def main() -> None:
     print(result.stdout, end="", flush=True)
     record = {
         "suite": "rocm_profile",
+        "tier": "qualification",
         "instrumented": True,
         "timing_is_baseline": False,
         "case": case,

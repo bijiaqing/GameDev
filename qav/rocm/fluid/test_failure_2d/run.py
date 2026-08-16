@@ -131,7 +131,7 @@ def main() -> None:
             "command": build_command,
             "return_code": build.returncode,
             "output": build.stdout,
-            "target": args.target,
+            "gpu_target": args.target,
         },
     )
     build.check_returncode()
@@ -174,8 +174,9 @@ def main() -> None:
     passed = all(case["passed"] for case in cases)
     manifest = {
         "suite": "fluid_failure",
+        "tier": "qualification",
         "model": model_dir.name,
-        "target": args.target,
+        "gpu_target": args.target,
         "started_utc": started_utc,
         "finished_utc": utc_now(),
         "cases": len(cases),
