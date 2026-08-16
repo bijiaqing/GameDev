@@ -192,6 +192,10 @@ def main() -> None:
     parser.add_argument("--linf-tolerance", type=float, default=1.0e-5)
     parser.add_argument("--absolute-tolerance", type=float, default=1.0e-10)
     parser.add_argument("--velocity-weighted-tolerance", type=float, default=1.0e-5)
+    parser.add_argument(
+        "--expected-records", type=int,
+        help="reject an incomplete model archive instead of comparing only the files present",
+    )
     parser.add_argument("--output", type=Path, default=Path("qav/out/backend_field_comparison.json"))
     args = parser.parse_args()
 
@@ -205,6 +209,18 @@ def main() -> None:
     metric_paths = sorted(cuda_model.glob("metrics_N*.json"))
     if not metric_paths:
         parser.error(f"no CUDA metric records found: {cuda_model}")
+    if args.expected_records is not None and len(metric_paths) != args.expected_records:
+        parser.error(
+            f"CUDA archive contains {len(metric_paths)} metric records; "
+            f"expected {args.expected_records}"
+        )
+
+    rocm_metric_paths = sorted(rocm_model.glob("metrics_N*.json"))
+    if args.expected_records is not None and len(rocm_metric_paths) != args.expected_records:
+        parser.error(
+            f"ROCm archive contains {len(rocm_metric_paths)} metric records; "
+            f"expected {args.expected_records}"
+        )
 
     records = [
         compare_record(
@@ -229,6 +245,8 @@ def main() -> None:
         "linf_tolerance": args.linf_tolerance,
         "absolute_tolerance": args.absolute_tolerance,
         "velocity_weighted_tolerance": args.velocity_weighted_tolerance,
+        "expected_records": args.expected_records,
+        "compared_records": len(records),
         "records": records,
         "passed": all(bool(record["passed"]) for record in records),
     }

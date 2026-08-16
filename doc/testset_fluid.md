@@ -20,8 +20,10 @@ coefficients would not yield simple closed-form solutions.
 This document records the test design, mathematical references, acceptance semantics, execution
 contract, and retained CUDA baseline. The compact implementation index in
 `qav/fluid/test_common/TEST_CASES.md` should remain consistent with it. The current local
-`qav/fluid/out/` directory is empty, so the historical numerical tables below are not backed by
-machine-readable artifacts in this checkout and must be regenerated before publication or release.
+`qav/fluid/out/` directory retains 85 analytical metric records for each sweep implementation and
+the matched 2D and 3D sweep-comparison records described below. Some thread-sweep analytical files
+are retained historical results, while the block-sweep matrix and both differential comparisons
+were regenerated after the 2026-08-16 polar-metric correction.
 
 ## Verification architecture and claim levels
 
@@ -534,13 +536,14 @@ not a grid-convergence sequence and does not use one implementation as analytica
 
 ## Recorded native CUDA evidence
 
-**Source-status note (2026-08-16).** The polar advection and CFL operators now use the exact
+**Source-status note (2026-08-16).** The polar advection and CFL operators use the exact
 radial polar-face factor $\Delta A_z/\Delta V_y$ instead of the former $1/y_c$ approximation.
-The supplementary T10 mesh regression passes for the corrected formula, but the native polar
-transport, complete-3D, and CUDA-versus-ROCm results recorded below predate this change and are
-historical until those cases are rerun with the current source.
+The supplementary T10 mesh regression, the complete block-sweep analytical matrix, and the matched
+2D and 3D thread/block comparisons have now passed with the corrected source. The archived
+thread-sweep analytical polar records and the earlier direct CUDA-versus-ROCm raw-field comparison
+predate this correction and remain labeled as historical evidence.
 
-### Complete analytical run of 2026-07-26
+### Complete analytical archives
 
 The complete 85-case thread-sweep run was recorded on 2026-07-26 with
 
@@ -554,14 +557,20 @@ analytical cases. The Makefile stores the builds in separate object directories,
 stores their fields, metrics, and environment records under `out/thread/` and `out/block/` so the
 two evidence sets coexist.
 
-The historical run completed all 85 builds and simulations without a compilation failure, runtime
-failure, Python traceback, or non-finite metric. The corrected output naming included CFL values in
+The historical thread run completed all 85 builds and simulations without a compilation failure,
+runtime failure, Python traceback, or non-finite metric. The corrected output naming included CFL values in
 radial and polar transport filenames, preventing the 12 low-CFL records from being overwritten.
 The recorded environment was CUDA 12.1 with `nvcc` 12.1.105 and an NVIDIA A100-SXM4-40GB using
 driver 580.159.04.
 
+The block-sweep matrix was regenerated on the same CUDA 12.1 and A100 environment after the exact
+polar metric and cooperative low-order update were introduced. All 85 expected metric files are
+present, every recorded norm and mass change is finite, and the convergence sequences retain the
+expected behavior. Except for polar transport, the values below are unchanged from the thread
+baseline to the displayed precision. The polar rows report the current block-sweep results.
+
 The following density $L_1$ orders use $N=32,64,128,256$ and list the three successive refinement
-intervals. “Pass” in this historical table is the recorded scientific assessment of the sequence,
+intervals. “Pass” in this table is the recorded scientific assessment of the sequence,
 not a `passed` field emitted by the current analytical runner.
 
 | Case | Successive $L_1$ orders | Assessment |
@@ -573,8 +582,8 @@ not a `passed` field emitted by the current analytical runner.
 | radial transport, $d=2$, CFL 0.5 | 1.5555, 2.4004, 2.7963 | pass; same qualification |
 | radial transport, $d=3$, CFL 0.05 | 1.5876, 2.2031, 2.7182 | pass; same qualification |
 | radial transport, $d=3$, CFL 0.5 | 1.5235, 2.3568, 2.8012 | pass; same qualification |
-| polar transport, CFL 0.05 | 1.6737, 2.3601, 2.4601 | pass |
-| polar transport, CFL 0.5 | 1.6813, 2.3623, 2.4999 | pass |
+| polar transport, CFL 0.05 | 1.1055, 2.2062, 2.3834 | pass; the coarse $N_Z=32$ profile is pre-asymptotic |
+| polar transport, CFL 0.5 | 1.1642, 2.0916, 2.8261 | pass; same qualification |
 | azimuthal diffusion | 1.9952, 1.9988, 1.9997 | pass |
 | radial diffusion, $d=2$ | 1.9903, 1.9937, 1.9993 | pass |
 | radial diffusion, $d=3$ | 1.9796, 1.9969, 1.9980 | pass |
@@ -594,8 +603,8 @@ The low- and production-CFL transport step sequences are:
 | radial transport, $d=2$ | 0.5 | 3, 5, 9, 16 | $9.77\times10^{-14}$ |
 | radial transport, $d=3$ | 0.05 | 22, 42, 81, 160 | $1.82\times10^{-12}$ |
 | radial transport, $d=3$ | 0.5 | 3, 5, 9, 16 | $4.93\times10^{-16}$ |
-| polar transport | 0.05 | 33, 65, 128, 254 | $1.08\times10^{-14}$ |
-| polar transport | 0.5 | 4, 7, 13, 26 | $1.14\times10^{-15}$ |
+| polar transport | 0.05 | 13, 25, 48, 95 | $3.99\times10^{-15}$ |
+| polar transport | 0.5 | 2, 3, 5, 10 | $4.27\times10^{-16}$ |
 
 The larger low-CFL mass roundoff in the two radial tests accumulates over roughly ten times as many
 steps and remains below $2\times10^{-12}$.
@@ -632,21 +641,34 @@ for these runs. The residual CUDA-versus-ROCm differences in separately reduced 
 norms therefore reflect ordinary cross-vendor evolution and reduction sensitivity rather than the
 CUDA fast-math option or a different polar discretization.
 
-### Historical thread/block performance
+The current post-correction CUDA and ROCm block-sweep analytical archives contain the same eight
+polar configurations and identical accepted-step sequences. Their density $L_1$ convergence orders
+agree to within $4.5\times10^{-4}$, and the largest absolute difference between any stored polar
+error norm is $1.99\times10^{-6}$. A path-by-path comparison of already reduced norms at relative
+tolerance $10^{-6}$ is consequently too strict and flags these ordinary cross-vendor differences.
+The subsequent post-correction raw-field refresh retained and compared all eight configurations.
+Initial density is byte-identical, all metadata agree, and every record passes. Among density and
+conserved momenta, the worst relative $L_2$ and $L_\infty$ differences are respectively
+$2.59\times10^{-6}$ and $3.97\times10^{-6}$, both below the $10^{-5}$ gate. The largest
+density-weighted velocity difference is $4.71\times10^{-11}$. Unweighted velocity differences reach
+$2.28\times10^{-5}$ in relative $L_2$ and $3.45\times10^{-4}$ in relative $L_\infty$ only in
+low-density tails, so they remain diagnostics rather than acceptance quantities.
 
-The development cross-comparisons motivating this branch found configuration-dependent performance.
-At `1024^2`, the stable thread and block runs took `132.93 s` and `77.82 s`, respectively, so the
-block method was approximately 1.71 times faster. In the vacuum-corrected `128^3` diffusion run,
-frame 0 was byte-identical and frame 10 had density relative L2 difference `1.476936e-12`, velocity
-relative L2 differences from `5.261644e-16` to `3.552797e-13`, and finite-volume mass mismatch
-`1.88686857e-16`. The corresponding thread and block wall times were `346.65 s` and `1182.99 s`,
-making the block method approximately 3.41 times slower. These results justify retaining both
-implementations and benchmarking the intended grid rather than selecting one globally.
+### Current thread/block comparison and performance
 
-The build logs, profiler reports, and `sweep_comparison_*.json` summaries for those development
-measurements are not present in the current repository. The numbers are therefore historical
-evidence rather than the canonical benchmark baseline. Rerun the automated sweep branch on the
-target GPU before making a production performance claim.
+The current CUDA cross-comparisons use byte-identical initial states and the corrected source. At
+$1024^2$, both implementations take 630 accepted steps. Their final density relative $L_2$
+difference is $4.12\times10^{-14}$, the final mass mismatch is
+$-1.92\times10^{-16}$, and the thread and block wall times are 132.85 s and 53.19 s. Thus the block
+sweep is about 2.50 times faster for this 2D case.
+
+At $128^3$ with diffusion, both implementations take 5,396 accepted steps. The final density
+relative $L_2$ difference is $4.55\times10^{-12}$, velocity differences range from
+$6.54\times10^{-16}$ to $5.68\times10^{-13}$, and the final mass mismatch is
+$1.89\times10^{-16}$. The thread and block wall times are 344.58 s and 771.98 s, so the block sweep
+is 2.24 times slower for this 3D case. The archived `build.json`, `run.json`, `timing.json`, and
+`sweep_comparison_*.json` files make these the current CUDA differential baseline. They confirm
+numerical equivalence but also show that sweep choice remains dimension- and grid-dependent.
 
 ## Running and archiving the suite
 

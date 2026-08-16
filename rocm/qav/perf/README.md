@@ -76,11 +76,26 @@ ROCPROFCOMPUTE_COLOR=0 python3 qav/perf/profile.py \
     --tool compute \
     --kernel advection_ybl \
     --target gfx942
+
+ROCPROFCOMPUTE_COLOR=0 python3 qav/perf/profile.py \
+    --case fluid_3d_production \
+    --tool compute \
+    --kernel advection_zbl \
+    --target gfx942
+
+python3 qav/perf/analyze_counters.py \
+    --profile-dir \
+        qav/perf/out/profiles/fluid_3d_production_advection_ybl \
+        qav/perf/out/profiles/fluid_3d_production_advection_zbl \
+    --output qav/perf/out/counter_analysis_yz.json
 ```
 
 The archived MI300A runtime trace identifies `advection_ybl` and `advection_zbl` as the dominant
-3D kernels, so counter collection should start with `advection_ybl`. Recompute the ranking after
-material source, compiler, grid, or physics changes rather than treating this target as fixed.
+3D kernels. `analyze_counters.py` requires each profile to contain its passing manifest and complete
+merged `workloads/**/pmc_perf.csv`, rejects inconsistent per-dispatch resource metadata, and writes
+one JSON summary of resource use, lane activity, residency, L2 behavior, and external-memory
+traffic. Recompute the ranking after material source, compiler, grid, or physics changes rather
+than treating these targets as fixed.
 
 Equivalent swarm cases are named `swarm_collision_kdtree_baseline`,
 `swarm_collision_morton_baseline`, and their `production` or `large` variants. Profiler-native JSON,

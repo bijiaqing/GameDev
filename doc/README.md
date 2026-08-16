@@ -37,8 +37,8 @@ The branches do not share headers or translation units. Related algorithms, incl
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | `qav/fluid/out/` is currently empty | the 85-case A100 result table in `testset_fluid.md` is a retained historical baseline, not a presently archived machine-readable result set |
-| fluid thread/block comparison | harness exists; no comparison JSON, build log, or profiler artifact is archived | implementation equivalence and timing claims should be regenerated on the target GPU before publication |
+| fluid analytical suite | 85 thread-sweep and 85 block-sweep metric records under `qav/fluid/out/`; the block matrix was regenerated after the exact polar-metric correction | the current block archive provides the native analytical baseline; the retained thread polar records predate the correction and remain historical |
+| fluid thread/block comparison | passing current CUDA comparisons at $1024^2$ and $128^3$, with build, run, timing, variable, and comparison JSON records | both implementations are numerically equivalent within the automatic tolerances; block is faster in the recorded 2D case and slower in the recorded 3D case |
 | swarm analytical suite | 51 metrics, 51 metadata files, 25 top-level model manifests, and a passing focused initialization aggregate under `qav/swarm/out/` | the retained all-group baseline and the newer continuous-initialization supplement passed natively on the recorded A100 environment; rerun `--group all` to regenerate one current aggregate manifest |
 | adaptive-Morton KNN | the current archive passes 7 ordinary cases, 15 edge checks, 10 periodic checks, 10 wedge cases, and all 6 production backend links at $N_P=10^5$ | the validated block-parallel sorted top-$K$ merge is the sole Morton selection path; larger historical matrices are development evidence, while current end-to-end collision timing still requires regeneration |
 

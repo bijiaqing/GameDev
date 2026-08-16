@@ -36,16 +36,19 @@ production collision backends linked successfully in 1D, 2D, and 3D.
 
 The complete native analytical campaign is now also archived. The fluid branch produced all 85
 records with the thread sweep and all 85 with the block sweep at the requested resolutions and
-parameter variants. Corresponding records agree throughout; the only differences exceeding the
-archive comparison's roundoff threshold are two $N=256$ radial-diffusion velocity $L_\infty$ values,
-all of order $10^{-12}$. The swarm branch produced all 51 CUDA-comparable analytical records, and
+parameter variants. After the exact polar-metric correction, the current CUDA and ROCm block
+archives retain identical polar step sequences and nearly identical convergence orders. Comparing
+their already reduced polar norms at relative tolerance $10^{-6}$ is overly strict and flags values
+whose largest absolute difference is $1.99\times10^{-6}$; all nonpolar records satisfy the archive
+comparison. The swarm branch produced all 51 CUDA-comparable analytical records, and
 every one of its 24 analytical component manifests reports `passed: true`. The subsequently
 archived native restart regression adds one model and one record. Together with the KNN component,
 the rebuilt ROCm aggregate reports 26 of 26 models and 52 analytical builds passed. This closes the
 implemented native ROCm numerical matrices at that archive revision. The subsequently executed
 nonfinite-state injection and large-LDS branches also passed natively on gfx942. The baseline and
-production performance matrices and a production 3D runtime trace are now archived; focused
-hardware-counter collection remains pending.
+production performance matrices and a production 3D runtime trace are now archived. Focused
+hardware-counter runs for both radial and polar block advection completed successfully, and their
+post-change merged tables and raw profiler records are completely archived and analyzed.
 
 The first $N=256$ 3D swarm grid run then exposed a latent endpoint-stencil safety defect shared by
 the CUDA and HIP sources. An exact final radial or polar cell-centre coordinate could select a
@@ -143,22 +146,22 @@ linker ceiling, while retaining the $128^3$ comparison. The reduced comparison s
 operation equivalence; it is not a production performance benchmark. Production-scale HIP timing
 and correctness runs should use the block sweep.
 
-The native $512^2$ comparison passes after 630 accepted steps in both implementations. At frame 10,
+The current native $512^2$ comparison passes after 630 accepted steps in both implementations. At frame 10,
 the relative $L_2$ differences between block and thread are $2.01\times10^{-14}$ in density,
 $2.24\times10^{-16}$ in azimuthal velocity, and $3.51\times10^{-15}$ in radial velocity; vertical
 velocity is byte-identical. Both runs have the same mass drift,
-$-3.61\times10^{-9}$, and their final masses are identical. The measured wall times were 34.29 s
-for thread and 21.88 s for block, giving $t_{\mathrm{block}}/t_{\mathrm{thread}}=0.638$, or a
-preliminary 1.57-fold block speedup on that run. A separate $1024^2$ block-only smoke test compiled,
+$-3.61\times10^{-9}$, and their final masses are identical. The measured wall times were 34.14 s
+for thread and 15.23 s for block, giving $t_{\mathrm{block}}/t_{\mathrm{thread}}=0.446$, or a
+2.24-fold block speedup on that run. A separate $1024^2$ block-only smoke test compiled,
 linked, and advanced to $t=0.1$ in one accepted step; the equivalent thread build remains impossible
 because of the linker stack limit.
 
-The native $128^3$ diffusion comparison also passes, with 5,392 accepted steps in both
+The current native $128^3$ diffusion comparison also passes, with 5,392 accepted steps in both
 implementations. At frame 10, the relative $L_2$ differences are
-$2.70\times10^{-12}$ in density, $5.16\times10^{-16}$ in azimuthal velocity,
-$3.08\times10^{-13}$ in radial velocity, and $2.82\times10^{-14}$ in polar velocity. The final
-mass mismatch is $-3.89\times10^{-16}$. On this run, the thread and block wall times were 223.45 s
-and 579.63 s, respectively, so the block method was 2.59 times slower. This single measurement
+$4.32\times10^{-12}$ in density, $5.35\times10^{-16}$ in azimuthal velocity,
+$3.12\times10^{-13}$ in radial velocity, and $3.24\times10^{-14}$ in polar velocity. The final
+mass mismatch is $1.17\times10^{-15}$. On this run, the thread and block wall times were 220.87 s
+and 386.77 s, respectively, so the block method was 1.75 times slower. This single measurement
 shows that the block rewrite is numerically equivalent in 3D but does not establish a universal
 performance advantage; sweep choice should remain dimension- and resolution-dependent until
 kernel-level profiling explains the 3D result.
@@ -334,7 +337,14 @@ fast-math CUDA records. Therefore `--use_fast_math` was not the cause of the res
 differences. Those differences arise from cross-vendor floating-point evolution followed by a
 sensitive reduction against the analytical solution; the direct solution comparison establishes
 that they are far below the discretization error. Together with the complete swarm and KNN results,
-this closes the current CUDA-versus-ROCm scientific comparison.
+this closed the CUDA-versus-ROCm scientific comparison for that source revision. The later exact
+polar-metric correction has independently passing CUDA and ROCm analytical matrices with matching
+step sequences and convergence. The subsequent direct-field refresh compared all eight current
+block-sweep configurations: initial density is byte-identical, metadata agree, and every record
+passes. The worst relative $L_2$ and $L_\infty$ differences among density and conserved momenta are
+$2.59\times10^{-6}$ and $3.97\times10^{-6}$; the largest density-weighted velocity difference is
+$4.71\times10^{-11}$. The comparator requires `--expected-records 8`, so an incomplete transfer
+cannot appear successful.
 
 When `qav/out/backend_field_comparison_z.json` is present and passed,
 `qav/compare_backends.py` uses that raw-field result for the eight polar records while continuing
@@ -757,23 +767,26 @@ operator cost so event instrumentation cannot bias the production timing.
 ### Native uninstrumented results on MI300A
 
 The first gfx942 campaign on 2026-08-12 completed the full baseline matrix and both production fluid
-cases; the production swarm pair followed on 2026-08-14. Every case returned normally and repeated
-an identical accepted-work count. Seven cases stayed below the five-percent noise threshold; the
+cases; the production swarm pair followed on 2026-08-14. The two production fluid cases were rerun
+on 2026-08-16 after the cooperative low-order update. Every case returned normally and repeated an
+identical accepted-work count. Seven cases stayed below the five-percent noise threshold; the
 production KD-tree case is retained but labelled noisy:
 
 | Case | Size | Work units | Median wall time | Median evolution time | Spread | Normalized evolution cost |
 |---|---:|---:|---:|---:|---:|---:|
 | fluid 2D baseline | $512^2$ | 126 steps | 4.604 s | 4.298 s | 0.340% | $1.301\times10^{-7}$ s cell$^{-1}$ step$^{-1}$ |
-| fluid 2D production | $1024^2$ | 126 steps | 11.456 s | 11.116 s | 0.851% | $8.414\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
+| fluid 2D production | $1024^2$ | 126 steps | 7.682 s | 7.347 s | 0.631% | $5.561\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
 | fluid 3D baseline | $64^3$ | 491 steps | 8.536 s | 8.271 s | 0.118% | $6.426\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
-| fluid 3D production | $128^3$ | 1090 steps | 118.228 s | 117.926 s | 0.511% | $5.159\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
+| fluid 3D production | $128^3$ | 1090 steps | 78.755 s | 78.443 s | 1.018% | $3.432\times10^{-8}$ s cell$^{-1}$ step$^{-1}$ |
 | swarm KD-tree baseline | $10^5$ particles | 6631 batches | 60.838 s | 60.514 s | 1.361% | $9.126\times10^{-8}$ s particle$^{-1}$ batch$^{-1}$ |
 | swarm Morton baseline | $10^5$ particles | 6637 batches | 83.404 s | 83.044 s | 0.045% | $1.251\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
 | swarm KD-tree production | $10^6$ particles | 1156 batches | 170.785 s | 170.236 s | 6.339% | $1.473\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
 | swarm Morton production | $10^6$ particles | 1162 batches | 203.565 s | 202.997 s | 0.028% | $1.747\times10^{-7}$ s particle$^{-1}$ batch$^{-1}$ |
 
-The larger fluid cases have lower normalized cell-step costs, consistent with improved accelerator
-saturation; this is a throughput observation, not a convergence claim. Morton costs 1.37 times the
+The current production fluid timings are about 1.49 times faster in 2D and 1.50 times faster in 3D
+than the corresponding pre-optimization records. The larger fluid cases have lower normalized
+cell-step costs, consistent with improved accelerator saturation; this is a throughput observation,
+not a convergence claim. Morton costs 1.37 times the
 KD-tree operator per particle-batch at $10^5$ particles and 1.19 times at $10^6$ particles. The gap
 therefore narrows at the production particle count, but Morton does not establish an end-to-end
 speed advantage in either case. Its decomposition advantages remain separate questions. The
@@ -796,26 +809,24 @@ future campaigns.
 
 ### Native runtime trace on MI300A
 
-The instrumented `fluid_3d_production` trace completed normally on 2026-08-14 and recorded 8673
-kernel dispatches over the shortened one-code-time workload. Its 12.947 s aggregate kernel time is
+The current instrumented `fluid_3d_production` trace completed normally on 2026-08-16 and recorded
+8673 kernel dispatches over the shortened one-code-time workload. Its 8.644 s aggregate kernel time is
 distributed primarily as follows:
 
 | Kernel | Calls | Mean duration | Fraction of kernel time |
 |---|---:|---:|---:|
-| `advection_ybl` | 242 | 24.765 ms | 46.29% |
-| `advection_zbl` | 242 | 21.522 ms | 40.23% |
-| `advection_xbl` | 242 | 3.183 ms | 5.95% |
-| `cfl_rate_calc` | 845 | 0.506 ms | 3.30% |
-| all three diffusion kernels | 714 | -- | 3.43% |
+| `advection_ybl` | 242 | 16.622 ms | 46.53% |
+| `advection_zbl` | 242 | 13.119 ms | 36.73% |
+| `advection_xbl` | 242 | 2.360 ms | 6.61% |
+| `cfl_rate_calc` | 845 | 0.481 ms | 4.70% |
+| all three diffusion kernels | 714 | -- | 4.23% |
 
-Directional advection therefore accounts for 92.47% of measured kernel time, with the radial and
-polar block sweeps alone accounting for 86.52%. This trace changes the first counter target from
-`diffusion_ybl` to `advection_ybl`, followed by `advection_zbl`. Both compiled at 128 architectural
-VGPRs in this trace; the kernel metadata also reports 68 bytes of private storage for Y and 12 bytes
-for Z per work item. The instrumented trace is used only for attribution and not as a wall-time
-baseline.
+Directional advection therefore accounts for 89.87% of measured kernel time, with the radial and
+polar block sweeps alone accounting for 83.26%. The first counter target remains `advection_ybl`,
+followed by `advection_zbl`. The instrumented trace is used only for attribution and not as a
+wall-time baseline.
 
-### Native hardware-counter collection on MI300A
+### Pre-optimization hardware-counter baseline on MI300A
 
 A focused ROCm Compute Profiler campaign for `advection_ybl` completed normally on 2026-08-16. It
 used the same $128^3$ block-sweep fluid configuration, transport plus diffusion, `gfx942`, and
@@ -871,8 +882,8 @@ peak HBM saturation as the primary limiter. The 128-VGPR allocation, 68-byte scr
 nonzero resource-admission stalls instead show meaningful register/private-memory pressure; the
 counter set does not isolate scratch traffic from the other flat-memory operations.
 
-The corresponding low-risk source changes are now implemented but do not yet have native timing or
-counter evidence. ROCm block sweeps launch 64 work-items per workgroup, filling one native wave;
+The corresponding low-risk source changes are now implemented. ROCm block sweeps launch 64
+work-items per workgroup, filling one native wave;
 ordinary elementwise and thread-line kernels retain their existing `TPB`. All three block-advection
 directions now compute the low-order cell update cooperatively through a twelfth full-grid workspace
 field that stages the updated density, and the radial and polar SSPRK combinations are cooperative.
@@ -884,14 +895,34 @@ the state left by earlier accepted face corrections, so a colored or simultaneou
 would define a different discrete limiter rather than merely parallelize the present one. Splitting
 the monolithic kernel into phases remains a possible later experiment because it may reduce the
 128-VGPR and scratch requirements, at the cost of additional launches and global-workspace traffic.
-Before accepting the optimization as a performance result, rerun the complete fluid analytical
-suite, the 2D and 3D thread-versus-block field comparisons, the large-LDS launch tests, the
-production timing case, and the focused `advection_ybl` counter profile against the new source
-fingerprints.
+The current source has now passed the complete 85-record block analytical matrix, both matched
+thread/block comparisons, the large-LDS launch branch, five-repeat production timing, and a new
+runtime trace. Focused ROCm Compute Profiler runs for both `advection_ybl` and `advection_zbl` also
+returned zero and produced passing manifests. Both complete archives now retain 43 of 43 declared
+artifacts, including 13 raw replay records and the merged `pmc_perf.csv`. Each merged table contains
+six matched dispatches with internally consistent metadata:
 
-The next counter target remains `advection_zbl`, because the runtime trace attributes 40.23% of
-aggregate kernel time to that sweep. Its separate profile is needed before assuming that its
-bottleneck is identical to the radial kernel.
+| Quantity | `advection_ybl` | `advection_zbl` |
+|---|---:|---:|
+| work-items per workgroup | 64 | 64 |
+| architected VGPRs per work-item | 128 | 128 |
+| SGPRs per wave | 112 | 112 |
+| private scratch per work-item | 68 B | 28 B |
+| LDS per workgroup | 0 B | 0 B |
+| median duration | 16.650 ms | 13.138 ms |
+| resident waves per CU | 14.87 of 32 | 14.91 of 32 |
+| active work-items per VALU instruction | 2.26 of 64 | 3.09 of 64 |
+| L2 hit fraction | 76.41% | 78.97% |
+| estimated external traffic | 4.75 GB | 4.40 GB |
+| estimated external bandwidth | 285.5 GB/s | 335.0 GB/s |
+
+The 64-work-item launch now fills one native wave, but the mean active-lane counts remain small
+because the ordered antidiffusive correction still executes in thread zero. Neither kernel is close
+to saturating nominal HBM bandwidth, and both retain 128 architected VGPRs; the current evidence
+therefore continues to point toward serial work and register/private-memory pressure rather than an
+LDS or peak-bandwidth limit. `qav/perf/analyze_counters.py` records these values in
+`qav/perf/out/counter_analysis_yz.json` and rejects missing counters or inconsistent dispatch
+metadata.
 
 ## Performance work after correctness
 

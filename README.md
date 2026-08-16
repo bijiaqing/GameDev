@@ -634,8 +634,8 @@ relevant observables.
 - The collision timestep can become globally restrictive in dense or strongly clumped regions
 - Collision KNN searches use a local planar metric with a documented search-radius validity limit
 - Multi-GPU domain decomposition is not implemented
-- The ROCm backend is tracked but still uses a separate build root; unified backend selection and
-  focused hardware-counter profiling remain pending
+- The ROCm backend is tracked but still uses a separate build root; unified backend selection
+  remains pending
 - `--use_fast_math`, backend choice, and CUDA architecture can change rounding and long-time
   trajectories; reproducibility claims must record the build environment
 - Some long-time, imported-gas, extreme-vacuum, and large-production collision regimes remain less
