@@ -64,11 +64,11 @@ int main ()
     lds_usage usage = require_lds(kernel, dynamic_lds, kernel_name);
     constexpr real dt = 1.0e-8;
     #ifdef VERIFY_LDS_X
-    diffusion_xbl <<< block_count, TPB, dynamic_lds >>> (dev_rhod, dev_mx, dev_my, dev_mz, dt);
+    diffusion_xbl <<< block_count, TPB_BLOCK, dynamic_lds >>> (dev_rhod, dev_mx, dev_my, dev_mz, dt);
     #elif defined(VERIFY_LDS_Y)
-    diffusion_ybl <<< block_count, TPB, dynamic_lds >>> (dev_rhod, dev_mx, dev_my, dev_mz, dt);
+    diffusion_ybl <<< block_count, TPB_BLOCK, dynamic_lds >>> (dev_rhod, dev_mx, dev_my, dev_mz, dt);
     #elif defined(VERIFY_LDS_Z)
-    diffusion_zbl <<< block_count, TPB, dynamic_lds >>> (dev_rhod, dev_mx, dev_my, dev_mz, dt);
+    diffusion_zbl <<< block_count, TPB_BLOCK, dynamic_lds >>> (dev_rhod, dev_mx, dev_my, dev_mz, dt);
     #endif
     HIP_CHECK(hipGetLastError());
     HIP_CHECK(hipDeviceSynchronize());

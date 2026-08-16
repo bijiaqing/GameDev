@@ -5,7 +5,7 @@
 // =========================================================================================================================
 // kernel: advection_zbl
 // purpose: reproduce the thread-sweep polar SSPRK and PPM update with one cooperative block per column
-// workspace: reuse 11 explicit full-grid fields and retain serial invariant-domain correction order within each column
+// workspace: reuse 12 explicit full-grid fields and retain serial invariant-domain correction order within each column
 // =========================================================================================================================
 
 __device__ __forceinline__
@@ -58,6 +58,7 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     real *anti_mx = _block_field(dev_adv_work, BLOCK_ANTI_MX, idx_col, N_Z);
     real *anti_my = _block_field(dev_adv_work, BLOCK_ANTI_MY, idx_col, N_Z);
     real *anti_mz = _block_field(dev_adv_work, BLOCK_ANTI_MZ, idx_col, N_Z);
+    real *rhod_low = _block_field(dev_adv_work, BLOCK_RHOD_LOW, idx_col, N_Z);
 
     real y = _get_ycent(iy);
     real geom_z = _get_area_z(iy) / _get_vol_y(iy);
@@ -123,38 +124,51 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
         __syncthreads();
 
-        if (threadIdx.x == 0)
+        // apply the geometry-aware low-order update independently in every polar cell
+        for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
         {
-            // apply the spherical low-order update in deterministic polar order
-            real speed_i = lz[0] / y;
-            real flux_rhod_i = (speed_i < 0.0) ? speed_i*fmax(rhod[0], 0.0) : 0.0;
-            real flux_mx_i = flux_rhod_i*lx[0];
-            real flux_my_i = flux_rhod_i*vy[0];
-            real flux_mz_i = flux_rhod_i*lz[0];
-
-            for (int iz = 0; iz < N_Z; iz++)
+            real flux_rhod_i, flux_mx_i, flux_my_i, flux_mz_i;
+            if (iz == 0)
             {
-                real flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o;
+                real speed_i = lz[0] / y;
+                flux_rhod_i = (speed_i < 0.0) ? speed_i*fmax(rhod[0], 0.0) : 0.0;
+                flux_mx_i = flux_rhod_i*lx[0];
+                flux_my_i = flux_rhod_i*vy[0];
+                flux_mz_i = flux_rhod_i*lz[0];
+            }
+            else
+            {
                 _block_z_lowflux(
-                    iz, y, rhod, lx, vy, lz,
-                    flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o
+                    iz - 1, y, rhod, lx, vy, lz,
+                    flux_rhod_i, flux_mx_i, flux_my_i, flux_mz_i
                 );
-
-                real z_i = _get_zface(iz);
-                real z_o = _get_zface(iz + 1);
-                real vol_z = _get_vol_z(iz);
-                rhod[iz] -= dt*geom_z*(sin(z_o)*flux_rhod_o - sin(z_i)*flux_rhod_i) / vol_z;
-                mx[iz] -= dt*geom_z*(sin(z_o)*flux_mx_o - sin(z_i)*flux_mx_i) / vol_z;
-                my[iz] -= dt*geom_z*(sin(z_o)*flux_my_o - sin(z_i)*flux_my_i) / vol_z;
-                mz[iz] -= dt*geom_z*(sin(z_o)*flux_mz_o - sin(z_i)*flux_mz_i) / vol_z;
-                if (rhod[iz] < 0.0) rhod[iz] = mx[iz] = my[iz] = mz[iz] = 0.0;
-
-                flux_rhod_i = flux_rhod_o;
-                flux_mx_i = flux_mx_o;
-                flux_my_i = flux_my_o;
-                flux_mz_i = flux_mz_o;
             }
 
+            real flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o;
+            _block_z_lowflux(
+                iz, y, rhod, lx, vy, lz,
+                flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o
+            );
+
+            real z_i = _get_zface(iz);
+            real z_o = _get_zface(iz + 1);
+            real vol_z = _get_vol_z(iz);
+            rhod_low[iz] = rhod[iz] - dt*geom_z*(sin(z_o)*flux_rhod_o - sin(z_i)*flux_rhod_i) / vol_z;
+            mx[iz] -= dt*geom_z*(sin(z_o)*flux_mx_o - sin(z_i)*flux_mx_i) / vol_z;
+            my[iz] -= dt*geom_z*(sin(z_o)*flux_my_o - sin(z_i)*flux_my_i) / vol_z;
+            mz[iz] -= dt*geom_z*(sin(z_o)*flux_mz_o - sin(z_i)*flux_mz_i) / vol_z;
+            if (rhod_low[iz] < 0.0) rhod_low[iz] = mx[iz] = my[iz] = mz[iz] = 0.0;
+        }
+        __syncthreads();
+
+        for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
+        {
+            rhod[iz] = rhod_low[iz];
+        }
+        __syncthreads();
+
+        if (threadIdx.x == 0)
+        {
             // restore antidiffusive transfers with one invariant-domain scale per interior face
             for (int iz = 0; iz < N_Z - 1; iz++)
             {
@@ -200,18 +214,19 @@ void advection_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 my[iz + 1] += scale*corr_my_R;
                 mz[iz + 1] += scale*corr_mz_R;
             }
+        }
+        __syncthreads();
 
-            if (stage == 1)
+        if (stage == 1)
+        {
+            // form the second SSPRK stage from the original and twice-Euler-updated states
+            for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
             {
-                // form the second SSPRK stage from the original and twice-Euler-updated states
-                for (int iz = 0; iz < N_Z; iz++)
-                {
-                    int idx_cell = idx_base + iz*N_X*N_Y;
-                    rhod[iz] = 0.75*dev_dustdens[idx_cell] + 0.25*rhod[iz];
-                    mx[iz] = 0.75*dev_dustmomx[idx_cell] + 0.25*mx[iz];
-                    my[iz] = 0.75*dev_dustmomy[idx_cell] + 0.25*my[iz];
-                    mz[iz] = 0.75*dev_dustmomz[idx_cell] + 0.25*mz[iz];
-                }
+                int idx_cell = idx_base + iz*N_X*N_Y;
+                rhod[iz] = 0.75*dev_dustdens[idx_cell] + 0.25*rhod[iz];
+                mx[iz] = 0.75*dev_dustmomx[idx_cell] + 0.25*mx[iz];
+                my[iz] = 0.75*dev_dustmomy[idx_cell] + 0.25*my[iz];
+                mz[iz] = 0.75*dev_dustmomz[idx_cell] + 0.25*mz[iz];
             }
         }
         __syncthreads();

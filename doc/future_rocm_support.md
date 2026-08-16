@@ -812,15 +812,92 @@ Directional advection therefore accounts for 92.47% of measured kernel time, wit
 polar block sweeps alone accounting for 86.52%. This trace changes the first counter target from
 `diffusion_ybl` to `advection_ybl`, followed by `advection_zbl`. Both compiled at 128 architectural
 VGPRs in this trace; the kernel metadata also reports 68 bytes of private storage for Y and 12 bytes
-for Z per work item. Hardware counters are still needed to decide whether VGPR-limited occupancy,
-scratch traffic, memory access, barriers, or serial line work dominates. The instrumented trace is
-used only for attribution and not as a wall-time baseline.
+for Z per work item. The instrumented trace is used only for attribution and not as a wall-time
+baseline.
+
+### Native hardware-counter collection on MI300A
+
+A focused ROCm Compute Profiler campaign for `advection_ybl` completed normally on 2026-08-16. It
+used the same $128^3$ block-sweep fluid configuration, transport plus diffusion, `gfx942`, and
+$\mathrm{CFL}=0.45$, shortened to $0.1$ code-time unit for instrumentation. All 13 required counter
+passes returned zero and reproduced the same one-step simulation state. The manifest records 43
+artifacts, including the 13 raw counter collections, the merged `pmc_perf.csv`, profiler
+configuration, system information, and per-counter configuration files. This establishes that the
+kernel can be profiled reproducibly on the MI300A and that the counter collection itself completed;
+it is not a numerical-convergence test or an uninstrumented timing measurement.
+
+This collection was launched before the subsequent exact polar-face metric correction. That change
+does not alter the profiled radial `advection_ybl` formulas, so the profile remains useful for this
+kernel, but its archived source fingerprint must not be presented as a profile of the complete
+post-correction tree.
+
+The native workload directory has since been archived with the merged counter table. It contains
+six matched `advection_ybl` dispatches. Each dispatch launches 16384 workgroups of 32 work-items,
+one workgroup for each radial column. On gfx942, the recorded wave size is 64, so even the
+cooperative portions of that archived source version could activate at most half of each wave. The
+median raw counters are
+
+| Quantity | Measured value |
+|---|---:|
+| architected VGPRs | 128 per work-item |
+| SGPRs | 112 per wave |
+| private scratch | 68 B per work-item |
+| LDS | 0 B per workgroup |
+| dispatched waves | 16384 |
+| time-averaged resident waves | about 14.83 of 32 per CU |
+| VALU-active work-items | about 1.33 of 64 per VALU instruction |
+| L2 hit fraction | about 83.64% |
+| L2 miss fraction | about 16.13% |
+| VALU instructions | $1.099\times10^{10}$ per dispatch |
+| scalar instructions | $2.374\times10^9$ per dispatch |
+| vector-memory instructions | $3.250\times10^8$ per dispatch |
+| LDS instructions and bank conflicts | 0 |
+
+The resident-wave estimate is the median ratio
+$\mathtt{SQ\_LEVEL\_WAVES}/\mathtt{SQ\_BUSY\_CU\_CYCLES}$; relative to the device limit of 32
+waves per CU it is about 46.3%. The active-work-item result follows from
+$\mathtt{SQ\_THREAD\_CYCLES\_VALU}/\mathtt{SQ\_INSTS\_VALU}$ and is the more important result:
+only about 2.07% of the 64 lanes participate in the average VALU instruction. This agrees with the
+profiled source structure. Cooperative reconstruction used only 32 lanes, while the geometry-aware
+low-order update, ordered invariant-domain correction, and one SSPRK combination executed entirely
+in thread zero. The block advection kernel uses the explicit global `dev_adv_work` fields rather
+than LDS, so LDS capacity or bank conflicts cannot explain its cost.
+
+Using the L2-to-memory transaction counters and the independently traced mean duration gives an
+approximate 5.1 GB of external traffic and roughly 206 GB/s per dispatch. This is only about 3.9%
+of the MI300A's reported 5.325 TB/s peak bandwidth. The estimate combines replayed counters with a
+separate trace and is therefore diagnostic rather than a bandwidth benchmark, but it rules out
+peak HBM saturation as the primary limiter. The 128-VGPR allocation, 68-byte scratch frame, and
+nonzero resource-admission stalls instead show meaningful register/private-memory pressure; the
+counter set does not isolate scratch traffic from the other flat-memory operations.
+
+The corresponding low-risk source changes are now implemented but do not yet have native timing or
+counter evidence. ROCm block sweeps launch 64 work-items per workgroup, filling one native wave;
+ordinary elementwise and thread-line kernels retain their existing `TPB`. All three block-advection
+directions now compute the low-order cell update cooperatively through a twelfth full-grid workspace
+field that stages the updated density, and the radial and polar SSPRK combinations are cooperative.
+The CUDA source uses the same staged update for cross-backend algorithmic parity while retaining its
+original 32-thread block-sweep launch.
+
+The ordered antidiffusive correction deliberately remains in thread zero. Its face scale depends on
+the state left by earlier accepted face corrections, so a colored or simultaneous implementation
+would define a different discrete limiter rather than merely parallelize the present one. Splitting
+the monolithic kernel into phases remains a possible later experiment because it may reduce the
+128-VGPR and scratch requirements, at the cost of additional launches and global-workspace traffic.
+Before accepting the optimization as a performance result, rerun the complete fluid analytical
+suite, the 2D and 3D thread-versus-block field comparisons, the large-LDS launch tests, the
+production timing case, and the focused `advection_ybl` counter profile against the new source
+fingerprints.
+
+The next counter target remains `advection_zbl`, because the runtime trace attributes 40.23% of
+aggregate kernel time to that sweep. Its separate profile is needed before assuming that its
+bottleneck is identical to the radial kernel.
 
 ## Performance work after correctness
 
 Only after the native matrices pass should the port evaluate:
 
-- 64, 128, and 256 threads per block on the 64-lane architecture
+- 128 and 256 block-sweep work-items against the new 64-work-item native-wave baseline
 - thread-line versus block-line fluid sweeps
 - device-only fast math with finite-value semantics restored
 - removal of `-fgpu-rdc` after a successful non-RDC link and full regression

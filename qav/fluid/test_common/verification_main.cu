@@ -448,7 +448,7 @@ int main ()
     auto apply_advection_x = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
-        advection_xbl <<< N_Y*N_Z, TPB >>> (
+        advection_xbl <<< N_Y*N_Z, TPB_BLOCK >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dev_adv_work, dt
         );
         CUDA_KERNEL_CHECK("advection_xbl");
@@ -461,7 +461,7 @@ int main ()
     auto apply_advection_y = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
-        advection_ybl <<< N_X*N_Z, TPB >>> (
+        advection_ybl <<< N_X*N_Z, TPB_BLOCK >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_y, dev_adv_work, dt
         );
         CUDA_KERNEL_CHECK("advection_ybl");
@@ -474,7 +474,7 @@ int main ()
     auto apply_advection_z = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
-        advection_zbl <<< N_X*N_Y, TPB >>> (
+        advection_zbl <<< N_X*N_Y, TPB_BLOCK >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dev_weight_z, dev_adv_work, dt
         );
         CUDA_KERNEL_CHECK("advection_zbl");
@@ -489,7 +489,7 @@ int main ()
     auto apply_diffusion_x = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
+        diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dt
         );
         CUDA_KERNEL_CHECK("diffusion_xbl");
@@ -502,7 +502,7 @@ int main ()
     auto apply_diffusion_y = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
+        diffusion_ybl <<< N_X*N_Z, TPB_BLOCK, sizeof(real)*6*N_Y >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dt
         );
         CUDA_KERNEL_CHECK("diffusion_ybl");
@@ -515,7 +515,7 @@ int main ()
     auto apply_diffusion_z = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+        diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (
             dev_dens, dev_momx, dev_momy, dev_momz, dt
         );
         CUDA_KERNEL_CHECK("diffusion_zbl");

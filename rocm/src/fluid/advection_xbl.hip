@@ -5,7 +5,7 @@
 // =========================================================================================================================
 // kernel: advection_xbl
 // purpose: reproduce the thread-sweep FARGO and PPM update with one cooperative block per azimuthal ring
-// workspace: reuse 11 explicit full-grid fields and retain serial invariant-domain correction order within each ring
+// workspace: reuse 12 explicit full-grid fields and retain serial invariant-domain correction order within each ring
 // =========================================================================================================================
 
 __device__ __forceinline__
@@ -66,6 +66,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     real *anti_mx = _block_field(dev_adv_work, BLOCK_ANTI_MX, idx_ring, N_X);
     real *anti_my = _block_field(dev_adv_work, BLOCK_ANTI_MY, idx_ring, N_X);
     real *anti_mz = _block_field(dev_adv_work, BLOCK_ANTI_MZ, idx_ring, N_X);
+    real *rhod_low = _block_field(dev_adv_work, BLOCK_RHOD_LOW, idx_ring, N_X);
 
     real dx = _get_dx();
     real y = _get_ycent(iy);
@@ -149,50 +150,38 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     }
     __syncthreads();
 
+    // apply the periodic low-order update independently in every azimuthal cell
+    for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
+    {
+        int ixm1 = (ix - 1 + N_X) % N_X;
+        real flux_rhod_i, flux_mx_i, flux_my_i, flux_mz_i;
+        _block_x_lowflux(
+            ixm1, R, lx_frame, rhod, lx, vy, lz,
+            flux_rhod_i, flux_mx_i, flux_my_i, flux_mz_i
+        );
+
+        real flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o;
+        _block_x_lowflux(
+            ix, R, lx_frame, rhod, lx, vy, lz,
+            flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o
+        );
+
+        rhod_low[ix] = rhod[ix] - dt*(flux_rhod_o - flux_rhod_i) / dx;
+        mx[ix] -= dt*(flux_mx_o - flux_mx_i) / dx;
+        my[ix] -= dt*(flux_my_o - flux_my_i) / dx;
+        mz[ix] -= dt*(flux_mz_o - flux_mz_i) / dx;
+        if (rhod_low[ix] < 0.0) rhod_low[ix] = mx[ix] = my[ix] = mz[ix] = 0.0;
+    }
+    __syncthreads();
+
+    for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
+    {
+        rhod[ix] = rhod_low[ix];
+    }
+    __syncthreads();
+
     if (threadIdx.x == 0)
     {
-        // apply the low-order update in deterministic face order
-        real flux_rhod_wrap, flux_mx_wrap, flux_my_wrap, flux_mz_wrap;
-        _block_x_lowflux(
-            N_X - 1, R, lx_frame, rhod, lx, vy, lz,
-            flux_rhod_wrap, flux_mx_wrap, flux_my_wrap, flux_mz_wrap
-        );
-        real flux_rhod_i = flux_rhod_wrap;
-        real flux_mx_i = flux_mx_wrap;
-        real flux_my_i = flux_my_wrap;
-        real flux_mz_i = flux_mz_wrap;
-
-        // advance the low-order conservative state through the periodic flux divergence
-        for (int ix = 0; ix < N_X; ix++)
-        {
-            real flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o;
-            if (ix < N_X - 1)
-            {
-                _block_x_lowflux(
-                    ix, R, lx_frame, rhod, lx, vy, lz,
-                    flux_rhod_o, flux_mx_o, flux_my_o, flux_mz_o
-                );
-            }
-            else
-            {
-                flux_rhod_o = flux_rhod_wrap;
-                flux_mx_o = flux_mx_wrap;
-                flux_my_o = flux_my_wrap;
-                flux_mz_o = flux_mz_wrap;
-            }
-
-            rhod[ix] -= dt*(flux_rhod_o - flux_rhod_i) / dx;
-            mx[ix] -= dt*(flux_mx_o - flux_mx_i) / dx;
-            my[ix] -= dt*(flux_my_o - flux_my_i) / dx;
-            mz[ix] -= dt*(flux_mz_o - flux_mz_i) / dx;
-            if (rhod[ix] < 0.0) rhod[ix] = mx[ix] = my[ix] = mz[ix] = 0.0;
-
-            flux_rhod_i = flux_rhod_o;
-            flux_mx_i = flux_mx_o;
-            flux_my_i = flux_my_o;
-            flux_mz_i = flux_mz_o;
-        }
-
         // restore antidiffusive fluxes with one conservative invariant-domain scale per face
         for (int ix = 0; ix < N_X; ix++)
         {

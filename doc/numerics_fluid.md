@@ -1658,12 +1658,15 @@ of approximately 168 KiB (172 kB) per thread at `N_X = 1024` if all arrays remai
 Compiler lifetime reuse can reduce that footprint, so `ptxas` resource reports and profiler
 local-memory traffic are the authoritative measures.
 
-The block implementation replaces those advection arrays with 11 persistent full-grid workspace
+The block implementation replaces those advection arrays with 12 persistent full-grid workspace
 fields and places four azimuthal or six radial/polar diffusion work arrays in dynamic shared
-memory. Cellwise reconstruction and flux work are cooperative, while the face-ordered
-invariant-domain correction and Thomas or Sherman–Morrison recurrence remain serial within each
-line to preserve the verified numerical ordering. This is an implementation and memory-layout
-choice, not a different numerical method.
+memory. Eleven advection fields hold the conserved state, recovered primitives, and antidiffusive
+fluxes; the twelfth stages the low-order density update so cells can advance cooperatively without
+reading density already overwritten by another thread. Cellwise reconstruction, low-order update,
+and SSPRK combinations are cooperative, while the face-ordered invariant-domain correction and
+Thomas or Sherman–Morrison recurrence remain serial within each line to preserve the verified
+numerical ordering. This is an implementation and memory-layout choice, not a different numerical
+method.
 
 Performance is grid dependent. Historical development comparisons found the block method faster for a
 `1024^2` transport model but slower for a `128^3` diffusion model. The intended production grid
@@ -1685,10 +1688,13 @@ The thread implementation assigns one thread to each line, whereas the block imp
 assigns one block to each line. Its persistent advection workspace is
 
 $$
-M_{\rm adv,work}=11N_G\,\mathrm{sizeof}(\mathtt{real}),
+M_{\rm adv,work}=12N_G\,\mathrm{sizeof}(\mathtt{real}).
 $$
 
-and its dynamic shared-memory requirements per diffusion block are
+For double precision this is 96 MiB at $1024^2$ and 192 MiB at $128^3$. The extra staged-density
+field costs one additional full-grid array relative to the former serial low-order block update.
+
+The dynamic shared-memory requirements per diffusion block are
 
 $$
 M_{{\rm sh},x}=4N_X\,\mathrm{sizeof}(\mathtt{real}),

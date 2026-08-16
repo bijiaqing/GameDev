@@ -12,6 +12,8 @@
 
 #ifdef FLUID_BLOCK_SWEEP
 
+const int TPB_BLOCK = 64;
+
 enum BlockAdvField
 {
     BLOCK_RHOD = 0,
@@ -25,6 +27,7 @@ enum BlockAdvField
     BLOCK_ANTI_MX,
     BLOCK_ANTI_MY,
     BLOCK_ANTI_MZ,
+    BLOCK_RHOD_LOW,
     BLOCK_ADV_FIELDS
 };
 

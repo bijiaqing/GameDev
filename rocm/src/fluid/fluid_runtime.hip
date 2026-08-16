@@ -251,7 +251,7 @@ int main (int argc, char **argv)
             ));
 
             #ifdef FLUID_BLOCK_SWEEP
-            advection_xbl <<< N_Y*N_Z, TPB >>> (
+            advection_xbl <<< N_Y*N_Z, TPB_BLOCK >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt_sub
             );
             HIP_KERNEL_CHECK("advection_xbl");
@@ -281,7 +281,7 @@ int main (int argc, char **argv)
             ));
 
             #ifdef FLUID_BLOCK_SWEEP
-            advection_ybl <<< N_X*N_Z, TPB >>> (
+            advection_ybl <<< N_X*N_Z, TPB_BLOCK >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dev_adv_work, dt_sub
             );
             HIP_KERNEL_CHECK("advection_ybl");
@@ -311,7 +311,7 @@ int main (int argc, char **argv)
             ));
 
             #ifdef FLUID_BLOCK_SWEEP
-            advection_zbl <<< N_X*N_Y, TPB >>> (
+            advection_zbl <<< N_X*N_Y, TPB_BLOCK >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dev_adv_work, dt_sub
             );
             HIP_KERNEL_CHECK("advection_zbl");
@@ -339,7 +339,7 @@ int main (int argc, char **argv)
         // apply the opening half of the symmetric diffusion composition
         #ifdef DIFFUSION
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
+        diffusion_ybl <<< N_X*N_Z, TPB_BLOCK, sizeof(real)*6*N_Y >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         HIP_KERNEL_CHECK("diffusion_ybl");
@@ -357,7 +357,7 @@ int main (int argc, char **argv)
         #endif // HIP_SYNC_TRACE
 
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
+        diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         HIP_KERNEL_CHECK("diffusion_xbl");
@@ -375,7 +375,7 @@ int main (int argc, char **argv)
         #endif // HIP_SYNC_TRACE
 
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+        diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         HIP_KERNEL_CHECK("diffusion_zbl");
@@ -454,17 +454,17 @@ int main (int argc, char **argv)
         // close the symmetric diffusion composition in reverse order
         #ifdef DIFFUSION
         #ifdef FLUID_BLOCK_SWEEP
-        diffusion_zbl <<< N_X*N_Y, TPB, sizeof(real)*6*N_Z >>> (
+        diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         HIP_KERNEL_CHECK("diffusion_zbl");
 
-        diffusion_xbl <<< N_Y*N_Z, TPB, sizeof(real)*4*N_X >>> (
+        diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         HIP_KERNEL_CHECK("diffusion_xbl");
 
-        diffusion_ybl <<< N_X*N_Z, TPB, sizeof(real)*6*N_Y >>> (
+        diffusion_ybl <<< N_X*N_Z, TPB_BLOCK, sizeof(real)*6*N_Y >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         HIP_KERNEL_CHECK("diffusion_ybl");
