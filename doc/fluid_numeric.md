@@ -161,10 +161,10 @@ The radial finite-volume measure is
 \Delta V_y=\frac{y_{\rm out}^d-y_{\rm in}^d}{d},
 \qquad
 d=
-\begin{cases}
+\left\{\begin{array}{ll}
 2,&N_Z=1,\\
 3,&N_Z>1.
-\end{cases}
+\end{array}\right.
 ```
 
 The polar measure is $\Delta V_z=\cos z_{\rm in}-\cos z_{\rm out}$ when the polar dimension is active.
@@ -176,10 +176,10 @@ The complete cell measure can be written
 ```math
 V_{ijk}=\Delta x\,
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
-\begin{cases}
+\left\{\begin{array}{ll}
 1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1.
-\end{cases}
+\end{array}\right.
 ```
 
 Radial fluxes use $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution
@@ -589,10 +589,10 @@ is the finite-volume integral of the resulting field rather than a separately im
 
 ```math
 M_d=
-\begin{cases}
+\left\{\begin{array}{ll}
 \displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\\
 \displaystyle\int\rho_d(r,\theta,\phi)r^2\sin\theta\,dr\,d\theta\,d\phi,&N_Z>1.
-\end{cases}
+\end{array}\right.
 ```
 
 ### 3.3 Initial velocity
@@ -630,10 +630,10 @@ v_{R,g}
 =-\frac{3\nu}{R}\left(g_\nu+p+\frac12\right),
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
-=\begin{cases}
+=\left\{\begin{array}{ll}
 0,&\nu=\mathrm{constant},\\
 q+\frac32,&\alpha=\mathrm{constant}.
-\end{cases}
+\end{array}\right.
 ```
 
 For the resolved 3D expression, define
@@ -1120,10 +1120,10 @@ At an outflow-only boundary with outward normal speed $a_n$, the boundary mass f
 
 ```math
 F_\varrho=
-\begin{cases}
+\left\{\begin{array}{ll}
 a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
 0,&a_n\text{ points into the domain},
-\end{cases}
+\end{array}\right.
 \qquad
 F_{m_a}=F_\varrho u_a.
 ```
@@ -1271,10 +1271,10 @@ where
 
 ```math
 \rho_{\rm ext}=
-\begin{cases}
+\left\{\begin{array}{ll}
 \Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\\
 \rho_d,&N_Z>1.
-\end{cases}
+\end{array}\right.
 ```
 
 The stored outer-face value is the inclusive radial prefix sum
@@ -1459,10 +1459,10 @@ For each stored primitive $u_a\in\{\ell_\phi,v_r,\ell_\theta\}$, the associated 
 =\mathcal F_{\rho,i+1/2}u_{a,\rm donor},
 \qquad
 u_{a,\rm donor}=
-\begin{cases}
+\left\{\begin{array}{ll}
 u_{a,i},&\mathcal F_{\rho,i+1/2}\ge0,\\
 u_{a,i+1},&\mathcal F_{\rho,i+1/2}<0,
-\end{cases}
+\end{array}\right.
 ```
 
 followed by

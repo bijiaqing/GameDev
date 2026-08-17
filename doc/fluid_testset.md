@@ -317,10 +317,10 @@ the two relevant Jacobians. Define
 
 ```math
 B(y)=
-\begin{cases}
+\left\{\begin{array}{ll}
 \exp\!\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\\
 0,&|u|\ge1,
-\end{cases}
+\end{array}\right.
 \qquad
 u=\frac{y-1.4}{0.4},
 ```
@@ -491,10 +491,10 @@ $y^p$ and
 
 ```math
 \tau(y)=
-\begin{cases}
+\left\{\begin{array}{ll}
 \dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\\
 \ln(y/Y_{\min}),&p=-1.
-\end{cases}
+\end{array}\right.
 ```
 
 at every radial outer face. The powers $p=0,-1,1$ exercise a constant integrand, the logarithmic

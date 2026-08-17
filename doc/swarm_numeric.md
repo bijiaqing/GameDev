@@ -173,20 +173,20 @@ Then the exact cell measure used for deposition is
 ```math
 V_{ijk}=\Delta\phi_{\rm cell}
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
-\begin{cases}
+\left\{\begin{array}{ll}
 1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1,
-\end{cases}
+\end{array}\right.
 ```
 
 where
 
 ```math
 \Delta\phi_{\rm cell}=
-\begin{cases}
+\left\{\begin{array}{ll}
 \Delta x,&N_X>1,\\
 2\pi,&N_X=1.
-\end{cases}
+\end{array}\right.
 ```
 
 The $2\pi$ branch is essential: an axisymmetric radial or radial–polar cell represents a complete
@@ -453,10 +453,10 @@ branch holds $\nu$ constant:
 
 ```math
 \nu(R)=
-\begin{cases}
+\left\{\begin{array}{ll}
 \alpha h_g^2R^2\Omega_K,&\text{constant }\mathtt{ALPHA},\\
 \mathrm{NU},&\text{constant }\mathtt{NU}.
-\end{cases}
+\end{array}\right.
 ```
 
 For the constant-viscosity branch, the corresponding local turbulent parameter is
@@ -882,10 +882,10 @@ v_{R,g}=-\frac{3\nu}{R}
 \left(g_\nu+p+\frac12\right),
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
-=\begin{cases}
+=\left\{\begin{array}{ll}
 0,&\nu=\mathrm{constant},\\
 q+3/2,&\alpha=\mathrm{constant}.
-\end{cases}
+\end{array}\right.
 ```
 
 For a resolved vertical domain, define
@@ -1339,11 +1339,11 @@ where
 
 ```math
 s_{\rm bound}=
-\begin{cases}
+\left\{\begin{array}{ll}
 S_0,&\text{monodisperse},\\
 s_i,&\text{multisize without collisions},\\
 \min(s_i,s_{\min}),&\text{multisize with collisions}.
-\end{cases}
+\end{array}\right.
 ```
 
 Omitting attenuation and the time ramp makes the rate conservative before the local optical depth
@@ -1411,10 +1411,10 @@ Let the physical mass represented by swarm $p$ be
 
 ```math
 W_p=
-\begin{cases}
+\left\{\begin{array}{ll}
 m_g(s_p)N_p,&\text{multisize},\\
 M_{\rm dust}/N_P,&\text{monodisperse}.
-\end{cases}
+\end{array}\right.
 ```
 
 Its extinction weight is
@@ -1691,10 +1691,10 @@ For the analytic viscosity law $D_R\propto R^{g_D}$,
 \partial_RD_R+\frac{D_R}{R}=\frac{(g_D+1)D_R}{R},
 \qquad
 g_D=
-\begin{cases}
+\left\{\begin{array}{ll}
 0,&\nu=\mathrm{constant},\\
 q+3/2,&\alpha=\mathrm{constant}.
-\end{cases}
+\end{array}\right.
 ```
 
 These drift terms are required for the Fokker–Planck equation to be
@@ -1922,12 +1922,12 @@ The turbulent Reynolds number is calibrated as
 
 ```math
 \mathrm{Re}=
-\begin{cases}
+\left\{\begin{array}{ll}
 \mathrm{Re}_0
 \dfrac{\alpha}{\alpha_0}
 \dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\\
 \dfrac{\alpha\Sigma_gX_{\rm sec}}{2M_{\rm mol}},&\text{physical-unit collision model}.
-\end{cases}
+\end{array}\right.
 ```
 
 The implementation writes $\Delta v_T^2=v_g^2B$ with the six Ormel–Cuzzi regimes
@@ -2544,10 +2544,10 @@ Ignoring allocator and alignment overhead, the persistent particle-state storage
 
 ```math
 M_{\rm particle}=N_P
-\begin{cases}
+\left\{\begin{array}{ll}
 6\,\mathrm{sizeof}(\mathtt{real}),&\text{monodisperse},\\
 8\,\mathrm{sizeof}(\mathtt{real}),&\text{multisize}.
-\end{cases}
+\end{array}\right.
 ```
 
 Diffusion or collisions additionally require one opaque backend RNG state per representative. KNN
