@@ -174,7 +174,7 @@ $$
 V_{ijk}=\Delta\phi_{\rm cell}
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
 \begin{cases}
-1,&N_Z=1,\\[2pt]
+1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1,
 \end{cases}
 $$
@@ -818,7 +818,7 @@ Finally,
 $$
 y=\sqrt{R^2+Z^2},
 \qquad
-z=\operatorname{atan2}(R,Z),
+z=\mathrm{atan2}(R,Z),
 $$
 
 while $x$ is uniform over the active azimuthal interval or exactly centered when azimuth is
@@ -1412,7 +1412,7 @@ Let the physical mass represented by swarm $p$ be
 $$
 W_p=
 \begin{cases}
-m_g(s_p)N_p,&\text{multisize},\\[2pt]
+m_g(s_p)N_p,&\text{multisize},\\
 M_{\rm dust}/N_P,&\text{monodisperse}.
 \end{cases}
 $$
@@ -1511,7 +1511,7 @@ f_\beta(t)e^{-\tau},
 \qquad
 f_\beta=s_t^2(3-2s_t),
 \qquad
-s_t=\operatorname{clip}(t/T_\beta,0,1).
+s_t=\mathrm{clip}(t/T_\beta,0,1).
 $$
 
 With radiation enabled, transport first drifts particles to midpoint positions, reconstructs
@@ -1925,7 +1925,7 @@ $$
 \begin{cases}
 \mathrm{Re}_0
 \dfrac{\alpha}{\alpha_0}
-\dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\\[10pt]
+\dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\\
 \dfrac{\alpha\Sigma_gX_{\rm sec}}{2M_{\rm mol}},&\text{physical-unit collision model}.
 \end{cases}
 $$
@@ -1936,24 +1936,24 @@ $$
 B=
 \begin{cases}
 \dfrac{(S-s)^2}{r_\eta},
-&S<0.2r_\eta,\\[8pt]
+&S<0.2r_\eta,\\
 \dfrac{S-s}{S+s}
 \left(\dfrac{S}{1+r_\eta/S}-\dfrac{s}{1+r_\eta/s}\right),
-&0.2r_\eta\le S<r_\eta/y_a,\\[10pt]
+&0.2r_\eta\le S<r_\eta/y_a,\\
 B_3,
-&r_\eta/y_a\le S<5r_\eta,\\[4pt]
+&r_\eta/y_a\le S<5r_\eta,\\
 S\left[
 2y_a-(1+\epsilon)
 +\dfrac{2}{1+\epsilon}
 \left(\dfrac{1}{1+y_a}+\dfrac{\epsilon^3}{y_a+\epsilon}\right)
 \right],
-&5r_\eta\le S<0.2,\\[10pt]
+&5r_\eta\le S<0.2,\\
 S\left[
 2y_s-(1+\epsilon)
 +\dfrac{2}{1+\epsilon}
 \left(\dfrac{1}{1+y_s}+\dfrac{\epsilon^3}{y_s+\epsilon}\right)
 \right],
-&0.2\le S<1,\\[10pt]
+&0.2\le S<1,\\
 \dfrac{1}{1+S}+\dfrac{1}{1+s},
 &S\ge1,
 \end{cases}
@@ -2136,7 +2136,7 @@ For root origin $\boldsymbol o$, width $W$, and maximum level $L$, each Cartesia
 quantized as
 
 $$
-I_\alpha=\operatorname{clip}\left(
+I_\alpha=\mathrm{clip}\left(
 \left\lfloor\frac{2^L(x_\alpha-o_\alpha)}{W}\right\rfloor,
 0,2^L-1
 \right).
@@ -2238,8 +2238,7 @@ For wedge width $\Delta\phi_w=X_{\max}-X_{\min}$, the two possible image maps ar
 
 $$
 \begin{pmatrix}X'\\Y'\end{pmatrix}
-=
-\begin{pmatrix}
+=\begin{pmatrix}
 \cos\Delta\phi_w&\mp\sin\Delta\phi_w\\
 \pm\sin\Delta\phi_w&\cos\Delta\phi_w
 \end{pmatrix}
@@ -2390,7 +2389,7 @@ Boundary policies are operator-specific:
 Periodic wrapping applies
 
 $$
-x\leftarrow X_{\min}+\operatorname{mod}(x-X_{\min},X_{\max}-X_{\min}).
+x\leftarrow X_{\min}+\mathrm{mod}(x-X_{\min},X_{\max}-X_{\min}).
 $$
 
 For diffusion, a lower or upper radial overshoot is repeatedly folded by
@@ -2495,8 +2494,8 @@ notions of convergence:
 For an ensemble observable $A$, independent-sampling noise scales asymptotically as
 
 $$
-\operatorname{SE}(\bar A)\simeq
-\sqrt{\frac{\operatorname{Var}(A)}{N_{\rm eff}}},
+\mathrm{SE}(\bar A)\simeq
+\sqrt{\frac{\mathrm{Var}(A)}{N_{\rm eff}}},
 $$
 
 where $N_{\rm eff}$ can be smaller than $N_P$ for unequal importance weights, clustering, or

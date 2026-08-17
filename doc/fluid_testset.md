@@ -492,7 +492,7 @@ $y^p$ and
 $$
 \tau(y)=
 \begin{cases}
-\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\\[6pt]
+\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\\
 \ln(y/Y_{\min}),&p=-1.
 \end{cases}
 $$

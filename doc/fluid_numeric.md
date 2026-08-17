@@ -177,7 +177,7 @@ $$
 V_{ijk}=\Delta x\,
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
 \begin{cases}
-1,&N_Z=1,\\[2pt]
+1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1.
 \end{cases}
 $$
@@ -200,8 +200,7 @@ The primitive arrays named `dustvelx/y/z` contain
 
 $$
 (\ell_\phi,v_r,\ell_\theta)
-=
-(Rv_\phi,v_r,rv_\theta),
+=(Rv_\phi,v_r,rv_\theta),
 $$
 
 not three linear Cartesian or spherical velocities. The conserved arrays contain
@@ -217,8 +216,7 @@ $$
 \begin{pmatrix}
 \varrho_d\\m_x\\m_y\\m_z
 \end{pmatrix}
-=
-\begin{pmatrix}
+=\begin{pmatrix}
 \varrho_d\\
 \varrho_d\ell_\phi\\
 \varrho_dv_r\\
@@ -547,8 +545,7 @@ is the smallest cylindrical radius covered by the spherical domain,
 
 $$
 R_{\min,\mathrm{init}}
-=
-Y_{\min}\min[\sin(Z_{\min}),\sin(Z_{\max})],
+=Y_{\min}\min[\sin(Z_{\min}),\sin(Z_{\max})],
 $$
 
 rather than $Y_{\min}$. This prevents high-latitude cells with $R<Y_{\min}$ from being clipped
@@ -593,7 +590,7 @@ is the finite-volume integral of the resulting field rather than a separately im
 $$
 M_d=
 \begin{cases}
-\displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\\[6pt]
+\displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\\
 \displaystyle\int\rho_d(r,\theta,\phi)r^2\sin\theta\,dr\,d\theta\,d\phi,&N_Z>1.
 \end{cases}
 $$
@@ -1063,7 +1060,7 @@ $$
 \qquad
 \delta n=\frac{\bar\ell_\phi\Delta t}{R^2\Delta x},
 \qquad
-n=\operatorname{round}(\delta n).
+n=\mathrm{round}(\delta n).
 $$
 
 The conserved arrays are first shifted periodically by $n$ cells. The angular speed of that integer
@@ -1227,7 +1224,7 @@ $$
 \qquad
 f_\beta=s^2(3-2s),
 \qquad
-s=\operatorname{clip}(t/T_\beta,0,1).
+s=\mathrm{clip}(t/T_\beta,0,1).
 $$
 
 The corresponding radial acceleration is
@@ -1275,7 +1272,7 @@ where
 $$
 \rho_{\rm ext}=
 \begin{cases}
-\Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\\[2pt]
+\Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\\
 \rho_d,&N_Z>1.
 \end{cases}
 $$
@@ -1521,7 +1518,7 @@ For a requested directional interval $h$, the driver repeatedly chooses
 
 $$
 \delta t_m=\min\left[
-h-\sum_{n<m}\delta t_n,
+h-\sum_{n\lt m}\delta t_n,
 \frac{\mathrm{CFL\_DYN}}{\max_{ijk}\lambda_{ijk}},
 \mathrm{DT\_MAX}
 \right]

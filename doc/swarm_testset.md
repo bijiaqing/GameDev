@@ -285,7 +285,7 @@ Thus `PASS` does not mean merely that a GPU kernel completed without an error.
 | `test_orbit_1d` | all six stored state components after one orbit | stationary $R=1$, $\ell_x=1$, $v_y=0$ equilibrium with inactive $x=0$, $z=\pi/2$, $\ell_z=0$ | finite state and combined $L_\infty<5\times10^{-13}$ |
 | `test_drag_1d` | final $\ell_x$, $v_y$, $R$, and inactive fields for eight sizes | closed-form frozen-coefficient gas-drag exponential and midpoint radial force | combined $L_\infty<2\times10^{-13}$ |
 | `test_viscflow_1d` | initialized $R$, $\ell_x$, $v_y$, and inactive fields at eight radii | analytical Kanagawa viscous gas velocity, radial Stokes scaling, and steady no-backreaction dust drift | combined $L_\infty<2\times10^{-13}$ |
-| `test_diffusion_1d` | radial displacement mean and variance, reconstructed $v_\phi,v_R$, and inactive fields | exact one-step cylindrical SDE, $E[\Delta R]=D\Delta t$ and $\operatorname{Var}(\Delta R)=2D\Delta t$ | mean and variance errors each within six standard errors, with velocity and inactive-field errors jointly satisfying $L_\infty<2\times10^{-12}$ |
+| `test_diffusion_1d` | radial displacement mean and variance, reconstructed $v_\phi,v_R$, and inactive fields | exact one-step cylindrical SDE, $E[\Delta R]=D\Delta t$ and $\mathrm{Var}(\Delta R)=2D\Delta t$ | mean and variance errors each within six standard errors, with velocity and inactive-field errors jointly satisfying $L_\infty<2\times10^{-12}$ |
 | `test_radiation_1d` | the same response fields as drag with size-dependent $\beta$ | closed-form frozen drag plus radiation-pressure response at zero optical depth | combined $L_\infty<2\times10^{-13}$ |
 | `test_prdrag_1d` | component-dependent angular and radial damping plus updated radius | closed-form gas plus Poynting–Robertson exponential with independently calculated $k_x$ and $k_y$ | combined $L_\infty<2\times10^{-13}$ |
 | `test_boundary_1d` | seven returned $(x,R,z,\ell_x,v_R,\ell_z)$ states | independent repeated radial reflection for diffusion, endpoint absorption for transport, and inactive-coordinate locking | all 42 scalars finite and combined $L_\infty<2\times10^{-13}$ |
@@ -638,7 +638,7 @@ $$
 \qquad
 E[\Delta x]=0,
 \qquad
-\operatorname{Var}(\Delta x)=2D\Delta t,
+\mathrm{Var}(\Delta x)=2D\Delta t,
 $$
 
 where $\xi\sim\mathcal N(0,1)$. Angular displacements are wrapped to $[-\pi,\pi)$ before their
@@ -683,8 +683,8 @@ E[\Delta Z]=0,
 $$
 
 $$
-\operatorname{Var}(\Delta R)
-=\operatorname{Var}(\Delta Z)
+\mathrm{Var}(\Delta R)
+=\mathrm{Var}(\Delta Z)
 =8\times10^{-4}.
 $$
 
