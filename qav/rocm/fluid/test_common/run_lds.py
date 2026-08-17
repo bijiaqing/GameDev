@@ -34,7 +34,7 @@ def write_json(path: Path, record: dict) -> None:
 def build_model(project_root: Path, model: str, target: str, output_dir: Path) -> tuple[Path, dict]:
     """Clean and build one model while preserving compiler output as JSON"""
 
-    executable = project_root/"bin"/model/"rocm"/"gamedev"
+    executable = project_root/"qav"/"rocm"/"fluid"/model/"gamedev"
     base = [
         "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
         f"GPU_TARGET={target}", "QAV_SCOPE=all",

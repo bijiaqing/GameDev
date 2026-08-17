@@ -133,7 +133,7 @@ not retain that order.
 Two CUDA sweep implementations are available:
 
 - `FLUID_SWEEP := thread` uses one thread per directional line and line-sized local work arrays
-- `FLUID_SWEEP := block` uses one CUDA block per line with explicit workspace and cooperative
+- `FLUID_SWEEP := block` uses one GPU block per line with explicit workspace and cooperative
   reconstruction
 
 They implement the same numerical method. Their relative performance depends on resolution and GPU
@@ -180,7 +180,8 @@ The numerical guides document backend-dependent arithmetic and execution details
 record native validation, and [`qav/rocm/bench/README.md`](qav/rocm/bench/README.md) defines the
 MI300A profiling and performance workflow.
 
-There is no installation step. Executables are written below `bin/MODEL/GPU_BACKEND/`.
+There is no installation step. Each executable is written beside its model flags as
+`mod/MODEL/gamedev`.
 
 ## Building and running
 
@@ -197,7 +198,7 @@ make MODEL=fluid_fiducial GPU_BACKEND=cuda GPU_TARGET=sm_80
 Run it:
 
 ```bash
-bin/fluid_fiducial/cuda/gamedev
+mod/fluid_fiducial/gamedev
 ```
 
 ### Swarm example
@@ -211,7 +212,7 @@ make MODEL=swarm_fiducial GPU_BACKEND=cuda GPU_TARGET=sm_80
 Run it:
 
 ```bash
-bin/swarm_fiducial/cuda/gamedev
+mod/swarm_fiducial/gamedev
 ```
 
 ### ROCm examples
@@ -220,14 +221,15 @@ Select the AMD backend from the same repository root:
 
 ```bash
 make MODEL=fluid_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
-bin/fluid_fiducial/rocm/gamedev
+mod/fluid_fiducial/gamedev
 
 make MODEL=swarm_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
-bin/swarm_fiducial/rocm/gamedev
+mod/swarm_fiducial/gamedev
 ```
 
-Object files, executables, production output, and QA output contain the backend name, so switching
-backends cannot reuse incompatible artifacts.
+Each production model selects one backend, sweep implementation, and collision-search method for
+its build. Rebuilding that model replaces its single `gamedev` executable, while internal object
+directories retain enough configuration detail to prevent incompatible objects from being reused.
 
 The supplied fiducial models are production-scale examples, not lightweight demonstrations. In
 particular, the default fluid grid is large and the default swarm model contains many
@@ -241,7 +243,7 @@ Remove one model executable and its active object directory:
 make MODEL=fluid_fiducial clean
 ```
 
-Remove all generated object files:
+Remove all generated object files and model executables:
 
 ```bash
 make clean
@@ -360,22 +362,22 @@ under `mod/`; files in the child model keep priority.
 Pass a saved frame index to the executable:
 
 ```bash
-bin/fluid_fiducial/cuda/gamedev 10
+mod/fluid_fiducial/gamedev 10
 ```
 
 or:
 
 ```bash
-bin/swarm_fiducial/cuda/gamedev 10
+mod/swarm_fiducial/gamedev 10
 ```
 
 The physical restart time is reconstructed from the model's output schedule. The fluid branch loads
 density and physical linear velocities, converts velocity files back to its internal angular state,
 and rebuilds conserved momentum and optical depth. The swarm branch loads its particle checkpoint
-and, when diffusion or collisions use random numbers, the matching CUDA random-state checkpoint.
+and, when diffusion or collisions use random numbers, the matching backend random-state checkpoint.
 
 Restart files are not designed as a cross-version interchange format. In particular, raw swarm RNG
-state depends on the CUDA state layout used to produce it.
+state depends on the selected backend's RNG-state layout.
 
 ## Output files
 
@@ -384,6 +386,9 @@ Production output is written to:
 ```text
 out/<MODEL>/
 ```
+
+Production output is preserved when the executable or its object files are cleaned and remains
+until it is removed explicitly.
 
 Frames use five-digit indices such as `00000`. Unless a model-specific interface states otherwise,
 binary arrays contain native `double` values in the writing host's byte order and without an
@@ -473,80 +478,12 @@ by the simulation.
 Verification models, validators, generated metrics, and standalone numerical checks live under
 `qav/`, separate from production models in `mod/`.
 
-### Short installation checks
-
-Run the quick fluid suite:
-
-```bash
-python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 --quick
-```
-
-Run the quick swarm suite:
-
-```bash
-python3 qav/cuda/swarm/test_common/run_suite.py --group all --res 32 64 --quick
-```
-
-These commands still compile multiple model variants; they are regression suites rather than a
-single smoke-test executable.
-
-### Full fluid suite
-
-```bash
-python3 qav/cuda/fluid/test_common/run_suite.py \
-    --group all \
-    --res 32 64 128 256
-```
-
-Available groups are `transport`, `diffusion`, `source`, `radiation`, `ring`, and `sweep`. The
-complete analytical matrix contains 85 builds/runs at the four standard resolutions. Thread/block
-equivalence is a separate group:
-
-```bash
-python3 qav/cuda/fluid/test_common/run_suite.py --group sweep --sweep-dim all
-```
-
-The implementation-independent algorithm checks can be run without CUDA:
-
-```bash
-python3 qav/comm/fluid/mock/algorithm_checks.py
-```
-
-### Full swarm suite
-
-```bash
-python3 qav/cuda/swarm/test_common/run_suite.py \
-    --group all \
-    --res 32 64 128 256
-```
-
-Available groups are `radial`, `grid`, `transport`, `diffusion`, `initialization`, `radiation`,
-`boundary`, `collision`, and `knn`. The standard analytical/statistical matrix contains 51
-resolution builds, followed by the KNN and production-backend checks selected by the runner.
-
-Run only the KNN group:
-
-```bash
-python3 qav/cuda/swarm/test_common/run_suite.py --group knn --res 32
-```
-
-Or run the standalone KNN harness directly:
-
-```bash
-python3 qav/cuda/swarm/test_knn/run.py
-python3 qav/cuda/swarm/test_knn/run.py --full
-```
-
-ROCm uses the corresponding `qav/rocm/fluid/` and `qav/rocm/swarm/` runners and accepts
-`--target gfx942`. Generated results are written below `qav/logs/REPRESENTATION/BACKEND/`. They are
-ignored by Git and are not part of the source test set. Metadata, metrics, manifests, environment,
-build, and run records use JSON; compact numerical field arrays remain binary. Consult the test guides before
-interpreting a pass: deterministic norms, convergence orders, conservation tolerances, statistical
-tests, and KNN topology criteria are intentionally different.
-
-The current evidence retained in the repository is summarized in
-[`doc/README.md`](doc/README.md). Historical tables are not a substitute for rerunning the relevant
-suite after numerical, compiler, architecture, or model changes.
+Run the complete native campaign with `qav/tool/run_all.py`; use `--quick` for a short workflow
+check. The backend-neutral archive-transfer and comparison procedure is documented in
+[`qav/README.md`](qav/README.md). Test equations, acceptance criteria, focused commands, current
+evidence, and remaining coverage are maintained in
+[`doc/fluid_testset.md`](doc/fluid_testset.md) and
+[`doc/swarm_testset.md`](doc/swarm_testset.md).
 
 ## Repository layout
 
@@ -572,7 +509,7 @@ suite after numerical, compiler, architecture, or model changes.
 │   └── logs/                 # generated, backend-separated QA records and fields
 ├── doc/                      # canonical numerical and development documentation
 ├── obj/                      # generated model-specific object files
-└── out/                      # generated production outputs
+└── out/                      # generated production outputs by model
 ```
 
 Experimental work may use the ignored `lab/` directory. It is not part of the production or
@@ -653,10 +590,10 @@ numerical and test-set guides.
 When changing a numerical method or physical prescription:
 
 1. keep the fluid and swarm implementations independently owned by their respective branches
-2. update the corresponding `doc/numerics_*.md` guide with the equation, assumptions, and reference
+2. update the corresponding `doc/*_numeric.md` guide with the equation, assumptions, and reference
 3. add or update an analytical, statistical, boundary, or regression test under `qav/`
 4. archive sufficient metrics and environment information to support the new claim
-5. update the relevant `doc/testset_*.md` evidence summary
+5. update the relevant `doc/*_testset.md` evidence summary
 6. follow [`doc/naming.md`](doc/naming.md) for names, comments, includes,
    formatting, and coordinate conventions
 

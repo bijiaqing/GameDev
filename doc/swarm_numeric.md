@@ -32,7 +32,7 @@ prevent an unsupported indefinitely settling dust layer.
 The active tree includes the corrected axisymmetric measure, well-mixed vertically integrated
 closures, imported-gas Stokes calibration, frozen collision snapshots, random-state restart
 semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The complete native CUDA
-suite, including the radial analytical and KNN cases, is archived and summarized in
+and ROCm suites, including the radial analytical and KNN cases, are summarized in
 [`swarm_testset.md`](swarm_testset.md).
 
 ### 1.2 Physical assumptions and relation to the fluid branch
@@ -1970,16 +1970,6 @@ B_3={}&\frac{S-s}{S+s}
 \end{aligned}
 $$
 
-The dimensionless analytical kernels used by verification replace $K_{ij}$ by
-$1$, $m_i+m_j$, or $m_im_j$ and multiply by
-
-$$
-\lambda_0=\frac{N_P}{(N_K-1)M_{\rm dust}}.
-$$
-
-This factor belongs to those normalized test kernels. The physical custom kernel instead uses the
-stored physical $N_j$, cross section, speed, and accessible measure directly.
-
 ### 8.2 Frozen Bernoulli collision batches
 
 The GPU event update is a controlled parallel Bernoulli leap, not the exact serial stochastic
@@ -2041,9 +2031,7 @@ s_{\rm new}=(s_i^3+s_j^3)^{1/3}
 $$
 
 and adjusts the represented grain number to conserve the representative mass. The fragmentation
-law is a configured modeling choice rather than a universal fragment distribution. Dimensionless
-constant, additive, and product kernels are available for analytical tests; the additive kernel is
-$K=m_i+m_j$.
+law is a configured modeling choice rather than a universal fragment distribution.
 
 Specifically, coagulation constructs
 
@@ -2073,9 +2061,8 @@ which preserves the mass represented by $i$ but is a model-specific one-fragment
 ### 8.3 Exact neighbor-search contract
 
 The search backend is part of the estimator because it determines the selected local set and the
-farthest-neighbor measure. For the dimensionless verification kernels, the normalization also
-contains $N_P/[(N_K-1)M_{\rm dust}]$; for the physical kernel, represented counts already carry the
-absolute number normalization.
+farthest-neighbor measure. In the physical kernel, represented counts carry the absolute number
+normalization.
 
 For particle $i$, the location-dependent search cap is
 
@@ -2182,10 +2169,10 @@ p=2(L_{\max}+2)\epsilon_{\rm float}
 $$
 
 prevents accumulated recursive-subdivision roundoff from making the pruning bound too large. One
-CUDA block evaluates candidate tiles cooperatively and retains the nearest $N_K$ pairs in shared
+GPU block evaluates candidate tiles cooperatively and retains the nearest $N_K$ pairs in shared
 memory. The traversal reports an overflow rather than silently accepting an incomplete result.
 
-The validated repeated block-parallel bitonic merge retains the nearest pairs in lexicographic
+The repeated block-parallel bitonic merge retains the nearest pairs in lexicographic
 $(d^2,\mathrm{id})$ order. Distances remain available because traversal pruning, closest-ghost
 deduplication, and the collision-volume radius require them even though collision physics consumes
 the original particle identifiers. When periodic images overlap, the query temporarily retains
@@ -2296,11 +2283,9 @@ Morton-range ownership for multiple GPUs. Its hierarchy alone is compact, but th
 owner also retains unsorted query coordinates, azimuths, per-particle cutoffs, and overflow flags.
 Consequently, full-disk total search storage can exceed the single-array KD-tree even when the
 Morton hierarchy is smaller; partial wedges benefit more strongly because the KD-tree stores three
-complete copies. The latest isolated query matrix found that Morton used less persistent search
-memory in every tested case through $N_P=10^7$, while KD-tree was faster in most cases and in every
-$N_P=10^7$ case. The KD-tree therefore remains both an independent mature reference and a strong
-single-GPU performance option. Backend choice is a measured model configuration, not a change in
-collision physics; detailed timing and pass criteria belong in `swarm_testset.md`.
+complete copies. The KD-tree remains an independent mature reference and a strong single-GPU
+option. Backend choice is a measured model configuration, not a change in collision physics;
+current timing, memory, and pass criteria belong in `swarm_testset.md`.
 
 For broader context on cooperative GPU similarity search, see
 [Johnson, Douze & Jégou (2017)](https://arxiv.org/abs/1702.08734); the exact top-$K$ and periodic
@@ -2473,8 +2458,7 @@ boundary-event implementation should do the following:
    verify weak convergence under diffusion-step refinement
 
 The existing CFL controls make missed transport crossings unlikely in ordinary runs, but do not
-constitute a mathematical event detector. The deterministic boundary tests exercise the endpoint
-policy itself; they do not yet establish boundary-event convergence.
+constitute a mathematical event detector.
 
 The 2D and 3D collision-volume corrections also remain locally planar approximations. The exact
 quantity is the measure of the Cartesian KNN ball intersected with the spherical disk domain. A
@@ -2571,7 +2555,7 @@ remain single precision on both backends.
 
 The collision backends use different parallel structures. KD-tree construction and traversal use
 the imported pointer-free tree implementation, with a query associated with each physical or image
-record. Morton construction sorts compact keys and assigns one cooperative CUDA block to each
+record. Morton construction sorts compact keys and assigns one cooperative GPU block to each
 physical query. In both cases, collision species are frozen once per Bernoulli batch and particle
 positions remain fixed across the complete opening or closing collision interval, so one spatial
 index is reused across all of its internal batches.
@@ -2586,14 +2570,14 @@ M_{\rm particle}=N_P
 \end{cases}
 $$
 
-Diffusion or collisions additionally require one opaque `curandState` per representative. KNN
+Diffusion or collisions additionally require one opaque backend RNG state per representative. KNN
 storage depends on the selected backend and wedge geometry; measured formulas and benchmark
 results are documented in [`swarm_testset.md`](swarm_testset.md), because compiler layout and
 periodic-ghost count determine the actual allocation.
 
-Initialization uses a fixed host random seed and stochastic evolution uses one persistent CURAND
-stream per representative. Saving and restoring those states preserves an interrupted run for the
-same executable and CUDA state layout. Changing the KNN backend can change partner ordering and RNG
+Initialization uses a fixed host random seed and stochastic evolution uses one persistent backend
+RNG stream per representative. Saving and restoring those states preserves an interrupted run for
+the same executable and backend RNG-state layout. Changing the KNN backend can change partner ordering and RNG
 consumption even when the neighbor set is identical, so cross-backend trajectories are not expected
 to remain bytewise synchronized.
 
@@ -2616,14 +2600,13 @@ Loading also reasserts every inactive coordinate, so a radial restart has exact
 $x=(X_{\min}+X_{\max})/2$, $z=\pi/2$, and $\ell_\theta=0$ before evolution resumes.
 
 Collision or diffusion builds save `rngstate_<frame>.dat` beside every particle checkpoint and
-restore it on resume. The companion file contains one raw `curandState` per representative, so a
-resumed stochastic run continues the same random streams as an uninterrupted run built with the
-same CUDA state layout.
+restore it on resume. The companion file contains one raw backend RNG state per representative, so
+a resumed stochastic run continues the same random streams as an uninterrupted run built with the
+same backend and RNG-state layout.
 
 The checkpoint stores physical linear velocity and reconstructs angular momentum on loading.
 Consequently $R(\ell_\phi/R)$ and $y(\ell_\theta/y)$ can differ from their original values by a
-floating-point ulp even when the random-state file is byte-identical. Restart tests must therefore
-combine exact RNG restoration with tolerance-based state, conservation, and statistical criteria.
+floating-point ulp even when the random-state file is byte-identical.
 
 Mesh fields and particle checkpoints have distinct cadences. Grid density and optical depth, when
 enabled, are reconstructed at every output index. The physical frame spacing is either linear,
@@ -2681,26 +2664,12 @@ with $\rho_{d,c}$ interpreted as $\Sigma_{d,c}$ when `N_Z == 1`. Because
 $\sum_cw_{pc}=1$ for an active interior particle, the grid integral recovers the total active
 representative mass up to atomic-addition roundoff and boundary-stencil conventions.
 
-## 12. Verification scope and known limitations
+## 12. Known limitations
 
-The analytical, stochastic, KNN, and production-backend tests, their acceptance criteria, and the
-recorded native CUDA results are documented in [`swarm_testset.md`](swarm_testset.md). They define
-the verification boundary for the equations and algorithms in this guide.
+Verification definitions, evidence, and untested regimes are maintained in
+[`swarm_testset.md`](swarm_testset.md). The limitations below concern the physical or numerical
+model itself rather than current test coverage.
 
-- The passed CUDA suite covers circular orbits, frozen stiff drag, one-step diffusion moments,
-  optical-depth reconstruction, radiation and P-R response algebra, accessible collision measures,
-  and constant, additive, and product kernel numerators. It does not establish long-time coupled
-  production evolution; see [`swarm_testset.md`](swarm_testset.md).
-- P-R validation still needs secular optically thin circular-orbit decay with a fixed orbital-plane
-  direction beyond the prepared constant-coefficient one-step response.
-- Collision validation still needs complete event statistics and convergence with `CFL_COL`,
-  neighbor count, and particle number; exact KD-tree/Morton/brute-force neighbor tests are now in
-  `qav/comm/swarm/test_knn/`.
-- Long-time settling equilibrium, monodisperse initialization with initial drift, imported-gas
-  trajectory coupling, boundary-event convergence, restart reproducibility, timestep rates, and
-  complete flag/operator combinations remain untested. Continuous conditional multisize
-  initialization now has a native CUDA regression, and deterministic endpoint boundary helpers
-  have dedicated CUDA cases.
 - The current fluid and swarm diffusion-momentum closures differ and should not be compared as the
   same velocity equation.
 - A zero integrated dust mass, `N_K == 1`, or a polar domain reaching a coordinate singularity is

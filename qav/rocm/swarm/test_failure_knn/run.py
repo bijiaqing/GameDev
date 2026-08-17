@@ -95,7 +95,7 @@ def main() -> None:
     scope_root = archive_root if scope == "all" else archive_root/"groups"/scope
     out_dir = scope_root/model_dir.name
     out_dir.mkdir(parents=True, exist_ok=True)
-    executable = project_root/"bin"/model_dir.name/"rocm"/"gamedev"
+    executable = model_dir/"gamedev"
 
     manifest = {
         "model": model_dir.name,

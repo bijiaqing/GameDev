@@ -13,7 +13,6 @@ endif
 MOD_ROOT        = $(ROOT_DIR)/mod
 OBJ_ROOT        = $(ROOT_DIR)/obj
 OUT_ROOT        = $(ROOT_DIR)/out
-BIN_ROOT        = $(ROOT_DIR)/bin
 QAV_ROOT        = $(ROOT_DIR)/qav
 QAV_COMM_DIR    = $(QAV_ROOT)/comm
 QAV_FLUID_DIR   = $(QAV_COMM_DIR)/fluid
@@ -22,6 +21,15 @@ INC_COMM_DIR    = $(ROOT_DIR)/inc/comm
 INC_BACKEND_DIR = $(ROOT_DIR)/inc/$(GPU_BACKEND)
 SRC_COMM_DIR    = $(ROOT_DIR)/src/comm
 SRC_BACKEND_DIR = $(ROOT_DIR)/src/$(GPU_BACKEND)
+MODEL_EXEC_DIRS = \
+    $(dir $(wildcard $(MOD_ROOT)/*/flags.mk)) \
+    $(dir $(wildcard $(QAV_ROOT)/comm/fluid/*/flags.mk)) \
+    $(dir $(wildcard $(QAV_ROOT)/comm/swarm/*/flags.mk)) \
+    $(dir $(wildcard $(QAV_ROOT)/cuda/fluid/*/flags.mk)) \
+    $(dir $(wildcard $(QAV_ROOT)/cuda/swarm/*/flags.mk)) \
+    $(dir $(wildcard $(QAV_ROOT)/rocm/fluid/*/flags.mk)) \
+    $(dir $(wildcard $(QAV_ROOT)/rocm/swarm/*/flags.mk))
+MODEL_EXECUTABLES = $(addsuffix gamedev,$(MODEL_EXEC_DIRS))
 
 ifeq ($(GPU_BACKEND),cuda)
 GPU_COMPILER ?= nvcc
@@ -158,10 +166,10 @@ MODEL_INCLUDE_FLAGS += -I $(MODEL_PARENT_DIR)
 endif
 
 MODEL_CONST := $(firstword $(foreach dir,$(MODEL_HEADER_DIRS),$(wildcard $(dir)/const_defs.cuh)))
-EXEC = $(BIN_ROOT)/$(MODEL)/$(GPU_BACKEND)/gamedev
+EXEC = $(dir $(MODEL_FLAG_FILE))gamedev
 
 ifeq ($(IS_QAV),)
-OUT_DIR = $(OUT_ROOT)/$(MODEL)/$(GPU_BACKEND)
+OUT_DIR = $(OUT_ROOT)/$(MODEL)
 else
 OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
 QAV_SCOPE ?= all
@@ -344,8 +352,9 @@ ifdef MODEL
 	@printf "%-12s %s\n" "Cleaning" "$(OBJ_DIR)"
 	@rm -rf $(OBJ_DIR)
 else
-	@printf "%-12s %s\n" "Cleaning" "all object and executable files"
-	@rm -rf $(OBJ_ROOT)/* $(BIN_ROOT)/*
+	@printf "%-12s %s\n" "Cleaning" "all object and model executable files"
+	@rm -rf $(OBJ_ROOT)/*
+	@rm -f $(MODEL_EXECUTABLES)
 endif
 
 -include $(OBJ:.o=.d)

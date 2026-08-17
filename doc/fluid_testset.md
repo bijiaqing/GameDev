@@ -19,10 +19,10 @@ force endpoints. These substitutions isolate numerical operators whose productio
 coefficients would not yield simple closed-form solutions.
 
 This document records the test design, mathematical references, acceptance semantics, execution
-contract, and historical native results. The compact implementation index in
-`qav/comm/fluid/test_common/TEST_CASES.md` should remain consistent with it. Generated JSON, text, and
-binary field records are intentionally absent from the source tree and ignored below `qav/logs/`;
-numerical values quoted later are historical evidence and must be regenerated for a current build.
+contract, and latest archived native results. The QAV implementation points back to this document rather
+than maintaining a second copy of the case definitions. Generated JSON and binary field records
+are ignored by Git below `qav/logs/`; the latest local archive was generated
+from the source fingerprint and environments recorded in [`README.md`](README.md).
 
 ## Verification architecture and claim levels
 
@@ -73,7 +73,7 @@ comparator continues to apply its tighter differential tolerances.
 
 ### Deterministic field errors
 
-Analytical fields are averaged over the same finite-volume cells used by the CUDA solver. For cell
+Analytical fields are averaged over the same finite-volume cells used by the production solver. For cell
 error $e_i$ and exact cell measure $V_i$, the validator reports
 
 $$
@@ -541,8 +541,8 @@ radiation-force composition because $\kappa=0$; they do not test finite $e^{-\ta
 
 The production fluid branch has two line-sweep implementations:
 
-- `thread` assigns one CUDA thread to one complete line and retains the reference arithmetic order
-- `block` assigns one CUDA block to one line, stores explicit work arrays, and uses cooperative
+- `thread` assigns one GPU thread or work-item to one complete line and retains the reference arithmetic order
+- `block` assigns one GPU block or workgroup to one line, stores explicit work arrays, and uses cooperative
   line operations to avoid very large thread-local arrays
 
 The analytical matrix can be run independently with either implementation by setting
@@ -557,44 +557,26 @@ $10^{-10}$. It records each implementation's own mass drift, accepted step count
 log, and environment. This branch tests discrete equivalence and performance on fixed work; it is
 not a grid-convergence sequence and does not use one implementation as analytical truth.
 
-## Recorded native CUDA evidence
+## Latest archived native and cross-backend evidence
 
-**Source-status note (2026-08-16).** The polar advection and CFL operators use the exact
-radial polar-face factor $\Delta A_z/\Delta V_y$ instead of the former $1/y_c$ approximation.
-The supplementary T10 mesh regression, the complete block-sweep analytical matrix, and the matched
-2D and 3D thread/block comparisons have now passed with the corrected source. The archived
-thread-sweep analytical polar records and the earlier direct CUDA-versus-ROCm raw-field comparison
-predate this correction and remain labeled as historical evidence.
+### Complete 2026-08-16 analytical archives
 
-### Complete analytical archives
+The complete thread-sweep matrix was regenerated on both backends under the source-matched campaign
+recorded in [`README.md`](README.md), which also records the native compilers, targets, drivers,
+and GPUs.
 
-The complete 85-case thread-sweep run was recorded on 2026-07-26 with
+Both aggregate manifests report 22/22 parameter variants and 85/85 metrics passed, partitioned
+into 57 publication and 28 release records. Independent local archive checks found no invalid
+metrics or missing raw fields. The command on each native system was
 
 ```bash
-python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 128 256
+python3 qav/tool/run_all.py --backend BACKEND --target TARGET --res 32 64 128 256
 ```
 
-The suite uses the reference thread sweep by default. Prefix the same command with
-`FLUID_SWEEP=block` to compile and analyze the block implementation through the identical
-analytical cases. The Makefile stores the builds in separate object directories, and the runner
-stores their fields, metrics, and environment records under the separate `thread/` and `block/`
-branches of `qav/logs/fluid/cuda/`, so the two evidence sets coexist.
-
-The historical thread run completed all 85 builds and simulations without a compilation failure,
-runtime failure, Python traceback, or non-finite metric. The corrected output naming included CFL values in
-radial and polar transport filenames, preventing the 12 low-CFL records from being overwritten.
-The recorded environment was CUDA 12.1 with `nvcc` 12.1.105 and an NVIDIA A100-SXM4-40GB using
-driver 580.159.04.
-
-The block-sweep matrix was regenerated on the same CUDA 12.1 and A100 environment after the exact
-polar metric and cooperative low-order update were introduced. All 85 expected metric files are
-present, every recorded norm and mass change is finite, and the convergence sequences retain the
-expected behavior. Except for polar transport, the values below are unchanged from the thread
-baseline to the displayed precision. The polar rows report the current block-sweep results.
-
-The following density $L_1$ orders use $N=32,64,128,256$ and list the three successive refinement
-intervals. “Pass” in this historical table is consistent with the current automated regression
-criteria; each model manifest retains the actual finest error and observed-order sequence.
+The following CUDA density $L_1$ orders use $N=32,64,128,256$ and list the three successive
+refinement intervals. The ROCm archive independently passed the same per-model criteria, and the
+cross-backend report accepted all corresponding metrics. Each model manifest retains the complete
+error and order sequence.
 
 | Case | Successive $L_1$ orders | Assessment |
 |---|---|---|
@@ -636,105 +618,61 @@ The integer FARGO case remains near machine roundoff. Its negative reported orde
 roundoff noise, not a failed transport test. The $p=0$ optical-depth case can likewise be integrated
 exactly or nearly exactly by the logarithmic midpoint rule, so its order is not meaningful.
 
-The source reference uses the same cancellation-safe endpoint-weight series as the CUDA kernel for
+The source reference uses the same cancellation-safe endpoint-weight series as the production GPU kernel for
 $h<10^{-4}$. Reanalysis of the unchanged native state reduced the largest componentwise discrepancy
 from $2.22\times10^{-5}$ to $2.22\times10^{-16}$; the former value was cancellation in the Python
 reference, not a production-kernel error. Density and total mass are exact to the recorded precision.
 
-### CUDA-versus-ROCm polar transport
+### CUDA-versus-ROCm equivalence
 
-The matched 2026-08-11 raw-field comparison covered both CFL values and all four resolutions of
-`test_z_transport_3d`. Initial density was byte-identical, metadata and accepted-step counts agreed,
-and all eight records passed. The worst final conserved-field differences were
+The complete backend comparison found all 85 analytical metrics on both sides, matching tier
+metadata, no missing records, and zero acceptance mismatches. Polar error norms are particularly
+sensitive to vendor-dependent reductions, so the gate replaces a direct comparison of those
+already reduced norms with an eight-record raw-field comparison of `test_z_transport_3d` at both
+CFL values and all four resolutions.
+
+Initial density was byte-identical in every raw-field record, and metadata and accepted-step counts
+agreed. Among final density and conserved momenta, the largest relative differences were
 
 $$
-L_{2,\mathrm{rel}}=1.93\times10^{-6},
+L_{2,\mathrm{rel}}=2.43\times10^{-6},
 \qquad
-L_{\infty,\mathrm{rel}}=5.09\times10^{-6},
+L_{\infty,\mathrm{rel}}=3.97\times10^{-6},
 $$
 
-in the coarsest $N=32$, CFL-$0.5$ calculation. The disagreement decreased under refinement. The
-largest density-weighted velocity difference was $6.59\times10^{-11}$, although unweighted
-velocity differences in negligible compact-support tails reached $2.06\times10^{-4}$. The latter
-remain diagnostic because division by vanishing density is ill-conditioned; conserved fields and
-the mass-weighted velocity norm define the cross-backend equivalence gate.
+both below the $10^{-5}$ gate. The largest density-weighted velocity relative $L_2$ difference was
+$4.71\times10^{-11}$. Unweighted velocity differences reached $2.28\times10^{-5}$ in relative
+$L_2$ and $3.45\times10^{-4}$ in relative $L_\infty$ only in low-density tails. They remain
+diagnostics because division by vanishing density is ill-conditioned; conserved fields and the
+density-weighted velocity norm define acceptance.
 
-CUDA builds with and without `--use_fast_math` produced identical conserved analytical error norms
-for these runs. The residual CUDA-versus-ROCm differences in separately reduced analytical error
-norms therefore reflect ordinary cross-vendor evolution and reduction sensitivity rather than the
-CUDA fast-math option or a different polar discretization.
+The comparison report also verifies that the CUDA and ROCm campaign source fingerprints match.
+Re-executing the archive checks and both comparison scripts locally from the downloaded tree
+reproduced `PASS` without a GPU runtime.
 
-The current post-correction CUDA and ROCm block-sweep analytical archives contain the same eight
-polar configurations and identical accepted-step sequences. Their density $L_1$ convergence orders
-agree to within $4.5\times10^{-4}$, and the largest absolute difference between any stored polar
-error norm is $1.99\times10^{-6}$. A path-by-path comparison of already reduced norms at relative
-tolerance $10^{-6}$ is consequently too strict and flags these ordinary cross-vendor differences.
-The subsequent post-correction raw-field refresh retained and compared all eight configurations.
-Initial density is byte-identical, all metadata agree, and every record passes. Among density and
-conserved momenta, the worst relative $L_2$ and $L_\infty$ differences are respectively
-$2.59\times10^{-6}$ and $3.97\times10^{-6}$, both below the $10^{-5}$ gate. The largest
-density-weighted velocity difference is $4.71\times10^{-11}$. Unweighted velocity differences reach
-$2.28\times10^{-5}$ in relative $L_2$ and $3.45\times10^{-4}$ in relative $L_\infty$ only in
-low-density tails, so they remain diagnostics rather than acceptance quantities.
+### Qualification evidence requiring a separate refresh
 
-### Native ROCm qualification
+The 2026-08-16 `run_all.py` campaign is the common publication-and-release gate. It deliberately
+does not run the qualification-only thread/block sweep comparison, deliberate NaN/Inf injection,
+large-LDS launch suite, or performance/profiling campaign. Earlier numerical and timing values for
+those branches have therefore been removed from the current-result section rather than presented
+as evidence for this source fingerprint.
 
-The native gfx942 campaign compiled and completed the 85-record analytical matrix with both line
-sweeps. After the exact polar-face correction, the complete ROCm block matrix passed with the same
-accepted-step sequences and convergence behavior as CUDA. The direct eight-record polar comparison
-requires byte-identical initial density and matching metadata, then applies $10^{-5}$ relative
-$L_2$ and $L_\infty$ limits to density and conserved momenta and the same limit to the
-density-weighted velocity norm. All eight records passed; the largest post-correction conserved
-relative $L_\infty$ difference was $3.97\times10^{-6}$ and the largest density-weighted velocity
-difference was $4.71\times10^{-11}$.
-
-ROCm also has two hardware-specific gates. The deliberate failure suite passed 32 of 32 clean and
-NaN/Inf cases through the production state and CFL guards. The large-LDS suite passed three
-stationary diffusion launches requesting 56--60 KiB and one controlled over-capacity rejection;
-the successful cases remained finite, conserved mass below $10^{-12}$ relatively, and differed
-from the exact stationary state by at most $4.44\times10^{-16}$. These are correctness and launch
-tests, not performance benchmarks.
-
-Run the backend-specific gates with
+Refresh those independent qualification branches when their claims are needed:
 
 ```bash
-python3 qav/rocm/fluid/test_common/run_suite.py --group all --res 32 64 128 256 --target gfx942
+python3 qav/cuda/fluid/test_common/run_suite.py --group sweep --sweep-dim all
+python3 qav/rocm/fluid/test_common/run_suite.py --group sweep --sweep-dim all --target gfx942
 python3 qav/rocm/fluid/test_common/run_suite.py --group failure --target gfx942
 python3 qav/rocm/fluid/test_common/run_suite.py --group lds --target gfx942
 ```
 
-Cross-backend archive and raw-field comparison use `qav/tool/compare_backends.py` and
-`qav/tool/compare_fluid_fields.py`. Reduced analytical norms are useful diagnostics but should not
-replace direct conserved-field comparison when two vendors independently accumulate nearly equal
-errors against an exact solution.
-
-For a transferable full campaign, the first backend runs `qav/tool/run_all.py` normally, which now
-means native-only. After copying the full project and ignored `qav/logs/` tree, the second backend
-runs the same command with `--compare`; it writes only its backend-owned paths and executes both
-cross-backend comparators automatically. CUDA may run first or second. Each campaign records a
-source-tree SHA-256 fingerprint, and the final comparison fails if the archives were generated from
-different source snapshots. Once both archives exist, comparison requires only Python and NumPy,
-not either GPU runtime. The complete procedure and archive tree are specified in `qav/README.md`.
-
-### Current thread/block comparison and performance
-
-The current CUDA cross-comparisons use byte-identical initial states and the corrected source. At
-$1024^2$, both implementations take 630 accepted steps. Their final density relative $L_2$
-difference is $4.12\times10^{-14}$, the final mass mismatch is
-$-1.92\times10^{-16}$, and the thread and block wall times are 132.85 s and 53.19 s. Thus the block
-sweep is about 2.50 times faster for this 2D case.
-
-At $128^3$ with diffusion, both implementations take 5,396 accepted steps. The final density
-relative $L_2$ difference is $4.55\times10^{-12}$, velocity differences range from
-$6.54\times10^{-16}$ to $5.68\times10^{-13}$, and the final mass mismatch is
-$1.89\times10^{-16}$. The thread and block wall times are 344.58 s and 771.98 s, so the block sweep
-is 2.24 times slower for this 3D case. The archived `build.json`, `run.json`, `timing.json`, and
-`sweep_comparison_*.json` files make these the current CUDA differential baseline. They confirm
-numerical equivalence but also show that sweep choice remains dimension- and grid-dependent.
+The transferable release workflow, archive paths, and backend-neutral comparison commands are
+specified in `qav/README.md`.
 
 ## Running and archiving the suite
 
-The CUDA suite requires the ordinary project toolchain, Python 3.9 or newer, and NumPy. GPU
+Each native suite requires its backend toolchain, Python 3.9 or newer, and NumPy. GPU
 diagnostic commands are recorded when available but are not numerical prerequisites.
 
 From the repository root, use a two-resolution workflow check before a long run:
@@ -802,9 +740,32 @@ tolerances were satisfied.
 
 ## Coverage limits and verification still required
 
-- Implement the full coupled 3D manufactured-solution harness specified in
-  `qav/comm/fluid/test_mms_3d/README.md` under the planned `test_mms_3d` model, including independent
-  forcing and exact boundary data
+### Planned full-3D manufactured solution
+
+No runnable model currently claims full coupled 3D verification. The planned `test_mms_3d` must
+generate its density and all three stored-momentum residuals independently with SymPy, emit
+test-only algebraic forcing expressions, insert density and momentum forcing symmetrically at the
+required substep times, impose exact manufactured boundary values, and compare independent
+high-order finite-volume averages of density, all momenta, physical velocities, and optical depth.
+The reference must not call production geometry, gas, force, diffusion, or optical-depth helpers.
+
+The harness must cover four configurations:
+
+1. transport only with zero manufactured diffusivity and radiation
+2. transport plus diffusion
+3. transport plus radiation
+4. transport plus diffusion and radiation
+
+Because production requires `DIFFUSION` whenever `N_Z > 1`, the first and third configurations
+must compile with that flag while returning exactly zero manufactured diffusivity. All dimensions
+must refine together with the same prescribed timestep history at a given resolution. Before any
+MMS order is interpreted, a source-only field with a known exact integral must validate the forcing
+composition, the exact solution must stay above `RHO_VAC`, and limiter and positivity scaling must
+remain inactive. Radiation cases retain the second-order floor of the production optical-depth
+quadrature. Both full-disk and `HALF_DISK` polar boundaries should ultimately be exercised.
+
+### Other missing verification
+
 - Add production initialization tests for the convolved dust surface-density profile, exact
   hydrostatic gas stratification, size-dependent Stokes number, equilibrium angular momentum, and
   initial radial/polar drift in both 2D and 3D

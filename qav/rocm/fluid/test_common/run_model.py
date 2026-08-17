@@ -23,7 +23,7 @@ from validate_case import analyze
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
-from qav_config import fluid_case_tier
+from qav_config import fluid_case_tier, model_executable
 
 
 def observed_orders(errors: list[float]) -> list[float]:
@@ -234,7 +234,7 @@ def run(model: str) -> None:
         # The executable writes binary fields and a small metadata file into
         # data_dir through PATH_OUT.  analyze then constructs the analytical
         # cell averages and compares them with those files.
-        executable = project_root / "bin" / model / "rocm" / "gamedev"
+        executable = model_executable(project_root, model, "rocm", "fluid")
         subprocess.run([str(executable)], cwd=project_root, check=True)
         record = analyze(data_dir, resolution)
         record["tier"] = evidence_tier

@@ -8,6 +8,24 @@ import hashlib
 from pathlib import Path
 
 
+def model_executable(
+    project_root: Path, model: str, backend: str, representation: str,
+) -> Path:
+    """Return the executable beside the unique flags file selected for one model"""
+
+    candidates = (
+        project_root/"mod"/model,
+        project_root/"qav"/"comm"/representation/model,
+        project_root/"qav"/backend/representation/model,
+    )
+    model_dirs = [path for path in candidates if (path/"flags.mk").is_file()]
+    if len(model_dirs) != 1:
+        raise RuntimeError(
+            f"expected one flags directory for {model}, found {len(model_dirs)}"
+        )
+    return model_dirs[0]/"gamedev"
+
+
 FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
     "transport": [
         *(('test_x_transport_2d', ('--shift', str(shift)))

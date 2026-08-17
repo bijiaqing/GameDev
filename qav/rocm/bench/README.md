@@ -90,8 +90,8 @@ python3 qav/rocm/bench/analyze_counters.py \
     --output qav/logs/bench/rocm/counter_analysis_yz.json
 ```
 
-The archived MI300A runtime trace identifies `advection_ybl` and `advection_zbl` as the dominant
-3D kernels. `analyze_counters.py` requires each profile to contain its passing manifest and complete
+The example targets `advection_ybl` and `advection_zbl`; rank a fresh runtime trace before deciding
+which kernels to profile. `analyze_counters.py` requires each profile to contain its passing manifest and complete
 merged `workloads/**/pmc_perf.csv`, rejects inconsistent per-dispatch resource metadata, and writes
 one JSON summary of resource use, lane activity, residency, L2 behavior, and external-memory
 traffic. Recompute the ranking after material source, compiler, grid, or physics changes rather
@@ -105,23 +105,9 @@ performance baseline. Trace defaults are long enough to sample several operator 
 counter defaults are shorter because the profiler can replay the selected kernel. Override either
 with `--duration` when the trace shows too few calls or counter collection is unnecessarily long.
 
-## Recorded MI300A evidence
+## Interpreting evidence
 
-The 2026-08-12--16 gfx942 campaign provides a historical baseline; generated records are not
-tracked and must be regenerated after material source, compiler, or machine changes. Five-repeat
-median wall times were 4.604 s and 7.682 s for the $512^2$ and $1024^2$ fluid cases, 8.536 s and
-78.755 s for $64^3$ and $128^3$, 60.838 s and 170.785 s for the $10^5$ and $10^6$ KD-tree swarm
-cases, and 83.404 s and 203.565 s for the corresponding Morton cases. The $10^6$ KD-tree spread was
-6.34% and is therefore noisy; the other seven cases remained below the five-percent threshold.
-
-The production 3D runtime trace attributed 46.53% of aggregate kernel time to `advection_ybl` and
-36.73% to `advection_zbl`. Focused counter collections for both kernels completed all required
-replays. They reported 128 architected VGPRs per work-item, 68 B and 28 B of private scratch,
-respectively, and only 2.26 and 3.09 active lanes per average VALU instruction despite 64-thread
-workgroups. Estimated external bandwidth remained far below nominal HBM peak. The evidence points
-to serial face correction and register/private-memory pressure rather than LDS conflicts or peak
-memory bandwidth as the current block-advection bottleneck.
-
-These values are attribution and baseline records, not promised performance. Use the commands
-above to produce a new `qav/logs/bench/rocm/` archive before quoting results for another revision or
-machine.
+Generated timing and profiler records belong below `qav/logs/bench/rocm/` and are ignored by Git.
+Do not preserve measured values in this operational README: numerical interpretation, current
+qualification status, and remaining performance evidence belong in the fluid and swarm test-set
+guides. Regenerate the archive after any material source, compiler, driver, or machine change.

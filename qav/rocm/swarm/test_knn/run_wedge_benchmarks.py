@@ -37,7 +37,7 @@ def main() -> None:
     args = parser.parse_args()
 
     test_root = Path(__file__).resolve().parent
-    executable = test_root / "bin" / "knn_wedge_benchmark"
+    executable = test_root / "knn_wedge_benchmark"
     project_root = test_root.parents[3]
     archive_root = project_root/"qav"/"logs"/"swarm"/"rocm"
     scope = os.environ.get("QAV_SCOPE", "manual")

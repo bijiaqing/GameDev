@@ -140,7 +140,7 @@ def check_python(errors: list[str]) -> None:
 
     for root in (PROJECT_ROOT/"qav",):
         for path in root.rglob("*.py"):
-            if any(part in {"out", "bin", "__pycache__"} for part in path.parts):
+            if any(part in {"out", "__pycache__"} for part in path.parts):
                 continue
             try:
                 ast.parse(path.read_text(), filename=str(path))
@@ -206,7 +206,7 @@ def check_naming(errors: list[str]) -> None:
 
 
 def check_metadata(errors: list[str]) -> None:
-    """Check repository and third-party licensing plus generated-file cleanliness"""
+    """Check repository licensing and keep generated result records below qav/logs"""
 
     if not (PROJECT_ROOT/"LICENSE").is_file():
         errors.append("missing repository MIT LICENSE")
@@ -219,7 +219,7 @@ def check_metadata(errors: list[str]) -> None:
     for path in (PROJECT_ROOT/"qav").rglob("*"):
         if any(part == "logs" for part in path.parts):
             continue
-        if path.is_file() and (path.name == "gamedev" or path.suffix in {".dat", ".json", ".txt"}):
+        if path.is_file() and path.suffix in {".dat", ".json", ".txt"}:
             generated.append(path.relative_to(PROJECT_ROOT))
     if generated:
         errors.append(

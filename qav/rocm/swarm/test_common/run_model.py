@@ -17,7 +17,7 @@ from validate_case import analyze
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
-from qav_config import swarm_model_tier, swarm_resolution_tiers
+from qav_config import model_executable, swarm_model_tier, swarm_resolution_tiers
 
 
 def orders(errors: list[float]) -> list[float]:
@@ -136,7 +136,7 @@ def run(model: str) -> None:
         ], check=True)
         if args.build_only:
             continue
-        executable = project_root/"bin"/model/"rocm"/"gamedev"
+        executable = model_executable(project_root, model, "rocm", "swarm")
         subprocess.run([str(executable)], cwd=project_root, check=True)
 
         # The HIP driver writes raw values only.  All expected values and pass

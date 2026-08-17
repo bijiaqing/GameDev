@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from compare_sweeps import compare_pair
-from run_model import environment_record
+from run_model import environment_record, model_executable
 
 
 def write_json(path: Path, record: dict[str, object]) -> None:
@@ -127,7 +127,7 @@ def build_and_run(
 
     # Retain the native stream in run.json while reporting a throttled live heartbeat
     start = time.perf_counter()
-    run_command = [str(project_root/"bin"/model/"rocm"/"gamedev")]
+    run_command = [str(model_executable(project_root, model, "rocm", "fluid"))]
     step_records: list[dict[str, int | float]] = []
     latest_step: tuple[int, float, float, float] | None = None
     next_report = start + progress_seconds

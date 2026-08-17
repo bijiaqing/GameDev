@@ -143,7 +143,7 @@ def main() -> None:
     production_links = []
     for model in production_models:
         for backend in ("kdtree", "morton"):
-            executable = test_dir/"bin"/f"production_{model}_{backend}"
+            executable = test_dir/f"production_{model}_{backend}"
             build_arguments = [
                 "make", "-C", str(project_root),
                 f"MODEL={model}", "GPU_BACKEND=cuda", "RES=32",
@@ -179,15 +179,14 @@ def main() -> None:
         )
         return
 
-    bin_dir = test_dir/"bin"
-    edge_command = [str(bin_dir/"knn_edge_tests")]
+    edge_command = [str(test_dir/"knn_edge_tests")]
     if args.radial_only:
         edge_command.append("--radial-only")
     edge = run_adversarial(edge_command, "edge", result_root/"edge_results.json")
     periodic = None
     if not args.radial_only:
         periodic = run_adversarial(
-            [str(bin_dir/"knn_periodic_tests")],
+            [str(test_dir/"knn_periodic_tests")],
             "periodic", result_root/"periodic_results.json",
         )
 

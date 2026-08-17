@@ -330,7 +330,7 @@ The production fluid branch is specialized at compilation rather than switched a
 | `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required |
 | `HALF_DISK` | reflect the active polar boundary at the midplane |
 | `FLUID_SWEEP=thread` | assign one CUDA thread to each complete directional line |
-| `FLUID_SWEEP=block` | assign one cooperative CUDA block to each directional line |
+| `FLUID_SWEEP=block` | assign one cooperative GPU block to each directional line |
 
 Transport and the local source update have no feature flag and are always compiled. The two sweep
 choices implement the same mathematical operators and differ only in work decomposition and
@@ -1089,8 +1089,8 @@ algebraically a periodic integer translation followed by conservative residual t
 The allowed endpoint `CFL_DYN = 0.5` can make $c_i=1$ exactly when the half-cell frame offset and
 the bounded residual displacement align. This remains within the PPM tracing domain, but it leaves
 no roundoff margin at the one-cell limit. The production default is therefore `CFL_DYN = 0.45`;
-this safety margin is not a correction to the method or a requirement for the documented
-verification results at CFL 0.5.
+this safety margin is not a correction to the method, and the limiting value 0.5 remains a
+supported edge case.
 
 ### 5.3 Radial and polar integration and boundaries
 
@@ -1688,11 +1688,9 @@ already exceeds a 64-KiB limit. The thread-line azimuthal advection stack is als
 validated gfx942 linker at `N_X = 1024`, making the block sweep the supported large-2D ROCm path.
 These are hardware resource constraints, not changes to the numerical operator.
 
-Performance is grid dependent. Historical development comparisons found the block method faster for a
-`1024^2` transport model but slower for a `128^3` diffusion model. The intended production grid
-should therefore be benchmarked before selecting a default; neither implementation is universally
-preferred. The matched comparison procedure and the status of its archived evidence are recorded
-in `fluid_testset.md`.
+Performance is grid dependent, so the intended production grid should be benchmarked before
+selecting a default; neither implementation is universally preferred. The matched comparison
+procedure and the status of its archived evidence are recorded in `fluid_testset.md`.
 
 For directional sweeps, the independent line counts are
 
@@ -1778,13 +1776,11 @@ precision; output interpolation is therefore unnecessary. Every frame contains `
 when radiation is enabled. `variables.txt` records the active grid, physical parameters, and
 timestep controls needed to interpret those arrays.
 
-## 11. Verification scope and known limitations
+## 11. Known limitations
 
-The analytical and differential CUDA tests, their acceptance criteria, and recorded native results
-are documented in [`fluid_testset.md`](fluid_testset.md). Those tests validate the individual
-transport, source, diffusion, optical-depth, geometry, composition, and thread/block equivalence
-claims made above; they do not establish accuracy after pressureless multistreaming or for every
-possible long production evolution.
+Verification definitions, evidence, and untested regimes are maintained in
+[`fluid_testset.md`](fluid_testset.md). The limitations below concern the physical or numerical
+model itself rather than current test coverage.
 
 - The diffusion-momentum closure is provisional. A complete density-diffusion momentum equation
   should be derived in spherical coordinates, including its tensor and geometric terms, before

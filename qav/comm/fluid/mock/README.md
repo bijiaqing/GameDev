@@ -2,7 +2,7 @@
 
 This directory contains one supplementary regression program:
 `algorithm_checks.py`. It translates selected numerical building blocks into
-NumPy so their intermediate values can be inspected without a CUDA compiler or
+NumPy so their intermediate values can be inspected without a GPU compiler or
 GPU.
 
 From the repository root, run:
@@ -36,11 +36,11 @@ tested and diagnostic numbers. The final line reports how many checks passed.
 
 ## Important limitation
 
-This program is not an independent execution of the CUDA source. It is a
+This program is not an independent execution of the CUDA or HIP source. It is a
 manually maintained Python transcription, so it can pass even if it has drifted
 away from the production implementation. Use it for fast algorithm development
 and algebraic regression checks, but use `test_common/run_suite.py` as the
-authoritative end-to-end validation of the actual CUDA kernels.
+authoritative end-to-end validation of the production GPU kernels.
 
 When a production numerical algorithm changes, update its corresponding Python
 section and explanatory comments together. Historical one-off diagnosis scripts

@@ -9,9 +9,9 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | Document | Responsibility |
 |---|---|
 | [`fluid_numeric.md`](fluid_numeric.md) | Eulerian dust-fluid user guide covering model selection, initialization, equations, discretization, composition, state semantics, and limitations |
-| [`fluid_testset.md`](fluid_testset.md) | Fluid analytical cases, measurement protocol, historical native results, commands, and missing verification |
+| [`fluid_testset.md`](fluid_testset.md) | Fluid analytical cases, measurement protocol, latest archived native results, commands, and missing verification |
 | [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm user guide covering model selection, mass normalization, initialization, transport, diffusion, radiation, collisions, state semantics, and limitations |
-| [`swarm_testset.md`](swarm_testset.md) | Swarm analytical and statistical cases, archived native results, commands, and missing verification |
+| [`swarm_testset.md`](swarm_testset.md) | Swarm analytical and statistical cases, latest archived native results, commands, and missing verification |
 | [`naming.md`](naming.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
 
 Numerical equations belong in the two `*_numeric.md` documents. Test definitions and evidence
@@ -49,19 +49,31 @@ implemented and tested. Backend-neutral complete files are shared between CUDA a
 
 The backend ownership rule is deliberately conservative: share a file only when the complete file
 is backend-neutral, and otherwise keep complete CUDA and ROCm versions. The selected build may use
-only `inc/comm`, `src/comm`, and one backend tree. Generated objects, executables, production
-outputs, and QA records include the backend name, so CUDA and ROCm artifacts cannot be linked or
-overwritten accidentally. Checkpoints are not supported across backends.
+only `inc/comm`, `src/comm`, and one backend tree. Generated object directories remain
+configuration-specific. Each model instead owns one executable beside its `flags.mk` and one
+production output directory under `out/MODEL/`, because a production model selects only one
+backend and algorithm configuration. QAV result archives retain explicit backend paths because
+cross-backend comparison requires both records. Checkpoints are not supported across backends.
 
-## Evidence status
+## Latest archived evidence
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | source definitions for the 85-case analytical matrix and thread/block comparisons | native CUDA and ROCm runs previously passed; generated records are intentionally not tracked and must be regenerated for current evidence |
-| swarm analytical suite | source definitions for the 51-build analytical/statistical matrix, initialization, boundaries, collisions, and failure paths | native CUDA and ROCm runs previously passed; generated records are intentionally not tracked and must be regenerated for current evidence |
-| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link harnesses for both backends | the validated block-parallel sorted top-$K$ merge remains implemented; regenerate backend manifests before making a current-machine claim |
+| fluid analytical suite | 85 metrics on both CUDA and ROCm, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-16 |
+| swarm analytical suite | 51 metrics on both CUDA and ROCm | both native archives passed and the comparison found no mismatches on 2026-08-16 |
+| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | both compact native suites passed with equal coverage on 2026-08-16 |
 
-The fluid and swarm source audits found no unresolved production correctness defect in their inspected scopes after the listed corrections were applied. That statement is a review result, not a substitute for the missing runtime cases documented in the verification files.
+The two complete campaigns used the same source SHA-256,
+`8f40e1d718503ae33b444b1369ea6a32ee7709e5194a2e5169aa0a4e89cdbac2`. CUDA used target `sm_80`,
+CUDA 12.1 (`nvcc` 12.1.105), an NVIDIA
+A100-SXM4-40GB, and driver 580.159.04. ROCm used target `gfx942`, ROCm 7.2.4, AMD clang
+22.0.0git, an AMD Instinct MI300A, and amdgpu driver 6.16.13. Both used Python 3.13.5.
+
+The later executable/output-path reorganization changed only build and runner paths, not numerical
+kernels, but it changed the QAV source fingerprint. The 2026-08-16 records are therefore retained as
+the latest numerical evidence rather than claimed as an archive of the current source snapshot.
+Regenerate both native archives before making a current-source or current-machine claim. The
+remaining coverage limits are listed in the two test-set documents.
 
 ## Current cross-representation conventions
 

@@ -69,7 +69,7 @@ def source_fingerprint(project_root: Path) -> dict:
     suffixes = {".h", ".hpp", ".cu", ".cuh", ".hip", ".py", ".mk"}
     for path in sorted(project_root.rglob("*")):
         if not path.is_file() or any(
-            part in {"obj", "out", "bin", "__pycache__"} for part in path.parts
+            part in {"obj", "out", "__pycache__"} for part in path.parts
         ):
             continue
         if path.name != "Makefile" and path.suffix not in suffixes:
@@ -449,7 +449,11 @@ def build_case(project_root: Path, case: dict, target: str, output_dir: Path) ->
     if clean.returncode != 0 or resolved.returncode != 0 or build.returncode != 0:
         raise RuntimeError(f"{case['case']} did not compile; see {output_dir/'build.json'}")
 
-    return project_root/"bin"/model/"rocm"/"gamedev", raw_output
+    if case["component"] == "fluid":
+        executable = project_root/"qav"/"comm"/"fluid"/model/"gamedev"
+    else:
+        executable = project_root/"qav"/"rocm"/"swarm"/model/"gamedev"
+    return executable, raw_output
 
 
 def summarize(case: dict, repetitions: list[dict], memory: dict) -> dict:

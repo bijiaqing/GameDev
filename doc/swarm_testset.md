@@ -22,8 +22,9 @@ reproducibility, or long-term coupled evolution.
 
 This document defines what each test proves, what it does not prove, and what result is
 expected. Machine-readable results are generated below `qav/logs/swarm/BACKEND/` and are ignored by
-Git; none are retained in the source test tree. The shorter implementation index in
-`qav/comm/swarm/test_common/TEST_CASES.md` should remain consistent with this document.
+Git; the latest local archive is summarized below but is not part of the tracked source tree. The
+QAV implementation points back to this document rather than maintaining a second copy of the case
+definitions.
 
 ## Verification architecture and claim levels
 
@@ -39,8 +40,8 @@ The swarm tests provide four complementary kinds of evidence:
 4. **Diagnostic performance records** report KNN construction time, query time, persistent memory,
    record multiplicity, and traversal counters without making speed part of numerical `PASS`
 
-Most models invoke production kernels from a small test-local `swarm_runtime.cu`. Helper tests use
-small CUDA kernels only to call production device functions and return their values. The KNN family
+Most models invoke production kernels from a small test-local backend runtime. Helper tests use
+small GPU kernels only to call production device functions and return their values. The KNN family
 compiles standalone controlled drivers and also links the actual 1D, 2D, and 3D production collision
 translation units with each backend. The other GPU backend is never treated as analytical truth;
 backend disagreement is resolved by exhaustive CPU search where the test design promises it.
@@ -135,7 +136,7 @@ particular random sequence.
 
 ### Reference independence and pass propagation
 
-Deterministic expected states are reconstructed in Python from test constants and raw CUDA output;
+Deterministic expected states are reconstructed in Python from test constants and raw GPU output;
 the validator does not read a GPU result back as its own reference. Grid measures, optical-depth
 prefix sums, drag exponentials, viscous targets, boundary folds, collision measures, and imported
 gas scalings are evaluated independently. Initialization uses independent containment integrals and
@@ -276,7 +277,7 @@ The `radial` group is a deliberately mixed validation matrix. Deterministic case
 returned scalar with an independently evaluated CPU formula. The diffusion case compares ensemble
 moments with exact stochastic moments. The KNN case combines differential comparison over many
 queries with exhaustive CPU enumeration over a configured subset and every backend disagreement.
-Thus `PASS` does not mean merely that a CUDA kernel completed without an error.
+Thus `PASS` does not mean merely that a GPU kernel completed without an error.
 
 | Model | GPU quantities compared | Independent ground truth | Required for `PASS` |
 |---|---|---|---|
@@ -294,7 +295,7 @@ Thus `PASS` does not mean merely that a CUDA kernel completed without an error.
 | radial KNN edge checks | inner, middle, and outer line queries plus rejection of nearer inactive particles | exhaustive enumeration of each small point set | exact valid identifier set, squared-distance error within $2\times10^{-6}\max(1,|d_{\rm ref}^2|)$, correct unused Morton slots, and zero Morton overflows; active-mask rejection must pass independently for both backends |
 
 For deterministic cases, the other GPU implementation is never treated as ground truth. The
-Python reference uses formulas derived independently from the CUDA output. For the radial KNN
+Python reference uses formulas derived independently from the GPU output. For the radial KNN
 matrix, backend agreement over all 4096 queries is supplemented rather than replaced by brute
 force: the first 32 queries are always exhaustively checked, and any later disagreement would
 also be exhaustively adjudicated.
@@ -448,7 +449,7 @@ $$
 For `test_orbit_1d`, the corresponding spatial trajectory is $x(t)=0$, with the same constant
 $y$, $\ell_x$, and $v_y$, and with $z=\pi/2$, $\ell_z=0$ exactly
 
-The CUDA kernel advances to $T=2\pi$ using $N$ equal steps. The 2D validator wraps the azimuthal error
+The selected GPU kernel advances to $T=2\pi$ using $N$ equal steps. The 2D validator wraps the azimuthal error
 to $[-\pi,\pi)$ and combines errors in $x$, $y$, $\ell_x$, and $v_y$. It rejects nonfinite states
 or $L_\infty\ge0.5$. The radial validator additionally checks exact inactive $z$ and $\ell_z$ and
 requires $L_\infty<5\times10^{-13}$. Because this circular equilibrium is preserved to roundoff, refinement does
@@ -824,7 +825,7 @@ the boundary-event convergence tests described below.
 
 ### Collision helper mathematics
 
-The collision cases execute a test-local CUDA kernel that directly calls the production
+The collision cases execute a test-local GPU kernel that directly calls the production
 `_get_ball_measure` and `_get_col_rate_ij` device helpers. They do not build or query the KD tree.
 
 For neighborhood radius $a=0.2$, an interior neighborhood has measure
@@ -1002,73 +1003,59 @@ to adjudicate a disagreement. This is strong differential coverage but is not ex
 validation of all 4096 queries when all GPU backends make the same choice. The adversarial drivers
 provide the complementary fully exhaustive small-set checks.
 
-### Native KNN result from the complete 2026-07-31 run
+### Latest archived native KNN evidence
 
-The KNN branch of the complete all-in-one run used $N_K=200$, a search cutoff of approximately
-$0.1$, 4096 quality queries, 32 unconditional exhaustive CPU queries, and $N_P=10^5$. It compiled
-all four standalone KNN drivers and linked the real `test_collision_1d`, `test_collision_2d`, and
-`test_collision_3d` production translation units once with each backend. The component manifests
-and `suite_manifest.json` all report `"passed": true`.
+The KNN branches of the 2026-08-16 CUDA and ROCm campaigns used $N_K=200$, a search cutoff of
+approximately $0.1$, 4096 quality queries, 32 unconditional exhaustive CPU queries, and
+$N_P=10^5$. Each backend compiled all four standalone KNN drivers and linked the real
+`test_collision_1d`, `test_collision_2d`, and `test_collision_3d` production translation units
+once with KD-tree search and once with Morton search. Every component and aggregate manifest
+reports `"passed": true`, and the cross-backend report confirms equal coverage.
 
-| Component | Cases | Recorded result |
-|---|---:|---|
-| edge adversarial driver | 15 | 15/15 PASS |
-| periodic adversarial driver | 10 | 10/10 PASS |
-| ordinary smooth/ring/clump/radial matrix | 7 | 7/7 PASS |
-| compact-ghost periodic-wedge matrix | 10 | 10/10 PASS |
-| production collision links | 6 backend/model combinations | 6/6 PASS |
+| Component | CUDA | ROCm |
+|---|---:|---:|
+| edge adversarial driver | 15/15 PASS | 15/15 PASS |
+| periodic adversarial driver | 14/14 PASS | 14/14 PASS |
+| ordinary smooth/ring/clump/radial matrix | 7/7 PASS | 7/7 PASS |
+| compact-ghost periodic-wedge matrix | 10/10 PASS | 10/10 PASS |
+| production collision links | 6/6 PASS | 6/6 PASS |
 
-This archived run predates the four near-full-domain transition cases, so its periodic-driver row
-correctly remains 10/10. The current driver contains 14 cases and requires a new native CUDA run
-before 14/14 can be recorded here.
+Across the seven ordinary cases on each backend there were no KD-tree/Morton query disagreements,
+brute-force mismatches, Morton-record mismatches, record-geometry mismatches, or traversal-stack
+overflows. The largest squared-distance discrepancy was $9.31\times10^{-10}$ on CUDA and
+$1.86\times10^{-9}$ on ROCm.
 
-Across the seven ordinary cases, the records contain:
+The periodic-wedge matrices contained six CUDA and ten ROCm topology disagreements. Every one was
+independently brute-forced, and both searches agreed with an admissible minimum-image reference.
+There were no brute-force, record-geometry, or overflow failures. The largest squared-distance
+discrepancy was $2.65\times10^{-8}$ on CUDA and $3.73\times10^{-9}$ on ROCm, both within the
+single-precision periodic tolerance.
 
-- zero KD-tree/Morton query disagreements
-- zero KD-tree or Morton brute-force mismatches
-- zero Morton-record or record-geometry mismatches
-- zero traversal-stack overflows
-- maximum squared-distance error from $0$ to
-  $9.313225746\times10^{-10}$
-
-Across the ten periodic-wedge cases, all backend disagreements were independently brute-forced:
-six disagreement queries were examined in total, and both backends agreed with the minimum-image
-reference in every one. There were no brute-force, record-geometry, or overflow failures. The
-largest recorded squared-distance discrepancy was
-$2.654269338\times10^{-8}$ in the narrow 3D seam case, below the stated periodic tolerance and
-associated with independently valid single-precision periodic ordering.
-
-Timing is diagnostic and is not part of `passed`. For the default $10^5$-particle run,
-the ordinary ratio
+Timing is diagnostic and is not part of `passed`. Define the query-time ratio
 
 $$
 S_{\rm query}=\frac{t_{\rm KD}}{t_{\rm Morton}}
 $$
 
-ranged from $0.258$ to $0.790$, while Morton hierarchy storage was $0.718$-$0.756$ of KD-tree
-storage. In the wedge matrix, $S_{\rm query}$ ranged from $0.670$ to $1.278$ and compact Morton
-storage was $0.247$-$0.491$ of the three-image KD-tree storage. Values above one favor Morton.
-The compact ghost-record count ranged from $1.025N_P$ for an interior clump to approximately
-$2.002N_P$ for a narrow seam clump, compared with the KD-tree's fixed $3N_P$ wedge records.
-These are search-batch and owned-hierarchy measurements on an A100, not end-to-end collision or
-simulation speedups.
+where values above one favor Morton. The current measurements are
 
-Before this matrix, intermittent ordinary and wedge mismatches exposed a shared-memory traversal
-race. Racecheck reported thread zero overwriting the shared node index while other warps still read
-its previous value, with secondary hazards in the sorted merge. Adding the missing block barrier
-before node-index replacement reduced the Racecheck result from three reported hazards to zero.
-The complete Morton matrices passed without topology, brute-force, geometry-record, or overflow
-failures. The benchmark retains `--quality-only` plus record-versus-traversal counters
-so future sanitizer runs can isolate the quality kernel without timing the full query batch.
+| Backend | Ordinary $S_{\rm query}$ | Wedge $S_{\rm query}$ | Ordinary Morton/KD memory | Wedge Morton/KD memory |
+|---|---:|---:|---:|---:|
+| CUDA A100 | 0.259--0.793 | 0.668--1.281 | 0.718--0.756 | 0.247--0.491 |
+| ROCm MI300A | 0.419--0.863 | 0.667--1.927 | 0.718--0.756 | 0.247--0.491 |
+
+The compact ghost-record count ranged from $1.0248N_P$ for an interior clump to
+$2.00196N_P$ for a narrow seam clump, compared with the KD-tree's fixed $3N_P$ wedge records.
+These are search-batch and owned-hierarchy measurements, not end-to-end collision or simulation
+speedups.
 
 The memory ratios above compare owned search hierarchies while treating query coordinates as common
 inputs. Production also owns backend-specific support arrays, so total simulation VRAM must be
 measured in the production executable rather than reconstructed from these ratios.
 
 The `--full` path is configured to add $N_P=10^6$ and $10^7$, producing 21 ordinary and 30 wedge
-cases. Older development transcripts contain successful large matrices, but the current
-machine-readable manifests document the clean default $N_P=10^5$ run only. This document therefore
-does not promote the older large-run timings to a current-source claim.
+cases. The archived source-matched manifests document the compact $N_P=10^5$ campaign only, so no
+large-particle timing is promoted as archived evidence.
 
 The standalone `*_query_ms` fields measure one complete batch of $N_P$ search queries using CUDA
 events after an untimed warm-up and report the mean of the requested repeats. They include tree
@@ -1082,13 +1069,9 @@ with particle images and compact-ghost Morton with block-parallel sorted top-$K$
 Morton remains a correctness-only adversarial driver and contributes no timing, memory, or wedge
 benchmark JSON fields.
 
-The promoted QA benchmark is not performance-identical to the former laboratory KD-tree driver.
-It uses the production `index_old` heap, and its periodic-wedge path deduplicates physical
-particles represented by multiple KD-tree images. The former driver used the stock KD-tree heap
-without that per-candidate deduplication. Consequently, historical laboratory ratios must not be
-compared directly with the promoted archive; only runs of one source revision are suitable for
-backend performance comparison.
-The current optimized KD-tree heap stores `index_old` directly and activates its duplicate scan only
+The promoted QA benchmark uses the production `index_old` heap, and its periodic-wedge path
+deduplicates physical particles represented by multiple KD-tree images. The optimized heap stores
+`index_old` directly and activates its duplicate scan only
 for geometrically overlapping image neighborhoods; the JSON field `kd_deduplicate` records which
 path each wedge case exercises.
 
@@ -1097,133 +1080,58 @@ evaluation with serial ordered accumulation. The standalone QA and production KD
 the same generic `index_old_heap` from each backend's
 `inc/<backend>/swarm/kdtree/index_heap.cuh`, eliminating the
 former test transcription. The clean topology archive validates the shared search components;
-the production pair-rate optimization is compiled by the suite but still needs a fresh
-end-to-end production timing comparison.
+the production pair-rate optimization is compiled by the suite but still needs an end-to-end
+production timing comparison.
 
-### Collision-runtime differential comparisons
+## Latest archived native and cross-backend evidence
 
-The four retained runtime models—`collision_disk_2d`, `collision_wedge_2d`,
-`collision_disk_3d`, and `collision_disk_3d_1m`—compare two executions initialized from the same
-particle bytes, with the KD-tree backend used as the independent mature reference and Morton used
-as the candidate. They are differential and statistical tests, not analytical solutions of the
-Smoluchowski equation.
+### Complete 2026-08-16 archives
 
-Before stochastic events, a runtime comparison requires:
+The common suite was regenerated on CUDA and ROCm under the source-matched campaign recorded in
+[`README.md`](README.md). Both aggregate manifests report 25/25 models passed, comprising 51/51
+analytical metrics, four standalone KNN builds, and six production collision links. The analytical
+metrics partition into 33 publication and 18 release records.
 
-- byte-identical initialized particle state
-- identical neighbor count and neighbor-identifier hash, except for an explicitly adjudicated
-  distance-equivalent $N_K$ boundary tie
-- finite collision-rate and KNN-radius arrays with identical zero masks
-- collision-rate relative $L_2\le10^{-5}$ and maximum relative error $\le10^{-3}$
-- KNN-radius errors within the same probe tolerances
+| Group | Builds or cases | CUDA | ROCm |
+|---|---:|---:|---:|
+| grid deposition and optical depth in 1D, 2D, and 3D | 12 builds | PASS | PASS |
+| orbit, drag, viscous flow, and transport in 1D and 2D | 11 builds | PASS | PASS |
+| diffusion in 1D, 2D, and 3D | 12 builds | PASS | PASS |
+| continuous finite-domain initialization | 4 builds | PASS | PASS |
+| radiation and P-R drag in 1D and 2D | 4 builds | PASS | PASS |
+| full-disk, wedge, and half-domain boundary maps | 4 builds | PASS | PASS |
+| collision and imported-gas helpers in 1D, 2D, and 3D | 4 builds | PASS | PASS |
 
-After collision evolution, different backend neighbor orders may consume the random target differently and
-produce different individual partners. Therefore byte-equal RNG state, byte-equal particle sizes,
-and trajectory closeness are diagnostics, not pass requirements. Instead, each of the eight final
-fields $(x,y,z,v_x,v_y,v_z,s,N)$ must pass a two-sample Kolmogorov–Smirnov comparison. The family
-false-rejection probability is $0.01$, divided over the eight fields, so each field uses
-$\alpha=0.00125$ and its sample-size-dependent two-sample critical value. Both runs must remain
-finite, each relative dust-mass drift and the final cross-backend mass mismatch must remain below
-$10^{-11}$, and every pre-event probe and final-field KS test must pass. Only then is the runtime
-record marked `passed: true`.
+The detailed KNN component counts, correctness criteria, memory ratios, and timing ranges are
+reported once in “Latest archived native KNN evidence” above.
 
-This reference establishes that changing the exact search backend preserves the collision
-estimator and its output distribution. It does not establish that either backend reproduces an
-analytical coagulation history, that the Bernoulli leap is converged in `CFL_COL`, or that a single
-realization should follow the same trajectory. The retained runtime JSON files describe the
-earlier development implementation; regenerating them with the promoted source remains listed
-below.
+The backend comparator found all 51 analytical records on both sides, no missing records, and zero
+acceptance mismatches. Twelve stochastic records are compared by pass state and acceptance metadata
+rather than requiring equal random realizations. The KNN comparison found equal component coverage
+and passing aggregate manifests on both backends. Independent local archive checks reproduced
+`PASS` for both downloaded archives without invoking either GPU runtime.
 
-## Recorded native CUDA evidence
+The common `all` group is the current publication-and-release baseline. Same-backend restart,
+deliberate nonfinite injection, large-particle KNN, and performance measurements are qualification
+branches and are not included in these counts. Refresh them separately when those claims are
+needed. Vendor RNG-state files must only be tested by same-backend restart cases.
 
-The then-current complete suite was run natively on the Vera CUDA cluster on 2026-07-31:
+### Qualification branches
 
-```bash
-python3 qav/cuda/swarm/test_common/run_suite.py \
-    --group all \
-    --res 32 64 128 256
-```
-
-The historical aggregate manifest reported `suite_passed: true`, `status: passed`, and 24/24 completed
-components. All 47 analytical builds passed, all four standalone KNN executables built, and all
-six production collision configurations linked. The run covered:
-
-Current runners use the unambiguous `passed` field and preserve the complete state in
-`qav/logs/swarm/cuda/manifest_all.json`; focused group manifests coexist beside it.
-
-| Group | Analytical builds or KNN cases | Result |
-|---|---:|---|
-| grid deposition and optical depth in 1D, 2D, and 3D | 12 builds | PASS |
-| orbit, drag, viscous flow, and transport in 1D and 2D | 11 builds | PASS |
-| diffusion in 1D, 2D, and 3D | 12 builds | PASS |
-| radiation and P-R drag in 1D and 2D | 4 builds | PASS |
-| full-disk, wedge, and half-domain boundary maps | 4 builds | PASS |
-| collision and imported-gas helpers in 1D, 2D, and 3D | 4 builds | PASS |
-| ordinary KNN matrix | 7 cases | 7/7 PASS |
-| KNN edge and periodic drivers | 25 checks | 25/25 PASS |
-| periodic-wedge KNN matrix | 10 cases | 10/10 PASS |
-| production KD-tree/Morton collision links | 6 configurations | 6/6 PASS |
-
-The archive contains 47 `metrics_N*.json` files, 47 matching `meta_N*.json` files, 23 analytical
-model manifests, the ordinary and wedge KNN manifests, individual edge, periodic, and
-production-link records, the KNN aggregate, and the live top-level aggregate. Every referenced
-component manifest reports `"passed": true`; the captured transcript JSON ends with
-`SWARM TEST SUITE: PASS`.
-
-All environment records agree on:
-
-- NVIDIA CUDA compiler 12.1, build 12.1.105
-- NVIDIA A100-SXM4-40GB GPU
-- NVIDIA driver 580.159.04
-- Python 3.13.5 for the aggregate runner
-
-This all-in-one archive supersedes the earlier focused radial, boundary, and KNN result summaries.
-The separate test groups remain useful for development, but the numerical claims below are taken
-from this all-group baseline and the newer focused initialization run described next.
-
-### Native ROCm qualification
-
-The native gfx942 analytical campaign produced all 51 CUDA-comparable records, and every one of
-its 24 analytical component manifests passed. The backend-local restart model also passed with
-byte-identical restored HIP RNG state and positions and a linear-velocity round-trip error below
-$2\times10^{-14}$. Together with KNN qualification, the aggregate contained 26 passing models and
-52 analytical builds at that source revision.
-
-The ROCm KNN matrix passed seven ordinary cases, 15 edge cases, 14 periodic cases, ten periodic-
-wedge cases, and all six production collision links. Large-query disagreements are adjudicated by
-the same exhaustive CPU rules described above; neither CUDA nor ROCm is treated as ground truth.
-At $10^5$ particles the KD-tree was faster in the ordinary cases, while Morton used less persistent
-memory and was fastest in the deliberately difficult narrow-seam cases. These timings establish a
-regime trend, not a universal backend preference.
-
-The deliberate ROCm collision failure suite passed 44 of 44 cases across KD-tree and Morton. It
-requires clean controls to succeed and injected nonfinite particle, collision-rate, or KNN-radius
-states to terminate through the intended production diagnostic without a HIP runtime fault.
-
-Run or compare these gates with
+The complete campaign does not refresh same-backend restart or deliberate failure injection.
+Run those qualification-only branches independently when their claims are needed:
 
 ```bash
-python3 qav/rocm/swarm/test_common/run_suite.py --group all --res 32 64 128 256 --target gfx942
+python3 qav/rocm/swarm/test_common/run_suite.py --group restart --res 32 --target gfx942
 python3 qav/rocm/swarm/test_common/run_suite.py --group failure --target gfx942
-python3 qav/tool/compare_backends.py --component swarm
 ```
 
-CUDA and ROCm stochastic paths are compared through analytical moments, mass conservation, KNN
-topology, collision-rate probes, and output distributions rather than byte-equal trajectories.
-Vendor RNG-state files are tested only by same-backend restart cases.
+Focused evidence is stored below `groups/GROUP/`, so it cannot replace the common `all` archive.
+The complete backend-neutral transfer and comparison workflow is specified in `qav/README.md`.
 
-The common `all` group is identical on both backends; ROCm restart and deliberate failure paths are
-separate native-only groups. `qav/tool/run_all.py` runs and checks the transferable common archive,
-while group-specific directories below `groups/GROUP/` prevent a later focused run from replacing
-any part of the full archive. Either backend may run first; after both backend archives are copied
-into one QAV tree, the comparison is a Python-only operation. See `qav/README.md` for the complete
-backend-neutral transfer workflow.
+### Recorded initialization results
 
-### Continuous-initialization supplement
-
-After replacing polar-cell-center initialization with continuous cylindrical containment and
-adding the intermediate-size population, `test_initial_3d` was run natively on the same Vera CUDA
-platform on 2026-08-01 at
+The complete CUDA and ROCm archives include `test_initial_3d` at
 
 $$
 N_Z=32,64,128,256.
@@ -1238,7 +1146,7 @@ were
 | Quantity | Recorded value | Acceptance limit |
 |---|---:|---:|
 | domain-mass relative $L_\infty$ | $3.71\times10^{-15}$ | $2\times10^{-12}$ |
-| mass-normalization relative error | $8.65\times10^{-16}$ | $5\times10^{-12}$ |
+| mass-normalization relative error | $2.16\times10^{-16}$ | $5\times10^{-12}$ |
 | represented-mass relative error | $4.76\times10^{-16}$ | $5\times10^{-12}$ |
 | radial PIT KS | $5.22\times10^{-3}$ | $4.06\times10^{-2}$ |
 | vertical PIT KS | $6.75\times10^{-3}$ | $4.06\times10^{-2}$ |
@@ -1246,16 +1154,8 @@ were
 For the geometric-mean grain size, interpolation between the two central size knots differed from
 a directly integrated midpoint reference by $4.07\times10^{-9}$ in CDF $L_\infty$ and
 $6.61\times10^{-9}$ in contained mass. These are fidelity diagnostics rather than acceptance
-thresholds. The archived `metrics_N*.json`, `meta_N*.json`, `manifest.json`, and `environment.json`
-files under `qav/logs/swarm/cuda/test_initial_3d/` are the native machine-readable record.
-
-The archived JSON was generated immediately before the midpoint normalization mirror in the Python
-validator was changed from arithmetic mass interpolation to the production rule, which is linear
-in $(\log s,\log I)$ for positive entries. The CUDA initialization itself already used the latter
-rule. Applying the corrected validator changes only the reported midpoint-sensitive normalization
-residual, from $8.65\times10^{-16}$ to approximately $5.13\times10^{-13}$ in the checked host
-artifact, still well below the $5\times10^{-12}$ limit. A focused native rerun should refresh the
-archived metric rather than treating the older last digits as current validator output.
+thresholds. Both backends accepted the same metrics; the per-resolution JSON, metadata,
+environment, and manifest files are the machine-readable record.
 
 ### Deterministic accuracy and conservation
 
@@ -1319,13 +1219,12 @@ every ensemble.
 
 The archived JSON files are the authoritative records for the complete $L_1$, $L_2$,
 $L_\infty$, mass, and stochastic-moment values. The metadata and environment records document the
-compiled problem sizes and native CUDA platform. The component directories therefore preserve the
-machine-readable numerical evidence, while the mutable top-level manifest describes only the most
-recent suite invocation as explained above.
+compiled problem sizes and each native platform. The CUDA and ROCm component directories preserve
+the machine-readable evidence for their respective campaigns.
 
 ## Running and archiving the suite
 
-The CUDA suite requires the ordinary project toolchain, Python 3.9 or newer, and NumPy. Optional
+Each native suite requires its backend toolchain, Python 3.9 or newer, and NumPy. Optional
 GPU diagnostic commands are recorded when available but do not replace numerical validation.
 
 From the repository root, run a short workflow check with
@@ -1388,9 +1287,9 @@ python3 qav/cuda/swarm/test_common/run_suite.py --group knn --knn-full
 ```
 
 These commands build and test the sole Morton path, the block-parallel sorted top-$K$ merge, against
-the KD-tree and independent brute-force references. The current full run contains 21 ordinary cases and
-30 periodic-wedge cases across $N_P=10^5$, $10^6$, and $10^7$; the $10^7$ cases are substantially
-more expensive and require correspondingly more GPU memory. The runners print the KD-tree and
+the KD-tree and independent brute-force references. The `--full` matrix contains 21 ordinary cases
+and 30 periodic-wedge cases across $N_P=10^5$, $10^6$, and $10^7$; the $10^7$ cases are
+substantially more expensive and require correspondingly more GPU memory. The runners print the KD-tree and
 Morton query batch times and their ratio. Standalone JSON, manifests, and analysis summaries are
 written directly under `qav/logs/swarm/cuda/test_knn/`, with periodic-wedge results in its `wedge/`
 subdirectory.
@@ -1426,9 +1325,9 @@ after every selected model has returned successfully.
 
 ## Coverage limits and verification still required
 
-- Regenerate the four production collision-runtime comparisons with the promoted source for
-  axisymmetry, partial wedges, full 3D, and $N_P=10^6$; the retained copies establish the earlier
-  development baseline but do not measure the current cooperative pair-rate implementation
+- Add current-source production collision-runtime comparisons for axisymmetry, partial wedges,
+  full 3D, and $N_P=10^6$; the present suite compiles both search backends but does not evolve and
+  statistically compare complete collision histories
 - Test complete frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
   with `CFL_COL`, $N_K$, $N_P$, and `H_SEARCH`; include a uniform-density field with a known rate

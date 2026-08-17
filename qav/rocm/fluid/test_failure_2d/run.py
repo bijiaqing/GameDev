@@ -110,7 +110,7 @@ def main() -> None:
     project_root = fluid_root.parents[2]
     output_dir = project_root/"qav"/"logs"/"fluid"/"rocm"/"failure"/model_dir.name
     output_dir.mkdir(parents=True, exist_ok=True)
-    executable = project_root/"bin"/model_dir.name/"rocm"/"gamedev"
+    executable = model_dir/"gamedev"
 
     build_command = [
         "make", "-C", str(project_root), f"MODEL={model_dir.name}",

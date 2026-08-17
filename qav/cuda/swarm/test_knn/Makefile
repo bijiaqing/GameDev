@@ -8,13 +8,12 @@ K ?= 200
 NVCC_FLAGS := -arch=$(ARCH) -O3 --use_fast_math -lineinfo -std=c++17 -DQAV_KNN_K=$(K)
 INCLUDES := -I $(TEST_DIR) -I $(ROOT_DIR)/inc/cuda/swarm -I $(ROOT_DIR)/inc/comm/swarm
 
-BIN_DIR := $(TEST_DIR)/bin
-CONFIG_STAMP := $(BIN_DIR)/.arch_$(ARCH)_k_$(K)
+CONFIG_STAMP := $(TEST_DIR)/.arch_$(ARCH)_k_$(K)
 
-TARGET          := $(BIN_DIR)/knn_benchmark
-EDGE_TARGET     := $(BIN_DIR)/knn_edge_tests
-PERIODIC_TARGET := $(BIN_DIR)/knn_periodic_tests
-WEDGE_TARGET    := $(BIN_DIR)/knn_wedge_benchmark
+TARGET          := $(TEST_DIR)/knn_benchmark
+EDGE_TARGET     := $(TEST_DIR)/knn_edge_tests
+PERIODIC_TARGET := $(TEST_DIR)/knn_periodic_tests
+WEDGE_TARGET    := $(TEST_DIR)/knn_wedge_benchmark
 
 .PHONY: all edge periodic wedge suite clean
 
@@ -29,14 +28,12 @@ wedge: $(WEDGE_TARGET)
 suite: all edge periodic wedge
 
 $(CONFIG_STAMP):
-	@mkdir -p $(BIN_DIR)
 	@touch $@
 
 $(TARGET): $(TEST_DIR)/knn_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/kdtree/index_heap.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
-	@mkdir -p $(BIN_DIR)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
@@ -46,7 +43,6 @@ $(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.cu $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/kdtree/knn.h \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
-	@mkdir -p $(BIN_DIR)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
@@ -54,7 +50,6 @@ $(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.cu $(TEST_DIR)/knn_types.cuh \
 $(PERIODIC_TARGET): $(TEST_DIR)/knn_periodic_tests.cu $(TEST_DIR)/periodic_query.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
-	@mkdir -p $(BIN_DIR)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/periodic_query.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
@@ -65,11 +60,11 @@ $(WEDGE_TARGET): $(TEST_DIR)/knn_wedge_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_ghost.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_query.cuh $(CONFIG_STAMP)
-	@mkdir -p $(BIN_DIR)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
 
 clean:
-	@printf "%-12s %s\n" "Cleaning" "$(BIN_DIR)"
-	@rm -rf $(BIN_DIR)
+	@printf "%-12s %s\n" "Cleaning" "$(TEST_DIR) executables"
+	@rm -f $(TARGET) $(EDGE_TARGET) $(PERIODIC_TARGET) $(WEDGE_TARGET) \
+		$(TEST_DIR)/.arch_* $(TEST_DIR)/production_test_collision_*

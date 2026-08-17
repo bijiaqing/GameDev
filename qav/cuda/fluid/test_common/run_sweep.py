@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from compare_sweeps import compare_pair
-from run_model import environment_record
+from run_model import environment_record, model_executable
 
 
 def write_json(path: Path, record: dict[str, object]) -> None:
@@ -119,7 +119,7 @@ def build_and_run(
 
     # Retain the native stream and accepted-step records inside one JSON log
     start = time.perf_counter()
-    run_command = [str(project_root/"bin"/model/"cuda"/"gamedev")]
+    run_command = [str(model_executable(project_root, model, "cuda", "fluid"))]
     simulation = subprocess.Popen(
         run_command, cwd=project_root, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1,
