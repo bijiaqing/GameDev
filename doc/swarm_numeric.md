@@ -1933,41 +1933,22 @@ The turbulent Reynolds number is calibrated as
 The implementation writes $\Delta v_T^2=v_g^2B$ with the six Ormel–Cuzzi regimes
 
 ```math
-B=
-\begin{cases}
-\dfrac{(S-s)^2}{r_\eta},
-&S<0.2r_\eta,\\
-\dfrac{S-s}{S+s}
-\left(\dfrac{S}{1+r_\eta/S}-\dfrac{s}{1+r_\eta/s}\right),
-&0.2r_\eta\le S<r_\eta/y_a,\\
-B_3,
-&r_\eta/y_a\le S<5r_\eta,\\
-S\left[
-2y_a-(1+\epsilon)
-+\dfrac{2}{1+\epsilon}
-\left(\dfrac{1}{1+y_a}+\dfrac{\epsilon^3}{y_a+\epsilon}\right)
-\right],
-&5r_\eta\le S<0.2,\\
-S\left[
-2y_s-(1+\epsilon)
-+\dfrac{2}{1+\epsilon}
-\left(\dfrac{1}{1+y_s}+\dfrac{\epsilon^3}{y_s+\epsilon}\right)
-\right],
-&0.2\le S<1,\\
-\dfrac{1}{1+S}+\dfrac{1}{1+s},
-&S\ge1,
-\end{cases}
+B=\left\{
+\begin{array}{ll}
+\dfrac{(S-s)^2}{r_\eta}, & S\lt0.2r_\eta,\\
+\dfrac{S-s}{S+s}\left(\dfrac{S}{1+r_\eta/S}-\dfrac{s}{1+r_\eta/s}\right), & 0.2r_\eta\le S\lt r_\eta/y_a,\\
+B_3, & r_\eta/y_a\le S\lt5r_\eta,\\
+S\left[2y_a-(1+\epsilon)+\dfrac{2}{1+\epsilon}\left(\dfrac{1}{1+y_a}+\dfrac{\epsilon^3}{y_a+\epsilon}\right)\right], & 5r_\eta\le S\lt0.2,\\
+S\left[2y_s-(1+\epsilon)+\dfrac{2}{1+\epsilon}\left(\dfrac{1}{1+y_s}+\dfrac{\epsilon^3}{y_s+\epsilon}\right)\right], & 0.2\le S\lt1,\\
+\dfrac{1}{1+S}+\dfrac{1}{1+s}, & S\ge1.
+\end{array}
+\right.
 ```
 
 where the transition coefficient is
 
 ```math
-\begin{aligned}
-B_3={}&\frac{S-s}{S+s}
-\left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)
-+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}\\
-&+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
-\end{aligned}
+B_3=\frac{S-s}{S+s}\left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
 ```
 
 ### 8.2 Frozen Bernoulli collision batches
