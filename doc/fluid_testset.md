@@ -318,7 +318,7 @@ the two relevant Jacobians. Define
 $$
 B(y)=
 \begin{cases}
-\exp\!\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\\
+\exp\!\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\cr
 0,&|u|\ge1,
 \end{cases}
 \qquad
@@ -492,7 +492,7 @@ $y^p$ and
 $$
 \tau(y)=
 \begin{cases}
-\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\\
+\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\cr
 \ln(y/Y_{\min}),&p=-1.
 \end{cases}
 $$

@@ -162,7 +162,7 @@ $$
 \qquad
 d=
 \begin{cases}
-2,&N_Z=1,\\
+2,&N_Z=1,\cr
 3,&N_Z>1.
 \end{cases}
 $$
@@ -177,7 +177,7 @@ $$
 V_{ijk}=\Delta x\,
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
 \begin{cases}
-1,&N_Z=1,\\
+1,&N_Z=1,\cr
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1.
 \end{cases}
 $$
@@ -214,12 +214,12 @@ For either density interpretation, define
 $$
 \boldsymbol U=
 \begin{pmatrix}
-\varrho_d\\m_x\\m_y\\m_z
+\varrho_d\cr m_x\cr m_y\cr m_z
 \end{pmatrix}
 =\begin{pmatrix}
-\varrho_d\\
-\varrho_d\ell_\phi\\
-\varrho_dv_r\\
+\varrho_d\cr
+\varrho_d\ell_\phi\cr
+\varrho_dv_r\cr
 \varrho_d\ell_\theta
 \end{pmatrix},
 \qquad
@@ -590,7 +590,7 @@ is the finite-volume integral of the resulting field rather than a separately im
 $$
 M_d=
 \begin{cases}
-\displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\\
+\displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\cr
 \displaystyle\int\rho_d(r,\theta,\phi)r^2\sin\theta\,dr\,d\theta\,d\phi,&N_Z>1.
 \end{cases}
 $$
@@ -631,7 +631,7 @@ v_{R,g}
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
 =\begin{cases}
-0,&\nu=\mathrm{constant},\\
+0,&\nu=\mathrm{constant},\cr
 q+\frac32,&\alpha=\mathrm{constant}.
 \end{cases}
 $$
@@ -959,9 +959,9 @@ In one spatial direction, the density and normal momentum subsystem is
 
 $$
 \frac{\partial}{\partial t}
-\begin{pmatrix}\rho\\ \rho u\end{pmatrix}
+\begin{pmatrix}\rho\cr \rho u\end{pmatrix}
 +\frac{\partial}{\partial x}
-\begin{pmatrix}\rho u\\ \rho u^2\end{pmatrix}=0.
+\begin{pmatrix}\rho u\cr \rho u^2\end{pmatrix}=0.
 $$
 
 Its flux Jacobian has the repeated eigenvalue
@@ -1121,7 +1121,7 @@ At an outflow-only boundary with outward normal speed $a_n$, the boundary mass f
 $$
 F_\varrho=
 \begin{cases}
-a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
+a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\cr
 0,&a_n\text{ points into the domain},
 \end{cases}
 \qquad
@@ -1272,7 +1272,7 @@ where
 $$
 \rho_{\rm ext}=
 \begin{cases}
-\Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\\
+\Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\cr
 \rho_d,&N_Z>1.
 \end{cases}
 $$
@@ -1460,7 +1460,7 @@ $$
 \qquad
 u_{a,\rm donor}=
 \begin{cases}
-u_{a,i},&\mathcal F_{\rho,i+1/2}\ge0,\\
+u_{a,i},&\mathcal F_{\rho,i+1/2}\ge0,\cr
 u_{a,i+1},&\mathcal F_{\rho,i+1/2}<0,
 \end{cases}
 $$

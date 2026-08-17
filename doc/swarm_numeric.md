@@ -174,7 +174,7 @@ $$
 V_{ijk}=\Delta\phi_{\rm cell}
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
 \begin{cases}
-1,&N_Z=1,\\
+1,&N_Z=1,\cr
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1,
 \end{cases}
 $$
@@ -184,7 +184,7 @@ where
 $$
 \Delta\phi_{\rm cell}=
 \begin{cases}
-\Delta x,&N_X>1,\\
+\Delta x,&N_X>1,\cr
 2\pi,&N_X=1.
 \end{cases}
 $$
@@ -454,7 +454,7 @@ branch holds $\nu$ constant:
 $$
 \nu(R)=
 \begin{cases}
-\alpha h_g^2R^2\Omega_K,&\text{constant }\mathtt{ALPHA},\\
+\alpha h_g^2R^2\Omega_K,&\text{constant }\mathtt{ALPHA},\cr
 \mathrm{NU},&\text{constant }\mathtt{NU}.
 \end{cases}
 $$
@@ -689,8 +689,8 @@ M_{\rm dust}\approx\frac{1}{u_{\max}-u_{\min}}
 \frac{\Delta u}{3}
 \left[
 I(u_0^2)+I(u_{N_q}^2)
-+4\sum_{\substack{n=1\\n\ \mathrm{odd}}}^{N_q-1}I(u_n^2)
-+2\sum_{\substack{n=2\\n\ \mathrm{even}}}^{N_q-2}I(u_n^2)
++4\sum_{\substack{n=1\cr n\ \mathrm{odd}}}^{N_q-1}I(u_n^2)
++2\sum_{\substack{n=2\cr n\ \mathrm{even}}}^{N_q-2}I(u_n^2)
 \right].
 $$
 
@@ -883,7 +883,7 @@ v_{R,g}=-\frac{3\nu}{R}
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
 =\begin{cases}
-0,&\nu=\mathrm{constant},\\
+0,&\nu=\mathrm{constant},\cr
 q+3/2,&\alpha=\mathrm{constant}.
 \end{cases}
 $$
@@ -1340,8 +1340,8 @@ where
 $$
 s_{\rm bound}=
 \begin{cases}
-S_0,&\text{monodisperse},\\
-s_i,&\text{multisize without collisions},\\
+S_0,&\text{monodisperse},\cr
+s_i,&\text{multisize without collisions},\cr
 \min(s_i,s_{\min}),&\text{multisize with collisions}.
 \end{cases}
 $$
@@ -1412,7 +1412,7 @@ Let the physical mass represented by swarm $p$ be
 $$
 W_p=
 \begin{cases}
-m_g(s_p)N_p,&\text{multisize},\\
+m_g(s_p)N_p,&\text{multisize},\cr
 M_{\rm dust}/N_P,&\text{monodisperse}.
 \end{cases}
 $$
@@ -1692,7 +1692,7 @@ $$
 \qquad
 g_D=
 \begin{cases}
-0,&\nu=\mathrm{constant},\\
+0,&\nu=\mathrm{constant},\cr
 q+3/2,&\alpha=\mathrm{constant}.
 \end{cases}
 $$
@@ -1925,7 +1925,7 @@ $$
 \begin{cases}
 \mathrm{Re}_0
 \dfrac{\alpha}{\alpha_0}
-\dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\\
+\dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\cr
 \dfrac{\alpha\Sigma_gX_{\rm sec}}{2M_{\rm mol}},&\text{physical-unit collision model}.
 \end{cases}
 $$
@@ -1936,24 +1936,24 @@ $$
 B=
 \begin{cases}
 \dfrac{(S-s)^2}{r_\eta},
-&S<0.2r_\eta,\\
+&S<0.2r_\eta,\cr
 \dfrac{S-s}{S+s}
 \left(\dfrac{S}{1+r_\eta/S}-\dfrac{s}{1+r_\eta/s}\right),
-&0.2r_\eta\le S<r_\eta/y_a,\\
+&0.2r_\eta\le S<r_\eta/y_a,\cr
 B_3,
-&r_\eta/y_a\le S<5r_\eta,\\
+&r_\eta/y_a\le S<5r_\eta,\cr
 S\left[
 2y_a-(1+\epsilon)
 +\dfrac{2}{1+\epsilon}
 \left(\dfrac{1}{1+y_a}+\dfrac{\epsilon^3}{y_a+\epsilon}\right)
 \right],
-&5r_\eta\le S<0.2,\\
+&5r_\eta\le S<0.2,\cr
 S\left[
 2y_s-(1+\epsilon)
 +\dfrac{2}{1+\epsilon}
 \left(\dfrac{1}{1+y_s}+\dfrac{\epsilon^3}{y_s+\epsilon}\right)
 \right],
-&0.2\le S<1,\\
+&0.2\le S<1,\cr
 \dfrac{1}{1+S}+\dfrac{1}{1+s},
 &S\ge1,
 \end{cases}
@@ -1965,7 +1965,7 @@ $$
 \begin{aligned}
 B_3={}&\frac{S-s}{S+s}
 \left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)
-+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}\\
++2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}\cr
 &+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
 \end{aligned}
 $$
@@ -2237,12 +2237,12 @@ the periodic isometry follows the same single-precision arithmetic as the search
 For wedge width $\Delta\phi_w=X_{\max}-X_{\min}$, the two possible image maps are
 
 $$
-\begin{pmatrix}X'\\Y'\end{pmatrix}
+\begin{pmatrix}X'\cr Y'\end{pmatrix}
 =\begin{pmatrix}
-\cos\Delta\phi_w&\mp\sin\Delta\phi_w\\
+\cos\Delta\phi_w&\mp\sin\Delta\phi_w\cr
 \pm\sin\Delta\phi_w&\cos\Delta\phi_w
 \end{pmatrix}
-\begin{pmatrix}X\\Y\end{pmatrix},
+\begin{pmatrix}X\cr Y\end{pmatrix},
 \qquad
 Z'=Z.
 $$
@@ -2564,7 +2564,7 @@ Ignoring allocator and alignment overhead, the persistent particle-state storage
 $$
 M_{\rm particle}=N_P
 \begin{cases}
-6\,\mathrm{sizeof}(\mathtt{real}),&\text{monodisperse},\\
+6\,\mathrm{sizeof}(\mathtt{real}),&\text{monodisperse},\cr
 8\,\mathrm{sizeof}(\mathtt{real}),&\text{multisize}.
 \end{cases}
 $$
