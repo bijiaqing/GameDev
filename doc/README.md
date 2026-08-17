@@ -12,7 +12,6 @@ Resolved audit diaries and rename histories are not canonical documents. Durable
 | [`fluid_testset.md`](fluid_testset.md) | Fluid analytical cases, measurement protocol, latest archived native results, commands, and missing verification |
 | [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm user guide covering model selection, mass normalization, initialization, transport, diffusion, radiation, collisions, state semantics, and limitations |
 | [`swarm_testset.md`](swarm_testset.md) | Swarm analytical and statistical cases, latest archived native results, commands, and missing verification |
-| [`naming.md`](naming.md) | Parallel naming conventions and independent file-ownership rules for the fluid and swarm branches |
 
 Numerical equations belong in the two `*_numeric.md` documents. Test definitions and evidence
 belong in the two `*_testset.md` documents. Future designs must not be described as active
@@ -85,7 +84,8 @@ Both branches use spherical computational coordinates and the same cylindrical c
 - fluid density-diffusion momentum closure versus velocity-preserving stochastic particle displacement
 - fluid pressureless Riemann evolution versus swarm KNN collision sampling
 
-These are parallel scientific and naming conventions, not shared-code interfaces. The exact ownership rules are maintained in [`naming.md`](naming.md).
+These are parallel scientific conventions, not shared-code interfaces, and the two representations
+remain independently implemented.
 
 ## Authority and maintenance
 

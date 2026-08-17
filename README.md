@@ -443,7 +443,7 @@ from pathlib import Path
 import numpy as np
 
 nx, ny, nz = 1024, 1024, 1
-path = Path("out/fluid_fiducial/cuda/dustdens_00000.dat")
+path = Path("out/fluid_fiducial/dustdens_00000.dat")
 
 dustdens = np.fromfile(path, dtype=np.float64)
 dustdens = dustdens.reshape(nz, ny, nx)
@@ -460,7 +460,7 @@ from pathlib import Path
 
 import numpy as np
 
-output = Path("out/swarm_fiducial/cuda")
+output = Path("out/swarm_fiducial")
 config = ConfigParser()
 config.read(output / "variables.txt")
 
@@ -524,7 +524,6 @@ verification interface.
 | [`doc/swarm_numeric.md`](doc/swarm_numeric.md) | swarm equations, mass weighting, transport, diffusion, collisions, KNN methods, and limitations |
 | [`doc/fluid_testset.md`](doc/fluid_testset.md) | fluid analytical cases, validators, commands, and retained results |
 | [`doc/swarm_testset.md`](doc/swarm_testset.md) | swarm analytical/statistical cases, KNN checks, commands, and retained results |
-| [`doc/naming.md`](doc/naming.md) | source formatting, naming, coordinates, fields, and branch-ownership conventions |
 
 For numerical behavior, current production source and machine-readable test results take precedence
 over prose. The authority order and documentation maintenance policy are stated in
@@ -594,8 +593,8 @@ When changing a numerical method or physical prescription:
 3. add or update an analytical, statistical, boundary, or regression test under `qav/`
 4. archive sufficient metrics and environment information to support the new claim
 5. update the relevant `doc/*_testset.md` evidence summary
-6. follow [`doc/naming.md`](doc/naming.md) for names, comments, includes,
-   formatting, and coordinate conventions
+6. preserve the established names, comments, include order, formatting, and coordinate conventions
+   of the affected branch
 
 Avoid recording resolved work as a permanent audit diary. Distill surviving invariants,
 limitations, and regression requirements into the canonical guides.

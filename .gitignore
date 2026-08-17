@@ -8,11 +8,11 @@ gamedev
 # local experiments
 /lab/
 
-# local model configurations; retain published fiducial models
+# unpublished model configurations; retain published fiducial models
 /mod/*
 !/mod/*_fiducial/
 
-# local documentation; retain maintained public guides
+# unpublished development notes; retain maintained public guides
 /doc/*
 !/doc/*_numeric.md
 !/doc/*_testset.md
