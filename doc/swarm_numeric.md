@@ -590,8 +590,8 @@ $$
 \frac{dI}{dR}
 =\Delta\phi\,R\Sigma_{d,\rm conv}(R)
 \sum_k\left[
-\Phi\!\left(\frac{Z_{k,\rm hi}}{H_d}\right)
--\Phi\!\left(\frac{Z_{k,\rm lo}}{H_d}\right)
+\Phi\left(\frac{Z_{k,\rm hi}}{H_d}\right)
+-\Phi\left(\frac{Z_{k,\rm lo}}{H_d}\right)
 \right]
 $$
 
@@ -2146,7 +2146,7 @@ A level-aware single-precision padding
 
 $$
 p=2(L_{\max}+2)\epsilon_{\rm float}
-\max\!\left(1,|\boldsymbol b_{\min}|_\infty,|\boldsymbol b_{\max}|_\infty\right)
+\max\left(1,|\boldsymbol b_{\min}|_\infty,|\boldsymbol b_{\max}|_\infty\right)
 $$
 
 prevents accumulated recursive-subdivision roundoff from making the pruning bound too large. One

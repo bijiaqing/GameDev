@@ -723,8 +723,8 @@ polar wedge to recover the allowed vertical intervals. For every interval it eva
 
 $$
 F_Z(R,s)=
-\Phi\!\left(\frac{Z_{\rm hi}}{H_d(R,s)}\right)
--\Phi\!\left(\frac{Z_{\rm lo}}{H_d(R,s)}\right),
+\Phi\left(\frac{Z_{\rm hi}}{H_d(R,s)}\right)
+-\Phi\left(\frac{Z_{\rm lo}}{H_d(R,s)}\right),
 $$
 
 reconstructs the convolved surface-density profile, and integrates

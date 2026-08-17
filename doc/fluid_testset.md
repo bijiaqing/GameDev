@@ -318,7 +318,7 @@ the two relevant Jacobians. Define
 ```math
 B(y)=
 \left\{\begin{array}{ll}
-\exp\!\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\\
+\exp\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\\
 0,&|u|\ge1,
 \end{array}\right.
 \qquad
