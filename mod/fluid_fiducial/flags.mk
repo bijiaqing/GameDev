@@ -1,0 +1,5 @@
+
+DUST_REPR := fluid
+FLUID_SWEEP := thread
+
+GPU_FLAGS += -DRADIATION

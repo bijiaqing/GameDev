@@ -1,28 +1,33 @@
-# OS generated files
-.DS_Store
-
-# Python cache files
-__pycache__/
-
-# executable files
+# executables
 gamedev
 
-# documentation files
-doc/naming.md
+# build and runtime outputs
+/obj/
+/out/
 
-# generated object and output directories at every depth
-**/obj/
-**/out/
+# local experiments
+/lab/
 
-# experimental files
-lab/*
+# local model configurations; retain published fiducial models
+/mod/*
+!/mod/*_fiducial/
 
-# test files
-qav/logs/
-qav/*/swarm/test_knn/knn_benchmark
-qav/*/swarm/test_knn/knn_edge_tests
-qav/*/swarm/test_knn/knn_periodic_tests
-qav/*/swarm/test_knn/knn_wedge_benchmark
+# local documentation; retain maintained public guides
+/doc/*
+!/doc/*_numeric.md
+!/doc/*_testset.md
+!/doc/README.md
+
+# generated QAV artifacts
+/qav/logs/
+qav/*/swarm/test_knn/knn_*
+!qav/*/swarm/test_knn/knn_*.*
 qav/*/swarm/test_knn/production_test_collision_*
-qav/*/swarm/test_knn/.arch_*
-qav/*/swarm/test_knn/.target_*
+qav/*/swarm/test_knn/.*_k_*
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# OS metadata
+.DS_Store
