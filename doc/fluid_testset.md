@@ -315,15 +315,15 @@ independently at the same angular speed.
 `test_y_transport_cyl` and `test_y_transport_sph` isolate the nonuniform radial PPM/HLL sweep with
 the two relevant Jacobians. Define
 
-$$
+```math
 B(y)=
 \begin{cases}
-\exp\!\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\cr
+\exp\!\left[1-\dfrac{1}{1-u^2}\right],&|u|<1,\\
 0,&|u|\ge1,
 \end{cases}
 \qquad
 u=\frac{y-1.4}{0.4},
-$$
+```
 
 and initialize $v_y=ay$ with $a=0.2$. Before characteristic crossing,
 
@@ -489,13 +489,13 @@ the endpoint-force exponential quadrature from gravity, disk geometry, and evolv
 $\Sigma_d=\sqrt{2\pi}H_g y^p$, so the well-mixed midplane extinction density is proportional to
 $y^p$ and
 
-$$
+```math
 \tau(y)=
 \begin{cases}
-\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\cr
+\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1,\\
 \ln(y/Y_{\min}),&p=-1.
 \end{cases}
-$$
+```
 
 at every radial outer face. The powers $p=0,-1,1$ exercise a constant integrand, the logarithmic
 antiderivative, and an ordinary power law. The case validates cell optical-depth quadrature,
@@ -559,7 +559,7 @@ not a grid-convergence sequence and does not use one implementation as analytica
 
 ## Latest archived native and cross-backend evidence
 
-### Complete 2026-08-16 analytical archives
+### Complete 2026-08-17 analytical archives
 
 The complete thread-sweep matrix was regenerated on both backends under the source-matched campaign
 recorded in [`README.md`](README.md), which also records the native compilers, targets, drivers,
@@ -652,7 +652,7 @@ reproduced `PASS` without a GPU runtime.
 
 ### Qualification evidence requiring a separate refresh
 
-The 2026-08-16 `run_all.py` campaign is the common publication-and-release gate. It deliberately
+The 2026-08-17 `run_all.py` campaign is the common publication-and-release gate. It deliberately
 does not run the qualification-only thread/block sweep comparison, deliberate NaN/Inf injection,
 large-LDS launch suite, or performance/profiling campaign. Earlier numerical and timing values for
 those branches have therefore been removed from the current-result section rather than presented

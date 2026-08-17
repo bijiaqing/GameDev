@@ -58,21 +58,20 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | 85 metrics on both CUDA and ROCm, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-16 |
-| swarm analytical suite | 51 metrics on both CUDA and ROCm | both native archives passed and the comparison found no mismatches on 2026-08-16 |
-| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | both compact native suites passed with equal coverage on 2026-08-16 |
+| fluid analytical suite | 85 metrics on both CUDA and ROCm, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-17 |
+| swarm analytical suite | 51 metrics on both CUDA and ROCm | both native archives passed and the comparison found no mismatches on 2026-08-17 |
+| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | both compact native suites passed with equal coverage on 2026-08-17 |
 
 The two complete campaigns used the same source SHA-256,
-`8f40e1d718503ae33b444b1369ea6a32ee7709e5194a2e5169aa0a4e89cdbac2`. CUDA used target `sm_80`,
+`efc181ba842c4dd6917db01d02afc3c7f6e501e7b63cc786983f6f2745243fd8`. CUDA used target `sm_80`,
 CUDA 12.1 (`nvcc` 12.1.105), an NVIDIA
 A100-SXM4-40GB, and driver 580.159.04. ROCm used target `gfx942`, ROCm 7.2.4, AMD clang
 22.0.0git, an AMD Instinct MI300A, and amdgpu driver 6.16.13. Both used Python 3.13.5.
 
-The later executable/output-path reorganization changed only build and runner paths, not numerical
-kernels, but it changed the QAV source fingerprint. The 2026-08-16 records are therefore retained as
-the latest numerical evidence rather than claimed as an archive of the current source snapshot.
-Regenerate both native archives before making a current-source or current-machine claim. The
-remaining coverage limits are listed in the two test-set documents.
+The fingerprint matches the current Makefile and compiled or interpreted files below `inc/`,
+`src/`, and `qav/`. Independent local archive checks and both cross-backend comparators reproduced
+`PASS` from the downloaded evidence without invoking either GPU runtime. The remaining coverage
+limits are listed in the two test-set documents.
 
 ## Current cross-representation conventions
 

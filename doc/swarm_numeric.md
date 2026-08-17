@@ -170,24 +170,24 @@ $$
 
 Then the exact cell measure used for deposition is
 
-$$
+```math
 V_{ijk}=\Delta\phi_{\rm cell}
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
 \begin{cases}
-1,&N_Z=1,\cr
+1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1,
 \end{cases}
-$$
+```
 
 where
 
-$$
+```math
 \Delta\phi_{\rm cell}=
 \begin{cases}
-\Delta x,&N_X>1,\cr
+\Delta x,&N_X>1,\\
 2\pi,&N_X=1.
 \end{cases}
-$$
+```
 
 The $2\pi$ branch is essential: an axisymmetric radial or radial–polar cell represents a complete
 ring, not a wedge of numerical width $X_{\max}-X_{\min}$.
@@ -451,13 +451,13 @@ For constant `ALPHA`, the turbulent viscosity uses the $\alpha$ prescription of
 [Shakura & Sunyaev (1973)](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S); the alternative
 branch holds $\nu$ constant:
 
-$$
+```math
 \nu(R)=
 \begin{cases}
-\alpha h_g^2R^2\Omega_K,&\text{constant }\mathtt{ALPHA},\cr
+\alpha h_g^2R^2\Omega_K,&\text{constant }\mathtt{ALPHA},\\
 \mathrm{NU},&\text{constant }\mathtt{NU}.
 \end{cases}
-$$
+```
 
 For the constant-viscosity branch, the corresponding local turbulent parameter is
 
@@ -684,15 +684,15 @@ this runtime domain mass. There is no independent arbitrary dust-mass parameter.
 In discrete form, with $N_q=1024$, $u_n=u_{\min}+n\Delta u$, and
 $\Delta u=(u_{\max}-u_{\min})/N_q$, the implemented normalized Simpson rule is
 
-$$
+```math
 M_{\rm dust}\approx\frac{1}{u_{\max}-u_{\min}}
 \frac{\Delta u}{3}
 \left[
 I(u_0^2)+I(u_{N_q}^2)
-+4\sum_{\substack{n=1\cr n\ \mathrm{odd}}}^{N_q-1}I(u_n^2)
-+2\sum_{\substack{n=2\cr n\ \mathrm{even}}}^{N_q-2}I(u_n^2)
++4\sum_{\substack{n=1\\ n\ \mathrm{odd}}}^{N_q-1}I(u_n^2)
++2\sum_{\substack{n=2\\ n\ \mathrm{even}}}^{N_q-2}I(u_n^2)
 \right].
-$$
+```
 
 Because $\Delta u/(u_{\max}-u_{\min})=1/N_q$, the implementation evaluates the weighted bracket
 divided by $3N_q$.
@@ -877,16 +877,16 @@ $$
 
 For a vertically integrated disk, that gas target is
 
-$$
+```math
 v_{R,g}=-\frac{3\nu}{R}
 \left(g_\nu+p+\frac12\right),
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
 =\begin{cases}
-0,&\nu=\mathrm{constant},\cr
+0,&\nu=\mathrm{constant},\\
 q+3/2,&\alpha=\mathrm{constant}.
 \end{cases}
-$$
+```
 
 For a resolved vertical domain, define
 
@@ -1337,14 +1337,14 @@ $$
 
 where
 
-$$
+```math
 s_{\rm bound}=
 \begin{cases}
-S_0,&\text{monodisperse},\cr
-s_i,&\text{multisize without collisions},\cr
+S_0,&\text{monodisperse},\\
+s_i,&\text{multisize without collisions},\\
 \min(s_i,s_{\min}),&\text{multisize with collisions}.
 \end{cases}
-$$
+```
 
 Omitting attenuation and the time ramp makes the rate conservative before the local optical depth
 or future collision product is known. For
@@ -1409,13 +1409,13 @@ size-independent opacity.
 
 Let the physical mass represented by swarm $p$ be
 
-$$
+```math
 W_p=
 \begin{cases}
-m_g(s_p)N_p,&\text{multisize},\cr
+m_g(s_p)N_p,&\text{multisize},\\
 M_{\rm dust}/N_P,&\text{monodisperse}.
 \end{cases}
-$$
+```
 
 Its extinction weight is
 
@@ -1687,15 +1687,15 @@ $$
 
 For the analytic viscosity law $D_R\propto R^{g_D}$,
 
-$$
+```math
 \partial_RD_R+\frac{D_R}{R}=\frac{(g_D+1)D_R}{R},
 \qquad
 g_D=
 \begin{cases}
-0,&\nu=\mathrm{constant},\cr
+0,&\nu=\mathrm{constant},\\
 q+3/2,&\alpha=\mathrm{constant}.
 \end{cases}
-$$
+```
 
 These drift terms are required for the Fokker–Planck equation to be
 $\partial_t\varrho_d=\nabla\cdot(D\nabla\varrho_d)$ in cylindrical coordinates. Omitting $D_R/R$
@@ -1920,55 +1920,55 @@ $$
 
 The turbulent Reynolds number is calibrated as
 
-$$
+```math
 \mathrm{Re}=
 \begin{cases}
 \mathrm{Re}_0
 \dfrac{\alpha}{\alpha_0}
-\dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\cr
+\dfrac{\Sigma_g}{\Sigma_0},&\text{code-unit collision model},\\
 \dfrac{\alpha\Sigma_gX_{\rm sec}}{2M_{\rm mol}},&\text{physical-unit collision model}.
 \end{cases}
-$$
+```
 
 The implementation writes $\Delta v_T^2=v_g^2B$ with the six Ormel–Cuzzi regimes
 
-$$
+```math
 B=
 \begin{cases}
 \dfrac{(S-s)^2}{r_\eta},
-&S<0.2r_\eta,\cr
+&S<0.2r_\eta,\\
 \dfrac{S-s}{S+s}
 \left(\dfrac{S}{1+r_\eta/S}-\dfrac{s}{1+r_\eta/s}\right),
-&0.2r_\eta\le S<r_\eta/y_a,\cr
+&0.2r_\eta\le S<r_\eta/y_a,\\
 B_3,
-&r_\eta/y_a\le S<5r_\eta,\cr
+&r_\eta/y_a\le S<5r_\eta,\\
 S\left[
 2y_a-(1+\epsilon)
 +\dfrac{2}{1+\epsilon}
 \left(\dfrac{1}{1+y_a}+\dfrac{\epsilon^3}{y_a+\epsilon}\right)
 \right],
-&5r_\eta\le S<0.2,\cr
+&5r_\eta\le S<0.2,\\
 S\left[
 2y_s-(1+\epsilon)
 +\dfrac{2}{1+\epsilon}
 \left(\dfrac{1}{1+y_s}+\dfrac{\epsilon^3}{y_s+\epsilon}\right)
 \right],
-&0.2\le S<1,\cr
+&0.2\le S<1,\\
 \dfrac{1}{1+S}+\dfrac{1}{1+s},
 &S\ge1,
 \end{cases}
-$$
+```
 
 where the transition coefficient is
 
-$$
+```math
 \begin{aligned}
 B_3={}&\frac{S-s}{S+s}
 \left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)
-+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}\cr
++2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}\\
 &+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
 \end{aligned}
-$$
+```
 
 ### 8.2 Frozen Bernoulli collision batches
 
@@ -2236,16 +2236,16 @@ the periodic isometry follows the same single-precision arithmetic as the search
 
 For wedge width $\Delta\phi_w=X_{\max}-X_{\min}$, the two possible image maps are
 
-$$
-\begin{pmatrix}X'\cr Y'\end{pmatrix}
+```math
+\begin{pmatrix}X'\\ Y'\end{pmatrix}
 =\begin{pmatrix}
-\cos\Delta\phi_w&\mp\sin\Delta\phi_w\cr
+\cos\Delta\phi_w&\mp\sin\Delta\phi_w\\
 \pm\sin\Delta\phi_w&\cos\Delta\phi_w
 \end{pmatrix}
-\begin{pmatrix}X\cr Y\end{pmatrix},
+\begin{pmatrix}X\\ Y\end{pmatrix},
 \qquad
 Z'=Z.
-$$
+```
 
 The sign is chosen so a source adjacent to one seam is copied across the opposite seam.
 
@@ -2561,13 +2561,13 @@ index is reused across all of its internal batches.
 
 Ignoring allocator and alignment overhead, the persistent particle-state storage is approximately
 
-$$
+```math
 M_{\rm particle}=N_P
 \begin{cases}
-6\,\mathrm{sizeof}(\mathtt{real}),&\text{monodisperse},\cr
+6\,\mathrm{sizeof}(\mathtt{real}),&\text{monodisperse},\\
 8\,\mathrm{sizeof}(\mathtt{real}),&\text{multisize}.
 \end{cases}
-$$
+```
 
 Diffusion or collisions additionally require one opaque backend RNG state per representative. KNN
 storage depends on the selected backend and wedge geometry; measured formulas and benchmark

@@ -157,15 +157,15 @@ generic line index and is not a second radial-index convention.
 
 The radial finite-volume measure is
 
-$$
+```math
 \Delta V_y=\frac{y_{\rm out}^d-y_{\rm in}^d}{d},
 \qquad
 d=
 \begin{cases}
-2,&N_Z=1,\cr
+2,&N_Z=1,\\
 3,&N_Z>1.
 \end{cases}
-$$
+```
 
 The polar measure is $\Delta V_z=\cos z_{\rm in}-\cos z_{\rm out}$ when the polar dimension is active.
 Consequently, `N_Z == 1` represents a vertically integrated disk and evolves dust surface density
@@ -173,14 +173,14 @@ $\Sigma_d$; `N_Z > 1` evolves volume density $\rho_d$.
 
 The complete cell measure can be written
 
-$$
+```math
 V_{ijk}=\Delta x\,
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
 \begin{cases}
-1,&N_Z=1,\cr
+1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1.
 \end{cases}
-$$
+```
 
 Radial fluxes use $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution
 to a polar face area is
@@ -211,21 +211,21 @@ $$
 
 For either density interpretation, define
 
-$$
+```math
 \boldsymbol U=
 \begin{pmatrix}
-\varrho_d\cr m_x\cr m_y\cr m_z
+\varrho_d\\ m_x\\ m_y\\ m_z
 \end{pmatrix}
 =\begin{pmatrix}
-\varrho_d\cr
-\varrho_d\ell_\phi\cr
-\varrho_dv_r\cr
+\varrho_d\\
+\varrho_d\ell_\phi\\
+\varrho_dv_r\\
 \varrho_d\ell_\theta
 \end{pmatrix},
 \qquad
 (\ell_\phi,v_r,\ell_\theta)
 =\frac{(m_x,m_y,m_z)}{\varrho_d}.
-$$
+```
 
 When $\varrho_d<\rho_{\rm vac}$, this division is replaced by
 
@@ -587,13 +587,13 @@ $x_i$ receives the same perturbation.
 Because the edge convolution and azimuthal perturbation are not renormalized, the initialized mass
 is the finite-volume integral of the resulting field rather than a separately imposed parameter:
 
-$$
+```math
 M_d=
 \begin{cases}
-\displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\cr
+\displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\\
 \displaystyle\int\rho_d(r,\theta,\phi)r^2\sin\theta\,dr\,d\theta\,d\phi,&N_Z>1.
 \end{cases}
-$$
+```
 
 ### 3.3 Initial velocity
 
@@ -625,16 +625,16 @@ If `VISC_FLOW` is enabled, the prescribed cylindrical gas radial velocity follow
 viscous expression of [Kanagawa et al. (2017)](https://arxiv.org/abs/1706.08975). In the vertically
 integrated case it reduces to
 
-$$
+```math
 v_{R,g}
 =-\frac{3\nu}{R}\left(g_\nu+p+\frac12\right),
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
 =\begin{cases}
-0,&\nu=\mathrm{constant},\cr
+0,&\nu=\mathrm{constant},\\
 q+\frac32,&\alpha=\mathrm{constant}.
 \end{cases}
-$$
+```
 
 For the resolved 3D expression, define
 
@@ -957,12 +957,12 @@ the time evolution.
 
 In one spatial direction, the density and normal momentum subsystem is
 
-$$
+```math
 \frac{\partial}{\partial t}
-\begin{pmatrix}\rho\cr \rho u\end{pmatrix}
+\begin{pmatrix}\rho\\ \rho u\end{pmatrix}
 +\frac{\partial}{\partial x}
-\begin{pmatrix}\rho u\cr \rho u^2\end{pmatrix}=0.
-$$
+\begin{pmatrix}\rho u\\ \rho u^2\end{pmatrix}=0.
+```
 
 Its flux Jacobian has the repeated eigenvalue
 
@@ -1118,15 +1118,15 @@ $$
 
 At an outflow-only boundary with outward normal speed $a_n$, the boundary mass flux is
 
-$$
+```math
 F_\varrho=
 \begin{cases}
-a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\cr
+a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
 0,&a_n\text{ points into the domain},
 \end{cases}
 \qquad
 F_{m_a}=F_\varrho u_a.
-$$
+```
 
 At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero.
 
@@ -1269,13 +1269,13 @@ $$
 
 where
 
-$$
+```math
 \rho_{\rm ext}=
 \begin{cases}
-\Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\cr
+\Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\\
 \rho_d,&N_Z>1.
 \end{cases}
-$$
+```
 
 The stored outer-face value is the inclusive radial prefix sum
 
@@ -1454,16 +1454,16 @@ $$
 
 For each stored primitive $u_a\in\{\ell_\phi,v_r,\ell_\theta\}$, the associated momentum flux is
 
-$$
+```math
 \mathcal F_{m_a,i+1/2}
 =\mathcal F_{\rho,i+1/2}u_{a,\rm donor},
 \qquad
 u_{a,\rm donor}=
 \begin{cases}
-u_{a,i},&\mathcal F_{\rho,i+1/2}\ge0,\cr
+u_{a,i},&\mathcal F_{\rho,i+1/2}\ge0,\\
 u_{a,i+1},&\mathcal F_{\rho,i+1/2}<0,
 \end{cases}
-$$
+```
 
 followed by
 

@@ -1005,7 +1005,7 @@ provide the complementary fully exhaustive small-set checks.
 
 ### Latest archived native KNN evidence
 
-The KNN branches of the 2026-08-16 CUDA and ROCm campaigns used $N_K=200$, a search cutoff of
+The KNN branches of the 2026-08-17 CUDA and ROCm campaigns used $N_K=200$, a search cutoff of
 approximately $0.1$, 4096 quality queries, 32 unconditional exhaustive CPU queries, and
 $N_P=10^5$. Each backend compiled all four standalone KNN drivers and linked the real
 `test_collision_1d`, `test_collision_2d`, and `test_collision_3d` production translation units
@@ -1041,8 +1041,8 @@ where values above one favor Morton. The current measurements are
 
 | Backend | Ordinary $S_{\rm query}$ | Wedge $S_{\rm query}$ | Ordinary Morton/KD memory | Wedge Morton/KD memory |
 |---|---:|---:|---:|---:|
-| CUDA A100 | 0.259--0.793 | 0.668--1.281 | 0.718--0.756 | 0.247--0.491 |
-| ROCm MI300A | 0.419--0.863 | 0.667--1.927 | 0.718--0.756 | 0.247--0.491 |
+| CUDA A100 | 0.258--0.793 | 0.670--1.278 | 0.718--0.756 | 0.247--0.491 |
+| ROCm MI300A | 0.418--0.869 | 0.671--1.881 | 0.718--0.756 | 0.247--0.491 |
 
 The compact ghost-record count ranged from $1.0248N_P$ for an interior clump to
 $2.00196N_P$ for a narrow seam clump, compared with the KD-tree's fixed $3N_P$ wedge records.
@@ -1085,7 +1085,7 @@ production timing comparison.
 
 ## Latest archived native and cross-backend evidence
 
-### Complete 2026-08-16 archives
+### Complete 2026-08-17 archives
 
 The common suite was regenerated on CUDA and ROCm under the source-matched campaign recorded in
 [`README.md`](README.md). Both aggregate manifests report 25/25 models passed, comprising 51/51
