@@ -88,7 +88,8 @@ SWARM_GROUPS: dict[str, list[str]] = {
     "grid": ["test_grid_1d", "test_grid_2d", "test_grid_3d"],
     "transport": [
         "test_orbit_1d", "test_drag_1d", "test_viscflow_1d",
-        "test_orbit_2d", "test_drag_2d", "test_orbit_ecc_2d", "test_drag_path_1d",
+        "test_orbit_2d", "test_drag_2d", "test_orbit_ecc_2d", "test_orbit_beta_2d",
+        "test_orbit_inc_3d", "test_drag_path_1d",
         "test_absorb_path_1d",
     ],
     "diffusion": [
@@ -143,9 +144,9 @@ SWARM_FIXED_RESOLUTION = {
 }
 
 EXPECTED_FLUID_METRICS = 105
-EXPECTED_SWARM_METRICS = 67
+EXPECTED_SWARM_METRICS = 75
 EXPECTED_PUBLICATION_FLUID_METRICS = 77
-EXPECTED_PUBLICATION_SWARM_METRICS = 49
+EXPECTED_PUBLICATION_SWARM_METRICS = 57
 
 PUBLICATION_TIER = "publication"
 RELEASE_TIER = "release"

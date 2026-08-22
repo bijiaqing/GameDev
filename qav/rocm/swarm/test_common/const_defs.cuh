@@ -43,12 +43,12 @@ constexpr real S_0 = 1.0;
 constexpr int N_P = PERF_PARTICLES;
 #elif defined(TEST_SETTLE_DIFFUSE_3D)
 constexpr int N_P = 65536;
-#elif defined(TEST_ORBIT_ECC_2D)
+#elif defined(TEST_ORBIT_ECC_2D) || defined(TEST_ORBIT_BETA_2D) || defined(TEST_ORBIT_INC_3D)
 constexpr int N_P = 4;
 #elif defined(TEST_DRAG_PATH_1D)
 constexpr int N_P = 3;
 #elif defined(TEST_ABSORB_PATH_1D)
-constexpr int N_P = 3;
+constexpr int N_P = 4;
 #elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
 constexpr int N_P = 16*VERIFY_RES*VERIFY_RES;
 #elif defined(TEST_INITIAL_3D)
@@ -95,6 +95,10 @@ constexpr int N_Z = VERIFY_RES;
 constexpr int N_X = 1;
 constexpr int N_Y = 96;
 constexpr int N_Z = VERIFY_RES;
+#elif defined(TEST_ORBIT_INC_3D)
+constexpr int N_X = 32;
+constexpr int N_Y = 16;
+constexpr int N_Z = 16;
 #elif defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) || defined(TEST_COLLISION_3D)
 constexpr int N_X = 8;
 constexpr int N_Y = 16;
@@ -138,7 +142,7 @@ constexpr real Y_MAX = 1.5;
 #if defined(TEST_INITIAL_3D)
 constexpr real Z_MIN = 0.5*M_PI - 0.01;
 constexpr real Z_MAX = 0.5*M_PI + 0.01;
-#elif defined(TEST_GRID_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) \
+#elif defined(TEST_GRID_3D) || defined(TEST_ORBIT_INC_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) \
     || defined(TEST_COLLISION_3D) \
     || defined(TEST_BOUNDARY_3D)
 constexpr real Z_MIN = 0.35;
@@ -163,7 +167,11 @@ constexpr real RHO_0 = 1.0;
 
 #if defined(DIFFUSION) || defined(COLLISION)
 #ifdef CONST_NU
+#ifdef TEST_ORBIT_INC_3D
+constexpr real NU = 0.0;
+#else
 constexpr real NU = 2.0e-2;
+#endif
 #else
 constexpr real ALPHA = 1.0e-4;
 #endif
@@ -223,7 +231,11 @@ constexpr int N_K = 200;
 #else
 constexpr int N_K = 2;
 #endif
+#ifdef TEST_ABSORB_PATH_1D
+constexpr real H_SEARCH = 10.0;
+#else  // OTHER TESTS
 constexpr real H_SEARCH = 1.0;
+#endif // TEST_ABSORB_PATH_1D
 constexpr real V_FRAG = 1.0;
 constexpr real CFL_COL = 0.01;
 #endif
