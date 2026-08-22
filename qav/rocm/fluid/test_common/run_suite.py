@@ -8,9 +8,9 @@ builds a list of model/parameter combinations and delegates each combination
 to the short ``run.py`` wrapper inside that model directory.
 """
 
-# Store type annotations without evaluating them at import time.  This keeps
+# store type annotations without evaluating them at import time; this keeps
 # annotations such as ``list[tuple[str, list[str]]]`` as documentation and has
-# no effect on the numerical tests.
+# no effect on the numerical tests
 from __future__ import annotations
 
 import argparse
@@ -44,8 +44,8 @@ def write_json(path: Path, record: dict[str, object]) -> None:
 
 def main() -> None:
     # ``nargs="+"`` accepts one or more values after --res, for example
-    # ``--res 32 64 128 256``.  --quick keeps only the first two of those
-    # resolutions, which is useful for checking the workflow before a full run.
+    # ``--res 32 64 128 256``; --quick keeps only the first two of those
+    # resolutions, which is useful for checking the workflow before a full run
     parser = argparse.ArgumentParser()
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
@@ -72,14 +72,14 @@ def main() -> None:
 
     resolutions = args.res[:2] if args.quick else args.res
 
-    # __file__ is this script.  Its parent is test_common, and the next parent
-    # is the directory containing both test_common and every model directory.
+    # __file__ is this script; its parent is test_common, and the next parent
+    # is the directory containing both test_common and every model directory
     common = Path(__file__).resolve().parent
     model_root = common.parent
     project_root = common.parents[3]
 
-    # Sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence.  It remains a
-    # separate branch because the full 128^3 pair is substantially more expensive than the analytical matrix.
+    # sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence; it remains a
+    # separate branch because the full 128^3 pair is substantially more expensive than the analytical matrix
     if args.group == "sweep":
         command = [
             sys.executable, str(common/"run_sweep.py"),
@@ -157,18 +157,18 @@ def main() -> None:
 
     for index, (model, extra) in enumerate(commands):
         # sys.executable reuses the Python interpreter that launched this suite,
-        # avoiding accidental changes of environment between the two scripts.
+        # avoiding accidental changes of environment between the two scripts
         command = [sys.executable, str(model_root/model/"run.py")]
 
-        # A model-specific --res, currently only the source test, takes priority
-        # over the suite-wide resolution list.
+        # a model-specific --res, currently only the source test, takes priority
+        # over the suite-wide resolution list
         if "--res" not in extra:
             command += ["--res", *(str(value) for value in resolutions)]
         command += list(extra)
         print("\n===", model, " ".join(extra), "===", flush=True)
 
         # check=True stops the suite immediately if compilation, execution, or
-        # validation of any case fails, so later output cannot hide that failure.
+        # validation of any case fails, so later output cannot hide that failure
         entries[index]["status"] = "running"
         write_json(manifest_path, manifest)
         result = subprocess.run(command, check=False, env=run_environment)

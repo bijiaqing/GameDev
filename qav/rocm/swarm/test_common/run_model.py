@@ -12,12 +12,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from validate_case import analyze
+from validate_case import analyze as default_analyze
 
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
-from qav_config import model_executable, swarm_model_tier, swarm_resolution_tiers
+from qav_config import model_analyzer, model_executable, swarm_model_tier, swarm_resolution_tiers
 
 
 def orders(errors: list[float]) -> list[float]:
@@ -98,6 +98,7 @@ def run(model: str) -> None:
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parents[4]
+    analyze = model_analyzer(project_root, "swarm", model, default_analyze)
     swarm_root = Path(__file__).resolve().parents[1]
     model_dir = swarm_root/model
     archive_root = project_root/"qav"/"logs"/"swarm"/"rocm"
@@ -109,9 +110,9 @@ def run(model: str) -> None:
     if not args.build_only:
         clean_results(out_dir)
 
-        # Keep compiler, GPU, and driver information beside the numerical metrics.
-        # This is especially important for stochastic tests and HIP regressions,
-        # whose performance and last-bit results can depend on the environment.
+        # keep compiler, GPU, and driver information beside the numerical metrics
+        # this is especially important for stochastic tests and HIP regressions,
+        # whose performance and last-bit results can depend on the environment
         environment = environment_record(project_root)
         (out_dir/"environment.json").write_text(
             json.dumps(environment, indent=2, sort_keys=True) + "\n"
@@ -123,8 +124,8 @@ def run(model: str) -> None:
     }
     records = []
     for resolution in args.res:
-        # Every test constant is compiled into HIP code.  Cleaning prevents an
-        # object built for a previous TEST_RES value from being reused.
+        # every test constant is compiled into HIP code; cleaning prevents an
+        # object built for a previous TEST_RES value from being reused
         target = os.environ.get("AMDGPU_TARGET", "gfx942")
         subprocess.run([
             "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
@@ -139,8 +140,8 @@ def run(model: str) -> None:
         executable = model_executable(project_root, model, "rocm", "swarm")
         subprocess.run([str(executable)], cwd=project_root, check=True)
 
-        # The HIP driver writes raw values only.  All expected values and pass
-        # thresholds are constructed independently by validate_case.py.
+        # the HIP driver writes raw values only; all expected values and pass
+        # thresholds are constructed independently by validate_case.py
         record = analyze(out_dir, resolution)
         record["tier"] = tier_by_resolution[resolution]
         expected_case = model.removeprefix("test_")
@@ -155,7 +156,21 @@ def run(model: str) -> None:
     if not records:
         return
 
-    passed = all(record["passed"] for record in records)
+    convergence_field = records[0].get("convergence_field")
+    convergence_orders = []
+    convergence_passed = True
+    minimum_order = float(records[0].get("minimum_order", 0.0))
+    if convergence_field and len(records) > 1:
+        convergence_errors = [
+            float(record["errors"][convergence_field]["l1"])
+            for record in records
+        ]
+        if all(error > 0.0 for error in convergence_errors):
+            convergence_orders = orders(convergence_errors)
+            convergence_passed = convergence_orders[-1] >= minimum_order
+        else:
+            convergence_passed = False
+    passed = all(record["passed"] for record in records) and convergence_passed
     manifest = {
         "schema": 1,
         "model": model,
@@ -167,6 +182,12 @@ def run(model: str) -> None:
         "resolutions": [record["resolution"] for record in records],
         "files": [f"metrics_N{record['resolution']}.json" for record in records],
         "environment": "environment.json",
+        "assessment": {
+            "convergence_field": convergence_field,
+            "minimum_order": minimum_order,
+            "orders": convergence_orders,
+            "convergence_passed": convergence_passed,
+        },
         "passed": passed,
     }
     (out_dir/"manifest.json").write_text(
@@ -176,7 +197,12 @@ def run(model: str) -> None:
     print(f"\n{model}: {'PASS' if passed else 'FAIL'}")
     for record in records:
         print_record(record)
-    if records[0]["case"] in {"orbit_1d", "orbit_2d"} and len(records) > 1:
+    if convergence_orders:
+        print(
+            f"{convergence_field} L1 orders:",
+            " ".join(f"{value:.4f}" for value in convergence_orders),
+        )
+    elif records[0]["case"] in {"orbit_1d", "orbit_2d"} and len(records) > 1:
         values = [record["errors"]["state"]["l2"] for record in records]
         print("observed orders:", " ".join(f"{value:.4f}" for value in orders(values)))
     if not passed:

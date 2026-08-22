@@ -1,3 +1,4 @@
+// select the analytical branch; the included test constants intentionally replace production model parameters
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 

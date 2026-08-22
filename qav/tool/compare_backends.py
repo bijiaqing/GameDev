@@ -224,9 +224,9 @@ def compare_metrics(
         rocm = load_json(rocm_files[name])
         case = str(cuda.get("case", ""))
         if component == "fluid" and name in direct_field_metrics:
-            # The raw-field gate is better conditioned than comparing two
+            # the raw-field gate is better conditioned than comparing two
             # separately reduced truncation-error norms near compact-support
-            # vacuum.  Retain exact agreement requirements for run metadata.
+            # vacuum; retain exact agreement requirements for run metadata
             for key in ("case", "resolution", "time", "steps", "cfl"):
                 if cuda.get(key) != rocm.get(key):
                     mismatches.append({
@@ -253,10 +253,10 @@ def compare_metrics(
         )
 
     if allow_partial:
-        # A partial run treats the CUDA archive as the requested metric subset
-        # and requires every one of those records to have a ROCm counterpart.
-        # Extra ROCm records are expected when, for example, only precise-math
-        # CUDA polar transport was rerun from the complete ROCm archive.
+        # a partial run treats the CUDA archive as the requested metric subset
+        # and requires every one of those records to have a ROCm counterpart
+        # extra ROCm records are expected when, for example, only precise-math
+        # CUDA polar transport was rerun from the complete ROCm archive
         complete = (
             bool(cuda_files)
             and len(common) == len(cuda_files)

@@ -114,7 +114,7 @@ edge_case make_duplicates (int dim)
 {
     edge_case test{"coincident_" + std::to_string(dim) + "d", dim, 0.25f, 128, {}, {}, {}};
 
-    // More than one HIP block of coincident candidates exercises chunked leaf buffering
+    // more than one HIP block of coincident candidates exercises chunked leaf buffering
     for (int idx = 0; idx < 300; idx++)
     {
         test.points.push_back(make_float3(0.0f, 0.0f, 0.0f));

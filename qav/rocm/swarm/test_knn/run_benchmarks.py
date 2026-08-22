@@ -67,8 +67,8 @@ def main() -> None:
 
     distributions = args.distribution or ["smooth", "ring", "clump", "radial"]
 
-    # K is a compile-time top-K capacity for both backends, so compile once for
-    # the complete matrix and then vary only runtime particle distributions.
+    # k is a compile-time top-K capacity for both backends, so compile once for
+    # the complete matrix and then vary only runtime particle distributions
     subprocess.run(
         [
             "make", "-C", str(test_root),

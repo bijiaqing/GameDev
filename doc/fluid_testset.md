@@ -47,16 +47,18 @@ The tier controls how evidence should be presented, not whether a test is retain
 
 - **Publication:** one fractional FARGO sequence (`shift=3.25`), the low-CFL cylindrical,
   spherical-radial, and polar transport convergence sequences, all four directional diffusion
-  cases, source quadrature, logarithmic and generic optical-depth profiles, and all four coupled
-  ring models
+  cases, positivity-controlled CN subcycling, source quadrature, logarithmic and generic
+  optical-depth profiles, attenuated source response, and all four coupled ring models
 - **Release:** the integer and additional fractional FARGO shifts, operational-CFL radial and
   polar transport repetitions, and the constant-opacity exact optical-depth branch
 - **Qualification:** matched thread/block sweeps, deliberate failure paths, large-LDS launches,
   and performance/profiling records
 
-The four-resolution common archive deliberately retains both publication and release tiers: 57 of
-its 85 metrics support the compact publication matrix and 28 are release-only regressions.
-Per-case, per-model, and aggregate JSON manifests store these labels directly.
+The expanded four-resolution common matrix retains both publication and release tiers: 69 of its
+97 metrics support the compact publication matrix and 28 are release-only regressions. The latest
+archived source-matched CUDA/ROCm campaign predates the four new fluid sequences and therefore
+contains the earlier 85-metric, 57-publication baseline. Per-case, per-model, and aggregate JSON
+manifests store these labels directly.
 
 The analytical runner writes every metric, applies a deliberately broad regression gate, and records
 the assessment in a variant-specific model manifest. Non-finite metrics, relative mass change above
@@ -189,7 +191,9 @@ The shared resolution argument refines different axes according to the case:
 | Test family | Mesh generated from $N=$ `--res` | Meaning of refinement |
 |---|---|---|
 | azimuthal transport or diffusion | $(N_X,N_Y,N_Z)=(N,4,1)$ | refine the periodic $x$ operator |
+| positivity-controlled azimuthal diffusion | $(N,1,1)$ | refine the cyclic CN eigenmode while forcing automatic subcycling |
 | cylindrical radial transport, diffusion, or optical depth | $(4,N,1)$ | refine the 2D radial operator |
+| 2D attenuation and frozen source response | $(4,N,1)$ | refine optical-depth quadrature and its source coupling |
 | spherical radial transport or diffusion | $(4,N,4)$ | refine the 3D radial operator while retaining transverse indexing |
 | polar transport or diffusion | $(4,4,N)$ | refine the spherical polar operator |
 | rotating-ring models | $(N,N,1)$ | refine both active 2D directions |
@@ -198,7 +202,7 @@ The shared resolution argument refines different axes according to the case:
 | 3D thread/block sweep | $(N,N,N)$ | fixed-work implementation comparison with diffusion |
 
 For the analytical matrix, `--quick` retains only the first two requested resolutions. Thus the
-default full matrix performs 85 builds/runs, while the default quick matrix performs 43. Every
+expanded full matrix performs 97 builds/runs, while the default quick matrix performs 49. Every
 resolution and parameter variant is cleaned and rebuilt because the mesh and control parameters
 are compile-time constants.
 
@@ -235,8 +239,8 @@ The current CUDA matrix covers the following combinations:
 | conservative transport | yes, $x$ and cylindrical $y$ | yes, spherical $y$ and polar $z$ separately | no |
 | density diffusion with momentum transport | yes, $x$ and cylindrical $y$ | yes, spherical $y$ and polar $z$ separately | differential sweep only |
 | drag/source quadrature | dimension-independent algebraic case | no separate 3D spatial case | no coupled 3D case |
-| optical-depth construction | yes | no analytical 3D attenuation case | no |
-| radiation force | unattenuated equilibrium rings | no | no |
+| optical-depth construction and attenuated forcing | yes | no analytical 3D attenuation case | no |
+| radiation force | unattenuated equilibrium rings and frozen finite-attenuation response | no | no |
 | transport–diffusion–radiation composition | four 2D ring combinations | no | no |
 | thread/block implementation equivalence | yes | yes, production-like 3D state | yes as a differential test, not analytical truth |
 
@@ -255,8 +259,10 @@ the cylindrical radial cases isolate a 2D directional operator rather than a sta
 | `test_y_diffusion_cyl` | $d=2$ radial Crank–Nicolson | Neumann shell eigenmode |
 | `test_y_diffusion_sph` | $d=3$ radial Crank–Nicolson | Neumann shell eigenmode |
 | `test_z_diffusion_3d` | polar Crank–Nicolson | $P_2(\cos z)$ decay |
+| `test_diffusion_poslimit` | automatic positivity-controlled cyclic CN subcycling | exact discrete Fourier amplification and continuum Fourier decay |
 | `test_source_drag` | exponential endpoint-force weights | linear-force drag relaxation over eight stiffness ratios |
 | `test_optdepth` | optical-depth quadrature and radial prefix sum | radial power-law integral |
+| `test_attenuation_2d` | finite optical depth followed by production source update | power-law optical depth and independently reconstructed frozen response |
 | `test_ring_transport_2d` | full transport/source composition | force-balanced Keplerian Fourier rings |
 | `test_ring_diffusion_2d` | transport plus diffusion | rotating, exponentially damped rings |
 | `test_ring_radiation_2d` | transport plus radiation | optically thin reduced-gravity rings |
@@ -451,8 +457,58 @@ $$
 is an exact eigenmode because the degree-two Legendre polynomial has angular eigenvalue $-6$.
 Regularity at the axis and zero derivative at the reflecting midplane match the production
 boundary conditions. The case tests $1/y^2$, $\sin z$, $d(-\cos z)$, and shell-dependent decay. It
-does not force the positivity controller to take multiple Crank–Nicolson substeps; that remains a
-separate required regression.
+does not force the positivity controller to take multiple Crank–Nicolson substeps; the dedicated
+regression below covers that controller path.
+
+### Positivity-controlled diffusion subcycling
+
+`test_diffusion_poslimit` isolates one periodic ring and deliberately chooses a long step that
+forces the production positivity controller to split a cyclic Crank–Nicolson update. It initializes
+the exact finite-volume Fourier averages
+
+$$
+\rho_{d,i}^0
+=1+0.9\,\frac{\sin(mx_{i+1})-\sin(mx_i)}{m\Delta x},
+\qquad m=2,
+$$
+
+with $D=0.05$, $\Delta t=1$, and $R=\sqrt{Y_{\min}Y_{\max}}$. The production controller selects
+
+$$
+N_s=\max\left[1,
+\left\lceil
+\frac{\Delta t\,D}{(R\Delta x)^2\,C_{\rm pos}}
+\right\rceil\right],
+\qquad
+\Delta t_s=\frac{\Delta t}{N_s},
+$$
+
+where $C_{\rm pos}=0.9$. For the standard resolutions $N=32,64,128,256$, the independently
+reconstructed counts are $2,6,24,94$, so the test cannot pass through the inactive one-step branch.
+For the discrete Fourier eigenvalue
+
+$$
+\lambda_h
+=\frac{4D}{(R\Delta x)^2}
+\sin^2\left(\frac{m\Delta x}{2}\right),
+$$
+
+the exact composite CN amplification is
+
+$$
+G_h
+=\left(
+\frac{1-\lambda_h\Delta t_s/2}
+     {1+\lambda_h\Delta t_s/2}
+\right)^{N_s}.
+$$
+
+The validator compares the automatic update with this discrete result and with an explicit sequence
+of $N_s$ calls at $\Delta t_s$, requires every recorded substep density to remain nonnegative, and
+also compares with the continuum amplification $\exp(-Dm^2\Delta t/R^2)$. The discrete and manual
+comparisons use $5\times10^{-11}$ maximum-error gates; the continuum $L_1$ sequence must retain
+order at least 1.8. This is a discrete-algorithm regression for controller activation plus a
+continuum convergence test, not evidence that arbitrary nonsmooth CN data are positivity preserving.
 
 ### Exponential source quadrature
 
@@ -501,6 +557,54 @@ at every radial outer face. The powers $p=0,-1,1$ exercise a constant integrand,
 antiderivative, and an ordinary power law. The case validates cell optical-depth quadrature,
 x-fastest/radial indexing, and the inclusive radial prefix sum. It does not apply the resulting
 $e^{-\tau}$ attenuation to a radiation force.
+
+### Finite attenuation and frozen source response
+
+`test_attenuation_2d` extends the optical-depth quadrature into the force calculation. It initializes
+
+$$
+\Sigma_d(y)=\sqrt{2\pi}\,H_g(y)\,y^p,
+$$
+
+so the well-mixed extinction density is $\rho_{\rm ext}=y^p$. The production opacity kernels form
+the inclusive outer-face sum
+
+$$
+\tau_{j+1}^{h}
+=\sum_{k=0}^{j}\kappa_0 y_k^p\left(y_{k+1}-y_k\right),
+$$
+
+and source integration uses the logarithmic-cell-center interpolation
+
+$$
+\tau_{c,j}
+=\tau_j+\frac{\tau_{j+1}-\tau_j}{1+\sqrt{q_y}},
+\qquad
+q_y=\frac{y_{j+1}}{y_j},
+$$
+
+followed by
+
+$$
+\beta_j=\beta_0e^{-\tau_{c,j}}.
+$$
+
+The cases $p=-1$ and $p=1$ compare the outer-face sum with the continuum integrals
+
+```math
+\tau(y)=
+\left\{\begin{array}{ll}
+\ln(y/Y_{\min}),&p=-1,\\
+\dfrac{y^{p+1}-Y_{\min}^{p+1}}{p+1},&p\ne-1.
+\end{array}\right.
+```
+
+After one frozen-density source step with $\Delta t=0.2$, the validator independently reconstructs
+$e^{-\tau_c}$, the local stopping time, exact drag relaxation, old/new force weights, angular
+momentum, and radial velocity. The discrete optical-depth error must remain below
+$5\times10^{-12}$, the complete source-state error below $2\times10^{-11}$, and the continuum
+optical-depth $L_1$ order above 1.8. This joins opacity and source kernels without introducing
+transport feedback during the reference step.
 
 ### Coupled rotating rings
 
@@ -565,8 +669,8 @@ The complete thread-sweep matrix was regenerated on both backends under the sour
 recorded in [`README.md`](README.md), which also records the native compilers, targets, drivers,
 and GPUs.
 
-Both aggregate manifests report 22/22 parameter variants and 85/85 metrics passed, partitioned
-into 57 publication and 28 release records. Independent local archive checks found no invalid
+Both pre-expansion aggregate manifests report 22/22 parameter variants and 85/85 metrics passed,
+partitioned into 57 publication and 28 release records. Independent local archive checks found no invalid
 metrics or missing raw fields. The command on each native system was
 
 ```bash
@@ -625,7 +729,7 @@ reference, not a production-kernel error. Density and total mass are exact to th
 
 ### CUDA-versus-ROCm equivalence
 
-The complete backend comparison found all 85 analytical metrics on both sides, matching tier
+The pre-expansion complete backend comparison found all 85 analytical metrics on both sides, matching tier
 metadata, no missing records, and zero acceptance mismatches. Polar error norms are particularly
 sensitive to vendor-dependent reductions, so the gate replaces a direct comparison of those
 already reduced norms with an eight-record raw-field comparison of `test_z_transport_3d` at both
@@ -687,7 +791,7 @@ Run the complete reference-thread matrix with
 python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
-The complete `--group all --res 32 64 128 256` matrix performs 85 builds/runs because several
+The complete `--group all --res 32 64 128 256` matrix performs 97 builds/runs because several
 models sweep CFL values, FARGO shifts, or optical-depth powers. Each resolution is cleaned and
 rebuilt so model-local compile-time constants cannot reuse stale objects.
 
@@ -701,8 +805,8 @@ python3 qav/cuda/fluid/test_common/run_suite.py --group radiation --res 32 64 12
 python3 qav/cuda/fluid/test_common/run_suite.py --group ring      --res 32 64 128 256
 ```
 
-Here the `radiation` group currently means optical-depth construction; the radiation-force ring
-models are in `ring`. To run the same analytical matrix through the block sweep, set the environment
+The `radiation` group contains both optical-depth-only quadrature and finite-attenuation source
+response; the evolving radiation-force ring models remain in `ring`. To run the same analytical matrix through the block sweep, set the environment
 selection explicitly:
 
 ```bash
@@ -731,7 +835,7 @@ For the sweep branch, also retain `build.json`,
 `run.json`, `variables.json`, `timing.json`, and `sweep_comparison_*.json`. Analytical results are namespaced as
 `qav/logs/fluid/cuda/SWEEP/groups/manual/MODEL/`, where `SWEEP` is `thread` or `block`.
 
-The full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 85
+The full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 97
 metric files are present, and `qav/tool/check_archive.py` accepts the archive. Focused groups write
 their models and manifest below `groups/GROUP/`, while direct wrappers use `groups/manual/`; neither
 can overwrite any full-suite artifact. The sweep branch is
@@ -788,10 +892,6 @@ quadrature. Both full-disk and `HALF_DISK` polar boundaries should ultimately be
   steady dust drift
 - Add restart-tolerance and legal flag-matrix regressions, including `HALF_DISK`, `DIFFUSION`,
   `RADIATION`, `VISC_FLOW`, and both fluid sweep implementations where compatible
-- Add a CUDA diffusion case that forces `POS_LIMIT` to select more than one CN positivity substep;
-  this path currently has only the supplementary CPU mock
-- Add finite, spatially varying radiation attenuation; current ring radiation cases deliberately
-  use zero opacity and therefore isolate force composition rather than $e^{-\tau}$ coupling
 - Archive matched thread/block comparison JSON, build logs, `ptxas` resource reports, and profiler
   local-memory traffic for the production grids used in performance claims
 - In long conservation tests, report mass and momentum changes caused by outflow and documented

@@ -45,7 +45,7 @@ def cell_volumes(nx: int, ny: int, nz: int, z_min: float, z_max: float) -> np.nd
         z_faces = np.linspace(z_min, z_max, nz + 1)
         vol_z = np.cos(z_faces[:-1]) - np.cos(z_faces[1:])
 
-    # Binary fields use ix + iy*nx + iz*nx*ny, corresponding to this array shape
+    # binary fields use ix + iy*nx + iz*nx*ny, corresponding to this array shape
     return dx*vol_z[:, None, None]*vol_y[None, :, None]*np.ones((1, 1, nx))
 
 
@@ -119,7 +119,7 @@ def compare_pair(
         }
         print(f"{field:<12} {expected:12d} {str(byte_equal):>12} {max_abs:14.6e} {rel_l2:14.6e}")
 
-    # Identical initialization proves that both executables received the same physical state
+    # identical initialization proves that both executables received the same physical state
     for field in fields:
         ref_path = reference_dir/f"{field}_00000.dat"
         opt_path = candidate_dir/f"{field}_00000.dat"
@@ -152,7 +152,7 @@ def compare_pair(
     print(f"final mass mismatch: {mass_mismatch:.8e}")
     print(f"accepted steps: thread={ref_steps} block={opt_steps}")
 
-    # These tolerances detect implementation mistakes while allowing harmless floating-point reordering
+    # these tolerances detect implementation mistakes while allowing harmless floating-point reordering
     if metrics["dustdens"]["relative_l2"] > 1.0e-7:
         raise AssertionError("thread/block density mismatch exceeds 1e-7")
     for field in ("dustvelx", "dustvely", "dustvelz"):

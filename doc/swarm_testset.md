@@ -18,7 +18,8 @@ exact KD-tree/Morton neighbor search. Dedicated radial-only cases additionally t
 coordinates, annular collision normalization, and imported surface-density Stokes/Reynolds scaling.
 It does not yet validate monodisperse initialization and initial drift together, complete stochastic
 collision events against an analytical or converged reference, boundary-event convergence, restart
-reproducibility, or long-term coupled evolution.
+reproducibility, or long-term coupled evolution. It now includes non-equilibrium eccentric-orbit
+and multi-step constant-drag trajectories in addition to its equilibrium and one-step tests.
 
 This document defines what each test proves, what it does not prove, and what result is
 expected. Machine-readable results are generated below `qav/logs/swarm/BACKEND/` and are ignored by
@@ -59,8 +60,11 @@ The common archive retains narrow regressions but distinguishes them from code-p
 - **Qualification:** restart, deliberate KNN/collision failure injection, extended million- and
   ten-million-particle KNN runs, and performance/profiling campaigns
 
-With the standard four requested resolutions, the 51 analytical swarm metrics partition into 33
-publication and 18 release-only records. The compact KNN suite is publication evidence for exact
+With the standard four requested resolutions, the expanded 63-metric analytical swarm matrix
+partitions into 45 publication and 18 release-only records. The latest archived source-matched
+CUDA/ROCm campaign predates the two new four-resolution trajectory sequences and the four-resolution
+settling--diffusion sequence and therefore
+contains the earlier 51-metric, 33-publication baseline. The compact KNN suite is publication evidence for exact
 neighbor search; `--knn-full` adds qualification evidence rather than strengthening a physical
 convergence claim. These labels are stored in model and aggregate manifests and do not remove any
 test from the release gate.
@@ -111,8 +115,8 @@ $$
 where $N$ is the number of timesteps in one orbit and therefore $\Delta t\propto N^{-1}$. However,
 the circular-orbit case is an exactly preserved equilibrium of the staggered update. Its error
 is consequently dominated by floating-point roundoff rather than temporal truncation, so the
-formal values of $p$ are not convergence orders and no fitted-order threshold is imposed. A future
-non-equilibrium trajectory test is needed to measure the transport scheme's temporal order.
+formal values of $p$ are not convergence orders and no fitted-order threshold is imposed. The eccentric-orbit case supplies the missing non-equilibrium temporal sequence and requires the
+final state-error order to remain at least 1.8.
 
 ### Stochastic errors
 
@@ -159,6 +163,8 @@ refinement:
 | 2D grid | mesh cells in both active directions | $N_X=N_Y=N$, $N_P=N^2$ |
 | 3D grid | radial and polar mesh cells | $N_X=4$, $N_Y=N_Z=N$, $N_P=4N^2$ |
 | circular orbit | timesteps in one orbit | $\Delta t=2\pi/N$, $N_P=64$ |
+| eccentric orbit | timesteps to a non-integer orbital phase | $\Delta t=1.3/N$, $N_P=4$ |
+| constant drag path | timesteps over one time unit | $\Delta t=1/N$, $N_P=3$ |
 | 1D/2D/3D diffusion | ensemble-control parameter | $N_P=16N^2$ on a fixed mesh |
 | drag, radiation, P-R, collision algebra | no physical dependence on $N$ | only the first requested value is built |
 | deterministic boundary helpers | no physical dependence on $N$ | only the first requested value is built |
@@ -227,7 +233,7 @@ The current CUDA matrix covers the following combinations:
 | Capability | 1D radial | 2D radial–azimuthal | full 3D |
 |---|---:|---:|---:|
 | grid deposition and optical depth | yes | yes | yes |
-| orbital transport and gas drag | yes | yes | no |
+| orbital transport and gas drag | equilibrium and multi-step drag path | circular and eccentric trajectories | no |
 | stochastic diffusion | cylindrical radial | azimuthal | cylindrical radial and vertical mapped to spherical storage |
 | finite-domain multisize initialization | no | no | yes |
 | radiation pressure and P-R drag | yes | yes | no |
@@ -250,12 +256,15 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_grid_3d` | full-3D spherical projection and optical-depth geometry | the same construction using exact $r^2\,dr\,d\Omega$ measures |
 | `test_orbit_1d` | radial-only non-radiative `ssa_transport` | stationary radius and angular momentum with exact inactive coordinates during one pressure-free circular orbit |
 | `test_orbit_2d` | complete non-radiative `ssa_transport` kernel | one pressure-free circular Kepler orbit |
+| `test_orbit_ecc_2d` | production staggered drift and geometric force update with QAV-only zero drag | eccentric Kepler state, energy, angular momentum, and second-order temporal convergence |
 | `test_drag_1d` | radial-only frozen gas-drag response | exact exponential angular relaxation, radial response, and inactive-state invariants |
+| `test_drag_path_1d` | production staggered radial drift with QAV-only constant drag coefficients | exact velocity and displacement for three stopping times plus second-order position convergence |
 | `test_viscflow_1d` | radial initialization with vertically integrated `VISC_FLOW` | exact viscous gas target and steady dust drift across several radii |
 | `test_drag_2d` | frozen-coefficient gas-drag response in `ssa_transport` | exact exponential angular relaxation and its induced radial response |
 | `test_diffusion_1d` | direct cylindrical radial SDE | exact Itô mean and variance, invariant physical velocity, and exact inactive coordinates |
 | `test_diffusion_2d` | azimuthal cylindrical diffusion SDE and velocity reprojection | exact Gaussian angular moments and invariant Cartesian velocity |
 | `test_diffusion_3d` | cylindrical radial and vertical SDE mapped to spherical storage | exact radial/vertical moments including cylindrical Itô drift and invariant Cartesian velocity |
+| `test_settle_diffuse_3d` | production vertical diffusion combined with a QAV-only local linear settling map | exact finite-step Ornstein--Uhlenbeck mean, variance, Gaussian CDF, and invariant physical velocity |
 | `test_initial_3d` | continuous finite-domain multisize initialization with geometrically thin size-dependent settling | independent truncated-Gaussian containment, radial and vertical probability transforms, represented-mass closure, exact domain bounds, and invariance under changes to simulation $N_Z$ |
 | `test_radiation_1d` | radial-only midpoint radiation split | exact radiation-modified frozen response and inactive-state invariants |
 | `test_radiation_2d` | midpoint radiation split without P-R damping | exact radiation-modified frozen response at zero optical depth |
@@ -456,6 +465,81 @@ requires $L_\infty<5\times10^{-13}$. Because this circular equilibrium is preser
 not expose the nominal temporal order: ratios of errors near machine precision fluctuate and may
 produce negative formal orders. This case verifies equilibrium preservation and long-orbit phase
 consistency, not general second-order convergence.
+
+### Non-equilibrium eccentric orbit
+
+`test_orbit_ecc_2d` complements the circular equilibrium with four eccentric trajectories at
+initial mean anomalies $0.1$, $0.7$, $1.4$, and $2.2$. The QAV model activates a zero-drag
+specialization while retaining the production staggered drift, spherical geometric force
+calculation, boundary handling, and `ssa_transport` kernel. For $GM_S=a=1$ and $e=0.2$, the
+independent reference solves
+
+$$
+E-e\sin E=M_0+t
+$$
+
+and evaluates
+
+$$
+y=1-e\cos E,
+\qquad
+x=\operatorname{atan2}\left(\sqrt{1-e^2}\sin E,\cos E-e\right),
+$$
+
+$$
+\ell_x=\sqrt{1-e^2},
+\qquad
+v_y=\frac{e\sin E}{1-e\cos E},
+\qquad
+z=\frac{\pi}{2},
+\qquad
+\ell_z=0.
+$$
+
+The final time $T=1.3$ is not an integer orbital period, preventing phase errors from being hidden
+by a return-time comparison. The validator reports the wrapped azimuthal error, complete stored
+state, specific orbital energy
+
+$$
+\mathcal E=\frac12\left[\left(\frac{\ell_x}{y}\right)^2+v_y^2\right]-\frac1y,
+$$
+
+and angular momentum. Every state error must remain below $2\times10^{-2}$, the activation flag
+must be true, and the final state $L_1$ order over $N=32,64,128,256$ must exceed 1.8. An independent
+host replica predicts second-order errors, but native CUDA and ROCm records are still required
+before quoting measured values.
+
+### Multi-step constant-coefficient drag path
+
+`test_drag_path_1d` tests displacement as well as the already verified one-step velocity response.
+A QAV-only coefficient specialization retains the production first/second half drifts and
+`ssa_transport` launch while prescribing
+
+$$
+v_g=0.15,
+\qquad
+a=-0.08,
+\qquad
+t_s\in\{0.02,0.2,2.0\}.
+$$
+
+For $y_0=0.8$ and $v_0=0.25$, define $v_{\rm eq}=v_g+a t_s$. The exact solution at $T=1$ is
+
+$$
+v(T)=v_{\rm eq}+(v_0-v_{\rm eq})e^{-T/t_s},
+$$
+
+$$
+y(T)=y_0+v_{\rm eq}T+t_s(v_0-v_{\rm eq})(1-e^{-T/t_s}).
+$$
+
+The velocity relaxation is exact for every numerical step, while the staggered two-half-drift
+position is a trapezoidal composition and should converge at second order. The validator requires
+velocity error below $2\times10^{-12}$, position error below $10^{-2}$, inactive coordinates and
+momenta below $2\times10^{-14}$, an active-specialization flag, and final position $L_1$ order at
+least 1.8. The three stopping times cover rapid, intermediate, and weak relaxation relative to the
+one-unit trajectory; the existing frozen-response cases retain the more extreme one-step stiffness
+ratios.
 
 ### Frozen drag and radiation responses
 
@@ -697,6 +781,54 @@ band is approximately $1.33\times10^{-3}$ at $N=32$, $6.63\times10^{-4}$ at $N=6
 $3.31\times10^{-4}$ at $N=128$, and $1.66\times10^{-4}$ at $N=256$. The $N=32$ and $N=64$
 ensembles therefore check gross diffusion behavior but cannot independently resolve the Itô drift;
 the $N\ge128$ results provide that evidence.
+
+#### Three-dimensional settling plus diffusion
+
+`test_settle_diffuse_3d` isolates the cylindrical vertical process
+
+$$
+dZ=-\gamma Z\,dt+\sqrt{2D}\,dW
+$$
+
+with $\gamma=0.7$, $D=0.02$, $Z_0=0.25$, and final time $T=1$. A test-only kernel applies the
+documented Euler settling map, while the unmodified production `diffusion_pos` kernel supplies the
+vertical Gaussian increment and spherical-coordinate reprojection. The azimuthal and cylindrical
+radial diffusivities are suppressed through large Schmidt numbers.
+
+For $n=N$ steps of size $h=T/N$, define
+
+$$
+a=1-\gamma h.
+$$
+
+The implemented recurrence is exactly
+
+$$
+Z_{k+1}=aZ_k+\sqrt{2Dh}\,\xi_k,
+\qquad \xi_k\sim\mathcal N(0,1),
+$$
+
+so the independent discrete reference is
+
+$$
+E[Z_n]=a^nZ_0,
+$$
+
+$$
+\operatorname{Var}(Z_n)
+=2Dh\frac{1-a^{2n}}{1-a^2}.
+$$
+
+Each resolution uses 65,536 representatives. The validator applies conservative six-standard-error
+limits to the sample mean and variance and a two-sided Kolmogorov--Smirnov test against the complete
+Gaussian law. The CDF gate receives one third of a familywise significance level of 0.01; the much
+stricter moment gates keep the combined false-rejection budget below that level. It also reconstructs
+$(v_R,v_x,v_Z)$ after every accumulated basis transformation and
+requires the final physical velocity to remain unchanged to $2\times10^{-11}$; $R$ and $x$ must
+remain unchanged to $2\times10^{-12}$. The configured radial and polar boundaries lie sufficiently
+far into the Gaussian tails that the reference is the unbounded recurrence rather than a reflected
+process. This is a coefficient-specialized statistical test of the production diffusion kernel,
+not a claim that the unrestricted disk settling force is globally linear.
 
 ### Continuous finite-domain initialization
 
@@ -1088,7 +1220,7 @@ production timing comparison.
 ### Complete 2026-08-17 archives
 
 The common suite was regenerated on CUDA and ROCm under the source-matched campaign recorded in
-[`README.md`](README.md). Both aggregate manifests report 25/25 models passed, comprising 51/51
+[`README.md`](README.md). Both pre-expansion aggregate manifests report 25/25 models passed, comprising 51/51
 analytical metrics, four standalone KNN builds, and six production collision links. The analytical
 metrics partition into 33 publication and 18 release records.
 
@@ -1105,7 +1237,7 @@ metrics partition into 33 publication and 18 release records.
 The detailed KNN component counts, correctness criteria, memory ratios, and timing ranges are
 reported once in “Latest archived native KNN evidence” above.
 
-The backend comparator found all 51 analytical records on both sides, no missing records, and zero
+The pre-expansion backend comparator found all 51 analytical records on both sides, no missing records, and zero
 acceptance mismatches. Twelve stochastic records are compared by pass state and acceptance metadata
 rather than requiring equal random realizations. The KNN comparison found equal component coverage
 and passing aggregate manifests on both backends. Independent local archive checks reproduced
@@ -1233,7 +1365,7 @@ From the repository root, run a short workflow check with
 python3 qav/cuda/swarm/test_common/run_suite.py --group all --quick
 ```
 
-This performs the 33 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
+This performs the 37 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
 and 3D production collision sources with both backends, and then runs the
 $10^5$-particle KNN matrix.
 
@@ -1245,7 +1377,7 @@ python3 qav/cuda/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The current complete command performs 51 analytical-suite builds plus four KNN driver builds and
+The current complete command performs 63 analytical-suite builds plus four KNN driver builds and
 six production backend/geometry links.
 Individual groups can be selected with
 
@@ -1355,8 +1487,8 @@ after every selected model has returned successfully.
   $\beta e^{-\tau}$; the current grid and radiation cases validate the two pieces separately
 - Recover long-term reduced-gravity circular motion and secular P-R inspiral, including the
   factor-of-two radial P-R damping over many steps
-- Validate vertical settling–diffusion equilibrium and spatially varying diffusivity-gradient
-  terms
+- Extend the local settling--diffusion regression to the unrestricted disk settling force and test
+  spatially varying diffusivity-gradient terms
 - Compare uninterrupted and restarted stochastic runs with byte-identical restored RNG files but
   tolerance-based physical state, conservation, and ensemble criteria because velocity-file
   conversion need not preserve internal angular momentum bitwise

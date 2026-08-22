@@ -3,6 +3,7 @@
 
 #include <hip/hip_runtime.h>                  // HIP device qualifiers and bit conversions
 
+// retain the exact top-K physical neighbors while filtering inactive particles and periodic duplicate images
 template<int K, typename Node>
 struct idx_old_heap
 {
@@ -16,6 +17,7 @@ struct idx_old_heap
         const unsigned char *dev_active = nullptr)
         : kdtree_node(tree_node), dev_active(dev_active), dedup_needed(dedup_needed)
     {
+        // initialize a finite max-heap whose invalid identifiers sort after every physical candidate
         unsigned long long empty = encode(search_dist*search_dist, 0xffffffffU);
         #pragma unroll
         for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++) near_key[idx_neighbor] = empty;
@@ -24,6 +26,7 @@ struct idx_old_heap
     __device__ __forceinline__
     unsigned long long encode (float dist_sq, unsigned int idx_old) const
     {
+        // order packed keys first by nonnegative float distance and then by original identifier
         return (static_cast<unsigned long long>(__float_as_uint(dist_sq)) << 32) | idx_old;
     }
 
@@ -54,6 +57,7 @@ struct idx_old_heap
     __device__ __forceinline__
     float expandedCullDist2 () const
     {
+        // retain candidates equal to the current cutoff despite single-precision traversal rounding
         return nextafterf(maxRadius2(), __uint_as_float(0x7f800000U));
     }
 
@@ -65,6 +69,7 @@ struct idx_old_heap
 
         unsigned long long candidate = encode(dist_sq, idx_old);
 
+        // replace an existing periodic image only when the new image is closer
         int idx_slot = -1;
         if (dedup_needed)
         {
@@ -86,6 +91,7 @@ struct idx_old_heap
             idx_slot = 0;
         }
 
+        // restore max-heap order after replacing either the root or a duplicate-image slot
         while (true)
         {
             int idx_child1 = 2*idx_slot + 1;

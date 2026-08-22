@@ -46,7 +46,7 @@ def main() -> None:
     result_root.mkdir(parents=True, exist_ok=True)
     distributions = args.distribution or ["smooth", "ring", "interior_clump", "seam_clump"]
 
-    # K is compiled into the candidate-list types used by both search backends.
+    # k is compiled into the candidate-list types used by both search backends
     subprocess.run(
         [
             "make", "-C", str(test_root), "wedge",

@@ -643,7 +643,7 @@ def analyze_boundary(out_dir: Path, resolution: int, meta: dict[str, str]) -> di
         1.0, -2.0, 3.0,
     )
 
-    # Both radial transport exits are absorbed after periodic azimuthal wrapping.
+    # both radial transport exits are absorbed after periodic azimuthal wrapping
     expected[3] = (wrap_x(x_max + 0.25*x_width), 0.0, 0.5*math.pi, 0.0, 0.0, 0.0)
     expected[4] = (wrap_x(x_min - 0.25*x_width), 0.0, 0.5*math.pi, 0.0, 0.0, 0.0)
 

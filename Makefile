@@ -331,7 +331,7 @@ FORCE:
 
 $(OBJ_DIR)/%.o: %.hip $(MODEL_FLAG_FILE) $(MODEL_CONST)
 	@mkdir -p $(dir $@)
-	@printf "%-12s %50s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
+	@printf "%-12s %60s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
 	@$(GPU_COMPILER) $(GPU_BASE_FLAGS) $(GPU_FLAGS) $(GPU_LANGUAGE_FLAG) $(GPU_DEVICE_FLAG) -o $@ $< \
 		$(INC_SEARCH_FLAGS) $(BACKEND_DEFINE) \
 		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \
@@ -339,7 +339,7 @@ $(OBJ_DIR)/%.o: %.hip $(MODEL_FLAG_FILE) $(MODEL_CONST)
 
 $(OBJ_DIR)/%.o: %.cu $(MODEL_FLAG_FILE) $(MODEL_CONST)
 	@mkdir -p $(dir $@)
-	@printf "%-12s %50s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
+	@printf "%-12s %60s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
 	@$(GPU_COMPILER) $(GPU_BASE_FLAGS) $(GPU_FLAGS) $(GPU_LANGUAGE_FLAG) $(GPU_DEVICE_FLAG) -o $@ $< \
 		$(INC_SEARCH_FLAGS) $(BACKEND_DEFINE) \
 		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \

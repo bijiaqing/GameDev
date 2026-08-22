@@ -384,8 +384,8 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
         if (error > 2.0e-6f) return true;
         if (actual[idx].second == expected[idx].second) continue;
 
-        // Host and GPU rotations may reverse candidates whose squared distances differ below
-        // single-precision resolution; record these substitutions without treating them as errors.
+        // host and GPU rotations may reverse candidates whose squared distances differ below
+        // single-precision resolution; record these substitutions without treating them as errors
         if (error <= 1.0e-7f)
         {
             tie_equivalent_neighbors++;

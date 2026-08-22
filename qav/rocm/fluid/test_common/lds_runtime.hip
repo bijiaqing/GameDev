@@ -14,17 +14,23 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
+// ROCm qualification driver rather than a physical evolution model
+// request the exact dynamic LDS used by one production block-line diffusion kernel, verify that a uniform state remains
+// stationary, and separately confirm that an unsupported allocation is rejected before launch
+
 const std::string PATH = PATH_OUT;
 
 int main ()
 {
     #ifdef VERIFY_LDS_REJECT
+    // deliberately exceed the supported launch allocation; successful continuation means the production guard failed
     require_lds(
         reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl"
     );
     std::cerr << "Error: unsupported LDS request was not rejected" << std::endl;
     return EXIT_FAILURE;
     #else
+    // use a spatially uniform conserved state whose zero diffusive flux exposes launch, indexing, or synchronization errors
     std::vector<real> rhod(N_G, 1.0);
     std::vector<real> mx(N_G, 2.0);
     std::vector<real> my(N_G, -0.5);
@@ -61,6 +67,7 @@ int main ()
     block_count = N_X*N_Y;
     #endif
 
+    // query and validate the device-specific LDS limit through the same host guard used by production
     lds_usage usage = require_lds(kernel, dynamic_lds, kernel_name);
     constexpr real dt = 1.0e-8;
     #ifdef VERIFY_LDS_X

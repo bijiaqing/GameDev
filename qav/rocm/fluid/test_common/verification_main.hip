@@ -14,22 +14,22 @@
 #include <fluid_host.cuh>
 
 // =========================================================================================================================
-// Shared HIP driver for the fluid verification models
+// shared HIP driver for the fluid verification models
 //
-// Each model directory defines one VERIFY_* macro in flags.mk and includes this file as its main program.  The preprocessor
-// keeps only the selected initial condition, integration branch, and case name in the resulting executable.  This lets every
-// test call the production kernels while sharing identical allocation, output, and metadata logic.
+// each model directory defines one VERIFY_* macro in flags.mk and includes this file as its main program; the preprocessor
+// keeps only the selected initial condition, integration branch, and case name in the resulting executable; this lets every
+// test call the production kernels while sharing identical allocation, output, and metadata logic
 //
-// The executable does not calculate error norms.  It writes initial and final fields plus metadata for validate_case.py,
-// which independently constructs analytical finite-volume reference solutions and performs the comparison.
+// the executable does not calculate error norms; it writes initial and final fields plus metadata for validate_case.py,
+// which independently constructs analytical finite-volume reference solutions and performs the comparison
 // =========================================================================================================================
 
 namespace
 {
 const std::string PATH = PATH_OUT;
 
-// Integrate one scalar function with an eight-point Gauss-Legendre rule.  The tables contain only the four positive nodes;
-// evaluating each node at symmetric offsets supplies all eight quadrature points.
+// integrate one scalar function with an eight-point Gauss-Legendre rule; the tables contain only the four positive nodes;
+// evaluating each node at symmetric offsets supplies all eight quadrature points
 template <typename Function>
 real gauss8 (Function function, real lower, real upper)
 {
@@ -55,8 +55,8 @@ real gauss8 (Function function, real lower, real upper)
 
 real compact_bump (real value, real lower, real upper)
 {
-    // This C-infinity profile is exactly zero outside its support and smooth at both endpoints, making it suitable for
-    // transport convergence tests without discontinuities that would reduce the formal PPM order.
+    // this C-infinity profile is exactly zero outside its support and smooth at both endpoints, making it suitable for
+    // transport convergence tests without discontinuities that would reduce the formal PPM order
     if (value <= lower || value >= upper) return 0.0;
     real center = 0.5*(lower + upper);
     real half_width = 0.5*(upper - lower);
@@ -86,14 +86,14 @@ real spherical_y0_deriv (real value)
 
 real radial_mode (real y, int dimension)
 {
-    // Construct a radial Laplacian eigenmode with zero derivative at Y_MIN.  The selected k2 and k3 values also impose zero
-    // derivative at Y_MAX, so the analytical mode is compatible with the diffusion kernel's zero-flux radial boundaries.
+    // construct a radial Laplacian eigenmode with zero derivative at Y_MIN; the selected k2 and k3 values also impose zero
+    // derivative at Y_MAX, so the analytical mode is compatible with the diffusion kernel's zero-flux radial boundaries
     constexpr real k2 = 1.694299217770420;
     constexpr real k3 = 1.874562003084784;
 
     if (dimension == 2)
     {
-        // Cylindrical radial eigenfunctions are linear combinations of ordinary order-zero Bessel functions.
+        // cylindrical radial eigenfunctions are linear combinations of ordinary order-zero Bessel functions
         real value = std::cyl_bessel_j(0, k2*y)*std::cyl_neumann(1, k2*Y_MIN)
                    - std::cyl_neumann(0, k2*y)*std::cyl_bessel_j(1, k2*Y_MIN);
         real norm = std::cyl_bessel_j(0, k2*Y_MIN)*std::cyl_neumann(1, k2*Y_MIN)
@@ -101,7 +101,7 @@ real radial_mode (real y, int dimension)
         return value / norm;
     }
 
-    // Spherical radial eigenfunctions use spherical Bessel functions instead.
+    // spherical radial eigenfunctions use spherical Bessel functions instead
     real value = spherical_j0(k3*y)*spherical_y0_deriv(k3*Y_MIN)
                - spherical_y0(k3*y)*spherical_j0_deriv(k3*Y_MIN);
     real norm = spherical_j0(k3*Y_MIN)*spherical_y0_deriv(k3*Y_MIN)
@@ -111,7 +111,7 @@ real radial_mode (real y, int dimension)
 
 real host_gas_dens (real R, real Z)
 {
-    // Reproduce the gas profile used as the radial baseline of the ring density
+    // reproduce the gas profile used as the radial baseline of the ring density
     real sigma_g = SIGMA_0*pow(R/R_0, IDX_P);
     if (N_Z == 1) return sigma_g;
 
@@ -122,7 +122,7 @@ real host_gas_dens (real R, real Z)
 
 const char *case_name ()
 {
-    // Store a stable case identifier in metadata.  The Python validator dispatches its analytical solution using this name.
+    // store a stable case identifier in metadata; the Python validator dispatches its analytical solution using this name
 #if defined(VERIFY_X_TRANSPORT)
     return "x_transport";
 #elif defined(VERIFY_Y_TRANSPORT_CYL)
@@ -158,12 +158,12 @@ const char *case_name ()
 
 std::string suffix ()
 {
-    // Resolution belongs in every binary filename so results from several grid sizes can share one output directory.
+    // resolution belongs in every binary filename so results from several grid sizes can share one output directory
     return "_N" + std::to_string(VERIFY_RES) + ".dat";
 }
 
-// Fill host-side cell averages of density and the three conserved momentum variables.  Initializing conserved quantities
-// directly prevents a primitive-to-conserved conversion from becoming part of the test error.
+// fill host-side cell averages of density and the three conserved momentum variables; initializing conserved quantities
+// directly prevents a primitive-to-conserved conversion from becoming part of the test error
 void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
     std::vector<real> &my, std::vector<real> &mz)
 {
@@ -171,7 +171,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
     real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
     real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
 
-    // Traverse cells in the same x-fastest ordering used by all production kernels and binary output files.
+    // traverse cells in the same x-fastest ordering used by all production kernels and binary output files
     for (int iz = 0; iz < N_Z; iz++)
     {
         real z0 = Z_MIN + static_cast<real>(iz)*dz;
@@ -193,7 +193,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 int idx = ix + iy*N_X + iz*N_X*N_Y;
 
 #if defined(VERIFY_X_TRANSPORT)
-                // Cell-average a periodic Fourier mode and assign specific angular momentum R^2, giving unit angular speed.
+                // cell-average a periodic Fourier mode and assign specific angular momentum R^2, giving unit angular speed
                 real q = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
                 real velx = Rc*Rc;
                 rhod[idx] = q;
@@ -201,8 +201,8 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 my[idx] = 0.0;
                 mz[idx] = 0.0;
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
-                // Integrate the compact bump and its radial momentum with the appropriate cylindrical or spherical volume
-                // measure.  Dividing by volume produces the finite-volume cell averages consumed by the advection kernel.
+                // integrate the compact bump and its radial momentum with the appropriate cylindrical or spherical volume
+                // measure; dividing by volume produces the finite-volume cell averages consumed by the advection kernel
                 int dimension = (N_Z > 1) ? 3 : 2;
                 real volume = (pow(y1, dimension) - pow(y0, dimension))/static_cast<real>(dimension);
                 real rho_int = gauss8([&](real y)
@@ -218,8 +218,8 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 my[idx] = my_int/volume;
                 mz[idx] = 0.11*rhod[idx];
 #elif defined(VERIFY_Z_TRANSPORT)
-                // Average the compact bump with the polar finite-volume measure and choose the shell momentum so the exact
-                // integrated polar face-area-to-volume factor gives the same known angular rate in every radial shell.
+                // average the compact bump with the polar finite-volume measure and choose the shell momentum so the exact
+                // integrated polar face-area-to-volume factor gives the same known angular rate in every radial shell
                 real volume = cos(z0) - cos(z1);
                 real rho_int = gauss8([&](real z)
                 {
@@ -233,15 +233,15 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 my[idx] = 0.05*rhod[idx];
                 mz[idx] = lz*rhod[idx];
 #elif defined(VERIFY_X_DIFFUSION)
-                // A periodic Fourier mode is an exact azimuthal diffusion eigenfunction.  Constant primitive momentum ratios
-                // also test whether diffusing mass transports all three conserved momentum components consistently.
+                // a periodic Fourier mode is an exact azimuthal diffusion eigenfunction; constant primitive momentum ratios
+                // also test whether diffusing mass transports all three conserved momentum components consistently
                 real rhod_init = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
                 rhod[idx] = rhod_init;
                 mx[idx] = 0.7*rhod_init;
                 my[idx] = -0.15*rhod_init;
                 mz[idx] = 0.11*rhod_init;
 #elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
-                // Average the zero-flux radial eigenmode with the correct dimension-dependent volume measure.
+                // average the zero-flux radial eigenmode with the correct dimension-dependent volume measure
                 int dimension = (N_Z > 1) ? 3 : 2;
                 real volume = (pow(y1, dimension) - pow(y0, dimension))/static_cast<real>(dimension);
                 real mode_avg = gauss8([&](real y)
@@ -254,8 +254,8 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 my[idx] = -0.15*rhod_init;
                 mz[idx] = 0.11*rhod_init;
 #elif defined(VERIFY_Z_DIFFUSION)
-                // P2(cos z) is an angular Laplacian eigenmode.  Multiplication by sin(z) supplies the spherical volume
-                // measure before division by the exact polar cell volume.
+                // p2(cos z) is an angular Laplacian eigenmode; multiplication by sin(z) supplies the spherical volume
+                // measure before division by the exact polar cell volume
                 real volume = cos(z0) - cos(z1);
                 real mode_avg = gauss8([&](real z)
                 {
@@ -268,20 +268,20 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 my[idx] = -0.15*rhod_init;
                 mz[idx] = 0.11*rhod_init;
 #elif defined(VERIFY_SOURCE_DRAG)
-                // Eight x cells encode eight drag stiffnesses through the test parameter helpers; spatial variation is not
-                // involved.  One source update can then be checked from the non-stiff through the very stiff limit.
+                // eight x cells encode eight drag stiffnesses through the test parameter helpers; spatial variation is not
+                // involved; one source update can then be checked from the non-stiff through the very stiff limit
                 rhod[idx] = 1.0;
                 mx[idx] = 1.3;
                 my[idx] = -0.8;
                 mz[idx] = 0.6;
 #elif defined(VERIFY_OPTDEPTH)
-                // Choose surface density so the reconstructed midplane volume density is the requested radial power law
+                // choose surface density so the reconstructed midplane volume density is the requested radial power law
                 real h_g = ASPR_0*pow(Rc/R_0, 0.5*(IDX_Q + 1.0));
                 rhod[idx] = sqrt(2.0*M_PI)*h_g*Rc*pow(yc, static_cast<real>(VERIFY_POWER));
                 mx[idx] = my[idx] = mz[idx] = 0.0;
 #elif defined(VERIFY_RING)
-                // Initialize a relative Fourier density perturbation on circular equilibrium rings.  Radiation modifies
-                // the equilibrium angular momentum, while optional diffusion supplies the known Fourier-mode damping.
+                // initialize a relative Fourier density perturbation on circular equilibrium rings; radiation modifies
+                // the equilibrium angular momentum, while optional diffusion supplies the known Fourier-mode damping
                 real rhod_mode = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
 #ifdef VERIFY_RING_RADIATION
                 const real beta = BETA_0;
@@ -311,14 +311,14 @@ void save_array (const std::string &name, const std::vector<real> &array)
 void save_state (const std::string &stage, real *dev_dustdens, real *dev_dustmomx,
     real *dev_dustmomy, real *dev_dustmomz, real *dev_velx, real *dev_vely, real *dev_velz)
 {
-    // Synchronize primitive variables with the current conserved fields before copying either representation to the host.
+    // synchronize primitive variables with the current conserved fields before copying either representation to the host
     momentum_getv <<< NB_G, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
     );
     HIP_KERNEL_CHECK("momentum_getv");
     HIP_CHECK(hipDeviceSynchronize());
 
-    // Ordinary host vectors are sufficient because test output is written only at the initial and final stages.
+    // ordinary host vectors are sufficient because test output is written only at the initial and final stages
     std::vector<real> rhod(N_G), mx(N_G), my(N_G), mz(N_G);
     std::vector<real> velx(N_G), vely(N_G), velz(N_G);
     HIP_CHECK(hipMemcpy(rhod.data(), dev_dustdens, sizeof(real)*N_G, hipMemcpyDeviceToHost));
@@ -329,8 +329,8 @@ void save_state (const std::string &stage, real *dev_dustdens, real *dev_dustmom
     HIP_CHECK(hipMemcpy(vely.data(), dev_vely, sizeof(real)*N_G, hipMemcpyDeviceToHost));
     HIP_CHECK(hipMemcpy(velz.data(), dev_velz, sizeof(real)*N_G, hipMemcpyDeviceToHost));
 
-    // Production calculations store x and z primitives as specific angular momenta.  Convert copies to physical linear
-    // velocities for output while retaining conserved angular momenta in the dustmomx and dustmomz files.
+    // production calculations store x and z primitives as specific angular momenta; convert copies to physical linear
+    // velocities for output while retaining conserved angular momenta in the dustmomx and dustmomz files
     save_sam_as_velocity(velx.data(), velz.data());
     save_array("dustdens_" + stage, rhod);
     save_array("dustmomx_" + stage, mx);
@@ -344,14 +344,14 @@ void save_state (const std::string &stage, real *dev_dustdens, real *dev_dustmom
 
 int main ()
 {
-    // PATH_OUT is selected by the Makefile from the model name and optional parameter-variant tag.
+    // PATH_OUT is selected by the Makefile from the model name and optional parameter-variant tag
     std::filesystem::create_directories(PATH);
 
-    // Build exact finite-volume initial data on the host before allocating its device representation.
+    // build exact finite-volume initial data on the host before allocating its device representation
     std::vector<real> rhod(N_G), mx(N_G), my(N_G), mz(N_G);
     initialize_state(rhod, mx, my, mz);
 
-    // Allocate the same conserved and primitive fields used by the production fluid integrator.
+    // allocate the same conserved and primitive fields used by the production fluid integrator
     real *dev_dustdens, *dev_dustmomx, *dev_dustmomy, *dev_dustmomz;
     real *dev_velx, *dev_vely, *dev_velz;
     HIP_CHECK(hipMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
@@ -362,7 +362,7 @@ int main ()
     HIP_CHECK(hipMalloc((void**)&dev_vely, sizeof(real)*N_G));
     HIP_CHECK(hipMalloc((void**)&dev_velz, sizeof(real)*N_G));
 
-    // Only conserved variables were initialized on the host.  momentum_getv below derives synchronized primitives.
+    // only conserved variables were initialized on the host; momentum_getv below derives synchronized primitives
     HIP_CHECK(hipMemcpy(dev_dustdens, rhod.data(), sizeof(real)*N_G, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(dev_dustmomx, mx.data(), sizeof(real)*N_G, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(dev_dustmomy, my.data(), sizeof(real)*N_G, hipMemcpyHostToDevice));
@@ -373,8 +373,8 @@ int main ()
     );
     HIP_KERNEL_CHECK("momentum_getv");
 
-    // Nonuniform radial and polar PPM kernels require precomputed face interpolation weights even when a particular test
-    // evolves only one direction.  Keeping a common allocation path simplifies compile-time case selection.
+    // nonuniform radial and polar PPM kernels require precomputed face interpolation weights even when a particular test
+    // evolves only one direction; keeping a common allocation path simplifies compile-time case selection
     real *dev_weight_y, *dev_weight_z;
     HIP_CHECK(hipMalloc((void**)&dev_weight_y, sizeof(real)*4*(N_Y + 1)));
     HIP_CHECK(hipMalloc((void**)&dev_weight_z, sizeof(real)*4*(N_Z + 1)));
@@ -384,7 +384,7 @@ int main ()
     HIP_CHECK(hipMemcpy(dev_weight_z, weight_z.data(), sizeof(real)*4*(N_Z + 1), hipMemcpyHostToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
-    // The block sweep shares one persistent 11-field advection workspace across all directions
+    // the block sweep shares one persistent 11-field advection workspace across all directions
     real *dev_adv_work;
     HIP_CHECK(hipMalloc(
         (void**)&dev_adv_work,
@@ -398,24 +398,24 @@ int main ()
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 
-    // The transport tests that use velocity-dependent timesteps share the production CFL-rate kernel and host reduction.
+    // the transport tests that use velocity-dependent timesteps share the production CFL-rate kernel and host reduction
     real *dev_cfl_rate;
     HIP_CHECK(hipMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
 
 #ifdef RADIATION
-    // Radiation and standalone optical-depth builds require one cumulative optical-depth field.
+    // radiation and standalone optical-depth builds require one cumulative optical-depth field
     real *dev_optdepth;
     HIP_CHECK(hipMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
 #endif
 
-    // Saving the initial state enables both direct initialization checks and the later mass-conservation calculation.
+    // saving the initial state enables both direct initialization checks and the later mass-conservation calculation
     save_state("initial", dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
         dev_velx, dev_vely, dev_velz);
 
     auto recover_velocity = [&]()
     {
-        // Conservative transport and diffusion update momentum, so primitives must be reconstructed before any subsequent
-        // operator that reads velocity or specific angular momentum.
+        // conservative transport and diffusion update momentum, so primitives must be reconstructed before any subsequent
+        // operator that reads velocity or specific angular momentum
         momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
         );
@@ -424,7 +424,7 @@ int main ()
 
     auto cfl_step = [&]()
     {
-        // Recompute rates from the current evolved state rather than retaining the initial timestep throughout the test.
+        // recompute rates from the current evolved state rather than retaining the initial timestep throughout the test
         recover_velocity();
         cfl_rate_calc <<< NB_X, TPB >>> (
             dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
@@ -435,7 +435,7 @@ int main ()
         return get_dt_cfl(dev_cfl_rate, dev_velx, dev_vely, dev_velz, false);
     };
 
-    // Select one-thread-per-line or one-block-per-line transport without changing the test cases below
+    // select one-thread-per-line or one-block-per-line transport without changing the test cases below
     auto apply_advection_x = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
@@ -476,7 +476,7 @@ int main ()
     };
 
     #ifdef DIFFUSION
-    // Select the matching line solver while preserving each test's timestep and operator order
+    // select the matching line solver while preserving each test's timestep and operator order
     auto apply_diffusion_x = [&](real dt)
     {
         #ifdef FLUID_BLOCK_SWEEP
@@ -521,8 +521,8 @@ int main ()
     int steps = 0;
 
 #if defined(VERIFY_OPTDEPTH)
-    // Optical depth is a spatial quadrature test, not a time integration test.  Construct the cumulative radial field once,
-    // save it, and leave clock and steps at zero for the metadata record.
+    // optical depth is a spatial quadrature test, not a time integration test; construct the cumulative radial field once,
+    // save it, and leave clock and steps at zero for the metadata record
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
     HIP_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -532,8 +532,8 @@ int main ()
     HIP_CHECK(hipMemcpy(optdepth.data(), dev_optdepth, sizeof(real)*N_G, hipMemcpyDeviceToHost));
     save_array("optdepth_final", optdepth);
 #elif defined(VERIFY_SOURCE_DRAG)
-    // Apply exactly one full source step.  The model-local source kernel prescribes gas velocities, stopping times, and
-    // linearly varying forces whose closed-form solution is evaluated independently in validate_case.py.
+    // apply exactly one full source step; the model-local source kernel prescribes gas velocities, stopping times, and
+    // linearly varying forces whose closed-form solution is evaluated independently in validate_case.py
     source_update <<< NB_G, TPB >>> (
         dev_velx, dev_vely, dev_velz, dev_dustdens, VERIFY_TEND
     );
@@ -545,8 +545,8 @@ int main ()
     clock = VERIFY_TEND;
     steps = 1;
 #elif defined(VERIFY_RING)
-    // Combined ring tests exercise the production operator composition.  Their target timestep is tied to one quarter of an
-    // azimuthal cell at the fastest equilibrium orbit, then clipped so the final step lands exactly on VERIFY_TEND.
+    // combined ring tests exercise the production operator composition; their target timestep is tied to one quarter of an
+    // azimuthal cell at the fastest equilibrium orbit, then clipped so the final step lands exactly on VERIFY_TEND
     real dx = (X_MAX - X_MIN)/static_cast<real>(N_X);
     real omega_max = sqrt((1.0
         #ifdef VERIFY_RING_RADIATION
@@ -560,21 +560,21 @@ int main ()
         real dt = fmin(dt_target, VERIFY_TEND - clock);
 
         #ifdef DIFFUSION
-        // Opening diffusion half-step in y then x; z is absent in these 2D ring models.
+        // opening diffusion half-step in y then x; z is absent in these 2D ring models
         apply_diffusion_y(0.5*dt);
         apply_diffusion_x(0.5*dt);
         recover_velocity();
         #endif
 
-        // Opening transport half-step in x then y, recovering primitives after each conservative sweep.
+        // opening transport half-step in x then y, recovering primitives after each conservative sweep
         apply_advection_x(0.5*dt);
         recover_velocity();
         apply_advection_y(0.5*dt);
         recover_velocity();
 
         #ifdef RADIATION
-        // Radiation builds recompute optical depth at the state presented to the centered source operator.  The taper is one
-        // in verification runs so the analytical acceleration is active for the entire step.
+        // radiation builds recompute optical depth at the state presented to the centered source operator; the taper is one
+        // in verification runs so the analytical acceleration is active for the entire step
         optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
         HIP_KERNEL_CHECK("optdepth_calc");
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -585,20 +585,20 @@ int main ()
         #endif
         HIP_KERNEL_CHECK("source_update");
 
-        // source_update advances primitives, so rebuild conserved momenta before returning to conservative transport.
+        // source_update advances primitives, so rebuild conserved momenta before returning to conservative transport
         momentum_setv <<< NB_G, TPB >>> (
             dev_dustdens, dev_velx, dev_vely, dev_velz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
         HIP_KERNEL_CHECK("momentum_setv");
 
-        // Closing transport half-step reverses the opening directional order for a symmetric composition.
+        // closing transport half-step reverses the opening directional order for a symmetric composition
         apply_advection_y(0.5*dt);
         recover_velocity();
         apply_advection_x(0.5*dt);
         recover_velocity();
 
         #ifdef DIFFUSION
-        // Closing diffusion half-step also reverses its opening order.
+        // closing diffusion half-step also reverses its opening order
         apply_diffusion_x(0.5*dt);
         apply_diffusion_y(0.5*dt);
         #endif
@@ -607,20 +607,20 @@ int main ()
         steps++;
     }
 #else
-    // Isolated transport and diffusion tests advance only the kernel selected by the model's VERIFY_* macro.
+    // isolated transport and diffusion tests advance only the kernel selected by the model's VERIFY_* macro
     while (clock < VERIFY_TEND)
     {
         real dt;
 #if defined(VERIFY_X_TRANSPORT)
-        // Prescribe the azimuthal displacement in cell widths so integer and fractional FARGO shifts can be studied directly.
+        // prescribe the azimuthal displacement in cell widths so integer and fractional FARGO shifts can be studied directly
         real dx = (X_MAX - X_MIN)/static_cast<real>(N_X);
         dt = fmin(static_cast<real>(VERIFY_SHIFT)*dx, VERIFY_TEND - clock);
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Z_TRANSPORT)
-        // Radial and polar transport use the current global production CFL condition.
+        // radial and polar transport use the current global production CFL condition
         dt = fmin(cfl_step(), VERIFY_TEND - clock);
 #else
-        // Diffusion is implicit, but a resolution-dependent timestep is retained to measure convergence of the complete
-        // space-time discretization rather than allowing temporal error to remain fixed as the grid is refined.
+        // diffusion is implicit, but a resolution-dependent timestep is retained to measure convergence of the complete
+        // space-time discretization rather than allowing temporal error to remain fixed as the grid is refined
         real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
         real min_length = Y_MIN*(dy - 1.0);
         if (N_Z > 1)
@@ -632,7 +632,7 @@ int main ()
         dt = fmin(0.25*min_length, VERIFY_TEND - clock);
 #endif
 
-        // Compile exactly one of these calls into an isolated-kernel test executable.
+        // compile exactly one of these calls into an isolated-kernel test executable
 #if defined(VERIFY_X_TRANSPORT)
         apply_advection_x(dt);
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
@@ -653,7 +653,7 @@ int main ()
 
 #if !defined(VERIFY_OPTDEPTH)
     #ifdef RADIATION
-    // Save final optical depth for combined radiation cases after the last density update.
+    // save final optical depth for combined radiation cases after the last density update
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
     HIP_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -664,13 +664,13 @@ int main ()
     save_array("optdepth_final", optdepth_final);
     #endif
 
-    // Synchronize and save the final conserved fields and physical velocities for Python validation.
+    // synchronize and save the final conserved fields and physical velocities for Python validation
     save_state("final", dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
         dev_velx, dev_vely, dev_velz);
 #endif
 
-    // Record the compile-time configuration and realized integration statistics beside the raw binary arrays.  Python uses
-    // these values instead of inferring dimensions or final time from filenames and requested parameters.
+    // record the compile-time configuration and realized integration statistics beside the raw binary arrays; Python uses
+    // these values instead of inferring dimensions or final time from filenames and requested parameters
     std::ofstream meta(PATH + "meta_N" + std::to_string(VERIFY_RES) + ".json");
     meta << std::setprecision(17)
          << "{\n"
@@ -686,7 +686,7 @@ int main ()
          << "  \"power\": " << static_cast<real>(VERIFY_POWER) << "\n"
          << "}\n";
 
-    // Release all device allocations; host std::vectors are released automatically when main returns.
+    // release all device allocations; host std::vectors are released automatically when main returns
     HIP_CHECK(hipFree(dev_dustdens));
     HIP_CHECK(hipFree(dev_dustmomx));
     HIP_CHECK(hipFree(dev_dustmomy));

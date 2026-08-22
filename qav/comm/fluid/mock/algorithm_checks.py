@@ -23,12 +23,12 @@ Reading guide for someone less familiar with Python:
 
 import numpy as np
 
-# These constants mirror their counterparts in the fluid solver
+# these constants mirror their counterparts in the fluid solver
 POS_LIMIT = 0.9
 RHO_VAC = 1.0e-15
 Y_MIN, Y_MAX = 0.5, 2.5
 
-# Each entry is ``(test name, passed)`` and is summarized at the end
+# each entry is ``(test name, passed)`` and is summarized at the end
 RESULTS = []
 
 
@@ -182,7 +182,7 @@ def test_x_diffusion():
 
 
 # ======================================================================================================================
-# Radial Crank-Nicolson diffusion
+# radial Crank-Nicolson diffusion
 # ======================================================================================================================
 
 def y_grid(N, d):
@@ -312,7 +312,7 @@ def test_y_diffusion():
 
 
 # ======================================================================================================================
-# Drag and external-force source integration
+# drag and external-force source integration
 # ======================================================================================================================
 
 def source_update(u, ug, ts, Fn, Fnew, dt):
@@ -487,7 +487,7 @@ def test_ppm_weights():
 
 
 # ======================================================================================================================
-# Periodic FARGO plus PPM transport
+# periodic FARGO plus PPM transport
 # ======================================================================================================================
 
 def ppm_edge_uni(qm1, q0, qp1, qp2):
@@ -654,7 +654,7 @@ def test_x_advection():
 
 
 # ======================================================================================================================
-# Radial optical-depth quadrature
+# radial optical-depth quadrature
 # ======================================================================================================================
 
 def test_optdepth():
@@ -699,7 +699,7 @@ def test_optdepth():
            np.all(orders > 1.7) and errs_c[-1] > 1e-14,
            f"rel errs={np.array2string(np.array(errs_c), precision=3)}, orders={np.round(orders,3)}")
 
-    # T6c: the C9 logarithmic-center rule tau_c = tau_i + f_c*(tau_o - tau_i), f_c = 1/(sqrt(r)+1),
+    # t6c: the C9 logarithmic-center rule tau_c = tau_i + f_c*(tau_o - tau_i), f_c = 1/(sqrt(r)+1),
     # is roundoff-exact for constant extinction (piecewise-constant cells are then exact) and
     # keeps the underlying second-order cell quadrature otherwise
     kappa_c = 1.0e5
@@ -735,7 +735,7 @@ def test_optdepth():
 
 
 # ======================================================================================================================
-# Radial PPM transport and SSPRK comparison
+# radial PPM transport and SSPRK comparison
 # ======================================================================================================================
 
 def advect_y(rhod, my, dt, yf, d, w):
@@ -1050,7 +1050,7 @@ def advect_y_invariant(rhod, mx, my, mz, dt, yface, dimension, weights):
     state_initial = np.stack((rhod, mx, my, mz))
 
     def euler_step(state):
-        # Work on a copy because near-vacuum recovery also repairs momenta
+        # work on a copy because near-vacuum recovery also repairs momenta
         stage = state.copy()
         rhod_s, mx_s, my_s, mz_s = stage
 
@@ -1064,7 +1064,7 @@ def advect_y_invariant(rhod, mx, my, mz, dt, yface, dimension, weights):
         mz_s[~active] = 0.0
         primitive = np.stack((lx, vy, lz))
 
-        # Reconstruct density and all three primitives at radial faces
+        # reconstruct density and all three primitives at radial faces
         face_values = [ppm_edges_nonuniform(values, weights) for values in (rhod_s, lx, vy, lz)]
         flux_high = np.zeros((4, cell_count + 1))
         flux_low = np.zeros((4, cell_count + 1))
@@ -1091,7 +1091,7 @@ def advect_y_invariant(rhod, mx, my, mz, dt, yface, dimension, weights):
                 vy[left], vy[right], rhod_s[left], primitive[:, left], rhod_s[right], primitive[:, right]
             )
 
-        # Permit outflow at either radial boundary but prohibit inflow
+        # permit outflow at either radial boundary but prohibit inflow
         if vy[0] < 0.0:
             mass_flux = vy[0]*max(rhod_s[0], 0.0)
             boundary_flux = np.concatenate(([mass_flux], mass_flux*primitive[:, 0]))
@@ -1101,12 +1101,12 @@ def advect_y_invariant(rhod, mx, my, mz, dt, yface, dimension, weights):
             boundary_flux = np.concatenate(([mass_flux], mass_flux*primitive[:, -1]))
             flux_low[:, -1] = flux_high[:, -1] = boundary_flux
 
-        # The cell-centered HLL update supplies the robust low-order state
+        # the cell-centered HLL update supplies the robust low-order state
         updated = stage - dt*(area[None, 1:]*flux_low[:, 1:]
                               - area[None, :-1]*flux_low[:, :-1])/volume[None, :]
         updated[:, updated[0] < 0.0] = 0.0
 
-        # Restore the PPM-minus-HLL correction face by face using one shared scale
+        # restore the PPM-minus-HLL correction face by face using one shared scale
         antidiffusive = flux_high - flux_low
         for face in range(1, cell_count):
             left = face - 1
@@ -1217,9 +1217,9 @@ def test_mesh_primitives():
     report("T10 polar measure telescopes to the hemisphere", abs(vol_z_sum - 1.0) < 1e-15,
            f"sum={vol_z_sum:.16f}")
 
-    # The radial part of a polar face is integral(y dy), while the 3D cell
-    # volume contains integral(y**2 dy).  Their ratio must be used by both the
-    # polar finite-volume divergence and its matching CFL rate.
+    # the radial part of a polar face is integral(y dy), while the 3D cell
+    # volume contains integral(y**2 dy); their ratio must be used by both the
+    # polar finite-volume divergence and its matching CFL rate
     yf = np.array([yface(i) for i in range(65)])
     area_z = 0.5*(yf[1:]**2 - yf[:-1]**2)
     vol_y = (yf[1:]**3 - yf[:-1]**3)/3.0

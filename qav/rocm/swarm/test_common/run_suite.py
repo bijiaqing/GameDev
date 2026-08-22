@@ -92,8 +92,8 @@ def main() -> None:
     manifest_path = scope_root/("manifest_all.json" if args.group == "all" else "manifest.json")
     environment_path = scope_root/("environment_all.json" if args.group == "all" else "environment.json")
 
-    # Preserve the order in GROUPS so terminal output follows the progression
-    # from grid primitives to coupled physical operators.
+    # preserve the order in GROUPS so terminal output follows the progression
+    # from grid primitives to coupled physical operators
     models = ROCM_GROUPS[args.group] if args.group in ROCM_GROUPS else swarm_models(args.group)
 
     entries = []

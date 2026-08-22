@@ -18,9 +18,9 @@ from pathlib import Path
 import numpy as np
 
 
-# These constants mirror test_common/const_defs.cuh.  Keeping the analytical
+# these constants mirror test_common/const_defs.cuh; keeping the analytical
 # parameters here makes validation independent of the numerical output itself;
-# an incorrect simulation cannot silently redefine its expected answer.
+# an incorrect simulation cannot silently redefine its expected answer
 Y_MIN, Y_MAX = 0.5, 2.5
 X_MIN, X_MAX = 0.0, 2.0 * math.pi
 Q0, EPS, MODE = 1.0, 0.1, 2
@@ -47,17 +47,17 @@ def read_field(out_dir: Path, name: str, resolution: int, shape: tuple[int, int,
     if data.size != expected:
         raise ValueError(f"{path} contains {data.size} values; expected {expected}")
     # HIP uses idx = ix + iy*N_X + iz*N_X*N_Y, so x is the fastest-varying
-    # index.  C-order reshape into (nz, ny, nx) reproduces exactly that layout.
+    # index; c-order reshape into (nz, ny, nx) reproduces exactly that layout
     return data.reshape(shape)
 
 
 def gauss_average(function, lower: np.ndarray, upper: np.ndarray, measure=None) -> np.ndarray:
     """Integrate a function over many cells with 16-point Gauss-Legendre rules"""
 
-    # lower and upper may be arrays.  Appending a quadrature axis with [..., None]
-    # evaluates all cells at once through NumPy broadcasting.  Despite the
+    # lower and upper may be arrays; appending a quadrature axis with [..., None]
+    # evaluates all cells at once through NumPy broadcasting; despite the
     # historical name, this function returns integrals; callers divide by the
-    # appropriate geometric cell volume when they require cell averages.
+    # appropriate geometric cell volume when they require cell averages
     nodes, weights = np.polynomial.legendre.leggauss(16)
     midpoint = 0.5 * (lower + upper)
     radius = 0.5 * (upper - lower)
@@ -75,8 +75,8 @@ def compact_bump(value: np.ndarray, lower: float, upper: float) -> np.ndarray:
     half_width = 0.5 * (upper - lower)
     u = (value - center) / half_width
     result = np.zeros_like(value)
-    # Evaluate the exponential only inside its support to avoid division by zero
-    # at |u|=1 and meaningless overflow outside the bump.
+    # evaluate the exponential only inside its support to avoid division by zero
+    # at |u|=1 and meaningless overflow outside the bump
     active = np.abs(u) < 1.0
     result[active] = np.exp(1.0 - 1.0 / (1.0 - u[active] ** 2))
     return result
@@ -85,10 +85,10 @@ def compact_bump(value: np.ndarray, lower: float, upper: float) -> np.ndarray:
 def radial_mode_table(dimension: int) -> tuple[np.ndarray, np.ndarray]:
     """Tabulate the radial Neumann eigenmode used by the diffusion exact solution"""
 
-    # The mode satisfies q'' + (d-1)q'/r + k**2 q = 0.  K2 and K3 are selected
-    # so q'=0 at both radial boundaries, while q(Y_MIN)=1 fixes normalization.
-    # A dense RK4 table avoids depending on SciPy Bessel functions and is later
-    # interpolated only for high-order cell integration.
+    # the mode satisfies q'' + (d-1)q'/r + k**2 q = 0; k2 and K3 are selected
+    # so q'=0 at both radial boundaries, while q(Y_MIN)=1 fixes normalization
+    # a dense RK4 table avoids depending on SciPy Bessel functions and is later
+    # interpolated only for high-order cell integration
     k = K2 if dimension == 2 else K3
     count = 200_001
     y = np.linspace(Y_MIN, Y_MAX, count)
@@ -98,11 +98,11 @@ def radial_mode_table(dimension: int) -> tuple[np.ndarray, np.ndarray]:
     q[0], derivative[0] = 1.0, 0.0
 
     def rhs(radius: float, value: float, slope: float) -> tuple[float, float]:
-        # Convert the second-order eigenvalue equation into two first-order ODEs.
+        # convert the second-order eigenvalue equation into two first-order ODEs
         return slope, -(dimension - 1.0) * slope / radius - k * k * value
 
-    # Classical fourth-order Runge-Kutta advances q and q' together on the dense
-    # reference grid.  k1 through k4 are slopes sampled across one radial step.
+    # classical fourth-order Runge-Kutta advances q and q' together on the dense
+    # reference grid; k1 through k4 are slopes sampled across one radial step
     for i in range(count - 1):
         r0, q0, p0 = y[i], q[i], derivative[i]
         k1q, k1p = rhs(r0, q0, p0)
@@ -135,36 +135,36 @@ def gas_density(radius: np.ndarray, beta: float) -> np.ndarray:
 def analyze(out_dir: Path, resolution: int) -> dict:
     """Analyze one completed case and return all scalar metrics"""
 
-    # Metadata tells the validator which compile-time branch produced the files
-    # and provides the realized grid and final integration time.
+    # metadata tells the validator which compile-time branch produced the files
+    # and provides the realized grid and final integration time
     meta = read_meta(out_dir / f"meta_N{resolution}.json")
     case = meta["case"]
     nx, ny, nz = int(meta["nx"]), int(meta["ny"]), int(meta["nz"])
     time = float(meta["time"])
     shape = (nz, ny, nx)
 
-    # Reconstruct azimuthal faces and centers on the uniform periodic mesh.
+    # reconstruct azimuthal faces and centers on the uniform periodic mesh
     dx = (X_MAX - X_MIN) / nx
     x0 = X_MIN + np.arange(nx) * dx
     x1 = x0 + dx
     xc = 0.5 * (x0 + x1)
 
-    # Radial cells are logarithmically spaced, so their centers are geometric
-    # rather than arithmetic means of the two faces.
+    # radial cells are logarithmically spaced, so their centers are geometric
+    # rather than arithmetic means of the two faces
     ratio = (Y_MAX / Y_MIN) ** (1.0 / ny)
     yf = Y_MIN * ratio ** np.arange(ny + 1)
     y0, y1 = yf[:-1], yf[1:]
     yc = np.sqrt(y0 * y1)
 
     if nz == 1:
-        # A single polar cell represents the 2D cylindrical midplane model.
+        # a single polar cell represents the 2D cylindrical midplane model
         zf = np.array([0.5 * np.pi, 0.5 * np.pi])
         zc = np.array([0.5 * np.pi])
         polar_volume = np.ones(1)
         dimension = 2
     else:
-        # Polar diffusion uses a hemisphere so the Legendre mode has natural
-        # zero-flux boundaries.  Other 3D tests avoid the coordinate poles.
+        # polar diffusion uses a hemisphere so the Legendre mode has natural
+        # zero-flux boundaries; other 3D tests avoid the coordinate poles
         if case == "z_diffusion":
             zf = np.linspace(0.0, 0.5 * np.pi, nz + 1)
         else:
@@ -173,8 +173,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         polar_volume = np.cos(zf[:-1]) - np.cos(zf[1:])
         dimension = 3
 
-    # Only relative weights enter the normalized norms and relative mass change,
-    # so the common azimuthal width dx can be omitted from every cell volume.
+    # only relative weights enter the normalized norms and relative mass change,
+    # so the common azimuthal width dx can be omitted from every cell volume
     radial_volume = (y1**dimension - y0**dimension) / dimension
     volume = polar_volume[:, None, None] * radial_volume[None, :, None] * np.ones((1, 1, nx))
 
@@ -188,8 +188,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     }
 
     if case == "optdepth":
-        # For rho=r**p and unit opacity, tau(r_face)=integral rho dr.  p=-1 has
-        # the logarithmic antiderivative and all other powers use r**(p+1)/(p+1).
+        # for rho=r**p and unit opacity, tau(r_face)=integral rho dr; p=-1 has
+        # the logarithmic antiderivative and all other powers use r**(p+1)/(p+1)
         tau = read_field(out_dir, "optdepth_final", resolution, shape)
         power = float(meta["power"])
         if abs(power + 1.0) < 1.0e-14:
@@ -200,8 +200,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         results["errors"]["optdepth"] = norm_set(tau - exact, volume)
         return results
 
-    # Dynamical tests save both conserved fields and physical output velocities.
-    # The initial density is retained solely for the mass-conservation metric.
+    # dynamical tests save both conserved fields and physical output velocities
+    # the initial density is retained solely for the mass-conservation metric
     rhod = read_field(out_dir, "dustdens_final", resolution, shape)
     mx = read_field(out_dir, "dustmomx_final", resolution, shape)
     my = read_field(out_dir, "dustmomy_final", resolution, shape)
@@ -211,16 +211,16 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     velz = read_field(out_dir, "dustvelz_final", resolution, shape)
     rhod_initial = read_field(out_dir, "dustdens_initial", resolution, shape)
 
-    # Allocate full analytical fields once; the case branch below fills every
-    # entry using broadcasting or explicit radial loops.
+    # allocate full analytical fields once; the case branch below fills every
+    # entry using broadcasting or explicit radial loops
     exact_rhod = np.empty(shape)
     exact_mx = np.empty(shape)
     exact_my = np.empty(shape)
     exact_mz = np.empty(shape)
 
     if case == "x_transport":
-        # A sinusoidal cell average translates by angular speed one.  The x
-        # momentum follows density times the prescribed specific angular momentum R**2.
+        # a sinusoidal cell average translates by angular speed one; the x
+        # momentum follows density times the prescribed specific angular momentum R**2
         mode_avg = (np.sin(MODE * (x1 - time)) - np.sin(MODE * (x0 - time))) / (MODE * dx)
         exact_rhod[:] = Q0 + EPS * mode_avg[None, None, :]
         radius = yc[None, :, None]
@@ -228,8 +228,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my.fill(0.0)
         exact_mz.fill(0.0)
     elif case == "x_diffusion":
-        # Each azimuthal Fourier mode decays as exp(-D*m**2*t/R**2), with the
-        # spherical metric introducing the radius-dependent R**-2 factor.
+        # each azimuthal Fourier mode decays as exp(-D*m**2*t/R**2), with the
+        # spherical metric introducing the radius-dependent R**-2 factor
         mode_avg = (np.sin(MODE * x1) - np.sin(MODE * x0)) / (MODE * dx)
         radius = yc[None, :, None]
         decay = np.exp(-DIFFUSIVITY * MODE * MODE * time / (radius * radius))
@@ -238,9 +238,9 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my[:] = -0.15 * exact_rhod
         exact_mz[:] = 0.11 * exact_rhod
     elif case.startswith("y_transport"):
-        # The prescribed homologous flow v_y=a*y expands coordinates by
-        # lambda=1+a*t and dilutes density by lambda**dimension.  Quadrature
-        # produces exact finite-volume density and radial momentum averages.
+        # the prescribed homologous flow v_y=a*y expands coordinates by
+        # lambda=1+a*t and dilutes density by lambda**dimension; quadrature
+        # produces exact finite-volume density and radial momentum averages
         lam = 1.0 + 0.2 * time
         measure = lambda y: y ** (dimension - 1)
         rho_int = gauss_average(
@@ -257,8 +257,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my[:] = line_my[None, :, None]
         exact_mz[:] = 0.11 * exact_rhod
     elif case == "z_transport":
-        # Choose one shell representative polar velocity so the exact integrated
-        # polar face-area-to-volume factor gives angular rate 0.15 at every y.
+        # choose one shell representative polar velocity so the exact integrated
+        # polar face-area-to-volume factor gives angular rate 0.15 at every y
         area_z = 0.5 * (y1**2 - y0**2)
         geom_z = area_z / radial_volume
         shell_lz = 0.15 * yc / geom_z
@@ -270,9 +270,9 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my[:] = 0.05 * exact_rhod
         exact_mz[:] = shell_lz[None, :, None] * exact_rhod
     elif case.startswith("y_diffusion"):
-        # A radial Laplacian eigenmode preserves its shape and decays globally as
-        # exp(-D*k**2*t).  The 2D and 3D cases use their corresponding eigenvalue
-        # and radial volume measure.
+        # a radial Laplacian eigenmode preserves its shape and decays globally as
+        # exp(-D*k**2*t); the 2D and 3D cases use their corresponding eigenvalue
+        # and radial volume measure
         table_y, table_q = radial_mode_table(dimension)
         mode_int = gauss_average(
             lambda y: np.interp(y, table_y, table_q), y0, y1,
@@ -286,9 +286,9 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my[:] = -0.15 * exact_rhod
         exact_mz[:] = 0.11 * exact_rhod
     elif case == "z_diffusion":
-        # P2(cos z) is a spherical angular Laplacian eigenfunction with eigenvalue
-        # -l(l+1)=-6.  Physical angular diffusion therefore decays as
-        # exp(-6*D*t/R**2) independently on each radial shell.
+        # p2(cos z) is a spherical angular Laplacian eigenfunction with eigenvalue
+        # -l(l+1)=-6; physical angular diffusion therefore decays as
+        # exp(-6*D*t/R**2) independently on each radial shell
         mode_int = gauss_average(
             lambda z: 0.5 * (3.0 * np.cos(z) ** 2 - 1.0), zf[:-1], zf[1:], np.sin
         )
@@ -300,19 +300,19 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my[:] = -0.15 * exact_rhod
         exact_mz[:] = 0.11 * exact_rhod
     elif case == "source_drag":
-        # The eight x cells represent eight values of dt/ts spanning twelve
-        # orders of magnitude; x is being used as a parameter index, not space.
+        # the eight x cells represent eight values of dt/ts spanning twelve
+        # orders of magnitude; x is being used as a parameter index, not space
         stiffness = np.array([1.0e-6, 1.0e-3, 0.1, 1.0, 10.0, 1.0e2, 1.0e4, 1.0e6])
         ts = time / stiffness
         decay = np.exp(-stiffness)
         drag_relax = -np.expm1(-stiffness)
 
         def source_exact(initial, gas, force0, force1):
-            # Closed-form solution of dv/dt=-(v-v_g)/ts+F(t) for a force that
-            # varies linearly from force0 to force1 during the single step.  The
+            # closed-form solution of dv/dt=-(v-v_g)/ts+F(t) for a force that
+            # varies linearly from force0 to force1 during the single step; the
             # two endpoint weights mirror the HIP branch: direct subtraction is
             # safe for ordinary h=dt/ts, while a series avoids cancellation when
-            # h is small.
+            # h is small
             weight_old = np.empty_like(stiffness)
             weight_new = np.empty_like(stiffness)
             small = stiffness < 1.0e-4
@@ -340,9 +340,9 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_my[:] = vy[None, None, :]
         exact_mz[:] = vz[None, None, :]
     elif case.startswith("ring_"):
-        # Combined ring tests rotate each radial shell at its radiation-modified
-        # Keplerian omega.  Optional azimuthal density diffusion damps the
-        # Fourier mode on top of the prescribed radial density profile.
+        # combined ring tests rotate each radial shell at its radiation-modified
+        # keplerian omega; optional azimuthal density diffusion damps the
+        # fourier mode on top of the prescribed radial density profile
         beta = 0.2 if case in {"ring_radiation_2d", "ring_all_2d"} else 0.0
         has_diffusion = case in {"ring_diffusion_2d", "ring_all_2d"}
         mode_values = np.empty((ny, nx))
@@ -362,8 +362,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     else:
         raise ValueError(f"Unknown verification case {case}")
 
-    # Compare conserved fields directly before converting the analytical angular
-    # momenta into the physical velocities written by save_state.
+    # compare conserved fields directly before converting the analytical angular
+    # momenta into the physical velocities written by save_state
     for name, numerical, exact in (
         ("density", rhod, exact_rhod),
         ("momx", mx, exact_mx),
@@ -372,10 +372,10 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     ):
         results["errors"][name] = norm_set(numerical - exact, volume)
 
-    # Velocity errors are meaningful only where both solutions resolve dust
-    # density.  Requiring numerical density excludes cells where the production
-    # recovery deliberately writes a vacuum fallback velocity.  Scale the floor
-    # to the analytical solution so the mask remains dimensionally meaningful.
+    # velocity errors are meaningful only where both solutions resolve dust
+    # density; requiring numerical density excludes cells where the production
+    # recovery deliberately writes a vacuum fallback velocity; scale the floor
+    # to the analytical solution so the mask remains dimensionally meaningful
     density_floor = 1.0e-12*float(np.max(np.abs(exact_rhod)))
     active = (exact_rhod > density_floor) & (rhod > density_floor)
     active_volume = np.where(active, volume, 0.0)
@@ -393,12 +393,12 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         results["errors"][name] = norm_set(np.where(active, numerical - exact, 0.0), active_volume)
 
     if case in {"ring_radiation_2d", "ring_all_2d"}:
-        # Ring radiation tests set KAPPA_0=0 to isolate radiation acceleration
-        # without attenuation, making zero optical depth the analytical answer.
+        # ring radiation tests set KAPPA_0=0 to isolate radiation acceleration
+        # without attenuation, making zero optical depth the analytical answer
         tau = read_field(out_dir, "optdepth_final", resolution, shape)
         results["errors"]["optdepth"] = norm_set(tau, volume)
 
-    # The common omitted azimuthal factor cancels from this relative change.
+    # the common omitted azimuthal factor cancels from this relative change
     mass_initial = float(np.sum(volume * rhod_initial))
     mass_final = float(np.sum(volume * rhod))
     results["mass_relative_change"] = abs(mass_final - mass_initial) / max(abs(mass_initial), 1.0e-300)
@@ -406,8 +406,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
 
 
 def main() -> None:
-    # This standalone interface is useful for reanalyzing files after copying
-    # them from a cluster.  --write optionally stores the same JSON that is shown.
+    # this standalone interface is useful for reanalyzing files after copying
+    # them from a cluster; --write optionally stores the same JSON that is shown
     parser = argparse.ArgumentParser()
     parser.add_argument("out_dir", type=Path)
     parser.add_argument("resolution", type=int)

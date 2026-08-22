@@ -149,8 +149,8 @@ def analyze_profile(profile_dir: Path, max_waves_per_cu: float) -> dict[str, obj
             read_count is not None and read_count_32 is not None
             and write_count is not None and write_count_64 is not None
         ):
-            # Total reads contain 32- and 64-byte requests, whereas the read subtype counts 32 B
-            # Total writes contain 32- and 64-byte requests, whereas the write subtype counts 64 B
+            # total reads contain 32- and 64-byte requests, whereas the read subtype counts 32 B
+            # total writes contain 32- and 64-byte requests, whereas the write subtype counts 64 B
             read_bytes = 64.0*read_count - 32.0*read_count_32
             write_bytes = 32.0*write_count + 32.0*write_count_64
             external_bytes = read_bytes + write_bytes

@@ -58,8 +58,8 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | 85 metrics on both CUDA and ROCm, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-17 |
-| swarm analytical suite | 51 metrics on both CUDA and ROCm | both native archives passed and the comparison found no mismatches on 2026-08-17 |
+| fluid analytical suite | archived 85-metric baseline on both CUDA and ROCm, plus eight direct polar-field comparisons | pre-expansion native archives and cross-backend comparison passed on 2026-08-17; the current 97-metric matrix awaits refresh |
+| swarm analytical suite | archived 51-metric baseline on both CUDA and ROCm | pre-expansion native archives passed with no mismatches on 2026-08-17; the current 63-metric matrix awaits refresh |
 | adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | both compact native suites passed with equal coverage on 2026-08-17 |
 
 The two complete campaigns used the same source SHA-256,
@@ -68,9 +68,10 @@ CUDA 12.1 (`nvcc` 12.1.105), an NVIDIA
 A100-SXM4-40GB, and driver 580.159.04. ROCm used target `gfx942`, ROCm 7.2.4, AMD clang
 22.0.0git, an AMD Instinct MI300A, and amdgpu driver 6.16.13. Both used Python 3.13.5.
 
-The fingerprint matches the current Makefile and compiled or interpreted files below `inc/`,
-`src/`, and `qav/`. Independent local archive checks and both cross-backend comparators reproduced
-`PASS` from the downloaded evidence without invoking either GPU runtime. The remaining coverage
+That fingerprint identifies the archived pre-expansion baseline and no longer matches the current
+QAV source after addition of the four analytical sequences. Independent local archive checks and
+both cross-backend comparators reproduced `PASS` for the archived source; new 97-fluid/63-swarm
+native campaigns are required to qualify the expanded matrix. The remaining coverage
 limits are listed in the two test-set documents.
 
 ## Current cross-representation conventions

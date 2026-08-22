@@ -31,6 +31,7 @@ __device__ __forceinline__
 real _get_sigma_g (real R)
 { return SIGMA_0*pow(R / R_0, IDX_P); }
 
+// reconstruct the exact vertically stratified gas density from its surface density
 __device__ __forceinline__
 real _get_rhog (real R, real Z, real h_g)
 {
@@ -41,6 +42,7 @@ real _get_rhog (real R, real Z, real h_g)
     return rhog_mid*_get_gas_strat(R, Z, h_g);
 }
 
+// scale the reference midplane Stokes number by inverse surface density and vertical stratification
 __device__ __forceinline__
 real _get_stokes (real R, real Z, real h_g)
 {
@@ -98,6 +100,7 @@ real _get_visc_vel (real R, real Z, real h_g)
 }
 #endif // VISC_FLOW
 
+// recover the local alpha equivalent of the selected viscosity prescription
 __device__ __forceinline__
 real _get_alpha (real R, real h_g)
 {

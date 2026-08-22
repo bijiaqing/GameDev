@@ -127,8 +127,8 @@ def main() -> None:
         ["make", "-C", str(test_dir), "clean"], check=True
     )
 
-    # The radial group needs only the ordinary benchmark and focused edge
-    # driver; the general KNN group also builds periodic and wedge drivers.
+    # the radial group needs only the ordinary benchmark and focused edge
+    # driver; the general KNN group also builds periodic and wedge drivers
     make_targets = ["all", "edge"] if args.radial_only else ["suite"]
     subprocess.run(
         [
@@ -138,9 +138,9 @@ def main() -> None:
         check=True,
     )
 
-    # Compile and link the real collision translation units with each backend.
-    # Distinct executable names prevent Make from mistaking an executable linked
-    # against one backend's object directory for the other backend's result.
+    # compile and link the real collision translation units with each backend
+    # distinct executable names prevent Make from mistaking an executable linked
+    # against one backend's object directory for the other backend's result
     production_models = (
         ("test_collision_1d",)
         if args.radial_only

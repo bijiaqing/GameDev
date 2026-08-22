@@ -35,7 +35,7 @@ def print_records(records: dict[str, dict]) -> None:
         f"{'time KD/M':>10s} {'mem M/KD':>10s} {'records/NP':>10s} {'dedup':>6s}"
     )
     for name, record in records.items():
-        # Accept the two retained development schemas when reviewing old files,
+        # accept the two retained development schemas when reviewing old files,
         # while new runs use direction-explicit ratio names
         if "record_ratio_morton_per_particle" in record:
             morton_ms = record["morton_query_ms"]

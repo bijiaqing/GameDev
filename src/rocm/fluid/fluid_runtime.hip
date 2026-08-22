@@ -47,6 +47,7 @@ int main (int argc, char **argv)
     HIP_CHECK(hipMalloc((void**)&dev_ppm_weight_z, sizeof(real)*4*(N_Z + 1)));
 
     #ifdef FLUID_BLOCK_SWEEP
+    // reuse one full-grid workspace across all block-owned advection directions
     real *dev_adv_work;
     HIP_CHECK(hipMalloc(
         (void**)&dev_adv_work,
@@ -54,12 +55,11 @@ int main (int argc, char **argv)
     ));
 
     #ifdef DIFFUSION
+    // reject block diffusion when one line exceeds the device LDS limit
     require_lds(reinterpret_cast<const void*>(diffusion_xbl), sizeof(real)*4*N_X, "diffusion_xbl");
     require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
     require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
 
-    // AMD devices ignore the CUDA-style dynamic-shared-memory opt-in hint
-    // so validate the required LDS explicitly and let each launch request it
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 

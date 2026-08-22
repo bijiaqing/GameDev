@@ -14,8 +14,8 @@ from run_model import run
 model = Path(__file__).resolve().parent.name
 run(model)
 
-# Changing TEST_RES changes only the simulation polar mesh for this case
-# The continuous initializer must therefore produce identical host results
+# changing TEST_RES changes only the simulation polar mesh for this case
+# the continuous initializer must therefore produce identical host results
 if "--build-only" not in sys.argv:
     project_root = Path(__file__).resolve().parents[4]
     archive_root = project_root/"qav"/"logs"/"swarm"/"rocm"

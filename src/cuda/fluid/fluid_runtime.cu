@@ -47,6 +47,7 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_ppm_weight_z, sizeof(real)*4*(N_Z + 1)));
 
     #ifdef FLUID_BLOCK_SWEEP
+    // reuse one full-grid workspace across all block-owned advection directions
     real *dev_adv_work;
     CUDA_CHECK(cudaMalloc(
         (void**)&dev_adv_work,
@@ -54,6 +55,7 @@ int main (int argc, char **argv)
     ));
 
     #ifdef DIFFUSION
+    // opt in to the dynamic shared-memory footprint required by each block-owned diffusion line
     CUDA_CHECK(cudaFuncSetAttribute(
         diffusion_xbl, cudaFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*4*N_X

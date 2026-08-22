@@ -130,6 +130,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
+        // transport every momentum component with the same mass flux and its donor primitive
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             int iy_up = (temp_work[iy] >= 0.0 || iy == N_Y - 1) ? iy : iy + 1;

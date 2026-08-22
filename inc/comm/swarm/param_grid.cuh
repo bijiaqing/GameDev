@@ -36,6 +36,8 @@ real _get_init_Rmin()
 }
 
 // =========================================================================================================================
+// cell faces
+// =========================================================================================================================
 
 __host__ __device__ __forceinline__
 real _get_yface (int iy) { return Y_MIN*pow(_get_dy(), static_cast<real>(iy)); }
@@ -43,6 +45,8 @@ real _get_yface (int iy) { return Y_MIN*pow(_get_dy(), static_cast<real>(iy)); }
 __host__ __device__ __forceinline__
 real _get_zface (int iz) { return Z_MIN + _get_dz()*static_cast<real>(iz); }
 
+// =========================================================================================================================
+// active geometry and cell measures
 // =========================================================================================================================
 
 // radial measure power: 2 for a vertically integrated disk and 3 when the polar dimension is active

@@ -86,7 +86,7 @@ def build_and_run(
     for legacy_name in ("build.txt", "run.txt", "variables.txt"):
         (out_dir/legacy_name).unlink(missing_ok=True)
 
-    # Model constants are compile-time values, so clean before applying a new benchmark configuration
+    # model constants are compile-time values, so clean before applying a new benchmark configuration
     subprocess.run([
         "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm", f"FLUID_SWEEP={sweep}",
         f"GPU_TARGET={target}", "QAV_SCOPE=all", f"OUT_TAG={tag}", "clean"
@@ -125,7 +125,7 @@ def build_and_run(
     environment["gpu_target"] = target
     write_json(out_dir/"environment.json", environment)
 
-    # Retain the native stream in run.json while reporting a throttled live heartbeat
+    # retain the native stream in run.json while reporting a throttled live heartbeat
     start = time.perf_counter()
     run_command = [str(model_executable(project_root, model, "rocm", "fluid"))]
     step_records: list[dict[str, int | float]] = []
@@ -284,7 +284,7 @@ def main() -> None:
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
 
-    # Quick mode is a compile-and-execute smoke test rather than a performance benchmark
+    # quick mode is a compile-and-execute smoke test rather than a performance benchmark
     if args.quick:
         args.res_2d = 128
         args.res_3d = 32

@@ -375,6 +375,7 @@ std::string frame_num (int idx_file)
 
 constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
 
+// write a contiguous host field in bounded chunks
 template <typename DataType> inline __host__
 bool save_host_binary (const std::string &file_name, const DataType *data, std::size_t count)
 {
@@ -392,6 +393,7 @@ bool save_host_binary (const std::string &file_name, const DataType *data, std::
     return true;
 }
 
+// read one exact-size host field in bounded chunks
 template <typename DataType> inline __host__
 bool load_host_binary (const std::string &file_name, DataType *data, std::size_t count)
 {
@@ -414,6 +416,7 @@ bool load_host_binary (const std::string &file_name, DataType *data, std::size_t
     return true;
 }
 
+// convert internal angular variables to linear velocities before file output
 inline __host__
 void save_sam_as_velocity (real *dustvelx, real *dustvelz)
 {
@@ -437,6 +440,7 @@ void save_sam_as_velocity (real *dustvelx, real *dustvelz)
     }
 }
 
+// convert linear file velocities to internal angular variables after loading
 inline __host__
 void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 {

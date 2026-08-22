@@ -12,6 +12,10 @@
 #include <morton/morton_ghost.cuh>
 #endif // COLLISION_MORTON
 
+// ROCm failure-path driver rather than a collision-evolution model
+// corrupt one particle or one computed collision result and verify that both production KNN backends reject the same
+// non-finite inputs before search or event selection while finite controls continue through a real index build
+
 namespace
 {
 
@@ -65,6 +69,7 @@ int main (int argc, char **argv)
 
     if (mode == "result")
     {
+        // bypass neighbor search here to isolate the post-search collision-rate and radius guard
         std::vector<real> col_rate(N_P, 1.0);
         std::vector<real> col_dist(N_P, 1.0);
         if (field == "col_rate") col_rate[IDX_BAD] = value;
@@ -109,6 +114,7 @@ int main (int argc, char **argv)
         particle[idx].par_size = 1.0;
         particle[idx].par_numr = 1.0;
     }
+    // inject after constructing a clean, deterministic disk so only the selected production field differs
     inject_particle(particle[IDX_BAD], field, value);
 
     swarm *dev_particle;
@@ -146,7 +152,7 @@ int main (int argc, char **argv)
         return 1;
     }
 
-    // require the clean control to continue through the selected production index builder
+    // require the clean control to continue through the selected production index builder, not merely pass col_site_init
     #ifdef COLLISION_KDTREE
     kdtree::buildTree <kdtree_node, kdtree_traits> (dev_kdtree_node, N_T, dev_kdtree_box);
     hip_check(hipGetLastError(), "build clean KD-tree");

@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 from pathlib import Path
+from types import ModuleType
+from typing import Callable
 
 
 def model_executable(
@@ -26,6 +29,28 @@ def model_executable(
     return model_dirs[0]/"gamedev"
 
 
+def model_analyzer(
+    project_root: Path, representation: str, model: str, fallback: Callable,
+) -> Callable:
+    """Load an optional backend-neutral model validator or retain the backend default"""
+
+    # load the shared backend validator for historical cases, but keep coefficient-specialized references beside the common
+    # model so CUDA and ROCm cannot silently select different expected solutions
+    validator = project_root/"qav"/"comm"/representation/model/"validate_case.py"
+    if not validator.is_file():
+        return fallback
+
+    module_name = f"qav_{representation}_{model}_validator"
+    specification = importlib.util.spec_from_file_location(module_name, validator)
+    if specification is None or specification.loader is None:
+        raise RuntimeError(f"cannot load model validator: {validator}")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    if not isinstance(module, ModuleType) or not hasattr(module, "analyze"):
+        raise RuntimeError(f"model validator does not define analyze: {validator}")
+    return module.analyze
+
+
 FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
     "transport": [
         *(('test_x_transport_2d', ('--shift', str(shift)))
@@ -42,10 +67,12 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("test_y_diffusion_cyl", ()),
         ("test_y_diffusion_sph", ()),
         ("test_z_diffusion_3d", ()),
+        ("test_diffusion_poslimit", ()),
     ],
     "source": [("test_source_drag", ("--res", "8"))],
     "radiation": [
         *(('test_optdepth', ('--power', str(power))) for power in (0.0, -1.0, 1.0)),
+        *(('test_attenuation_2d', ('--power', str(power))) for power in (-1.0, 1.0)),
     ],
     "ring": [
         ("test_ring_transport_2d", ()),
@@ -59,9 +86,11 @@ SWARM_GROUPS: dict[str, list[str]] = {
     "grid": ["test_grid_1d", "test_grid_2d", "test_grid_3d"],
     "transport": [
         "test_orbit_1d", "test_drag_1d", "test_viscflow_1d",
-        "test_orbit_2d", "test_drag_2d",
+        "test_orbit_2d", "test_drag_2d", "test_orbit_ecc_2d", "test_drag_path_1d",
     ],
-    "diffusion": ["test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d"],
+    "diffusion": [
+        "test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d", "test_settle_diffuse_3d",
+    ],
     "initialization": ["test_initial_3d"],
     "radiation": [
         "test_radiation_1d", "test_prdrag_1d", "test_radiation_2d", "test_prdrag_2d",
@@ -79,6 +108,7 @@ SWARM_RADIAL_MODELS = [
     "test_grid_1d",
     "test_orbit_1d",
     "test_drag_1d",
+    "test_drag_path_1d",
     "test_viscflow_1d",
     "test_diffusion_1d",
     "test_radiation_1d",
@@ -108,10 +138,10 @@ SWARM_FIXED_RESOLUTION = {
     "test_knn",
 }
 
-EXPECTED_FLUID_METRICS = 85
-EXPECTED_SWARM_METRICS = 51
-EXPECTED_PUBLICATION_FLUID_METRICS = 57
-EXPECTED_PUBLICATION_SWARM_METRICS = 33
+EXPECTED_FLUID_METRICS = 97
+EXPECTED_SWARM_METRICS = 63
+EXPECTED_PUBLICATION_FLUID_METRICS = 69
+EXPECTED_PUBLICATION_SWARM_METRICS = 45
 
 PUBLICATION_TIER = "publication"
 RELEASE_TIER = "release"

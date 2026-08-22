@@ -18,12 +18,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from validate_case import analyze
+from validate_case import analyze as default_analyze
 
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
-from qav_config import fluid_case_tier, model_executable
+from qav_config import fluid_case_tier, model_analyzer, model_executable
 
 
 def observed_orders(errors: list[float]) -> list[float]:
@@ -31,8 +31,8 @@ def observed_orders(errors: list[float]) -> list[float]:
 
     import math
 
-    # If E(h) is proportional to h**p and the next grid has h/2, then
-    # p = log_2(E(h)/E(h/2)).
+    # if E(h) is proportional to h**p and the next grid has h/2, then
+    # p = log_2(E(h)/E(h/2))
     return [math.log(errors[i] / errors[i + 1], 2.0) for i in range(len(errors) - 1)]
 
 
@@ -41,8 +41,8 @@ def capture(command: list[str], cwd: Path) -> str:
 
     try:
         # check=False is intentional: missing GPU diagnostics must not prevent a
-        # simulation from running.  stderr is folded into stdout so the saved
-        # environment file contains either version information or the error.
+        # simulation from running; stderr is folded into stdout so the saved
+        # environment file contains either version information or the error
         result = subprocess.run(command, cwd=cwd, check=False, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return result.stdout.strip()
@@ -65,9 +65,9 @@ def environment_record(project_root: Path) -> dict[str, str]:
 def output_tag(model: str, cfl: float, power: float, shift: float) -> str:
     """Name parameter variants that would otherwise overwrite one another"""
 
-    # Only parameters varied by run_suite.py enter directory and metric names.
-    # The empty string keeps single-configuration model outputs one level higher.
-    if model == "test_optdepth":
+    # only parameters varied by run_suite.py enter directory and metric names
+    # the empty string keeps single-configuration model outputs one level higher
+    if model in {"test_optdepth", "test_attenuation_2d"}:
         return f"p{power:+g}"
     if model == "test_x_transport_2d":
         return f"shift{shift:g}"
@@ -117,6 +117,32 @@ def assess_records(
         if "mass_relative_change" in record:
             scalar_values.append(record["mass_relative_change"])
     finite = all(math.isfinite(float(value)) for value in scalar_values)
+
+    if records and all("passed" in record for record in records):
+        convergence_field = records[0].get("convergence_field")
+        convergence_orders = []
+        convergence_passed = True
+        minimum_order = float(records[0].get("minimum_order", 0.0))
+        if convergence_field and len(records) > 1:
+            convergence_errors = [
+                float(record["errors"][convergence_field]["l1"])
+                for record in records
+            ]
+            if all(error > 0.0 for error in convergence_errors):
+                convergence_orders = observed_orders(convergence_errors)
+                convergence_passed = convergence_orders[-1] >= minimum_order
+            else:
+                convergence_passed = False
+        return {
+            "finite": finite,
+            "validator_owned": True,
+            "convergence_field": convergence_field,
+            "minimum_order": minimum_order,
+            "orders": convergence_orders,
+            "convergence_passed": convergence_passed,
+            "passed": finite and convergence_passed
+                and all(record["passed"] is True for record in records),
+        }
     mass_max = max((record.get("mass_relative_change", 0.0) for record in records), default=0.0)
     mass_passed = mass_max <= 1.0e-8
 
@@ -172,8 +198,9 @@ def run(model: str) -> None:
     parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args()
 
-    # Backend runners live one level below qav/rocm so parents[4] is the repository root
+    # backend runners live one level below qav/rocm so parents[4] is the repository root
     project_root = Path(__file__).resolve().parents[4]
+    analyze = model_analyzer(project_root, "fluid", model, default_analyze)
     test_root = Path(__file__).resolve().parents[1]
     model_dir = test_root / model
     sweep = selected_sweep()
@@ -185,16 +212,16 @@ def run(model: str) -> None:
         raise SystemExit(f"Unknown model directory: {model_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Parameter variants receive separate data directories, for example
+    # parameter variants receive separate data directories, for example
     # out/thread/test_x_transport_2d/shift3.25, while their metrics JSON files
-    # remain in the model's top-level output directory with the same tag in the name.
+    # remain in the model's top-level output directory with the same tag in the name
     variant = output_tag(model, args.cfl, args.power, args.shift)
     tier_arguments: tuple[str, ...] = ()
     if model == "test_x_transport_2d":
         tier_arguments = ("--shift", str(args.shift))
     elif model in {"test_y_transport_cyl", "test_y_transport_sph", "test_z_transport_3d"}:
         tier_arguments = ("--cfl", str(args.cfl))
-    elif model == "test_optdepth":
+    elif model in {"test_optdepth", "test_attenuation_2d"}:
         tier_arguments = ("--power", str(args.power))
     evidence_tier = fluid_case_tier(model, tier_arguments)
     data_dir = out_dir / variant if variant else out_dir
@@ -202,20 +229,20 @@ def run(model: str) -> None:
     if not args.build_only:
         clean_results(out_dir, data_dir, variant)
 
-    # Record the compiler, GPU, and driver associated with these results.  The
-    # information is written once per parameter variant rather than once per N.
+    # record the compiler, GPU, and driver associated with these results; the
+    # information is written once per parameter variant rather than once per N
     environment = environment_record(project_root)
     (data_dir / "environment.json").write_text(
         json.dumps(environment, indent=2, sort_keys=True) + "\n"
     )
 
-    # One record is the dictionary returned by validate_case.analyze for one
-    # resolution.  The complete list is later used to print convergence orders.
+    # one record is the dictionary returned by validate_case.analyze for one
+    # resolution; the complete list is later used to print convergence orders
     records = []
     for resolution in args.res:
-        # Grid sizes and verification parameters are compile-time constants in
-        # the HIP tests.  Cleaning before every resolution prevents an object
-        # compiled with an earlier N or parameter value from being reused.
+        # grid sizes and verification parameters are compile-time constants in
+        # the HIP tests; cleaning before every resolution prevents an object
+        # compiled with an earlier N or parameter value from being reused
         subprocess.run([
             "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=rocm",
             f"FLUID_SWEEP={sweep}", f"QAV_SCOPE={scope}", "clean"
@@ -231,16 +258,16 @@ def run(model: str) -> None:
         if args.build_only:
             continue
 
-        # The executable writes binary fields and a small metadata file into
-        # data_dir through PATH_OUT.  analyze then constructs the analytical
-        # cell averages and compares them with those files.
+        # the executable writes binary fields and a small metadata file into
+        # data_dir through PATH_OUT; analyze then constructs the analytical
+        # cell averages and compares them with those files
         executable = model_executable(project_root, model, "rocm", "fluid")
         subprocess.run([str(executable)], cwd=project_root, check=True)
         record = analyze(data_dir, resolution)
         record["tier"] = evidence_tier
 
-        # Keep a machine-readable result per resolution so cluster output can be
-        # downloaded and reassessed without rerunning the HIP executable.
+        # keep a machine-readable result per resolution so cluster output can be
+        # downloaded and reassessed without rerunning the HIP executable
         tag = f"N{resolution}"
         if variant:
             tag += f"_{variant}"
@@ -273,9 +300,11 @@ def run(model: str) -> None:
         json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     )
 
-    # Optical depth is the primary field only for the zero-step quadrature test;
-    # every dynamical test reports density in the compact terminal table.
-    field = "optdepth" if records[0]["case"] == "optdepth" else "density"
+    # optical depth is the primary field only for the zero-step quadrature test;
+    # every dynamical test reports density in the compact terminal table
+    field = records[0].get(
+        "primary_field", "optdepth" if records[0]["case"] == "optdepth" else "density"
+    )
     print(f"\n{records[0]['case']}: {field} convergence")
     print(f"{'N':>8} {'L1':>14} {'L2':>14} {'Linf':>14} {'mass rel':>14}")
     l1_errors = []
@@ -286,8 +315,8 @@ def run(model: str) -> None:
         print(f"{record['resolution']:8d} {error['l1']:14.6e} {error['l2']:14.6e} "
               f"{error['linf']:14.6e} {mass:14.6e}")
     if len(l1_errors) > 1:
-        # Orders are printed only for L1 here; L2 and Linf remain available in
-        # every metrics JSON file for more detailed post-processing.
+        # orders are printed only for L1 here; l2 and Linf remain available in
+        # every metrics JSON file for more detailed post-processing
         print("L1 orders:", " ".join(f"{order:.4f}" for order in observed_orders(l1_errors)))
     print(f"{model}{f'/{variant}' if variant else ''}: {'PASS' if passed else 'FAIL'}")
     if not passed:
@@ -295,6 +324,6 @@ def run(model: str) -> None:
 
 
 if __name__ == "__main__":
-    # Direct invocation cannot infer a model.  A model-local run.py supplies it
-    # explicitly and is therefore the supported entry point.
+    # direct invocation cannot infer a model; a model-local run.py supplies it
+    # explicitly and is therefore the supported entry point
     raise SystemExit("Call run(model_name) from a model-local run.py wrapper")

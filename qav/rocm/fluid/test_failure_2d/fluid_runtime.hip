@@ -8,6 +8,10 @@
 #include <fluid_host.cuh>
 #include <fluid_kern.cuh>
 
+// ROCm failure-path driver rather than a physical evolution model
+// inject exactly one NaN or Inf into an otherwise finite production state and require the state and CFL guards to identify
+// the correct cell or ring while finite controls prevent a test that passes merely by rejecting every input
+
 namespace
 {
 
@@ -75,6 +79,7 @@ int main (int argc, char **argv)
 
     if (value_name != "finite")
     {
+        // corrupt one known interior cell so the expected one-based failure flag and CFL ring are deterministic
         real *target = select_field(field, rhod, mx, my, mz, lx, vy, lz, optdepth);
         if (target == nullptr || (mode == "cfl" && field == "optdepth"))
         {
@@ -119,6 +124,7 @@ int main (int argc, char **argv)
 
     if (mode == "state")
     {
+        // exercise the production all-field finite-state kernel without allowing the host harness to pre-screen the value
         HIP_CHECK(hipMemset(dev_bad_cell, 0, sizeof(int)));
         inf_cell_flag <<< NB_G, TPB >>> (
             dev_rhod, dev_mx, dev_my, dev_mz, dev_lx, dev_vy, dev_lz, dev_optdepth, dev_bad_cell
@@ -149,6 +155,7 @@ int main (int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    // a non-finite primitive or momentum must poison the complete x ring reduced by the production CFL kernel
     cfl_rate_calc <<< NB_X, TPB >>> (
         dev_cfl_rate, dev_rhod, dev_mx, dev_my, dev_mz, dev_lx, dev_vy, dev_lz
     );

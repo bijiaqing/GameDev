@@ -26,8 +26,15 @@ std::mt19937 rand_generator;
 namespace
 {
 
-// shared native-CUDA driver for isolated swarm formula, operator, and boundary tests
-// each model selects one compile-time branch and writes raw arrays plus metadata for the independent Python validator
+// =========================================================================================================================
+// shared CUDA driver for isolated swarm verification models
+//
+// each model selects one compile-time branch, but the selected branch launches production kernels wherever an
+// analytical reference permits; host construction replaces production initialization only when exact particle
+// positions, random increments, imported gas, or crossed boundary states must be prescribed by the test
+//
+// raw arrays and metadata are written for an independent Python validator; this driver does not judge its own output
+// =========================================================================================================================
 
 const std::string output_path = PATH_OUT;
 
