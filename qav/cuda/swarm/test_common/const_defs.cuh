@@ -42,6 +42,8 @@ constexpr int N_P = 65536;
 constexpr int N_P = 4;
 #elif defined(TEST_DRAG_PATH_1D)
 constexpr int N_P = 3;
+#elif defined(TEST_ABSORB_PATH_1D)
+constexpr int N_P = 3;
 #elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
 constexpr int N_P = 16*VERIFY_RES*VERIFY_RES;
 #elif defined(TEST_INITIAL_3D)
@@ -99,6 +101,7 @@ constexpr int N_X = 16;
 constexpr int N_Y = 16;
 constexpr int N_Z = 1;
 #elif defined(TEST_ORBIT_1D) || defined(TEST_DRAG_1D) || defined(TEST_DRAG_PATH_1D) \
+    || defined(TEST_ABSORB_PATH_1D) \
     || defined(TEST_VISCFLOW_1D) || defined(TEST_RADIATION_1D) \
     || defined(TEST_PRDRAG_1D) || defined(TEST_IMPORT_1D)
 constexpr int N_X = 1;

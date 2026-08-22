@@ -60,9 +60,9 @@ The common archive retains narrow regressions but distinguishes them from code-p
 - **Qualification:** restart, deliberate KNN/collision failure injection, extended million- and
   ten-million-particle KNN runs, and performance/profiling campaigns
 
-With the standard four requested resolutions, the expanded 63-metric analytical swarm matrix
-partitions into 45 publication and 18 release-only records. The latest archived source-matched
-CUDA/ROCm campaign predates the two new four-resolution trajectory sequences and the four-resolution
+With the standard four requested resolutions, the expanded 67-metric analytical swarm matrix
+partitions into 49 publication and 18 release-only records. The latest archived source-matched
+CUDA/ROCm campaign predates the three new four-resolution trajectory sequences and the four-resolution
 settling--diffusion sequence and therefore
 contains the earlier 51-metric, 33-publication baseline. The compact KNN suite is publication evidence for exact
 neighbor search; `--knn-full` adds qualification evidence rather than strengthening a physical
@@ -165,6 +165,7 @@ refinement:
 | circular orbit | timesteps in one orbit | $\Delta t=2\pi/N$, $N_P=64$ |
 | eccentric orbit | timesteps to a non-integer orbital phase | $\Delta t=1.3/N$, $N_P=4$ |
 | constant drag path | timesteps over one time unit | $\Delta t=1/N$, $N_P=3$ |
+| deterministic radial absorption | accepted transport steps over one time unit | $\Delta t=1/N$, $N_P=3$ |
 | 1D/2D/3D diffusion | ensemble-control parameter | $N_P=16N^2$ on a fixed mesh |
 | drag, radiation, P-R, collision algebra | no physical dependence on $N$ | only the first requested value is built |
 | deterministic boundary helpers | no physical dependence on $N$ | only the first requested value is built |
@@ -233,7 +234,7 @@ The current CUDA matrix covers the following combinations:
 | Capability | 1D radial | 2D radial–azimuthal | full 3D |
 |---|---:|---:|---:|
 | grid deposition and optical depth | yes | yes | yes |
-| orbital transport and gas drag | equilibrium and multi-step drag path | circular and eccentric trajectories | no |
+| orbital transport, gas drag, and radial absorption | equilibrium, multi-step drag path, and exact radial crossings | circular and eccentric trajectories | no |
 | stochastic diffusion | cylindrical radial | azimuthal | cylindrical radial and vertical mapped to spherical storage |
 | finite-domain multisize initialization | no | no | yes |
 | radiation pressure and P-R drag | yes | yes | no |
@@ -259,6 +260,7 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_orbit_ecc_2d` | production staggered drift and geometric force update with QAV-only zero drag | eccentric Kepler state, energy, angular momentum, and second-order temporal convergence |
 | `test_drag_1d` | radial-only frozen gas-drag response | exact exponential angular relaxation, radial response, and inactive-state invariants |
 | `test_drag_path_1d` | production staggered radial drift with QAV-only constant drag coefficients | exact velocity and displacement for three stopping times plus second-order position convergence |
+| `test_absorb_path_1d` | production staggered drift and radial transport boundary with QAV-only constant paths | exact inner/outer crossing times, inactive sentinel, detection bound, density-deposition exclusion, and zero inactive dynamics rate |
 | `test_viscflow_1d` | radial initialization with vertically integrated `VISC_FLOW` | exact viscous gas target and steady dust drift across several radii |
 | `test_drag_2d` | frozen-coefficient gas-drag response in `ssa_transport` | exact exponential angular relaxation and its induced radial response |
 | `test_diffusion_1d` | direct cylindrical radial SDE | exact Itô mean and variance, invariant physical velocity, and exact inactive coordinates |
@@ -297,6 +299,7 @@ Thus `PASS` does not mean merely that a GPU kernel completed without an error.
 | `test_diffusion_1d` | radial displacement mean and variance, reconstructed $v_\phi,v_R$, and inactive fields | exact one-step cylindrical SDE, $E[\Delta R]=D\Delta t$ and $\mathrm{Var}(\Delta R)=2D\Delta t$ | mean and variance errors each within six standard errors, with velocity and inactive-field errors jointly satisfying $L_\infty<2\times10^{-12}$ |
 | `test_radiation_1d` | the same response fields as drag with size-dependent $\beta$ | closed-form frozen drag plus radiation-pressure response at zero optical depth | combined $L_\infty<2\times10^{-13}$ |
 | `test_prdrag_1d` | component-dependent angular and radial damping plus updated radius | closed-form gas plus Poynting–Robertson exponential with independently calculated $k_x$ and $k_y$ | combined $L_\infty<2\times10^{-13}$ |
+| `test_absorb_path_1d` | first inactive endpoint, final sentinel, downstream rates, and deposited mass | exact constant-velocity inner/outer crossing times and one surviving representative | $0\le t_{\rm record}-t_{\rm hit}\le\Delta t$, exact inactive fields and zero inactive rates, survivor error $<2\times10^{-12}$, deposited mass error $<2\times10^{-12}$ |
 | `test_boundary_1d` | seven returned $(x,R,z,\ell_x,v_R,\ell_z)$ states | independent repeated radial reflection for diffusion, endpoint absorption for transport, and inactive-coordinate locking | all 42 scalars finite and combined $L_\infty<2\times10^{-13}$ |
 | `test_collision_1d` | four accessible radial KNN measures and three kernel numerators | exact boundary-clipped annular areas and constant, additive, and product propensity formulas | maximum absolute error across all seven scalars $<2\times10^{-13}$ |
 | `test_import_1d` | local Stokes number and $\mathrm{Re}^{-1/2}$ at eight imported-density samples | prescribed $\Sigma_g$, $\mathrm{St}=\mathrm{St}_0\Sigma_0/\Sigma_g$, and analytical Reynolds scaling | maximum absolute error across all 16 scalars $<2\times10^{-13}$ |
@@ -893,6 +896,46 @@ accidental return of polar-cell-center quadrature to the initialization path. A 
 invocation still validates the analytical and statistical criteria but cannot establish the
 cross-`N_Z` byte comparison.
 
+### Deterministic radial absorption path
+
+`test_absorb_path_1d` exercises the public production `ssa_transport` kernel rather than invoking
+the boundary helper directly. A model-local transport specialization removes gravity and drag but
+retains the production staggered drift, midpoint and endpoint boundary calls, active-state test,
+and absorbed-particle sentinel. Two representatives move at constant radial velocity toward the
+inner and outer faces, and a third remains inside the domain. For either crossing,
+
+$$
+t_{\rm hit}=\frac{y_{\rm face}-y_0}{v_y}.
+$$
+
+After every accepted step the driver records the first endpoint at which the stored radius becomes
+the production inactive value $y=0$. Since an endpoint is checked no later than the first step that
+contains the exact crossing, the deterministic acceptance condition is
+
+$$
+0\le t_{\rm record}-t_{\rm hit}\le\Delta t.
+$$
+
+This bounded delay tends to zero with the refined step even though its ratio to $\Delta t$ need not
+be monotone when a fixed crossing time moves through different step phases. The test therefore
+checks the analytical bound at every resolution instead of fitting a misleading order to the
+ceiling operation.
+
+At $T=1$, both crossed representatives must have
+
+$$
+y=0,
+\qquad z=\frac{\pi}{2},
+\qquad \ell_x=v_y=\ell_z=0,
+$$
+
+while the surviving path remains the exact translation $y(T)=y_0+v_yT$. The final state is then
+passed to the production `dyn_rate_calc`, `dustdens_init`, `dustdens_depo`, and `dustdens_calc`
+kernels. Both inactive rates must be zero, the active rate must be positive and finite, and the
+finite-volume integral of deposited density must equal the mass of the sole survivor. The current
+case does not yet claim optical-depth, collision-rate, or KNN exclusion; those remain explicit
+extensions of the same inactive-state contract.
+
 ### Deterministic boundary policies
 
 The four fixed-resolution boundary models call the production `_apply_transport_boundary` and
@@ -1365,7 +1408,7 @@ From the repository root, run a short workflow check with
 python3 qav/cuda/swarm/test_common/run_suite.py --group all --quick
 ```
 
-This performs the 37 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
+This performs the 41 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
 and 3D production collision sources with both backends, and then runs the
 $10^5$-particle KNN matrix.
 
@@ -1377,7 +1420,7 @@ python3 qav/cuda/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The current complete command performs 63 analytical-suite builds plus four KNN driver builds and
+The current complete command performs 67 analytical-suite builds plus four KNN driver builds and
 six production backend/geometry links.
 Individual groups can be selected with
 
@@ -1500,8 +1543,8 @@ after every selected model has returned successfully.
   KNN-radius failure cases
 - Reject an all-zero imported $\rho_g\epsilon$ mass before CDF normalization and test that failure
   path, and directly test the documented outermost-half-cell optical-depth clamp
-- Verify that absorbed representatives are absent from deposition, optical depth, dynamical rates,
-  collision rates, and both KNN structures in one end-to-end case
+- Extend the deterministic absorption case from its current density-deposition and dynamical-rate
+  checks to optical depth, collision rates, and both KNN structures
 - Validate the multisize radiation proposal and importance weights statistically, including their
   recovery of total represented dust mass and effective sample size
 - Compile and run a small legal flag matrix covering `HALF_DISK`, `DIFFUSION`, `RADIATION`,

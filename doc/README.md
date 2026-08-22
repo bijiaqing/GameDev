@@ -58,8 +58,8 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | archived 85-metric baseline on both CUDA and ROCm, plus eight direct polar-field comparisons | pre-expansion native archives and cross-backend comparison passed on 2026-08-17; the current 97-metric matrix awaits refresh |
-| swarm analytical suite | archived 51-metric baseline on both CUDA and ROCm | pre-expansion native archives passed with no mismatches on 2026-08-17; the current 63-metric matrix awaits refresh |
+| fluid analytical suite | archived 85-metric baseline on both CUDA and ROCm, plus eight direct polar-field comparisons | pre-expansion native archives and cross-backend comparison passed on 2026-08-17; the current 105-metric matrix awaits refresh |
+| swarm analytical suite | archived 51-metric baseline on both CUDA and ROCm | pre-expansion native archives passed with no mismatches on 2026-08-17; the current 67-metric matrix awaits refresh |
 | adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | both compact native suites passed with equal coverage on 2026-08-17 |
 
 The two complete campaigns used the same source SHA-256,
@@ -70,7 +70,7 @@ A100-SXM4-40GB, and driver 580.159.04. ROCm used target `gfx942`, ROCm 7.2.4, AM
 
 That fingerprint identifies the archived pre-expansion baseline and no longer matches the current
 QAV source after addition of the four analytical sequences. Independent local archive checks and
-both cross-backend comparators reproduced `PASS` for the archived source; new 97-fluid/63-swarm
+both cross-backend comparators reproduced `PASS` for the archived source; new 105-fluid/67-swarm
 native campaigns are required to qualify the expanded matrix. The remaining coverage
 limits are listed in the two test-set documents.
 

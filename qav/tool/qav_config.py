@@ -59,6 +59,8 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("test_y_transport_cyl", ("--cfl", "0.5")),
         ("test_y_transport_sph", ("--cfl", "0.05")),
         ("test_y_transport_sph", ("--cfl", "0.5")),
+        ("test_y_outflow_2d", ()),
+        ("test_y_outflow_3d", ()),
         ("test_z_transport_3d", ("--cfl", "0.05")),
         ("test_z_transport_3d", ("--cfl", "0.5")),
     ],
@@ -87,6 +89,7 @@ SWARM_GROUPS: dict[str, list[str]] = {
     "transport": [
         "test_orbit_1d", "test_drag_1d", "test_viscflow_1d",
         "test_orbit_2d", "test_drag_2d", "test_orbit_ecc_2d", "test_drag_path_1d",
+        "test_absorb_path_1d",
     ],
     "diffusion": [
         "test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d", "test_settle_diffuse_3d",
@@ -109,6 +112,7 @@ SWARM_RADIAL_MODELS = [
     "test_orbit_1d",
     "test_drag_1d",
     "test_drag_path_1d",
+    "test_absorb_path_1d",
     "test_viscflow_1d",
     "test_diffusion_1d",
     "test_radiation_1d",
@@ -138,10 +142,10 @@ SWARM_FIXED_RESOLUTION = {
     "test_knn",
 }
 
-EXPECTED_FLUID_METRICS = 97
-EXPECTED_SWARM_METRICS = 63
-EXPECTED_PUBLICATION_FLUID_METRICS = 69
-EXPECTED_PUBLICATION_SWARM_METRICS = 45
+EXPECTED_FLUID_METRICS = 105
+EXPECTED_SWARM_METRICS = 67
+EXPECTED_PUBLICATION_FLUID_METRICS = 77
+EXPECTED_PUBLICATION_SWARM_METRICS = 49
 
 PUBLICATION_TIER = "publication"
 RELEASE_TIER = "release"

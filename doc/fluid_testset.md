@@ -46,7 +46,7 @@ equations are correct; that conclusion comes from the analytical cases.
 The tier controls how evidence should be presented, not whether a test is retained:
 
 - **Publication:** one fractional FARGO sequence (`shift=3.25`), the low-CFL cylindrical,
-  spherical-radial, and polar transport convergence sequences, all four directional diffusion
+  spherical-radial and polar transport convergence sequences, both radial-outflow sequences, all four directional diffusion
   cases, positivity-controlled CN subcycling, source quadrature, logarithmic and generic
   optical-depth profiles, attenuated source response, and all four coupled ring models
 - **Release:** the integer and additional fractional FARGO shifts, operational-CFL radial and
@@ -54,16 +54,19 @@ The tier controls how evidence should be presented, not whether a test is retain
 - **Qualification:** matched thread/block sweeps, deliberate failure paths, large-LDS launches,
   and performance/profiling records
 
-The expanded four-resolution common matrix retains both publication and release tiers: 69 of its
-97 metrics support the compact publication matrix and 28 are release-only regressions. The latest
-archived source-matched CUDA/ROCm campaign predates the four new fluid sequences and therefore
+The expanded four-resolution common matrix retains both publication and release tiers: 77 of its
+105 metrics support the compact publication matrix and 28 are release-only regressions. The latest
+archived source-matched CUDA/ROCm campaign predates the six new fluid sequences and therefore
 contains the earlier 85-metric, 57-publication baseline. Per-case, per-model, and aggregate JSON
 manifests store these labels directly.
 
 The analytical runner writes every metric, applies a deliberately broad regression gate, and records
-the assessment in a variant-specific model manifest. Non-finite metrics, relative mass change above
-$10^{-8}$, failure of an exact/source tolerance, a finest-grid primary $L_1$ error above $2\times
-10^{-2}$, or loss of the established refinement trend makes the model and suite return nonzero. A
+the assessment in a variant-specific model manifest. Legacy cases without a model-owned validator
+reject non-finite metrics, relative mass change above $10^{-8}$, failure of an exact/source
+tolerance, a finest-grid primary $L_1$ error above $2\times10^{-2}$, or loss of the established
+refinement trend. Specialized validators supply their own documented gates; in particular, radial
+outflow compares the nonzero physical mass loss with its analytical value rather than treating it
+as a conservation failure. A
 four-resolution non-degenerate sequence requires its final observed order to be at least $1.5$;
 short workflow checks require $0.75$. Exact integer-shift and $p=0$ optical-depth cases use a
 $10^{-10}$ finest-error gate rather than a meaningless roundoff order, while the source test uses a
@@ -192,9 +195,9 @@ The shared resolution argument refines different axes according to the case:
 |---|---|---|
 | azimuthal transport or diffusion | $(N_X,N_Y,N_Z)=(N,4,1)$ | refine the periodic $x$ operator |
 | positivity-controlled azimuthal diffusion | $(N,1,1)$ | refine the cyclic CN eigenmode while forcing automatic subcycling |
-| cylindrical radial transport, diffusion, or optical depth | $(4,N,1)$ | refine the 2D radial operator |
+| cylindrical radial transport, outflow, diffusion, or optical depth | $(4,N,1)$ | refine the 2D radial operator |
 | 2D attenuation and frozen source response | $(4,N,1)$ | refine optical-depth quadrature and its source coupling |
-| spherical radial transport or diffusion | $(4,N,4)$ | refine the 3D radial operator while retaining transverse indexing |
+| spherical radial transport, outflow, or diffusion | $(4,N,4)$ | refine the 3D radial operator while retaining transverse indexing |
 | polar transport or diffusion | $(4,4,N)$ | refine the spherical polar operator |
 | rotating-ring models | $(N,N,1)$ | refine both active 2D directions |
 | source drag | $(8,1,1)$ | eight stiffness parameters; fixed `--res 8`, not a spatial grid |
@@ -202,7 +205,7 @@ The shared resolution argument refines different axes according to the case:
 | 3D thread/block sweep | $(N,N,N)$ | fixed-work implementation comparison with diffusion |
 
 For the analytical matrix, `--quick` retains only the first two requested resolutions. Thus the
-expanded full matrix performs 97 builds/runs, while the default quick matrix performs 49. Every
+expanded full matrix performs 105 builds/runs, while the default quick matrix performs 53. Every
 resolution and parameter variant is cleaned and rebuilt because the mesh and control parameters
 are compile-time constants.
 
@@ -254,6 +257,8 @@ the cylindrical radial cases isolate a 2D directional operator rather than a sta
 | `test_x_transport_2d` | periodic FARGO, PPM/HLL, conservative limiter | rotating Fourier mode after one revolution |
 | `test_y_transport_cyl` | radial PPM/HLL with $d=2$ geometry | compact homologous expansion |
 | `test_y_transport_sph` | radial PPM/HLL with $d=3$ geometry | compact homologous expansion |
+| `test_y_outflow_2d` | radial PPM/HLL with $d=2$ geometry and outer outflow flux | exact characteristic dilution and remaining mass |
+| `test_y_outflow_3d` | radial PPM/HLL with $d=3$ geometry and outer outflow flux | exact characteristic dilution and remaining mass |
 | `test_z_transport_3d` | polar PPM/HLL and $\sin z$ geometry | translation of $\rho\sin z$ at constant $\ell_\theta$ |
 | `test_x_diffusion_2d` | cyclic Crank–Nicolson and diffusive momentum flux | Fourier decay on each ring |
 | `test_y_diffusion_cyl` | $d=2$ radial Crank–Nicolson | Neumann shell eigenmode |
@@ -350,6 +355,46 @@ These cases test the exact radial volume, open-boundary implementation without a
 boundary, conservative momentum transport, SSPRK(3,3), CFL recomputation, and the invariant-domain
 flux correction. The compact bump spans only a few cells at $N=32$, so the coarsest interval is not
 expected to be asymptotic; the finer intervals supply the convergence evidence.
+
+### Radial outflow
+
+`test_y_outflow_2d` and `test_y_outflow_3d` use the same production radial sweep but place a smooth
+pulse close enough to the outer face that a finite fraction leaves the mesh. The angular directions
+are uniform, $v_y=u=0.2$, and the transverse momenta vanish. In radial dimension $d$, the solved
+continuity equation is
+
+$$
+\frac{\partial\varrho_d}{\partial t}
++\frac{1}{y^{d-1}}\frac{\partial}{\partial y}
+\left(y^{d-1}u\varrho_d\right)=0,
+$$
+
+where $(d,\varrho_d)=(2,\Sigma_d)$ for the vertically integrated model and $(3,\rho_d)$ for the
+spherical model. Its characteristic solution is
+
+$$
+\varrho_d(y,t)=
+\left(\frac{y-ut}{y}\right)^{d-1}\varrho_{d,0}(y-ut).
+$$
+
+The validator does not sample this expression at cell centers. For radial cell
+$[y_{j-1/2},y_{j+1/2}]$, it evaluates the exact finite-volume average
+
+$$
+\bar\varrho_{d,j}(t)=
+\frac{
+\displaystyle\int_{y_{j-1/2}}^{y_{j+1/2}}
+\varrho_{d,0}(y-ut)(y-ut)^{d-1}\,dy
+}{
+\displaystyle\int_{y_{j-1/2}}^{y_{j+1/2}}y^{d-1}\,dy
+}.
+$$
+
+It separately reports the numerical and analytical remaining masses, their relative mismatch, the
+density norms, $m_y-u\varrho_d$, both zero transverse momenta, finiteness, and nonnegativity. The
+outer face is therefore exercised by nonzero support rather than merely compiled. Because the
+production boundary flux is deliberately one-sided and lower order than an interior PPM face, the
+registered convergence floor is first-order-compatible rather than the interior transport floor.
 
 ### Polar transport
 
@@ -791,7 +836,7 @@ Run the complete reference-thread matrix with
 python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
-The complete `--group all --res 32 64 128 256` matrix performs 97 builds/runs because several
+The complete `--group all --res 32 64 128 256` matrix performs 105 builds/runs because several
 models sweep CFL values, FARGO shifts, or optical-depth powers. Each resolution is cleaned and
 rebuilt so model-local compile-time constants cannot reuse stale objects.
 
@@ -835,7 +880,7 @@ For the sweep branch, also retain `build.json`,
 `run.json`, `variables.json`, `timing.json`, and `sweep_comparison_*.json`. Analytical results are namespaced as
 `qav/logs/fluid/cuda/SWEEP/groups/manual/MODEL/`, where `SWEEP` is `thread` or `block`.
 
-The full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 97
+The full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 105
 metric files are present, and `qav/tool/check_archive.py` accepts the archive. Focused groups write
 their models and manifest below `groups/GROUP/`, while direct wrappers use `groups/manual/`; neither
 can overwrite any full-suite artifact. The sweep branch is
@@ -877,8 +922,8 @@ quadrature. Both full-disk and `HALF_DISK` polar boundaries should ultimately be
 - Add independent nonzero-$(p,q)$ tests of the midplane pressure-support target and the complete
   3D gas rotation law, evaluating the fixed-$Z$ pressure gradient and cylindrical stellar gravity
   separately before verifying their off-midplane cancellation
-- Add radial and polar cases whose nonzero support actually crosses an outflow boundary, plus a
-  `HALF_DISK` midplane-reflection case; current compact profiles remain away from those boundaries
+- Add a polar case whose nonzero support crosses an outflow boundary and a `HALF_DISK`
+  midplane-reflection case; radial outflow is now covered in both supported radial geometries
 - Add periodic-wedge seam cases for FARGO transport, PPM limiting, and cyclic azimuthal diffusion
   on domains with $X_{\max}-X_{\min}<2\pi$
 - Run polar transport at fixed $N_Z$ while varying $N_Y$ independently, and verify both the exact
