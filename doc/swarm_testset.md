@@ -61,10 +61,9 @@ The common archive retains narrow regressions but distinguishes them from code-p
   ten-million-particle KNN runs, and performance/profiling campaigns
 
 With the standard four requested resolutions, the expanded 75-metric analytical swarm matrix
-partitions into 57 publication and 18 release-only records. The latest archived source-matched
-CUDA/ROCm campaign predates the five new four-resolution trajectory sequences and the four-resolution
-settling--diffusion sequence and therefore
-contains the earlier 51-metric, 33-publication baseline. The compact KNN suite is publication evidence for exact
+partitions into 57 publication and 18 release-only records. The 2026-08-23 CUDA campaign completed
+the six new four-resolution sequences. The latest source-matched CUDA/ROCm campaign remains the
+earlier 51-metric, 33-publication baseline. The compact KNN suite is publication evidence for exact
 neighbor search; `--knn-full` adds qualification evidence rather than strengthening a physical
 convergence claim. These labels are stored in model and aggregate manifests and do not remove any
 test from the release gate.
@@ -1225,7 +1224,7 @@ to adjudicate a disagreement. This is strong differential coverage but is not ex
 validation of all 4096 queries when all GPU backends make the same choice. The adversarial drivers
 provide the complementary fully exhaustive small-set checks.
 
-### Latest archived native KNN evidence
+### Latest archived source-matched KNN evidence
 
 The KNN branches of the 2026-08-17 CUDA and ROCm campaigns used $N_K=200$, a search cutoff of
 approximately $0.1$, 4096 quality queries, 32 unconditional exhaustive CPU queries, and
@@ -1307,9 +1306,45 @@ production timing comparison.
 
 ## Latest archived native and cross-backend evidence
 
-### Complete 2026-08-17 archives
+### Expanded CUDA archive from 2026-08-23
 
-The common suite was regenerated on CUDA and ROCm under the source-matched campaign recorded in
+The complete CUDA campaign passed all 31 analytical/statistical models and all 75 requested
+resolution records. Every model manifest reports `passed: true`; all numeric JSON values are finite.
+The compact KNN suite also passed all four standalone builds, 7/7 ordinary cases, 15/15 edge cases,
+14/14 periodic cases, 10/10 wedge cases, and 6/6 production collision links.
+
+The six added four-resolution sequences produced the following strongest summary diagnostics:
+
+| Model | Convergence or statistical result | Finest or worst retained diagnostic |
+|---|---|---|
+| eccentric 2D orbit | state orders 2.0004, 2.0001, 2.0000 | state $L_\infty=1.01\times10^{-6}$; energy error $2.32\times10^{-7}$ |
+| radiation-modified 2D orbit | state orders 2.0003, 2.0001, 2.0000 | state $L_\infty=8.18\times10^{-7}$; energy error $1.56\times10^{-7}$ |
+| inclined 3D orbit | state orders 2.0005, 2.0001, 2.0000 | state $L_\infty=2.35\times10^{-6}$; energy error $3.54\times10^{-7}$ |
+| multi-step 1D drag | position orders 1.9626, 1.9903, 1.9976 | position $L_\infty=6.46\times10^{-6}$ |
+| deterministic 1D absorption | all state, sentinel, collision-mask, collision-rate, and optical-depth gates pass | finest absorption-time error $4.69\times10^{-4}$; active-mass error $8.88\times10^{-16}$ |
+| 3D settling--diffusion equilibrium | all four ensemble distributions pass | KS $=0.00330$--$0.00546$ below the $0.00699$ limit |
+
+The continuous 3D initialization regression also remained independent of the nominal polar
+resolution: the four initialized arrays and mass-bank checks passed, with domain-mass relative
+$L_\infty=3.71\times10^{-15}$, radial PIT KS $=0.00522$, vertical PIT KS $=0.00675$, and
+middle-size contained-mass interpolation error $6.61\times10^{-9}$.
+
+In the compact CUDA KNN archive, ordinary KD-tree/Morton queries had no topology mismatches and a
+largest squared-distance discrepancy of $9.31\times10^{-10}$. The wedge matrix recorded at most
+four topology disagreements in a case; every disagreement passed independent brute-force
+adjudication, with no record-geometry mismatch or traversal-stack overflow. The largest wedge
+squared-distance discrepancy was $2.65\times10^{-8}$, within the documented single-precision
+periodic tolerance.
+
+This is a native CUDA qualification, not yet an expanded cross-backend qualification. Its recorded
+source fingerprint differs from the current local verification-affecting source-tree fingerprint,
+and no matching expanded ROCm
+archive is present. The results remain valid for the campaign hash recorded in
+[`README.md`](README.md).
+
+### Source-matched 2026-08-17 cross-backend archives
+
+The earlier common suite was regenerated on CUDA and ROCm under the source-matched campaign recorded in
 [`README.md`](README.md). Both pre-expansion aggregate manifests report 25/25 models passed, comprising 51/51
 analytical metrics, four standalone KNN builds, and six production collision links. The analytical
 metrics partition into 33 publication and 18 release records.

@@ -58,21 +58,23 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | archived 85-metric baseline on both CUDA and ROCm, plus eight direct polar-field comparisons | pre-expansion native archives and cross-backend comparison passed on 2026-08-17; the current 105-metric matrix awaits refresh |
-| swarm analytical suite | archived 51-metric baseline on both CUDA and ROCm | pre-expansion native archives passed with no mismatches on 2026-08-17; the current 75-metric matrix awaits refresh |
-| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | both compact native suites passed with equal coverage on 2026-08-17 |
+| fluid analytical suite | expanded CUDA archive with 105/105 metrics and eight precise polar records | all native CUDA criteria passed on 2026-08-23; the expanded ROCm and cross-backend refresh remains pending |
+| swarm analytical suite | expanded CUDA archive with 31/31 models and 75/75 metrics | all native CUDA analytical, statistical, and boundary criteria passed on 2026-08-23; the expanded ROCm refresh remains pending |
+| adaptive-Morton KNN | CUDA ordinary, edge, periodic, wedge, and production-link matrices | all 52 compact cases and all four standalone builds passed on 2026-08-23; the expanded ROCm refresh remains pending |
 
-The two complete campaigns used the same source SHA-256,
-`efc181ba842c4dd6917db01d02afc3c7f6e501e7b63cc786983f6f2745243fd8`. CUDA used target `sm_80`,
-CUDA 12.1 (`nvcc` 12.1.105), an NVIDIA
-A100-SXM4-40GB, and driver 580.159.04. ROCm used target `gfx942`, ROCm 7.2.4, AMD clang
-22.0.0git, an AMD Instinct MI300A, and amdgpu driver 6.16.13. Both used Python 3.13.5.
+The expanded CUDA campaign used target `sm_80` and remained internally source-stable at SHA-256
+`2d287994722315384ccc7c0541c1bc6b99840223e0136464d50ad75406fca6b7` across its complete run from
+2026-08-23 12:01 to 14:04 UTC. Its archive checker found no malformed, non-finite, failed, or missing
+records. The downloaded archive contains 523 valid JSON files. The recorded environment was CUDA
+12.1 (`nvcc` 12.1.105), an NVIDIA A100-SXM4-40GB with driver 580.159.04, and Python 3.13.5.
 
-That fingerprint identifies the archived pre-expansion baseline and no longer matches the current
-QAV source after addition of the four analytical sequences. Independent local archive checks and
-both cross-backend comparators reproduced `PASS` for the archived source; new 105-fluid/75-swarm
-native campaigns are required to qualify the expanded matrix. The remaining coverage
-limits are listed in the two test-set documents.
+The campaign fingerprint does not match the current local verification-affecting source-tree fingerprint,
+`5a66e4a3c8eef8b5ebf3ebb59ed23bdc523ec973311dae427e0f94ca6403b9c5`. The results are
+therefore valid evidence for the source identified by the campaign, but are not promoted as a
+current-source CUDA/ROCm equivalence claim. The 2026-08-17 source-matched 85-fluid/51-swarm
+CUDA/ROCm campaign remains the latest complete cross-backend baseline. Recreate both expanded
+native archives from one synchronized source tree before refreshing that claim. The remaining
+coverage limits are listed in the two test-set documents.
 
 ## Current cross-representation conventions
 

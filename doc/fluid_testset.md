@@ -21,8 +21,8 @@ coefficients would not yield simple closed-form solutions.
 This document records the test design, mathematical references, acceptance semantics, execution
 contract, and latest archived native results. The QAV implementation points back to this document rather
 than maintaining a second copy of the case definitions. Generated JSON and binary field records
-are ignored by Git below `qav/logs/`; the latest local archive was generated
-from the source fingerprint and environments recorded in [`README.md`](README.md).
+are ignored by Git below `qav/logs/`; the latest local CUDA archive and its source qualification are
+recorded in [`README.md`](README.md).
 
 ## Verification architecture and claim levels
 
@@ -55,10 +55,10 @@ The tier controls how evidence should be presented, not whether a test is retain
   and performance/profiling records
 
 The expanded four-resolution common matrix retains both publication and release tiers: 77 of its
-105 metrics support the compact publication matrix and 28 are release-only regressions. The latest
-archived source-matched CUDA/ROCm campaign predates the six new fluid sequences and therefore
-contains the earlier 85-metric, 57-publication baseline. Per-case, per-model, and aggregate JSON
-manifests store these labels directly.
+105 metrics support the compact publication matrix and 28 are release-only regressions. The
+2026-08-23 CUDA campaign completed this expanded matrix. The latest source-matched CUDA/ROCm
+campaign remains the earlier 85-metric, 57-publication baseline. Per-case, per-model, and aggregate
+JSON manifests store these labels directly.
 
 The analytical runner writes every metric, applies a deliberately broad regression gate, and records
 the assessment in a variant-specific model manifest. Legacy cases without a model-owned validator
@@ -713,9 +713,38 @@ not a grid-convergence sequence and does not use one implementation as analytica
 
 ## Latest archived native and cross-backend evidence
 
-### Complete 2026-08-17 analytical archives
+### Expanded CUDA archive from 2026-08-23
 
-The complete thread-sweep matrix was regenerated on both backends under the source-matched campaign
+The complete CUDA thread-sweep campaign passed 27/27 parameter variants, 105/105 analytical
+metrics, and all eight precise polar-field records. The archive checker found no invalid metrics,
+missing raw fields, failed manifests, or non-finite JSON values. The campaign was internally
+source-stable at the SHA-256 recorded in [`README.md`](README.md).
+
+The new deterministic sequences passed their full four-resolution gates:
+
+| Case | Successive density $L_1$ orders | Finest density $L_1$ | Additional finest-grid diagnostic |
+|---|---|---:|---:|
+| 2D radial outflow | 1.3662, 1.6895, 1.5612 | $8.95\times10^{-4}$ | density $L_\infty=2.42\times10^{-2}$; remaining-mass mismatch $1.11\times10^{-3}$ |
+| 3D radial outflow | 1.4120, 1.6770, 1.5572 | $1.14\times10^{-3}$ | density $L_\infty=2.23\times10^{-2}$; remaining-mass mismatch $1.19\times10^{-3}$ |
+| positivity-controlled diffusion | 1.9429, 1.9669, 1.9919 | $1.90\times10^{-5}$ | minimum substep density $0.102$; finite and nonnegative |
+| attenuation, $p=-1$ | 2.0148, 2.0076, 2.0038 | $1.94\times10^{-6}$ | source-response $L_\infty=4.44\times10^{-16}$ |
+| attenuation, $p=1$ | 2.0374, 2.0192, 2.0097 | $7.46\times10^{-6}$ | source-response $L_\infty=4.44\times10^{-16}$ |
+
+For both outflow cases, density $L_1$, density $L_\infty$, and analytical remaining-mass mismatch
+decrease monotonically. Their final density and mass-error orders exceed the sequence-level $0.75$
+floor. The nonzero mass change is the prescribed outward boundary flux, not a conservation defect.
+All pre-existing transport, diffusion, source, optical-depth, and coupled-ring variants also passed;
+their measured orders agree with the table below.
+
+This is a native CUDA qualification, not yet an expanded cross-backend qualification. Its recorded
+source fingerprint differs from the current local verification-affecting source-tree fingerprint,
+and no matching expanded ROCm
+archive is present. The numerical evidence must therefore remain associated with the campaign hash
+rather than being described as current-source CUDA/ROCm equivalence.
+
+### Source-matched 2026-08-17 cross-backend archives
+
+The earlier thread-sweep matrix was regenerated on both backends under the source-matched campaign
 recorded in [`README.md`](README.md), which also records the native compilers, targets, drivers,
 and GPUs.
 
@@ -777,7 +806,7 @@ $h<10^{-4}$. Reanalysis of the unchanged native state reduced the largest compon
 from $2.22\times10^{-5}$ to $2.22\times10^{-16}$; the former value was cancellation in the Python
 reference, not a production-kernel error. Density and total mass are exact to the recorded precision.
 
-### CUDA-versus-ROCm equivalence
+### CUDA-versus-ROCm equivalence for the 2026-08-17 baseline
 
 The pre-expansion complete backend comparison found all 85 analytical metrics on both sides, matching tier
 metadata, no missing records, and zero acceptance mismatches. Polar error norms are particularly
@@ -806,11 +835,10 @@ reproduced `PASS` without a GPU runtime.
 
 ### Qualification evidence requiring a separate refresh
 
-The 2026-08-17 `run_all.py` campaign is the common publication-and-release gate. It deliberately
-does not run the qualification-only thread/block sweep comparison, deliberate NaN/Inf injection,
+Neither the 2026-08-17 cross-backend baseline nor the 2026-08-23 expanded CUDA `run_all.py`
+campaign runs the qualification-only thread/block sweep comparison, deliberate NaN/Inf injection,
 large-LDS launch suite, or performance/profiling campaign. Earlier numerical and timing values for
-those branches have therefore been removed from the current-result section rather than presented
-as evidence for this source fingerprint.
+those branches are therefore not presented as evidence for either campaign fingerprint.
 
 Refresh those independent qualification branches when their claims are needed:
 
