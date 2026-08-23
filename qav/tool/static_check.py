@@ -264,6 +264,7 @@ def check_qav_contract(errors: list[str]) -> None:
         ("fluid", {model for model, _ in fluid_cases}),
         ("swarm", set(swarm_models)),
     ):
+        overlay_suffixes = {".cu", ".hip", ".cuh", ".h", ".hpp", ".mk", ".py", ".sh"}
         for model in sorted(names):
             common = PROJECT_ROOT/"qav"/"comm"/component/model
             if not common.is_dir():
@@ -282,7 +283,9 @@ def check_qav_contract(errors: list[str]) -> None:
                     errors.append(f"missing QAV wrapper: {(native/'run.py').relative_to(PROJECT_ROOT)}")
                 overlay_files[backend] = {
                     f"{path.stem}.gpu" if path.suffix in {".cu", ".hip"} else path.name
-                    for path in native.iterdir() if path.is_file()
+                    for path in native.iterdir()
+                    if path.is_file()
+                    and (path.name == "Makefile" or path.suffix in overlay_suffixes)
                 }
             if len(overlay_files) == 2 and overlay_files["cuda"] != overlay_files["rocm"]:
                 errors.append(

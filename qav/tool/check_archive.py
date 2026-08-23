@@ -41,7 +41,7 @@ def variant_name(metric: dict[str, Any]) -> str:
     """Reconstruct the parameter directory associated with one fluid metric"""
 
     case = str(metric["case"])
-    if case == "optdepth":
+    if case in {"optdepth", "attenuation_2d"}:
         return f"p{float(metric['power']):+g}"
     if case == "x_transport":
         return f"shift{float(metric['shift']):g}"
@@ -54,7 +54,7 @@ def variant_from_arguments(model: str, arguments: list[str]) -> str:
     """Resolve the manifest suffix for one suite case entry"""
 
     values = {arguments[index]: arguments[index + 1] for index in range(0, len(arguments), 2)}
-    if model == "test_optdepth":
+    if model in {"test_optdepth", "test_attenuation_2d"}:
         return f"p{float(values['--power']):+g}"
     if model == "test_x_transport_2d":
         return f"shift{float(values['--shift']):g}"

@@ -115,6 +115,7 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     return {
         "case": "attenuation_2d",
         "resolution": resolution,
+        "power": power,
         "primary_field": "continuum_optdepth",
         "convergence_field": "continuum_optdepth",
         "minimum_order": 1.8,

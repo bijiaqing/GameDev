@@ -134,6 +134,41 @@ def assess_records(
                 convergence_passed = convergence_orders[-1] >= minimum_order
             else:
                 convergence_passed = False
+        sequence_checks = []
+        sequence_passed = True
+        for requirement in records[0].get("sequence_requirements", []):
+            field = str(requirement["field"])
+            norm = str(requirement["norm"])
+            values = [float(record["errors"][field][norm]) for record in records]
+            orders = observed_orders(values) \
+                if len(values) > 1 and all(value > 0.0 for value in values) else []
+            maximum_final_error = requirement.get("maximum_final_error")
+            minimum_final_order = requirement.get("minimum_final_order")
+            require_monotonic = bool(requirement.get("require_monotonic", False))
+            accuracy_passed = maximum_final_error is None \
+                or values[-1] <= float(maximum_final_error)
+            order_passed = minimum_final_order is None or len(values) == 1 or (
+                bool(orders) and orders[-1] >= float(minimum_final_order)
+            )
+            monotonic_passed = not require_monotonic or all(
+                values[index + 1] < values[index] for index in range(len(values) - 1)
+            )
+            check_passed = accuracy_passed and order_passed and monotonic_passed
+            sequence_checks.append({
+                "name": requirement["name"],
+                "field": field,
+                "norm": norm,
+                "values": values,
+                "orders": orders,
+                "maximum_final_error": maximum_final_error,
+                "minimum_final_order": minimum_final_order,
+                "require_monotonic": require_monotonic,
+                "accuracy_passed": accuracy_passed,
+                "order_passed": order_passed,
+                "monotonic_passed": monotonic_passed,
+                "passed": check_passed,
+            })
+            sequence_passed = sequence_passed and check_passed
         return {
             "finite": finite,
             "validator_owned": True,
@@ -141,7 +176,9 @@ def assess_records(
             "minimum_order": minimum_order,
             "orders": convergence_orders,
             "convergence_passed": convergence_passed,
-            "passed": finite and convergence_passed
+            "sequence_checks": sequence_checks,
+            "sequence_passed": sequence_passed,
+            "passed": finite and convergence_passed and sequence_passed
                 and all(record["passed"] is True for record in records),
         }
     mass_max = max((record.get("mass_relative_change", 0.0) for record in records), default=0.0)
@@ -313,8 +350,9 @@ def run(model: str) -> None:
     field = records[0].get(
         "primary_field", "optdepth" if records[0]["case"] == "optdepth" else "density"
     )
+    mass_label = records[0].get("mass_diagnostic_label", "mass rel")
     print(f"\n{records[0]['case']}: {field} convergence")
-    print(f"{'N':>8} {'L1':>14} {'L2':>14} {'Linf':>14} {'mass rel':>14}")
+    print(f"{'N':>8} {'L1':>14} {'L2':>14} {'Linf':>14} {mass_label:>14}")
     l1_errors = []
     for record in records:
         error = record["errors"][field]

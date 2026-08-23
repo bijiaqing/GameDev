@@ -13,6 +13,10 @@ import numpy as np
 Y_MIN, Y_MAX = 0.5, 2.5
 OUTFLOW_SPEED = 0.2
 SUPPORT_MIN, SUPPORT_MAX = 1.7, 2.5
+MINIMUM_SEQUENCE_ORDER = 0.75
+DENSITY_L1_FINAL_LIMIT = 2.0e-3
+DENSITY_LINF_FINAL_LIMIT = 3.0e-2
+MASS_ERROR_FINAL_LIMIT = 5.0e-3
 
 
 def compact_bump(value: np.ndarray) -> np.ndarray:
@@ -112,14 +116,41 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         "reference_class": "operator-specialized-exact-characteristic",
         "primary_field": "density",
         "convergence_field": "density",
-        "minimum_order": 0.75,
+        "minimum_order": MINIMUM_SEQUENCE_ORDER,
+        "sequence_requirements": [
+            {
+                "name": "density_l1_accuracy",
+                "field": "density",
+                "norm": "l1",
+                "maximum_final_error": DENSITY_L1_FINAL_LIMIT,
+                "require_monotonic": True,
+            },
+            {
+                "name": "density_linf_accuracy",
+                "field": "density",
+                "norm": "linf",
+                "maximum_final_error": DENSITY_LINF_FINAL_LIMIT,
+                "require_monotonic": True,
+            },
+            {
+                "name": "remaining_mass_convergence",
+                "field": "remaining_mass_relative",
+                "norm": "linf",
+                "maximum_final_error": MASS_ERROR_FINAL_LIMIT,
+                "minimum_final_order": MINIMUM_SEQUENCE_ORDER,
+                "require_monotonic": True,
+            },
+        ],
         "activation": activation,
+        "state_finite": bool(np.all(np.isfinite(density))),
+        "minimum_density": float(np.min(density)),
         "initial_mass": initial_mass,
         "analytical_remaining_mass": analytical_mass,
         "numerical_remaining_mass": numerical_mass,
         "analytical_escaped_fraction": escaped_exact,
         "numerical_escaped_fraction": escaped_numerical,
         "mass_relative_change": abs(escaped_numerical),
+        "mass_diagnostic_label": "escaped frac",
         "errors": {
             "density": norm_set(density - exact_density, volume),
             "radial_momentum_closure": norm_set(momentum_error, volume),
@@ -134,9 +165,7 @@ def analyze(out_dir: Path, resolution: int) -> dict:
             activation
             and np.all(np.isfinite(density))
             and np.min(density) >= -2.0e-13
-            and mass_error < 3.0e-2
             and np.max(np.abs(momentum_error)) < 2.0e-11
             and np.max(np.abs(transverse_error)) < 2.0e-13
-            and np.max(np.abs(density - exact_density)) < 1.5e-1
         ),
     }

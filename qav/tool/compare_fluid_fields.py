@@ -47,7 +47,7 @@ def variant_name(metric: dict[str, object]) -> str:
     """Reconstruct the parameter subdirectory selected by the fluid QA runner"""
 
     case = str(metric["case"])
-    if case == "optdepth":
+    if case in {"optdepth", "attenuation_2d"}:
         return f"p{float(metric['power']):+g}"
     if case == "x_transport":
         return f"shift{float(metric['shift']):g}"

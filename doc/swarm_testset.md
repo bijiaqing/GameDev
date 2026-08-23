@@ -1547,6 +1547,36 @@ after every selected model has returned successfully.
 
 ## Coverage limits and verification still required
 
+### Deferred analytical extensions
+
+The secular Poynting--Robertson reference for a nearly circular, optically thin orbit is
+
+$$
+\frac{dR}{dt}=-\frac{2\beta GM_S}{cR},
+\qquad
+R^2(t)=R_0^2-\frac{4\beta GM_S}{c}t.
+$$
+
+It is deferred because it is an asymptotic, many-orbit test rather than an exact pointwise
+trajectory; the exact reduced-gravity orbit is already covered by `test_orbit_beta_2d`.
+
+For Brownian motion starting a distance $d$ from an absorbing boundary, the analytical crossing
+probability is
+
+$$
+P(T_{\rm hit}\le t)
+=
+\operatorname{erfc}\left(\frac{d}{\sqrt{4Dt}}\right).
+$$
+
+This first-passage test is deferred because production stochastic diffusion currently reflects
+radial and polar crossings. It requires a genuine continuous-time absorbing boundary-event
+algorithm, not an endpoint-only test specialization. Extension of the existing local
+settling--diffusion regression to unrestricted disk settling and spatially varying diffusivity
+gradients is also deferred.
+
+### Other missing verification
+
 - Add current-source production collision-runtime comparisons for axisymmetry, partial wedges,
   full 3D, and $N_P=10^6$; the present suite compiles both search backends but does not evolve and
   statistically compare complete collision histories
@@ -1575,10 +1605,6 @@ after every selected model has returned successfully.
   timesteps do not exceed the configured crossing or diffusion limits
 - Test finite attenuation by coupling the reconstructed optical depth to
   $\beta e^{-\tau}$; the current grid and radiation cases validate the two pieces separately
-- Recover secular P-R inspiral, including the factor-of-two radial P-R damping over many steps;
-  the unattenuated reduced-gravity eccentric orbit is now covered directly
-- Extend the local settling--diffusion regression to the unrestricted disk settling force and test
-  spatially varying diffusivity-gradient terms
 - Compare uninterrupted and restarted stochastic runs with byte-identical restored RNG files but
   tolerance-based physical state, conservation, and ensemble criteria because velocity-file
   conversion need not preserve internal angular momentum bitwise

@@ -395,6 +395,11 @@ density norms, $m_y-u\varrho_d$, both zero transverse momenta, finiteness, and n
 outer face is therefore exercised by nonzero support rather than merely compiled. Because the
 production boundary flux is deliberately one-sided and lower order than an interior PPM face, the
 registered convergence floor is first-order-compatible rather than the interior transport floor.
+The complete sequence must decrease monotonically in density $L_1$, density $L_\infty$, and
+remaining-mass mismatch. The final density limits are $L_1<2\times10^{-3}$ and
+$L_\infty<3\times10^{-2}$; the final remaining-mass mismatch must be below $5\times10^{-3}$, and
+the final density and mass-error orders must both be at least $0.75$. Coarse-grid errors are
+reported but are not compared with separately tuned absolute ceilings.
 
 ### Polar transport
 
@@ -889,29 +894,22 @@ tolerances were satisfied.
 
 ## Coverage limits and verification still required
 
-### Planned full-3D manufactured solution
+### Deferred analytical extensions
 
-No runnable model currently claims full coupled 3D verification. The planned `test_mms_3d` must
-generate its density and all three stored-momentum residuals independently with SymPy, emit
-test-only algebraic forcing expressions, insert density and momentum forcing symmetrically at the
-required substep times, impose exact manufactured boundary values, and compare independent
-high-order finite-volume averages of density, all momenta, physical velocities, and optical depth.
-The reference must not call production geometry, gas, force, diffusion, or optical-depth helpers.
+A reduced fluid settling--diffusion test would target
 
-The harness must cover four configurations:
+$$
+\frac{\partial\rho_d}{\partial t}
+=
+\frac{\partial}{\partial Z}(\gamma Z\rho_d)
++D\frac{\partial^2\rho_d}{\partial Z^2},
+\qquad
+H_d^2=\frac{D}{\gamma}.
+$$
 
-1. transport only with zero manufactured diffusivity and radiation
-2. transport plus diffusion
-3. transport plus radiation
-4. transport plus diffusion and radiation
-
-Because production requires `DIFFUSION` whenever `N_Z > 1`, the first and third configurations
-must compile with that flag while returning exactly zero manufactured diffusivity. All dimensions
-must refine together with the same prescribed timestep history at a given resolution. Before any
-MMS order is interpreted, a source-only field with a known exact integral must validate the forcing
-composition, the exact solution must stay above `RHO_VAC`, and limiter and positivity scaling must
-remain inactive. Radiation cases retain the second-order floor of the production optical-depth
-quadrature. Both full-disk and `HALF_DISK` polar boundaries should ultimately be exercised.
+This test is deferred because production evolves inertial momentum rather than imposing the
+terminal drift $v_Z=-\gamma Z$; a faithful test would need a QAV-only prescribed drift or another
+natural closed-form reduction.
 
 ### Other missing verification
 
@@ -952,11 +950,10 @@ vacuum fallback velocities from masquerading as transport error while leaving al
 norms unmasked.
 
 The directional 3D radial and polar tests do not establish complete 3D transport–diffusion–
-radiation coupling; that claim requires the manufactured-solution suite above.
+radiation coupling. No natural closed-form regression currently supports that broader claim.
 
 ## References
 
-- Salari & Knupp (2000), [verification by manufactured solutions](https://digital.library.unt.edu/ark:/67531/metadc702130/)
 - Colella & Woodward (1984), [PPM](<https://doi.org/10.1016/0021-9991(84)90143-8>)
 - Harten, Lax & van Leer (1983), [HLL-type Godunov schemes](https://doi.org/10.1137/1025002)
 - Masset (2000), [FARGO](https://arxiv.org/abs/astro-ph/9910390)
