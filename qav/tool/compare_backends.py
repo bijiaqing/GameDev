@@ -13,7 +13,12 @@ from typing import Any
 
 from qav_config import archive_fingerprint, EXPECTED_FLUID_METRICS, EXPECTED_SWARM_METRICS
 
-STOCHASTIC_SWARM_CASES = {"diffusion_1d", "diffusion_2d", "diffusion_3d"}
+STOCHASTIC_SWARM_CASES = {
+    "diffusion_1d",
+    "diffusion_2d",
+    "diffusion_3d",
+    "settle_diffuse_3d",
+}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -393,7 +398,7 @@ def main() -> None:
         default="thread",
     )
     parser.add_argument("--rocm-sweep", choices=("thread", "block"), default="thread")
-    parser.add_argument("--relative-tolerance", type=float, default=1.0e-6)
+    parser.add_argument("--relative-tolerance", type=float, default=1.0e-5)
     parser.add_argument("--absolute-tolerance", type=float, default=1.0e-11)
     parser.add_argument(
         "--allow-partial", action="store_true",

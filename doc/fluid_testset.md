@@ -56,9 +56,8 @@ The tier controls how evidence should be presented, not whether a test is retain
 
 The expanded four-resolution common matrix retains both publication and release tiers: 77 of its
 105 metrics support the compact publication matrix and 28 are release-only regressions. The
-2026-08-23 CUDA campaign completed this expanded matrix. The latest source-matched CUDA/ROCm
-campaign remains the earlier 85-metric, 57-publication baseline. Per-case, per-model, and aggregate
-JSON manifests store these labels directly.
+source-matched 2026-08-23/24 CUDA/ROCm campaign completed this expanded matrix on both backends.
+Per-case, per-model, and aggregate JSON manifests store these labels directly.
 
 The analytical runner writes every metric, applies a deliberately broad regression gate, and records
 the assessment in a variant-specific model manifest. Legacy cases without a model-owned validator
@@ -713,12 +712,13 @@ not a grid-convergence sequence and does not use one implementation as analytica
 
 ## Latest archived native and cross-backend evidence
 
-### Expanded CUDA archive from 2026-08-23
+### Complete source-matched archives from 2026-08-23/24
 
-The complete CUDA thread-sweep campaign passed 27/27 parameter variants, 105/105 analytical
-metrics, and all eight precise polar-field records. The archive checker found no invalid metrics,
-missing raw fields, failed manifests, or non-finite JSON values. The campaign was internally
-source-stable at the SHA-256 recorded in [`README.md`](README.md).
+The complete CUDA and ROCm thread-sweep campaigns each passed 27/27 parameter variants and 105/105
+analytical metrics. The CUDA archive also supplies all eight precise polar-field records used for
+the direct comparison. Both archive checkers found no invalid metrics, missing fields, failed
+manifests, or non-finite JSON values. Both campaigns were internally stable and used the same
+580-file SHA-256 recorded in [`README.md`](README.md).
 
 The new deterministic sequences passed their full four-resolution gates:
 
@@ -736,21 +736,9 @@ floor. The nonzero mass change is the prescribed outward boundary flux, not a co
 All pre-existing transport, diffusion, source, optical-depth, and coupled-ring variants also passed;
 their measured orders agree with the table below.
 
-This is a native CUDA qualification, not yet an expanded cross-backend qualification. Its recorded
-source fingerprint differs from the current local verification-affecting source-tree fingerprint,
-and no matching expanded ROCm
-archive is present. The numerical evidence must therefore remain associated with the campaign hash
-rather than being described as current-source CUDA/ROCm equivalence.
-
-### Source-matched 2026-08-17 cross-backend archives
-
-The earlier thread-sweep matrix was regenerated on both backends under the source-matched campaign
-recorded in [`README.md`](README.md), which also records the native compilers, targets, drivers,
-and GPUs.
-
-Both pre-expansion aggregate manifests report 22/22 parameter variants and 85/85 metrics passed,
-partitioned into 57 publication and 28 release records. Independent local archive checks found no invalid
-metrics or missing raw fields. The command on each native system was
+The ROCm archive independently passed the same new outflow, positivity, and attenuation criteria.
+The cross-backend metric comparator accepts all 105 common records. The command on each native
+system was
 
 ```bash
 python3 qav/tool/run_all.py --backend BACKEND --target TARGET --res 32 64 128 256
@@ -806,10 +794,11 @@ $h<10^{-4}$. Reanalysis of the unchanged native state reduced the largest compon
 from $2.22\times10^{-5}$ to $2.22\times10^{-16}$; the former value was cancellation in the Python
 reference, not a production-kernel error. Density and total mass are exact to the recorded precision.
 
-### CUDA-versus-ROCm equivalence for the 2026-08-17 baseline
+### CUDA-versus-ROCm equivalence
 
-The pre-expansion complete backend comparison found all 85 analytical metrics on both sides, matching tier
-metadata, no missing records, and zero acceptance mismatches. Polar error norms are particularly
+The complete backend comparison found all 105 analytical metrics on both sides, matching tier
+metadata, no missing records, and zero acceptance mismatches. Deterministic metric records use
+$10^{-5}$ relative and $10^{-11}$ absolute tolerances. Polar error norms are particularly
 sensitive to vendor-dependent reductions, so the gate replaces a direct comparison of those
 already reduced norms with an eight-record raw-field comparison of `test_z_transport_3d` at both
 CFL values and all four resolutions.
@@ -829,16 +818,15 @@ $L_2$ and $3.45\times10^{-4}$ in relative $L_\infty$ only in low-density tails. 
 diagnostics because division by vanishing density is ill-conditioned; conserved fields and the
 density-weighted velocity norm define acceptance.
 
-The comparison report also verifies that the CUDA and ROCm campaign source fingerprints match.
+The comparison report verifies that the CUDA and ROCm campaign source fingerprints match.
 Re-executing the archive checks and both comparison scripts locally from the downloaded tree
 reproduced `PASS` without a GPU runtime.
 
 ### Qualification evidence requiring a separate refresh
 
-Neither the 2026-08-17 cross-backend baseline nor the 2026-08-23 expanded CUDA `run_all.py`
-campaign runs the qualification-only thread/block sweep comparison, deliberate NaN/Inf injection,
-large-LDS launch suite, or performance/profiling campaign. Earlier numerical and timing values for
-those branches are therefore not presented as evidence for either campaign fingerprint.
+The 2026-08-23/24 `run_all.py` campaigns do not run the qualification-only thread/block sweep
+comparison, deliberate NaN/Inf injection, large-LDS launch suite, or performance/profiling
+campaign. Those branches therefore remain separate from this source-matched analytical evidence.
 
 Refresh those independent qualification branches when their claims are needed:
 

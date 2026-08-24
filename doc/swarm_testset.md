@@ -61,9 +61,9 @@ The common archive retains narrow regressions but distinguishes them from code-p
   ten-million-particle KNN runs, and performance/profiling campaigns
 
 With the standard four requested resolutions, the expanded 75-metric analytical swarm matrix
-partitions into 57 publication and 18 release-only records. The 2026-08-23 CUDA campaign completed
-the six new four-resolution sequences. The latest source-matched CUDA/ROCm campaign remains the
-earlier 51-metric, 33-publication baseline. The compact KNN suite is publication evidence for exact
+partitions into 57 publication and 18 release-only records. The source-matched 2026-08-23/24
+CUDA/ROCm campaign completed all six new four-resolution sequences on both backends. The compact
+KNN suite is publication evidence for exact
 neighbor search; `--knn-full` adds qualification evidence rather than strengthening a physical
 convergence claim. These labels are stored in model and aggregate manifests and do not remove any
 test from the release gate.
@@ -1226,7 +1226,7 @@ provide the complementary fully exhaustive small-set checks.
 
 ### Latest archived source-matched KNN evidence
 
-The KNN branches of the 2026-08-17 CUDA and ROCm campaigns used $N_K=200$, a search cutoff of
+The KNN branches of the 2026-08-23/24 CUDA and ROCm campaigns used $N_K=200$, a search cutoff of
 approximately $0.1$, 4096 quality queries, 32 unconditional exhaustive CPU queries, and
 $N_P=10^5$. Each backend compiled all four standalone KNN drivers and linked the real
 `test_collision_1d`, `test_collision_2d`, and `test_collision_3d` production translation units
@@ -1262,8 +1262,8 @@ where values above one favor Morton. The current measurements are
 
 | Backend | Ordinary $S_{\rm query}$ | Wedge $S_{\rm query}$ | Ordinary Morton/KD memory | Wedge Morton/KD memory |
 |---|---:|---:|---:|---:|
-| CUDA A100 | 0.258--0.793 | 0.670--1.278 | 0.718--0.756 | 0.247--0.491 |
-| ROCm MI300A | 0.418--0.869 | 0.671--1.881 | 0.718--0.756 | 0.247--0.491 |
+| CUDA A100 | 0.258--0.793 | 0.669--1.274 | 0.718--0.756 | 0.247--0.491 |
+| ROCm MI300A | 0.386--0.865 | 0.668--1.871 | 0.718--0.756 | 0.247--0.491 |
 
 The compact ghost-record count ranged from $1.0248N_P$ for an interior clump to
 $2.00196N_P$ for a narrow seam clump, compared with the KD-tree's fixed $3N_P$ wedge records.
@@ -1278,8 +1278,8 @@ The `--full` path is configured to add $N_P=10^6$ and $10^7$, producing 21 ordin
 cases. The archived source-matched manifests document the compact $N_P=10^5$ campaign only, so no
 large-particle timing is promoted as archived evidence.
 
-The standalone `*_query_ms` fields measure one complete batch of $N_P$ search queries using CUDA
-events after an untimed warm-up and report the mean of the requested repeats. They include tree
+The standalone `*_query_ms` fields measure one complete batch of $N_P$ search queries using native
+CUDA or HIP events after an untimed warm-up and report the mean of the requested repeats. They include tree
 traversal, top-$K$ maintenance, and the checksum write, but exclude index construction, allocation,
 host-device transfers, brute-force validation, collision-rate physics, and collision events. The
 corresponding `*_build_ms` fields report index construction separately. These search-only timings
@@ -1306,12 +1306,13 @@ production timing comparison.
 
 ## Latest archived native and cross-backend evidence
 
-### Expanded CUDA archive from 2026-08-23
+### Complete source-matched archives from 2026-08-23/24
 
-The complete CUDA campaign passed all 31 analytical/statistical models and all 75 requested
-resolution records. Every model manifest reports `passed: true`; all numeric JSON values are finite.
-The compact KNN suite also passed all four standalone builds, 7/7 ordinary cases, 15/15 edge cases,
-14/14 periodic cases, 10/10 wedge cases, and 6/6 production collision links.
+The complete CUDA and ROCm campaigns each passed all 31 analytical/statistical models and all 75
+requested resolution records. Every model manifest reports `passed: true`; all numeric JSON values
+are finite. On each backend, the compact KNN suite also passed all four standalone builds, 7/7
+ordinary cases, 15/15 edge cases, 14/14 periodic cases, 10/10 wedge cases, and 6/6 production
+collision links.
 
 The six added four-resolution sequences produced the following strongest summary diagnostics:
 
@@ -1336,24 +1337,16 @@ adjudication, with no record-geometry mismatch or traversal-stack overflow. The 
 squared-distance discrepancy was $2.65\times10^{-8}$, within the documented single-precision
 periodic tolerance.
 
-This is a native CUDA qualification, not yet an expanded cross-backend qualification. Its recorded
-source fingerprint differs from the current local verification-affecting source-tree fingerprint,
-and no matching expanded ROCm
-archive is present. The results remain valid for the campaign hash recorded in
-[`README.md`](README.md).
-
-### Source-matched 2026-08-17 cross-backend archives
-
-The earlier common suite was regenerated on CUDA and ROCm under the source-matched campaign recorded in
-[`README.md`](README.md). Both pre-expansion aggregate manifests report 25/25 models passed, comprising 51/51
-analytical metrics, four standalone KNN builds, and six production collision links. The analytical
-metrics partition into 33 publication and 18 release records.
+The two campaigns use the same source fingerprint recorded in [`README.md`](README.md). The
+cross-backend comparator found all 75 records on both sides, equal tier metadata, no missing
+records, and zero acceptance mismatches. The analytical metrics partition into 57 publication and
+18 release records.
 
 | Group | Builds or cases | CUDA | ROCm |
 |---|---:|---:|---:|
 | grid deposition and optical depth in 1D, 2D, and 3D | 12 builds | PASS | PASS |
-| orbit, drag, viscous flow, and transport in 1D and 2D | 11 builds | PASS | PASS |
-| diffusion in 1D, 2D, and 3D | 12 builds | PASS | PASS |
+| orbit, drag, viscous flow, absorption, and transport | 31 builds | PASS | PASS |
+| diffusion and settling--diffusion in 1D, 2D, and 3D | 16 builds | PASS | PASS |
 | continuous finite-domain initialization | 4 builds | PASS | PASS |
 | radiation and P-R drag in 1D and 2D | 4 builds | PASS | PASS |
 | full-disk, wedge, and half-domain boundary maps | 4 builds | PASS | PASS |
@@ -1362,9 +1355,9 @@ metrics partition into 33 publication and 18 release records.
 The detailed KNN component counts, correctness criteria, memory ratios, and timing ranges are
 reported once in “Latest archived native KNN evidence” above.
 
-The pre-expansion backend comparator found all 51 analytical records on both sides, no missing records, and zero
-acceptance mismatches. Twelve stochastic records are compared by pass state and acceptance metadata
-rather than requiring equal random realizations. The KNN comparison found equal component coverage
+Sixteen stochastic records are compared by pass state and acceptance metadata rather than
+requiring equal vendor RNG realizations. All other deterministic metric records use $10^{-5}$
+relative and $10^{-11}$ absolute tolerances. The KNN comparison found equal component coverage
 and passing aggregate manifests on both backends. Independent local archive checks reproduced
 `PASS` for both downloaded archives without invoking either GPU runtime.
 

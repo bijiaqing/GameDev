@@ -58,23 +58,23 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | expanded CUDA archive with 105/105 metrics and eight precise polar records | all native CUDA criteria passed on 2026-08-23; the expanded ROCm and cross-backend refresh remains pending |
-| swarm analytical suite | expanded CUDA archive with 31/31 models and 75/75 metrics | all native CUDA analytical, statistical, and boundary criteria passed on 2026-08-23; the expanded ROCm refresh remains pending |
-| adaptive-Morton KNN | CUDA ordinary, edge, periodic, wedge, and production-link matrices | all 52 compact cases and all four standalone builds passed on 2026-08-23; the expanded ROCm refresh remains pending |
+| fluid analytical suite | source-matched CUDA and ROCm archives with 105/105 metrics on each backend, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-24 |
+| swarm analytical suite | source-matched CUDA and ROCm archives with 31/31 models and 75/75 metrics on each backend | both native archives and the cross-backend comparison passed on 2026-08-24 |
+| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | all 52 compact cases and all four standalone builds passed on each backend with equal coverage |
 
 The expanded CUDA campaign used target `sm_80` and remained internally source-stable at SHA-256
 `2d287994722315384ccc7c0541c1bc6b99840223e0136464d50ad75406fca6b7` across its complete run from
 2026-08-23 12:01 to 14:04 UTC. Its archive checker found no malformed, non-finite, failed, or missing
-records. The downloaded archive contains 523 valid JSON files. The recorded environment was CUDA
+records. The CUDA archive contains 523 valid JSON files. The recorded environment was CUDA
 12.1 (`nvcc` 12.1.105), an NVIDIA A100-SXM4-40GB with driver 580.159.04, and Python 3.13.5.
 
-The campaign fingerprint does not match the current local verification-affecting source-tree fingerprint,
-`5a66e4a3c8eef8b5ebf3ebb59ed23bdc523ec973311dae427e0f94ca6403b9c5`. The results are
-therefore valid evidence for the source identified by the campaign, but are not promoted as a
-current-source CUDA/ROCm equivalence claim. The 2026-08-17 source-matched 85-fluid/51-swarm
-CUDA/ROCm campaign remains the latest complete cross-backend baseline. Recreate both expanded
-native archives from one synchronized source tree before refreshing that claim. The remaining
-coverage limits are listed in the two test-set documents.
+The expanded ROCm campaign used the same 580-file source fingerprint and target `gfx942`; it ran
+with ROCm 7.2.4, AMD clang 22.0.0git, an AMD Instinct MI300A, amdgpu driver 6.16.13, and Python
+3.13.5. Its archive checker also found no invalid or missing records. The local comparison-only
+tool was subsequently corrected to apply the documented $10^{-5}$ deterministic tolerance and to
+treat settling--diffusion as a stochastic acceptance comparison; this does not change either
+native archive. The resulting metric, raw-field, KNN, and provenance comparisons all pass. The
+remaining coverage limits are listed in the two test-set documents.
 
 ## Current cross-representation conventions
 
