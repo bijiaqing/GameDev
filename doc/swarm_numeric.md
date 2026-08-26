@@ -2041,7 +2041,7 @@ which preserves the mass represented by $i$ but is a model-specific one-fragment
 
 #### Guarded CUDA continuous-time collision chain
 
-Defining `COL_CHAIN` selects an alternative CUDA/Morton integrator while leaving the Bernoulli
+Defining `COL_CHAIN` selects an alternative CUDA integrator while leaving the Bernoulli
 method as the default. The spatial index and each owner's physical top-$K$ neighbor identities and
 KNN measure are fixed over one collision operator because positions do not change. At every shorter
 bath boundary, the partner sizes and represented numbers are refreshed from the current population.
@@ -2081,17 +2081,24 @@ logarithmic size change, and redistribution between the same merged bins. The ne
 factor is reduced after persistent activity or distribution overshoot and relaxed only after three
 quiet baths. Completed baths are not rejected and replayed.
 
-CUDA currently uses a full neighbor cache requiring
+Both CUDA search backends populate the same full physical-neighbor cache. The KD-tree path performs
+one exact heap query for each physical tree record and deduplicates overlapping wedge images by
+original particle identifier. The Morton path constructs the same physical top-$K$ contract with
+one cooperative query block per owner. Subsequent bath selection, local chains, controller audits,
+and RNG handling are independent of the search backend.
+
+The cache requires
 
 $$
 M_{\rm cache}=N_P N_K\,\mathrm{sizeof}(\mathtt{int}),
 $$
 
-which is $8.0$ GB in decimal units for $N_P=10^7$ and $N_K=200$, before the Morton hierarchy and
+which is $8.0$ GB in decimal units for $N_P=10^7$ and $N_K=200$, before the selected search index and
 other particle/controller arrays. This initial policy is explicit rather than a production-scale
-memory recommendation. `COL_CHAIN` currently requires `COLLISION_MORTON`; ROCm rejects the flag at
-compile time instead of silently selecting the legacy method. `variables.txt` records the selected
-integrator, controller constants, search method, and shared per-particle RNG-stream policy.
+memory recommendation. CUDA accepts either `COLLISION_KDTREE` or `COLLISION_MORTON`; ROCm rejects
+`COL_CHAIN` at compile time instead of silently selecting the legacy method. `variables.txt`
+records the selected integrator, controller constants, search method, and shared per-particle
+RNG-stream policy.
 
 ### 8.3 Exact neighbor-search contract
 

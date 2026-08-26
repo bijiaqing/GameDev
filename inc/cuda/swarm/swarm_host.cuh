@@ -1110,6 +1110,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
     #ifdef COL_CHAIN
     file << "COLLISION_INTEGRATOR = chain"                                               << std::endl;
+    file << "COL_CHAIN_TPB = " << COL_CHAIN_TPB                                           << std::endl;
     file << "COL_EVENT_CAP  = " << COL_EVENT_CAP                                          << std::endl;
     file << "COL_BATH_MAX   = " << std::scientific << std::setprecision(8) << COL_BATH_MAX << std::endl;
     file << "COL_BATH_EPS   = " << std::scientific << std::setprecision(8) << COL_BATH_EPS << std::endl;

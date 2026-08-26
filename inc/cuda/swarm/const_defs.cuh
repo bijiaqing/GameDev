@@ -119,6 +119,7 @@ const real  V_FRAG      = 1.0;              // the fragmentation velocity for du
 const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
 
 #ifdef COL_CHAIN
+const int   COL_CHAIN_TPB = 256;            // cooperative threads assigned to one collision-chain owner
 const int   COL_EVENT_CAP = 32;              // accepted events permitted per representative and continuation launch
 const int   COL_BIN_X     = 8;               // azimuthal controller bins before reduced-dimension collapse
 const int   COL_BIN_Y     = 4;               // radial controller bins

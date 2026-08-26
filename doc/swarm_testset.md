@@ -242,7 +242,7 @@ The current CUDA matrix covers the following combinations:
 | deterministic boundary helpers | yes | narrow wedge | full disk and half disk |
 | collision measures and kernel numerators | annular | disk/circular cap | ball/radial and polar caps |
 | exact KD-tree/Morton search | collinear radial embedding | ordinary and periodic wedge | ordinary and periodic wedge |
-| end-to-end coupled evolution | no | guarded CUDA/Morton collision-only runtime | no current registered case |
+| end-to-end coupled evolution | no | guarded CUDA collision-only runtime with both search backends | no current registered case |
 
 The 1D model is vertically integrated and azimuthally symmetric but retains midplane dynamical
 closure. The 2D model evolves surface density in $R$ and azimuth. The 3D model stores spherical
@@ -279,7 +279,7 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_collision_2d` | 2D accessible-neighborhood measure and coagulation-kernel numerators | disk and circular-cap areas plus constant, additive, and product rates |
 | `test_collision_3d` | 3D accessible-neighborhood measure and coagulation-kernel numerators | interior, radial-cap, and polar-cap ball volumes plus the same three rates |
 | `test_import_1d` | imported vertically integrated gas coupling | exact $\mathrm{St}=\mathrm{St}_0\Sigma_0/\Sigma_g$ and external-$\Sigma_g$ turbulent Reynolds scaling |
-| `test_colchain_2d` | guarded CUDA/Morton production runtime with the continuous-time frozen-bath collision chain | finite positive species, nontrivial evolution, represented-mass conservation, provenance, RNG checkpointing, and exact repeat determinism |
+| `test_colchain_2d` | guarded CUDA production runtime with KD-tree and Morton collision-chain caches | finite positive species, nontrivial evolution, represented-mass conservation, provenance, equal initialization, RNG checkpointing, and exact repeat determinism within each search backend |
 | `test_boundary_1d` | radial-only transport absorption and diffusion reflection | exact inactive-coordinate locking, repeated radial folding, and absorbing radial endpoint states |
 | `test_boundary_2d` | radial–azimuthal boundary helpers on a narrow periodic wedge | exact multi-wrap azimuth, radial diffusion reflection, radial absorption, and inactive polar state |
 | `test_boundary_3d` | full-disk 3D boundary helpers | exact periodic azimuth, radial/polar diffusion reflection, and radial/polar transport absorption |
@@ -1131,15 +1131,17 @@ is a direct device-helper test with fixed inputs.
 ### Guarded production collision-chain runtime
 
 `test_colchain_2d` is a CUDA-only qualification case that builds the actual production
-`src/cuda/swarm/swarm_runtime.cu` with `COL_CHAIN`, `COLLISION_MORTON`, $N_P=2048$, $N_K=200$, and
-a $32\times32\times1$ radial–azimuthal grid. Unlike the collision-helper cases, it constructs the
-Morton hierarchy, caches physical neighbors, selects controller baths, advances exact local event
-chains with continuation support, writes production checkpoints, and runs through the production
-output path.
+`src/cuda/swarm/swarm_runtime.cu` twice with `COL_CHAIN`: once with `COLLISION_MORTON` and once with
+`COLLISION_KDTREE`. Both variants use $N_P=2048$, $N_K=200$, and a $32\times32\times1$
+radial–azimuthal grid. Unlike the collision-helper cases, each constructs its production search
+index, caches physical neighbors, selects controller baths, advances exact local event chains with
+continuation support, writes production checkpoints, and runs through the production output path.
 
-The wrapper starts the executable twice from the same deterministic initialization and validates
-both the particle and RNG checkpoints. With particle size $s_i$ and represented grain number $N_i$,
-the conserved mass proxy is
+The wrapper starts each search variant twice from the same deterministic initialization and
+validates both the particle and RNG checkpoints. It also requires the two search variants to begin
+from byte-identical particle checkpoints; their final stochastic paths need not be byte-identical
+because an exact top-$K$ set may be traversed in a different slot order. With particle size $s_i$
+and represented grain number $N_i$, the conserved mass proxy is
 
 $$
 \mathcal M_3=\sum_iN_is_i^3,
@@ -1149,10 +1151,10 @@ because the constant factor $\pi\rho_0/6$ cancels in the relative comparison. A 
 
 - every stored particle scalar is finite and every final $s_i,N_i$ is positive
 - at least one particle size changes, proving the event path was exercised
-- $|\mathcal M_3^{\rm final}-\mathcal M_3^{\rm initial}|/\mathcal M_3^{\rm initial}le2\times10^{-12}$
-- `variables.txt` records the chain integrator and Morton search
+- $|\mathcal M_3^{\rm final}-\mathcal M_3^{\rm initial}|/\mathcal M_3^{\rm initial}\le2\times10^{-12}$
+- `variables.txt` records the chain integrator and the requested search backend
 - a nonempty RNG checkpoint is written
-- the two fresh runs have identical final-particle and RNG SHA-256 digests
+- the two fresh runs of each search backend have identical final-particle and RNG SHA-256 digests
 
 This is an integration and reproducibility gate, not an analytical collision-distribution test. It
 does not by itself establish bath-size convergence, force an event-cap continuation, validate the
@@ -1656,7 +1658,7 @@ gradients is also deferred.
 
 ### Other missing verification
 
-- Extend the current-source production collision-chain runtime gate beyond its CUDA/Morton 2D
+- Extend the current-source production collision-chain runtime gate beyond its CUDA 2D
   qualification case to axisymmetry, partial wedges, full 3D, imported gas, coupled operators, and
   $N_P=10^6$; statistically compare complete histories and bath-size convergence
 - Test complete legacy frozen collision batches, the exact Bernoulli probability

@@ -364,6 +364,13 @@ int main (int argc, char **argv)
 
         #ifdef COL_CHAIN
         // retain the fixed geometric neighborhood while baths refresh only collision properties
+        #ifdef COLLISION_KDTREE
+        col_cache_get <<< NB_T, TPB >>> (
+            dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
+            dev_col_active, dev_particle, image_dist_min
+        );
+        CUDA_KERNEL_CHECK("col_cache_get");
+        #else  // COLLISION_MORTON
         col_cache_get <<< N_P, MORTON_TPB >>> (
             dev_col_neighbor, dev_col_measure, dev_morton_overflow, dev_morton_point,
             dev_col_active, dev_particle, morton_owner.view(), morton_owner.unique_ids()
@@ -375,6 +382,7 @@ int main (int argc, char **argv)
         );
         if (max_morton_overflow != 0)
             throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
+        #endif // COLLISION_KDTREE
 
         col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
         CUDA_KERNEL_CHECK("col_space_bin");
@@ -393,7 +401,7 @@ int main (int argc, char **argv)
                 dev_col_complete, dev_particle
             );
             CUDA_KERNEL_CHECK("col_bath_init");
-            col_momnt_get <<< N_P, MORTON_TPB >>> (
+            col_momnt_get <<< N_P, COL_CHAIN_TPB >>> (
                 dev_col_rate, dev_col_jump1, dev_col_jump2, dev_col_jumpmax,
                 dev_particle, dev_col_neighbor, dev_col_measure, dev_col_active,
                 dev_size_old, dev_numr_old,
@@ -451,7 +459,7 @@ int main (int argc, char **argv)
                 if (++continuation_count > 1000000)
                     throw std::runtime_error("collision chain continuation limit exceeded");
                 CUDA_CHECK(cudaMemset(dev_col_unfinished, 0, sizeof(int)));
-                col_chain_run <<< N_P, MORTON_TPB >>> (
+                col_chain_run <<< N_P, COL_CHAIN_TPB >>> (
                     dev_particle, dev_rngstate, dev_col_error, dev_col_unfinished,
                     dev_col_time, dev_col_events, dev_col_complete, dev_col_neighbor,
                     dev_col_measure, dev_col_active, dev_size_old, dev_numr_old,

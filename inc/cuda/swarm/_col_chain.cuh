@@ -12,7 +12,9 @@
 #include <vector>     // std::vector
 
 #include <_collision.cuh>
+#ifdef COLLISION_MORTON
 #include <morton/morton_query.cuh>
+#endif // COLLISION_MORTON
 
 struct col_rate_bin
 {
@@ -176,6 +178,55 @@ void _get_col_jump (real size_i, real size_j, bool fragmentation,
 }
 
 // cache the fixed physical top-K neighborhood once per collision operator
+#ifdef COLLISION_KDTREE
+__global__
+void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
+    const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
+    const unsigned char *dev_col_active, const swarm *dev_particle,
+    float image_dist_min)
+{
+    int idx_tree = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_tree >= N_T || dev_kdtree_node[idx_tree].image != 0) return;
+
+    int idx_old_i = dev_kdtree_node[idx_tree].idx_old;
+    if (dev_col_active[idx_old_i] == 0)
+    {
+        for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+            dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)] = -1;
+        dev_col_measure[idx_old_i] = 0.0;
+        return;
+    }
+
+    real y = dev_particle[idx_old_i].position.y;
+    real z = dev_particle[idx_old_i].position.z;
+    real R = _get_cyl_R(y, z);
+    float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
+
+    // deduplicate overlapping wedge images using the same exact physical-id heap as the legacy search
+    bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*search_dist;
+    kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active);
+    kdtree::cct::knn <kdtree_heap, kdtree_node, kdtree_traits> (
+        near_result, dev_kdtree_node[idx_tree].cartesian,
+        *dev_kdtree_box, dev_kdtree_node, N_T
+    );
+
+    float max_dist_sq = 0.0f;
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+    {
+        int idx_old_j = near_result.returnIndex(idx_neighbor);
+        dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)] = idx_old_j;
+        if (idx_old_j >= 0)
+            max_dist_sq = fmaxf(max_dist_sq, near_result.returnDist2(idx_neighbor));
+    }
+
+    real radius = sqrt(static_cast<real>(max_dist_sq));
+    real measure = _get_ball_measure(y, z, radius);
+    #ifdef COLLISION_UNIT_VOLUME
+    measure = 1.0;
+    #endif // COLLISION_UNIT_VOLUME
+    dev_col_measure[idx_old_i] = measure;
+}
+#else  // COLLISION_MORTON
 __global__
 void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     unsigned int *dev_morton_overflow, const float3 *dev_morton_point,
@@ -239,6 +290,7 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
         dev_morton_overflow[idx_old_i] = stack_overflow;
     }
 }
+#endif // COLLISION_KDTREE
 
 // freeze the partner reservoir and reset continuation state for one bath
 __global__

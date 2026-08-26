@@ -231,6 +231,7 @@ constexpr real V_FRAG = 1.0;
 constexpr real CFL_COL = 0.01;
 
 #ifdef COL_CHAIN
+constexpr int COL_CHAIN_TPB = 256;
 constexpr int COL_EVENT_CAP = 32;
 constexpr int COL_BIN_X = 8;
 constexpr int COL_BIN_Y = 4;

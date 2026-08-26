@@ -317,6 +317,10 @@ def check_make_resolution(errors: list[str]) -> None:
             "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=cuda",
             "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=qualification",
         ],
+        [
+            "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
+        ],
         ["make", "-n", "MODEL=test_failure_2d", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
         ["make", "-n", "MODEL=test_lds_x", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
     )

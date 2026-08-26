@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 
 
@@ -54,7 +55,7 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def run_once(executable: Path, project_root: Path, out_dir: Path) -> dict:
+def run_once(executable: Path, project_root: Path, out_dir: Path, search: str) -> dict:
     """Run one fresh realization and return physical and byte-level diagnostics"""
 
     subprocess.run([str(executable)], cwd=project_root, check=True)
@@ -88,10 +89,8 @@ def run_once(executable: Path, project_root: Path, out_dir: Path) -> dict:
     mass_final = represented_mass(final)
     mass_relative = abs(mass_final - mass_initial) / mass_initial
     variables = variable_path.read_text()
-    provenance = (
-        "COLLISION_INTEGRATOR = chain" in variables
-        and "COLLISION_SEARCH = morton" in variables
-    )
+    provenance = "COLLISION_INTEGRATOR = chain" in variables \
+        and f"COLLISION_SEARCH = {search}" in variables
     return {
         "particle_count": len(final) // PARTICLE_FIELDS,
         "finite": finite,
@@ -101,6 +100,7 @@ def run_once(executable: Path, project_root: Path, out_dir: Path) -> dict:
         "mass_final": mass_final,
         "mass_relative_error": mass_relative,
         "provenance": provenance,
+        "initial_sha256": digest(initial_path),
         "particle_sha256": digest(final_path),
         "rng_sha256": digest(rng_path),
     }
@@ -109,6 +109,10 @@ def run_once(executable: Path, project_root: Path, out_dir: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", default=os.environ.get("CUDA_ARCH", "sm_80"))
+    parser.add_argument(
+        "--search", choices=("both", "kdtree", "morton"), default="both",
+        help="neighbor-search backend or both production implementations",
+    )
     parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args()
 
@@ -120,43 +124,69 @@ def main() -> None:
     out_dir = scope_root/MODEL
     out_dir.mkdir(parents=True, exist_ok=True)
     for path in out_dir.iterdir():
-        if path.is_file():
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
             path.unlink()
 
-    make_base = [
-        "make", "-C", str(project_root), f"MODEL={MODEL}", "GPU_BACKEND=cuda",
-        f"GPU_TARGET={args.target}", "COLLISION_SEARCH=morton", f"QAV_SCOPE={scope}",
-    ]
-    subprocess.run([*make_base, "clean"], check=True)
-    subprocess.run(make_base, check=True)
+    searches = ("morton", "kdtree") if args.search == "both" else (args.search,)
+    executable = Path(__file__).resolve().parent/"gamedev"
+    search_results = {}
+    for search in searches:
+        search_dir = out_dir/search
+        make_base = [
+            "make", "-C", str(project_root), f"MODEL={MODEL}", "GPU_BACKEND=cuda",
+            f"GPU_TARGET={args.target}", f"COLLISION_SEARCH={search}",
+            f"QAV_SCOPE={scope}", f"OUT_TAG={search}",
+        ]
+        subprocess.run([*make_base, "clean"], check=True)
+        subprocess.run(make_base, check=True)
+        if args.build_only:
+            continue
+
+        first = run_once(executable, project_root, search_dir, search)
+        second = run_once(executable, project_root, search_dir, search)
+        deterministic = (
+            first["particle_sha256"] == second["particle_sha256"]
+            and first["rng_sha256"] == second["rng_sha256"]
+        )
+        passed = (
+            first["finite"]
+            and first["positive_species"]
+            and first["changed_particles"] > 0
+            and first["mass_relative_error"] <= 2.0e-12
+            and first["provenance"]
+            and deterministic
+        )
+        search_results[search] = {
+            "runs": [first, second],
+            "repeat_deterministic": deterministic,
+            "passed": passed,
+        }
+        print(
+            f"{MODEL}/{search}: {'PASS' if passed else 'FAIL'} "
+            f"changed={first['changed_particles']} "
+            f"mass_relative={first['mass_relative_error']:.3e} "
+            f"repeat_equal={deterministic}",
+            flush=True,
+        )
+
     if args.build_only:
         return
 
-    executable = Path(__file__).resolve().parent/"gamedev"
-    first = run_once(executable, project_root, out_dir)
-    second = run_once(executable, project_root, out_dir)
-    deterministic = (
-        first["particle_sha256"] == second["particle_sha256"]
-        and first["rng_sha256"] == second["rng_sha256"]
-    )
-    passed = (
-        first["finite"]
-        and first["positive_species"]
-        and first["changed_particles"] > 0
-        and first["mass_relative_error"] <= 2.0e-12
-        and first["provenance"]
-        and deterministic
-    )
+    initial_equal = len(search_results) < 2 or len({
+        result["runs"][0]["initial_sha256"] for result in search_results.values()
+    }) == 1
+    passed = all(result["passed"] for result in search_results.values()) and initial_equal
     manifest = {
-        "schema": 1,
+        "schema": 2,
         "model": MODEL,
         "backend": "cuda",
         "gpu_target": args.target,
         "tier": "qualification",
         "integrator": "chain",
-        "search": "morton",
-        "runs": [first, second],
-        "repeat_deterministic": deterministic,
+        "searches": search_results,
+        "initial_byte_equal": initial_equal,
         "mass_tolerance": 2.0e-12,
         "passed": passed,
         "finished_utc": utc_now(),
@@ -165,9 +195,8 @@ def main() -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     print(
         f"{MODEL}: {'PASS' if passed else 'FAIL'} "
-        f"changed={first['changed_particles']} "
-        f"mass_relative={first['mass_relative_error']:.3e} "
-        f"repeat_equal={deterministic} manifest={manifest_path}",
+        f"searches={','.join(searches)} initial_equal={initial_equal} "
+        f"manifest={manifest_path}",
         flush=True,
     )
     if not passed:

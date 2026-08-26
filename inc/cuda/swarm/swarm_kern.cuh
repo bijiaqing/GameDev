@@ -35,11 +35,9 @@
 #error "COLLISION requires exactly one of COLLISION_KDTREE or COLLISION_MORTON"
 #endif // COLLISION backend selection
 
-#if defined(COL_CHAIN) && !defined(COLLISION_MORTON)
-#error "COL_CHAIN currently requires COLLISION_MORTON"
-#endif // COL_CHAIN && !COLLISION_MORTON
-
 #ifdef COL_CHAIN
+static_assert(COL_CHAIN_TPB > 0 && COL_CHAIN_TPB <= 1024,
+    "COL_CHAIN requires 0 < COL_CHAIN_TPB <= 1024");
 static_assert(COL_EVENT_CAP > 0, "COL_CHAIN requires COL_EVENT_CAP > 0");
 static_assert(COL_BIN_X > 0 && COL_BIN_Y > 0 && COL_BIN_Z > 0 && COL_BIN_S > 0,
     "COL_CHAIN controller-bin counts must be positive");
