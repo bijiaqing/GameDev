@@ -41,11 +41,9 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     // sample whether this representative experiences one event during the frozen-rate interval
     curs rngstate = dev_rngstate[idx_old_i];
     real event_prob = -expm1(-col_rate_i*dt_col);
-    if (curand_uniform_double(&rngstate) > event_prob)
-    {
-        dev_rngstate[idx_old_i] = rngstate;
-        return;
-    }
+    bool run_event = curand_uniform_double(&rngstate) <= event_prob;
+    dev_rngstate[idx_old_i] = rngstate; // commit every consumed draw before any later terminal path
+    if (!run_event) return;
 
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
@@ -67,6 +65,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
     // select the collision partner from cumulative pair propensity rather than neighbor rank
     real target = col_rate_i*curand_uniform_double(&rngstate);
+    dev_rngstate[idx_old_i] = rngstate;
     real cumulative = 0.0;
     int idx_old_j = -1;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
@@ -154,7 +153,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
             rngstate = dev_rngstate[idx_old_i];
             real event_prob = -expm1(-col_rate_i*dt_col);
             run_event = curand_uniform_double(&rngstate) <= event_prob;
-            if (!run_event) dev_rngstate[idx_old_i] = rngstate;
+            dev_rngstate[idx_old_i] = rngstate; // commit every consumed draw before any later terminal path
         }
     }
     __syncthreads();
@@ -219,6 +218,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     if (measure <= 0.0) return;
 
     real target = dev_col_rate[idx_old_i]*curand_uniform_double(&rngstate);
+    dev_rngstate[idx_old_i] = rngstate;
     real cumulative = 0.0;
     int idx_old_j = -1;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)

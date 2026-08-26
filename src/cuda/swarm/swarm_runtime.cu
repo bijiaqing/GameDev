@@ -6,6 +6,7 @@
 #include <limits>           // std::numeric_limits
 #include <sstream>          // std::stringstream
 #include <stdexcept>        // std::runtime_error
+#include <string>           // std::string, std::to_string
 #include <vector>           // std::vector
 
 #if defined(TRANSPORT) || defined(COLLISION)
@@ -15,6 +16,10 @@
 
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
+
+#ifdef COL_CHAIN
+#include <_col_chain.cuh>
+#endif // COL_CHAIN
 
 #ifdef COLLISION_MORTON
 #include <morton/morton_ghost.cuh>
@@ -130,11 +135,40 @@ int main (int argc, char **argv)
     morton_ghost_index morton_owner;
     #endif // COLLISION_KDTREE
 
-    real *dev_size_old, *dev_numr_old, *dev_col_rate, *dev_col_dist;
+    real *dev_size_old, *dev_numr_old, *dev_col_rate;
     CUDA_CHECK(cudaMalloc((void**)&dev_size_old, sizeof(real)*N_P));
     CUDA_CHECK(cudaMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
     CUDA_CHECK(cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
+
+    #ifdef COL_CHAIN
+    const std::size_t col_neighbor_count = static_cast<std::size_t>(N_P)*N_K;
+    const int col_raw_count = _get_col_raw_count();
+    int *dev_col_neighbor, *dev_col_events, *dev_col_spatial;
+    int *dev_col_count, *dev_col_binmap, *dev_col_error, *dev_col_unfinished;
+    real *dev_col_measure, *dev_col_time, *dev_col_jump1, *dev_col_jump2, *dev_col_jumpmax;
+    unsigned char *dev_col_complete;
+    col_rate_bin *dev_col_ratebin;
+    col_audit_accum *dev_col_audit;
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_events, sizeof(int)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_spatial, sizeof(int)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_count, sizeof(int)*col_raw_count));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_binmap, sizeof(int)*col_raw_count));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_error, sizeof(int)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_unfinished, sizeof(int)));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_time, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_jump1, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_jump2, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_jumpmax, sizeof(real)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_complete, sizeof(unsigned char)*N_P));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
+    CUDA_CHECK(cudaMemset(dev_col_error, 0, sizeof(int)*N_P));
+    #else  // LEGACY_COLLISION
+    real *dev_col_dist;
     CUDA_CHECK(cudaMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
+    #endif // COL_CHAIN
     #endif // COLLISION
 
     #if defined(COLLISION) || defined(DIFFUSION)
@@ -292,7 +326,7 @@ int main (int argc, char **argv)
     #endif // LOGTIMING
 
     #ifdef COLLISION
-    // evolve collisions over a fixed-position interval with controlled frozen-rate Bernoulli batches
+    // evolve collisions over a fixed-position interval with the configured collision integrator
     auto evolve_collisions = [&] (real duration)
     {
         // collisions change grain properties but not positions, so one search index serves the full interval
@@ -328,6 +362,135 @@ int main (int argc, char **argv)
         );
         #endif // COLLISION_KDTREE
 
+        #ifdef COL_CHAIN
+        // retain the fixed geometric neighborhood while baths refresh only collision properties
+        col_cache_get <<< N_P, MORTON_TPB >>> (
+            dev_col_neighbor, dev_col_measure, dev_morton_overflow, dev_morton_point,
+            dev_col_active, dev_particle, morton_owner.view(), morton_owner.unique_ids()
+        );
+        CUDA_KERNEL_CHECK("col_cache_get");
+        thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
+        unsigned int max_morton_overflow = *thrust::max_element(
+            morton_overflow_ptr, morton_overflow_ptr + N_P
+        );
+        if (max_morton_overflow != 0)
+            throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
+
+        col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
+        CUDA_KERNEL_CHECK("col_space_bin");
+
+        std::vector<int> col_count(col_raw_count);
+        std::vector<int> col_binmap(col_raw_count);
+        std::vector<col_rate_bin> col_ratebin(col_raw_count);
+        std::vector<col_audit_accum> col_audit(col_raw_count);
+        col_bath_state bath_state;
+        real elapsed = 0.0;
+        int continuation_count = 0;
+        while (elapsed < duration)
+        {
+            col_bath_init <<< NB_P, TPB >>> (
+                dev_size_old, dev_numr_old, dev_col_time, dev_col_events,
+                dev_col_complete, dev_particle
+            );
+            CUDA_KERNEL_CHECK("col_bath_init");
+            col_momnt_get <<< N_P, MORTON_TPB >>> (
+                dev_col_rate, dev_col_jump1, dev_col_jump2, dev_col_jumpmax,
+                dev_particle, dev_col_neighbor, dev_col_measure, dev_col_active,
+                dev_size_old, dev_numr_old,
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass
+            );
+            CUDA_KERNEL_CHECK("col_momnt_get");
+
+            CUDA_CHECK(cudaMemset(dev_col_count, 0, sizeof(int)*col_raw_count));
+            col_count_bin <<< NB_P, TPB >>> (
+                dev_col_count, dev_particle, dev_col_spatial, dev_col_active
+            );
+            CUDA_KERNEL_CHECK("col_count_bin");
+            CUDA_CHECK(cudaMemcpy(
+                col_count.data(), dev_col_count, sizeof(int)*col_raw_count, cudaMemcpyDeviceToHost
+            ));
+            int col_merged_count = _build_col_binmap(col_count, col_binmap);
+            CUDA_CHECK(cudaMemcpy(
+                dev_col_binmap, col_binmap.data(), sizeof(int)*col_raw_count, cudaMemcpyHostToDevice
+            ));
+
+            CUDA_CHECK(cudaMemset(dev_col_ratebin, 0, sizeof(col_rate_bin)*col_raw_count));
+            col_rate_bins <<< NB_P, TPB >>> (
+                dev_col_ratebin, dev_particle, dev_col_rate, dev_col_jump1, dev_col_jump2,
+                dev_col_jumpmax, dev_col_spatial, dev_col_binmap, dev_col_active
+            );
+            CUDA_KERNEL_CHECK("col_rate_bins");
+            CUDA_CHECK(cudaMemcpy(
+                col_ratebin.data(), dev_col_ratebin, sizeof(col_rate_bin)*col_merged_count,
+                cudaMemcpyDeviceToHost
+            ));
+
+            real active_mass = 0.0;
+            for (int idx_bin = 0; idx_bin < col_merged_count; idx_bin++)
+            {
+                if (col_ratebin[idx_bin].invalid_count != 0)
+                    throw std::runtime_error("collision bath controller returned invalid rate moments");
+                active_mass += col_ratebin[idx_bin].mass;
+            }
+            if (!(active_mass > 0.0))
+            {
+                dt_col = duration - elapsed;
+                elapsed = duration;
+                break;
+            }
+
+            dt_col = _choose_col_bath(
+                col_ratebin, col_merged_count, duration - elapsed, bath_state.limit_scale
+            );
+            int unfinished = N_P;
+            while (unfinished > 0)
+            {
+                if (++continuation_count > 1000000)
+                    throw std::runtime_error("collision chain continuation limit exceeded");
+                CUDA_CHECK(cudaMemset(dev_col_unfinished, 0, sizeof(int)));
+                col_chain_run <<< N_P, MORTON_TPB >>> (
+                    dev_particle, dev_rngstate, dev_col_error, dev_col_unfinished,
+                    dev_col_time, dev_col_events, dev_col_complete, dev_col_neighbor,
+                    dev_col_measure, dev_col_active, dev_size_old, dev_numr_old,
+                    #ifdef IMPORTGAS
+                    dev_gas_dens,
+                    #endif // IMPORTGAS
+                    N_P / (N_K - 1.0) / total_dust_mass, dt_col
+                );
+                CUDA_KERNEL_CHECK("col_chain_run");
+                CUDA_CHECK(cudaMemcpy(
+                    &unfinished, dev_col_unfinished, sizeof(int), cudaMemcpyDeviceToHost
+                ));
+            }
+
+            thrust::device_ptr <const int> col_error_ptr(dev_col_error);
+            int max_col_error = *thrust::max_element(col_error_ptr, col_error_ptr + N_P);
+            if (max_col_error != 0)
+                throw std::runtime_error("collision chain returned error " + std::to_string(max_col_error));
+
+            CUDA_CHECK(cudaMemset(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
+            col_audit_bin <<< NB_P, TPB >>> (
+                dev_col_audit, dev_particle, dev_size_old, dev_numr_old, dev_col_rate,
+                dev_col_jump1, dev_col_jump2, dev_col_jumpmax, dev_col_events,
+                dev_col_spatial, dev_col_binmap, dev_col_active, dt_col
+            );
+            CUDA_KERNEL_CHECK("col_audit_bin");
+            CUDA_CHECK(cudaMemcpy(
+                col_audit.data(), dev_col_audit, sizeof(col_audit_accum)*col_merged_count,
+                cudaMemcpyDeviceToHost
+            ));
+            _finish_col_bath(col_audit, col_merged_count, bath_state);
+
+            elapsed += dt_col;
+            if (duration - elapsed < 8.0*std::numeric_limits<real>::epsilon()*duration)
+                elapsed = duration;
+            clock_dyn = elapsed;
+            count_col++;
+        }
+        #else  // LEGACY_COLLISION
         real elapsed = 0.0;
         while (elapsed < duration)
         {
@@ -417,6 +580,7 @@ int main (int argc, char **argv)
             clock_dyn = elapsed;
             count_col++;
         }
+        #endif // COL_CHAIN
     };
     #endif // COLLISION
 

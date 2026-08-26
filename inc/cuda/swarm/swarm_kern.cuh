@@ -1,6 +1,8 @@
 #ifndef SWARM_KERN_CUH
 #define SWARM_KERN_CUH
 
+#include <const_defs.cuh>
+
 #if defined(DIFFUSION) && !defined(TRANSPORT)
 #error "DIFFUSION requires TRANSPORT"
 #endif // DIFFUSION && !TRANSPORT
@@ -33,6 +35,24 @@
 #error "COLLISION requires exactly one of COLLISION_KDTREE or COLLISION_MORTON"
 #endif // COLLISION backend selection
 
+#if defined(COL_CHAIN) && !defined(COLLISION_MORTON)
+#error "COL_CHAIN currently requires COLLISION_MORTON"
+#endif // COL_CHAIN && !COLLISION_MORTON
+
+#ifdef COL_CHAIN
+static_assert(COL_EVENT_CAP > 0, "COL_CHAIN requires COL_EVENT_CAP > 0");
+static_assert(COL_BIN_X > 0 && COL_BIN_Y > 0 && COL_BIN_Z > 0 && COL_BIN_S > 0,
+    "COL_CHAIN controller-bin counts must be positive");
+static_assert(COL_BIN_MIN > 0, "COL_CHAIN requires COL_BIN_MIN > 0");
+static_assert(COL_BATH_MAX > 0.0, "COL_CHAIN requires COL_BATH_MAX > 0");
+static_assert(COL_BATH_EPS > 0.0 && COL_BATH_EPS < 1.0,
+    "COL_CHAIN requires 0 < COL_BATH_EPS < 1");
+static_assert(COL_BATH_ALPHA > 0.0 && COL_BATH_ALPHA < 1.0,
+    "COL_CHAIN requires 0 < COL_BATH_ALPHA < 1");
+static_assert(COL_SIZE_MIN > 0.0 && COL_SIZE_MAX > COL_SIZE_MIN,
+    "COL_CHAIN requires COL_SIZE_MAX > COL_SIZE_MIN > 0");
+#endif // COL_CHAIN
+
 #if !defined(TRANSPORT) && !defined(COLLISION)
 #error "No evolution module is enabled"
 #endif // !TRANSPORT && !COLLISION
@@ -48,8 +68,6 @@
 #if defined(LOGTIMING) && defined(SAVE_DENS)
 #error "LOGTIMING is not compatible with SAVE_DENS"
 #endif // LOGTIMING && SAVE_DENS
-
-#include <const_defs.cuh>
 
 #ifdef COLLISION_MORTON
 #include <morton/morton_types.cuh>

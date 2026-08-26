@@ -28,6 +28,9 @@ from qav_config import (
 )
 
 
+CUDA_GROUPS = {"chain": ["test_colchain_2d"]}
+
+
 def utc_now() -> str:
     """Return a stable UTC timestamp for the aggregate manifest"""
 
@@ -58,7 +61,9 @@ def write_manifest(path: Path, manifest: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--group", choices=("all", "radial", *SWARM_GROUPS), default="all")
+    parser.add_argument(
+        "--group", choices=("all", "radial", *SWARM_GROUPS, *CUDA_GROUPS), default="all"
+    )
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--build-only", action="store_true")
@@ -85,11 +90,14 @@ def main() -> None:
 
     # preserve the order in GROUPS so terminal output follows the progression
     # from grid primitives to coupled physical operators
-    models = swarm_models(args.group)
+    models = CUDA_GROUPS[args.group] if args.group in CUDA_GROUPS else swarm_models(args.group)
 
     entries = []
+    qualification_group = args.group in CUDA_GROUPS
     for model in models:
-        model_resolutions = resolutions[:1] if model in SWARM_FIXED_RESOLUTION else resolutions
+        chain_model = model == "test_colchain_2d"
+        model_resolutions = [] if chain_model \
+            else (resolutions[:1] if model in SWARM_FIXED_RESOLUTION else resolutions)
         if model == "test_knn":
             output = "test_knn/suite_manifest.json"
         else:
@@ -97,19 +105,24 @@ def main() -> None:
         entries.append({
             "model": model,
             "resolutions": model_resolutions,
-            "tier": swarm_model_tier(model),
-            "resolution_tiers": swarm_resolution_tiers(model, model_resolutions),
+            "tier": QUALIFICATION_TIER if qualification_group else swarm_model_tier(model),
+            "resolution_tiers": [] if chain_model \
+                else swarm_resolution_tiers(model, model_resolutions),
             "extended_tier": "qualification" if model == "test_knn" and args.knn_full else None,
             "output": None if args.build_only else output,
             "status": "pending",
         })
 
-    metric_tiers = swarm_metric_tiers(models, resolutions)
-    included_tiers = [
-        tier for tier in (PUBLICATION_TIER, RELEASE_TIER) if metric_tiers[tier] > 0
-    ]
-    if args.knn_full and "test_knn" in models:
-        included_tiers.append(QUALIFICATION_TIER)
+    if qualification_group:
+        metric_tiers = {QUALIFICATION_TIER: len(models)}
+        included_tiers = [QUALIFICATION_TIER]
+    else:
+        metric_tiers = swarm_metric_tiers(models, resolutions)
+        included_tiers = [
+            tier for tier in (PUBLICATION_TIER, RELEASE_TIER) if metric_tiers[tier] > 0
+        ]
+        if args.knn_full and "test_knn" in models:
+            included_tiers.append(QUALIFICATION_TIER)
 
     manifest = {
         "schema": 1,
@@ -124,14 +137,16 @@ def main() -> None:
         "build_only": args.build_only,
         "reconstructed": args.rebuild_manifest,
         "gpu_target": args.target,
-        "campaign_tier": RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER,
+        "campaign_tier": QUALIFICATION_TIER if qualification_group else (
+            RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER
+        ),
         "included_tiers": included_tiers,
         "metric_tiers": metric_tiers,
         "models_expected": len(models),
         "models_completed": 0,
         "analytical_builds_expected": sum(
             len(entry["resolutions"]) for entry in entries
-            if entry["model"] != "test_knn"
+            if entry["model"] not in {"test_knn", "test_colchain_2d"}
         ),
         "knn_standalone_builds_expected": (
             2 if args.group == "radial" else 4
@@ -187,7 +202,9 @@ def main() -> None:
 
     for idx_model, model in enumerate(models):
         model_resolutions = entries[idx_model]["resolutions"]
-        command = [sys.executable, str(root/model/"run.py"), "--res", *(str(value) for value in model_resolutions)]
+        command = [sys.executable, str(root/model/"run.py")]
+        if model != "test_colchain_2d":
+            command.extend(("--res", *(str(value) for value in model_resolutions)))
         if args.build_only:
             command.append("--build-only")
         if model == "test_knn" and args.group == "radial":

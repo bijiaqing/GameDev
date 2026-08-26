@@ -36,7 +36,9 @@ constexpr real S_0 = 1.0;
 
 // particle counts are test samples rather than production population choices: use only enough representatives to cover the
 // analytical cases, except for stochastic distribution tests that need a statistically meaningful ensemble
-#if defined(TEST_SETTLE_DIFFUSE_3D)
+#if defined(TEST_COLCHAIN_2D)
+constexpr int N_P = 2048;
+#elif defined(TEST_SETTLE_DIFFUSE_3D)
 constexpr int N_P = 65536;
 #elif defined(TEST_ORBIT_ECC_2D) || defined(TEST_ORBIT_BETA_2D) || defined(TEST_ORBIT_INC_3D)
 constexpr int N_P = 4;
@@ -68,7 +70,11 @@ constexpr int N_P = 64;
 #endif
 
 // activate only the coordinates needed by each claim and keep inactive dimensions explicit to expose indexing mistakes
-#if defined(TEST_GRID_1D)
+#if defined(TEST_COLCHAIN_2D)
+constexpr int N_X = 32;
+constexpr int N_Y = 32;
+constexpr int N_Z = 1;
+#elif defined(TEST_GRID_1D)
 constexpr int N_X = 1;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = 1;
@@ -211,7 +217,11 @@ constexpr real INIT_SMAX = 6.4;
 #ifdef COLLISION
 constexpr real REYNOLDS_0 = 1.0e8;
 constexpr int COAG_KERNEL = 0;
+#ifdef TEST_COLCHAIN_2D
+constexpr int N_K = 200;
+#else
 constexpr int N_K = 2;
+#endif // TEST_COLCHAIN_2D
 #ifdef TEST_ABSORB_PATH_1D
 constexpr real H_SEARCH = 10.0;
 #else  // OTHER TESTS
@@ -219,6 +229,20 @@ constexpr real H_SEARCH = 1.0;
 #endif // TEST_ABSORB_PATH_1D
 constexpr real V_FRAG = 1.0;
 constexpr real CFL_COL = 0.01;
+
+#ifdef COL_CHAIN
+constexpr int COL_EVENT_CAP = 32;
+constexpr int COL_BIN_X = 8;
+constexpr int COL_BIN_Y = 4;
+constexpr int COL_BIN_Z = 2;
+constexpr int COL_BIN_S = 8;
+constexpr int COL_BIN_MIN = 64;
+constexpr real COL_BATH_MAX = 0.05;
+constexpr real COL_BATH_EPS = 0.06;
+constexpr real COL_BATH_ALPHA = 1.0e-3;
+constexpr real COL_SIZE_MIN = 0.5*INIT_SMIN;
+constexpr real COL_SIZE_MAX = 8.0*INIT_SMAX;
+#endif // COL_CHAIN
 #endif
 
 #ifdef COLLISION_MORTON
@@ -229,7 +253,12 @@ constexpr int MORTON_WORK_SIZE = 1024;
 #endif
 
 constexpr int SAVE_MAX = 1;
-constexpr real DT_OUT = 1.0;
+constexpr real DT_OUT =
+#ifdef TEST_COLCHAIN_2D
+    1.0e-3;
+#else
+    1.0;
+#endif // TEST_COLCHAIN_2D
 constexpr real DT_MAX = 1.0;
 constexpr real CFL_DYN = 0.5;
 constexpr int LIN_BASE = 1;

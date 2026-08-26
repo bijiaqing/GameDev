@@ -242,7 +242,7 @@ The current CUDA matrix covers the following combinations:
 | deterministic boundary helpers | yes | narrow wedge | full disk and half disk |
 | collision measures and kernel numerators | annular | disk/circular cap | ball/radial and polar caps |
 | exact KD-tree/Morton search | collinear radial embedding | ordinary and periodic wedge | ordinary and periodic wedge |
-| end-to-end coupled evolution | no | no current registered case | no current registered case |
+| end-to-end coupled evolution | no | guarded CUDA/Morton collision-only runtime | no current registered case |
 
 The 1D model is vertically integrated and azimuthally symmetric but retains midplane dynamical
 closure. The 2D model evolves surface density in $R$ and azimuth. The 3D model stores spherical
@@ -279,6 +279,7 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_collision_2d` | 2D accessible-neighborhood measure and coagulation-kernel numerators | disk and circular-cap areas plus constant, additive, and product rates |
 | `test_collision_3d` | 3D accessible-neighborhood measure and coagulation-kernel numerators | interior, radial-cap, and polar-cap ball volumes plus the same three rates |
 | `test_import_1d` | imported vertically integrated gas coupling | exact $\mathrm{St}=\mathrm{St}_0\Sigma_0/\Sigma_g$ and external-$\Sigma_g$ turbulent Reynolds scaling |
+| `test_colchain_2d` | guarded CUDA/Morton production runtime with the continuous-time frozen-bath collision chain | finite positive species, nontrivial evolution, represented-mass conservation, provenance, RNG checkpointing, and exact repeat determinism |
 | `test_boundary_1d` | radial-only transport absorption and diffusion reflection | exact inactive-coordinate locking, repeated radial folding, and absorbing radial endpoint states |
 | `test_boundary_2d` | radial–azimuthal boundary helpers on a narrow periodic wedge | exact multi-wrap azimuth, radial diffusion reflection, radial absorption, and inactive polar state |
 | `test_boundary_3d` | full-disk 3D boundary helpers | exact periodic azimuth, radial/polar diffusion reflection, and radial/polar transport absorption |
@@ -1127,6 +1128,37 @@ independently evaluated CPU formulas above to the stated absolute tolerance. The
 not used as the reference, and resolution convergence is neither required nor implied because this
 is a direct device-helper test with fixed inputs.
 
+### Guarded production collision-chain runtime
+
+`test_colchain_2d` is a CUDA-only qualification case that builds the actual production
+`src/cuda/swarm/swarm_runtime.cu` with `COL_CHAIN`, `COLLISION_MORTON`, $N_P=2048$, $N_K=200$, and
+a $32\times32\times1$ radial–azimuthal grid. Unlike the collision-helper cases, it constructs the
+Morton hierarchy, caches physical neighbors, selects controller baths, advances exact local event
+chains with continuation support, writes production checkpoints, and runs through the production
+output path.
+
+The wrapper starts the executable twice from the same deterministic initialization and validates
+both the particle and RNG checkpoints. With particle size $s_i$ and represented grain number $N_i$,
+the conserved mass proxy is
+
+$$
+\mathcal M_3=\sum_iN_is_i^3,
+$$
+
+because the constant factor $\pi\rho_0/6$ cancels in the relative comparison. A run passes only if
+
+- every stored particle scalar is finite and every final $s_i,N_i$ is positive
+- at least one particle size changes, proving the event path was exercised
+- $|\mathcal M_3^{\rm final}-\mathcal M_3^{\rm initial}|/\mathcal M_3^{\rm initial}le2\times10^{-12}$
+- `variables.txt` records the chain integrator and Morton search
+- a nonempty RNG checkpoint is written
+- the two fresh runs have identical final-particle and RNG SHA-256 digests
+
+This is an integration and reproducibility gate, not an analytical collision-distribution test. It
+does not by itself establish bath-size convergence, force an event-cap continuation, validate the
+custom physical kernel or fragmentation, exercise imported gas or operator coupling, or determine
+production-scale memory and performance.
+
 ## KNN implementation and periodic-ghost comparison
 
 `qav/cuda/swarm/test_knn/` and `qav/rocm/swarm/test_knn/` provide the backend KNN drivers;
@@ -1372,12 +1404,27 @@ The complete campaign does not refresh same-backend restart or deliberate failur
 Run those qualification-only branches independently when their claims are needed:
 
 ```bash
+python3 qav/cuda/swarm/test_common/run_suite.py --group chain --target sm_80
 python3 qav/rocm/swarm/test_common/run_suite.py --group restart --res 32 --target gfx942
 python3 qav/rocm/swarm/test_common/run_suite.py --group failure --target gfx942
 ```
 
 Focused evidence is stored below `groups/GROUP/`, so it cannot replace the common `all` archive.
 The complete backend-neutral transfer and comparison workflow is specified in `qav/README.md`.
+
+The source-matched native `sm_80` chain qualification completed on 2026-08-26. Its two fresh
+production-runtime executions each changed 516 of 2048 representatives, retained finite positive
+states, and reported zero relative drift in $\mathcal M_3$. Their final particle checkpoints were
+byte-identical with SHA-256
+`bbdb178cf729b42767c27542159319aa4ba79b6193485220a8ac6727df051973`; their RNG checkpoints were
+also byte-identical with SHA-256
+`2dca612c5d133cc44f5eb95fb14d71c9f5ec9cbcc21097c8b8288737c5c95e2c`. The aggregate and component
+manifests both report `passed: true`.
+
+The accompanying CUDA legacy-collision regression also passed all four $N=32$ cases after the RNG
+commit correction. Maximum $L_\infty$ errors were zero in 1D, $2.78\times10^{-17}$ for imported-gas
+scaling, $2.78\times10^{-17}$ in 2D, and $6.94\times10^{-18}$ in 3D. This confirms that the guarded
+integration and RNG housekeeping did not change the existing collision-helper results.
 
 ### Recorded initialization results
 
@@ -1508,7 +1555,11 @@ python3 qav/cuda/swarm/test_common/run_suite.py --group radiation --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group boundary  --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group collision --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group knn       --res 32
+python3 qav/cuda/swarm/test_common/run_suite.py --group chain     --target sm_80
 ```
+
+The `chain` group is a CUDA-only qualification branch and is intentionally excluded from `all`
+until the same production method exists and passes natively on ROCm.
 
 The radial implementation can be isolated before the full regression with
 
@@ -1605,13 +1656,13 @@ gradients is also deferred.
 
 ### Other missing verification
 
-- Add current-source production collision-runtime comparisons for axisymmetry, partial wedges,
-  full 3D, and $N_P=10^6$; the present suite compiles both search backends but does not evolve and
-  statistically compare complete collision histories
-- Test complete frozen collision batches, the exact Bernoulli probability
-  $1-e^{-\lambda\Delta t}$, partner sampling, representative-mass conservation, and convergence
-  with `CFL_COL`, $N_K$, $N_P$, and `H_SEARCH`; include a uniform-density field with a known rate
-  and a forced fragmentation case that exercises the size and represented-number update
+- Extend the current-source production collision-chain runtime gate beyond its CUDA/Morton 2D
+  qualification case to axisymmetry, partial wedges, full 3D, imported gas, coupled operators, and
+  $N_P=10^6$; statistically compare complete histories and bath-size convergence
+- Test complete legacy frozen collision batches, the exact Bernoulli probability
+  $1-e^{-\lambda\Delta t}$, and partner sampling; for both integrators, add convergence with
+  `CFL_COL` or bath tolerance, $N_K$, $N_P$, and `H_SEARCH`, including a uniform-density field with
+  a known rate and forced fragmentation that exercises the size and represented-number update
 - Validate the physical `CUSTOM_KERNEL` directly across all Ormel–Cuzzi turbulent regimes and
   their boundaries, the physical-unit Brownian term, and the vertically integrated Gaussian
   overlap factor $[2\pi(H_{g,i}^2+H_{g,j}^2)]^{-1/2}$

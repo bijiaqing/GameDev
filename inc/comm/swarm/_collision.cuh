@@ -267,25 +267,25 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g, real sigma_g)
     return sqrt(vrel_sq);
 }
 
-// combine resolved Cartesian motion with unresolved Brownian and turbulent speeds in quadrature
+// combine resolved Cartesian motion with unresolved Brownian and turbulent speeds for explicit grain sizes
 __device__ __forceinline__
-real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old_i, int idx_old_j
+real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
+    int idx_old_i, int idx_old_j
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
     #endif // IMPORTGAS
 )
 {
-    real x_i = dev_particle[idx_old_i].position.x;
-    real x_j = dev_particle[idx_old_j].position.x;
-    
     real y_i = dev_particle[idx_old_i].position.y;
     real y_j = dev_particle[idx_old_j].position.y;
     
     real z_i = dev_particle[idx_old_i].position.z;
     real z_j = dev_particle[idx_old_j].position.z;
-    
-    real size_i = dev_size_old[idx_old_i];
-    real size_j = dev_size_old[idx_old_j];
+
+    #ifdef IMPORTGAS
+    real x_i = dev_particle[idx_old_i].position.x;
+    real x_j = dev_particle[idx_old_j].position.x;
+    #endif // IMPORTGAS
     
     real R_i = _get_cyl_R(y_i, z_i);
     real R_j = _get_cyl_R(y_j, z_j);
@@ -351,6 +351,22 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
     vrel_sq += vrel_t*vrel_t;
 
     return sqrt(vrel_sq);
+}
+
+// combine resolved and unresolved relative speeds for two frozen grain sizes
+__device__ __forceinline__
+real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old_i, int idx_old_j
+    #ifdef IMPORTGAS
+    , const real *dev_gas_dens
+    #endif // IMPORTGAS
+)
+{
+    return _get_vrel_pair(
+        dev_particle, dev_size_old[idx_old_i], dev_size_old[idx_old_j], idx_old_i, idx_old_j
+        #ifdef IMPORTGAS
+        , dev_gas_dens
+        #endif // IMPORTGAS
+    );
 }
 
 // =========================================================================================================================

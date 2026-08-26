@@ -1,6 +1,8 @@
 #ifndef SWARM_KERN_CUH
 #define SWARM_KERN_CUH
 
+#include <const_defs.cuh>
+
 #if defined(DIFFUSION) && !defined(TRANSPORT)
 #error "DIFFUSION requires TRANSPORT"
 #endif // DIFFUSION && !TRANSPORT
@@ -33,6 +35,10 @@
 #error "COLLISION requires exactly one of COLLISION_KDTREE or COLLISION_MORTON"
 #endif // COLLISION backend selection
 
+#ifdef COL_CHAIN
+#error "COL_CHAIN is not yet implemented for ROCm"
+#endif // COL_CHAIN
+
 #if !defined(TRANSPORT) && !defined(COLLISION)
 #error "No evolution module is enabled"
 #endif // !TRANSPORT && !COLLISION
@@ -48,8 +54,6 @@
 #if defined(LOGTIMING) && defined(SAVE_DENS)
 #error "LOGTIMING is not compatible with SAVE_DENS"
 #endif // LOGTIMING && SAVE_DENS
-
-#include <const_defs.cuh>
 
 #ifdef COLLISION_MORTON
 #include <morton/morton_types.cuh>

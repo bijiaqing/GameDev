@@ -1108,7 +1108,9 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
+    file << "COLLISION_INTEGRATOR = legacy"                                              << std::endl;
     file << "CFL_COL     = " << std::defaultfloat   << std::setprecision(8) << CFL_COL      << std::endl;
+    file << "RNG_STREAM_POLICY = shared_per_particle"                                    << std::endl;
     #ifdef COLLISION_KDTREE
     file << "COLLISION_SEARCH = kdtree"                                                   << std::endl;
     #else  // COLLISION_MORTON

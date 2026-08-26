@@ -2039,6 +2039,60 @@ $$
 
 which preserves the mass represented by $i$ but is a model-specific one-fragment sampling law.
 
+#### Guarded CUDA continuous-time collision chain
+
+Defining `COL_CHAIN` selects an alternative CUDA/Morton integrator while leaving the Bernoulli
+method as the default. The spatial index and each owner's physical top-$K$ neighbor identities and
+KNN measure are fixed over one collision operator because positions do not change. At every shorter
+bath boundary, the partner sizes and represented numbers are refreshed from the current population.
+Within a bath, owner $i$ evolves by the Gillespie direct method against that immutable reservoir:
+
+$$
+\lambda_i(s_i)=\sum_{j\in\mathcal N_i}\lambda_{ij}(s_i;s_j^{(b)},N_j^{(b)}),
+\qquad
+\delta t_i=-\frac{\ln U_1}{\lambda_i},
+$$
+
+and, when the sampled clock remains inside the bath, the partner is drawn from
+
+$$
+P(j\mid i,s_i)=\frac{\lambda_{ij}(s_i;s_j^{(b)},N_j^{(b)})}{\lambda_i(s_i)}.
+$$
+
+The owner size and represented number are updated after every event, so all owner-dependent pair
+rates are recomputed before its next clock. This permits zero, one, or many events per owner without
+using the fastest particle to impose a global collision microstep. An event cap bounds one kernel
+launch but not the stochastic path: local time, event count, and RNG state persist across
+continuation launches, and the cap is checked before drawing another clock.
+
+The bath duration is controlled in merged geometry-and-size bins. With represented mass
+$w_i=N_im_g(s_i)$, bin mass $M_q=\sum_{i\in q}w_i$, and bath-start rate $\lambda_i$, the candidate
+duration is
+
+$$
+\tau_b=\min\left[
+\tau_{\rm remain},\tau_{\max},
+\min_q\frac{\epsilon s_{\rm safe}M_q}{\sum_{i\in q}w_i\lambda_i}
+\right].
+$$
+
+Post-bath diagnostics compare predicted and realized touched mass, event-weighted activity,
+logarithmic size change, and redistribution between the same merged bins. The next bath's safety
+factor is reduced after persistent activity or distribution overshoot and relaxed only after three
+quiet baths. Completed baths are not rejected and replayed.
+
+CUDA currently uses a full neighbor cache requiring
+
+$$
+M_{\rm cache}=N_P N_K\,\mathrm{sizeof}(\mathtt{int}),
+$$
+
+which is $8.0$ GB in decimal units for $N_P=10^7$ and $N_K=200$, before the Morton hierarchy and
+other particle/controller arrays. This initial policy is explicit rather than a production-scale
+memory recommendation. `COL_CHAIN` currently requires `COLLISION_MORTON`; ROCm rejects the flag at
+compile time instead of silently selecting the legacy method. `variables.txt` records the selected
+integrator, controller constants, search method, and shared per-particle RNG-stream policy.
+
 ### 8.3 Exact neighbor-search contract
 
 The search backend is part of the estimator because it determines the selected local set and the
@@ -2279,7 +2333,7 @@ been examined and either $d_{K,i}$ or $q_i$ is below the conservative distance t
 remote cells. Particle migration, halo exchange, and collision-property synchronization are not yet
 implemented.
 
-### 8.7 Future removal of the global collision timestep
+### 8.7 Guarded removal of the global collision timestep
 
 The present batch step
 
@@ -2293,7 +2347,7 @@ is controlled by the fastest representative. Raising `CFL_COL` does not solve th
 $\lambda_i\Delta t$ is large, collapsing several expected physical events into one Bernoulli trial
 changes the stochastic process.
 
-The preferred future integrator is a frozen-bath local continuous-time event chain. Over a larger
+The guarded CUDA implementation is a frozen-bath local continuous-time event chain. Over a larger
 bath interval $\tau_{\mathrm{bath}}$, each representative keeps a local clock, draws exact waiting
 times
 
@@ -2305,9 +2359,9 @@ and processes zero, one, or many events against immutable partner properties. Af
 own rate and partner weights are recomputed. This removes the fastest-particle global microstep and
 is exact conditional on the frozen bath; convergence under halving $\tau_{\mathrm{bath}}$ controls
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
-chain lengths without truncating a stochastic path. The current Bernoulli method must remain
-selectable until waiting-time statistics, Smoluchowski moments, mass conservation, and bath-interval
-convergence pass.
+chain lengths without truncating a stochastic path. The current Bernoulli method remains the default
+until production-scale memory and performance, bath-interval convergence, coupled-operator behavior,
+restart semantics, and ROCm support are qualified.
 
 ## 9. Operator composition, timestep hierarchy, and boundaries
 
@@ -2469,6 +2523,7 @@ notions of convergence:
 | Euler–Maruyama diffusion | strong order $1/2$, weak order $1$ | finite diffusion step and boundary folding |
 | symmetric operator composition | second order for deterministic smooth operators | does not raise the intrinsic stochastic or collision-leap order |
 | frozen Bernoulli collisions | exact zero/one-event probability for a frozen clock | omitted multiple events give an error of order $(\lambda\Delta t_{\rm col})^2$ per batch |
+| frozen-bath continuous-time chain | exact local Gillespie path conditional on the frozen partner reservoir | finite bath duration and fixed top-$K$ reservoir introduce the controlled approximation |
 | exact KNN selection | no neighbor-approximation error under the stated search contract | finite-$N_P$ sampling and approximate boundary volume |
 | initialization and deposition | deterministic quadrature plus Monte Carlo sampling | quadrature error and sampling noise |
 
@@ -2536,9 +2591,10 @@ remain single precision on both backends.
 The collision backends use different parallel structures. KD-tree construction and traversal use
 the imported pointer-free tree implementation, with a query associated with each physical or image
 record. Morton construction sorts compact keys and assigns one cooperative GPU block to each
-physical query. In both cases, collision species are frozen once per Bernoulli batch and particle
-positions remain fixed across the complete opening or closing collision interval, so one spatial
-index is reused across all of its internal batches.
+physical query. In both search backends, particle positions remain fixed across the complete opening
+or closing collision interval, so one spatial index is reused across all internal batches. The
+default integrator freezes collision species once per Bernoulli batch; the guarded CUDA chain instead
+keeps neighbor identities fixed while refreshing partner species at every controlled bath boundary.
 
 Ignoring allocator and alignment overhead, the persistent particle-state storage is approximately
 
@@ -2657,15 +2713,13 @@ model itself rather than current test coverage.
 - Imported-gas position sampling currently assumes a strictly positive integrated
   $\rho_g\epsilon$ mass; an all-zero imported profile reaches an undefined CDF normalization and
   should be rejected by the caller until an explicit host guard is added.
-- The ROCm collision path rejects nonfinite particle, rate, and search-radius state, while the CUDA
-  collision runtime does not yet provide the corresponding production guard.
-- A collision event draw can be consumed without persisting its advanced RNG state when later
-  partner selection finds no admissible measure or neighbor. This does not change the estimator,
-  but exact random-stream accounting depends on partner availability.
+- The guarded CUDA chain rejects invalid pair rates, clocks, states, and Morton traversal overflow;
+  equivalent chain behavior is not yet implemented on ROCm, and the legacy CUDA failure guards are
+  not yet identical to the ROCm qualification path.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.
-- Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and local
-  continuous-time collision chains remain future work.
+- Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, ROCm/KD-tree
+  collision chains, and a production-scale chain cache policy remain future work.
 - `--use_fast_math` changes division, square-root, transcendental, and subnormal behavior for
   performance. Statistical tolerances, exact-neighbor tie cases, and reproducibility claims must
   be interpreted for the compiled arithmetic mode.

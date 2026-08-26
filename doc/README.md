@@ -61,6 +61,7 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 | fluid analytical suite | source-matched CUDA and ROCm archives with 105/105 metrics on each backend, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-24 |
 | swarm analytical suite | source-matched CUDA and ROCm archives with 31/31 models and 75/75 metrics on each backend | both native archives and the cross-backend comparison passed on 2026-08-24 |
 | adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | all 52 compact cases and all four standalone builds passed on each backend with equal coverage |
+| guarded collision chain | CUDA/Morton production-runtime qualification plus the four-case legacy collision regression | the chain was deterministic across two fresh runs, conserved represented mass exactly, and the complete focused campaign passed on 2026-08-26; ROCm and production-scale promotion remain pending |
 
 The expanded CUDA campaign used target `sm_80` and remained internally source-stable at SHA-256
 `2d287994722315384ccc7c0541c1bc6b99840223e0136464d50ad75406fca6b7` across its complete run from
