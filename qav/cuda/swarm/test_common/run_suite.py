@@ -28,7 +28,22 @@ from qav_config import (
 )
 
 
-CUDA_GROUPS = {"chain": ["test_colchain_2d"]}
+CUDA_GROUPS = {
+    "chain": [
+        "test_colchain_2d",
+        "test_colchain_frag_2d",
+        "test_colchain_wedge_2d",
+        "test_colchain_3d",
+        "test_colchain_restart_2d",
+        "test_colreuse_2d",
+    ],
+}
+
+
+def collision_runtime_model(model: str) -> bool:
+    """Identify production-runtime qualifications that do not use resolution sweeps"""
+
+    return model.startswith("test_colchain_") or model == "test_colreuse_2d"
 
 
 def utc_now() -> str:
@@ -95,7 +110,7 @@ def main() -> None:
     entries = []
     qualification_group = args.group in CUDA_GROUPS
     for model in models:
-        chain_model = model == "test_colchain_2d"
+        chain_model = collision_runtime_model(model)
         model_resolutions = [] if chain_model \
             else (resolutions[:1] if model in SWARM_FIXED_RESOLUTION else resolutions)
         if model == "test_knn":
@@ -146,7 +161,7 @@ def main() -> None:
         "models_completed": 0,
         "analytical_builds_expected": sum(
             len(entry["resolutions"]) for entry in entries
-            if entry["model"] not in {"test_knn", "test_colchain_2d"}
+            if entry["model"] != "test_knn" and not collision_runtime_model(entry["model"])
         ),
         "knn_standalone_builds_expected": (
             2 if args.group == "radial" else 4
@@ -203,7 +218,7 @@ def main() -> None:
     for idx_model, model in enumerate(models):
         model_resolutions = entries[idx_model]["resolutions"]
         command = [sys.executable, str(root/model/"run.py")]
-        if model != "test_colchain_2d":
+        if not collision_runtime_model(model):
             command.extend(("--res", *(str(value) for value in model_resolutions)))
         if args.build_only:
             command.append("--build-only")

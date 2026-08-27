@@ -2039,9 +2039,9 @@ $$
 
 which preserves the mass represented by $i$ but is a model-specific one-fragment sampling law.
 
-#### Guarded CUDA continuous-time collision chain
+#### Guarded GPU continuous-time collision chain
 
-Defining `COL_CHAIN` selects an alternative CUDA integrator while leaving the Bernoulli
+Defining `COL_CHAIN` selects an alternative GPU integrator while leaving the Bernoulli
 method as the default. The spatial index and each owner's physical top-$K$ neighbor identities and
 KNN measure are fixed over one collision operator because positions do not change. At every shorter
 bath boundary, the partner sizes and represented numbers are refreshed from the current population.
@@ -2076,12 +2076,38 @@ $$
 \right].
 $$
 
-Post-bath diagnostics compare predicted and realized touched mass, event-weighted activity,
-logarithmic size change, and redistribution between the same merged bins. The next bath's safety
-factor is reduced after persistent activity or distribution overshoot and relaxed only after three
-quiet baths. Completed baths are not rejected and replayed.
+The bath-start rate remains the inexpensive pre-control used to select the candidate duration. The
+post-bath audit does not assume that this rate remains fixed after the owner changes size. Along the
+piecewise-constant owner path, the chain accumulates the exact predictable compensators
 
-Both CUDA search backends populate the same full physical-neighbor cache. The KD-tree path performs
+$$
+H_i=\int_0^{\tau_b}\lambda_i[s_i(t)]\,dt,
+$$
+
+$$
+J_{1,i}=\int_0^{\tau_b}\sum_j\lambda_{ij}[s_i(t)]
+\operatorname E\left(\left|\ln\frac{s_i'}{s_i}\right|\right)dt,
+\qquad
+J_{2,i}=\int_0^{\tau_b}\sum_j\lambda_{ij}[s_i(t)]
+\operatorname E\left[\left(\ln\frac{s_i'}{s_i}\right)^2\right]dt.
+$$
+
+The touched-owner probability remains
+$1-\exp[-\lambda_i(s_i^{(b)})\tau_b]$, because the owner state cannot change before its first
+event. Event activity is compared with $H_i$, while absolute logarithmic size change is compared
+with $J_{1,i}$ and its second-moment compensator $J_{2,i}$. This removes the bath-start-rate bias
+from the realized E/G audit for the linear, product, and custom kernels.
+
+The next bath's safety factor is reduced after persistent activity or distribution overshoot and
+relaxed only after three quiet baths. Completed baths are not rejected and replayed, because
+conditioning acceptance on a random post-bath fluctuation would bias the stochastic process.
+Controller memory persists across split collision operators within one checkpoint interval. If two
+consecutive unacceptable baths occur at the minimum safety factor, the run aborts rather than
+continuing outside the controller contract. The full bath schedule and compact F/E/G/D summaries
+are written to `collision_chain_FRAME.json` at every output boundary; controller memory is then
+reset so restart files remain sufficient at that boundary.
+
+Both search backends populate the same full physical-neighbor cache on CUDA and ROCm. The KD-tree path performs
 one exact heap query for each physical tree record and deduplicates overlapping wedge images by
 original particle identifier. The Morton path constructs the same physical top-$K$ contract with
 one cooperative query block per owner. Subsequent bath selection, local chains, controller audits,
@@ -2095,8 +2121,8 @@ $$
 
 which is $8.0$ GB in decimal units for $N_P=10^7$ and $N_K=200$, before the selected search index and
 other particle/controller arrays. This initial policy is explicit rather than a production-scale
-memory recommendation. CUDA accepts either `COLLISION_KDTREE` or `COLLISION_MORTON`; ROCm rejects
-`COL_CHAIN` at compile time instead of silently selecting the legacy method. `variables.txt`
+memory recommendation. Both GPU backends accept either `COLLISION_KDTREE` or `COLLISION_MORTON`.
+`variables.txt`
 records the selected integrator, controller constants, search method, and shared per-particle
 RNG-stream policy.
 
@@ -2354,7 +2380,7 @@ is controlled by the fastest representative. Raising `CFL_COL` does not solve th
 $\lambda_i\Delta t$ is large, collapsing several expected physical events into one Bernoulli trial
 changes the stochastic process.
 
-The guarded CUDA implementation is a frozen-bath local continuous-time event chain. Over a larger
+The guarded GPU implementation is a frozen-bath local continuous-time event chain. Over a larger
 bath interval $\tau_{\mathrm{bath}}$, each representative keeps a local clock, draws exact waiting
 times
 
@@ -2368,7 +2394,8 @@ is exact conditional on the frozen bath; convergence under halving $\tau_{\mathr
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
 chain lengths without truncating a stochastic path. The current Bernoulli method remains the default
 until production-scale memory and performance, bath-interval convergence, coupled-operator behavior,
-restart semantics, and ROCm support are qualified.
+and native ROCm behavior are qualified. Native CUDA checkpoint-boundary restart has been qualified
+for both supported searches; equivalent ROCm restart evidence remains pending.
 
 ## 9. Operator composition, timestep hierarchy, and boundaries
 
@@ -2600,7 +2627,7 @@ the imported pointer-free tree implementation, with a query associated with each
 record. Morton construction sorts compact keys and assigns one cooperative GPU block to each
 physical query. In both search backends, particle positions remain fixed across the complete opening
 or closing collision interval, so one spatial index is reused across all internal batches. The
-default integrator freezes collision species once per Bernoulli batch; the guarded CUDA chain instead
+default integrator freezes collision species once per Bernoulli batch; the guarded GPU chain instead
 keeps neighbor identities fixed while refreshing partner species at every controlled bath boundary.
 
 Ignoring allocator and alignment overhead, the persistent particle-state storage is approximately
@@ -2720,13 +2747,12 @@ model itself rather than current test coverage.
 - Imported-gas position sampling currently assumes a strictly positive integrated
   $\rho_g\epsilon$ mass; an all-zero imported profile reaches an undefined CDF normalization and
   should be rejected by the caller until an explicit host guard is added.
-- The guarded CUDA chain rejects invalid pair rates, clocks, states, and Morton traversal overflow;
-  equivalent chain behavior is not yet implemented on ROCm, and the legacy CUDA failure guards are
-  not yet identical to the ROCm qualification path.
+- The guarded GPU chain rejects invalid pair rates, clocks, states, and Morton traversal overflow;
+  native ROCm chain qualification is still required before claiming backend parity.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.
-- Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, ROCm/KD-tree
-  collision chains, and a production-scale chain cache policy remain future work.
+- Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and a
+  production-scale chain cache policy remain future work.
 - `--use_fast_math` changes division, square-root, transcendental, and subnormal behavior for
   performance. Statistical tolerances, exact-neighbor tie cases, and reproducibility claims must
   be interpreted for the compiled arithmetic mode.

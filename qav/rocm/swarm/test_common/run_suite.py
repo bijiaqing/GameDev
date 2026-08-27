@@ -28,7 +28,24 @@ from qav_config import (
 )
 
 
-ROCM_GROUPS = {"restart": ["test_restart_2d"], "failure": ["test_failure_knn"]}
+ROCM_GROUPS = {
+    "chain": [
+        "test_colchain_2d",
+        "test_colchain_frag_2d",
+        "test_colchain_wedge_2d",
+        "test_colchain_3d",
+        "test_colchain_restart_2d",
+        "test_colreuse_2d",
+    ],
+    "restart": ["test_restart_2d"],
+    "failure": ["test_failure_knn"],
+}
+
+
+def collision_runtime_model(model: str) -> bool:
+    """Identify production-runtime qualifications that do not use resolution sweeps"""
+
+    return model.startswith("test_colchain_") or model == "test_colreuse_2d"
 
 
 def utc_now() -> str:
@@ -99,9 +116,11 @@ def main() -> None:
     entries = []
     qualification_group = args.group in ROCM_GROUPS
     for model in models:
+        chain_model = collision_runtime_model(model)
         fixed_resolution = model in SWARM_FIXED_RESOLUTION \
             or model in {"test_restart_2d", "test_failure_knn"}
-        model_resolutions = resolutions[:1] if fixed_resolution else resolutions
+        model_resolutions = [] if chain_model \
+            else (resolutions[:1] if fixed_resolution else resolutions)
         if model == "test_knn":
             output = "test_knn/suite_manifest.json"
         else:
@@ -110,7 +129,7 @@ def main() -> None:
             "model": model,
             "resolutions": model_resolutions,
             "tier": QUALIFICATION_TIER if qualification_group else swarm_model_tier(model),
-            "resolution_tiers": [
+            "resolution_tiers": [] if chain_model else [
                 {"resolution": resolution, "tier": QUALIFICATION_TIER}
                 for resolution in model_resolutions
             ] if qualification_group else swarm_resolution_tiers(model, model_resolutions),
@@ -121,8 +140,8 @@ def main() -> None:
 
     if qualification_group:
         qualification_metrics = sum(
-            len(entry["resolutions"]) for entry in entries
-            if entry["model"] != "test_failure_knn"
+            1 if collision_runtime_model(entry["model"]) else len(entry["resolutions"])
+            for entry in entries if entry["model"] != "test_failure_knn"
         )
         metric_tiers = {QUALIFICATION_TIER: qualification_metrics}
         included_tiers = [QUALIFICATION_TIER]
@@ -157,6 +176,7 @@ def main() -> None:
         "analytical_builds_expected": sum(
             len(entry["resolutions"]) for entry in entries
             if entry["model"] not in {"test_knn", "test_failure_knn"}
+            and not collision_runtime_model(entry["model"])
         ),
         "failure_backend_builds_expected": 2 if "test_failure_knn" in models else 0,
         "knn_standalone_builds_expected": (
@@ -225,7 +245,13 @@ def main() -> None:
 
     for idx_model, model in enumerate(models):
         model_resolutions = entries[idx_model]["resolutions"]
-        command = [sys.executable, str(root/model/"run.py"), "--res", *(str(value) for value in model_resolutions)]
+        if collision_runtime_model(model):
+            command = [sys.executable, str(root/model/"run.py"), "--target", args.target]
+        else:
+            command = [
+                sys.executable, str(root/model/"run.py"),
+                "--res", *(str(value) for value in model_resolutions),
+            ]
         if args.build_only:
             command.append("--build-only")
         if model == "test_knn" and args.group == "radial":

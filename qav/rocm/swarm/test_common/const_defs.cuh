@@ -36,7 +36,11 @@ constexpr real S_0 = 1.0;
 
 // particle counts are test samples rather than production population choices: use only enough representatives to cover the
 // analytical cases, except for stochastic and performance tests that need a statistically meaningful ensemble
-#if defined(TEST_PERF_COLLISION_2D)
+#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
+    || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D) \
+    || defined(TEST_COLCHAIN_RESTART_2D) || defined(TEST_COLREUSE_2D)
+constexpr int N_P = 2048;
+#elif defined(TEST_PERF_COLLISION_2D)
 #ifndef PERF_PARTICLES
 #define PERF_PARTICLES 100000
 #endif
@@ -75,7 +79,17 @@ constexpr int N_P = 64;
 #endif
 
 // activate only the coordinates needed by each claim and keep inactive dimensions explicit to expose indexing mistakes
-#if defined(TEST_PERF_COLLISION_2D)
+#if defined(TEST_COLCHAIN_3D)
+constexpr int N_X = 8;
+constexpr int N_Y = 16;
+constexpr int N_Z = 8;
+#elif defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
+    || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_RESTART_2D) \
+    || defined(TEST_COLREUSE_2D)
+constexpr int N_X = 32;
+constexpr int N_Y = 32;
+constexpr int N_Z = 1;
+#elif defined(TEST_PERF_COLLISION_2D)
 constexpr int N_X = 100;
 constexpr int N_Y = 100;
 constexpr int N_Z = 1;
@@ -129,7 +143,7 @@ constexpr int N_Y = 16;
 constexpr int N_Z = 1;
 #endif
 
-#ifdef TEST_BOUNDARY_2D
+#if defined(TEST_BOUNDARY_2D) || defined(TEST_COLCHAIN_WEDGE_2D)
 constexpr real X_MIN = -0.1;
 constexpr real X_MAX = 0.1;
 #else
@@ -143,7 +157,7 @@ constexpr real Y_MAX = 1.5;
 constexpr real Z_MIN = 0.5*M_PI - 0.01;
 constexpr real Z_MAX = 0.5*M_PI + 0.01;
 #elif defined(TEST_GRID_3D) || defined(TEST_ORBIT_INC_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) \
-    || defined(TEST_COLLISION_3D) \
+    || defined(TEST_COLLISION_3D) || defined(TEST_COLCHAIN_3D) \
     || defined(TEST_BOUNDARY_3D)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
@@ -225,8 +239,16 @@ constexpr real INIT_SMAX = 6.4;
 
 #ifdef COLLISION
 constexpr real REYNOLDS_0 = 1.0e8;
-constexpr int COAG_KERNEL = 0;
-#ifdef TEST_PERF_COLLISION_2D
+constexpr int COAG_KERNEL =
+#ifdef TEST_COLCHAIN_FRAG_2D
+    3;
+#else
+    0;
+#endif // TEST_COLCHAIN_FRAG_2D
+#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
+    || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D) \
+    || defined(TEST_COLCHAIN_RESTART_2D) || defined(TEST_COLREUSE_2D) \
+    || defined(TEST_PERF_COLLISION_2D)
 constexpr int N_K = 200;
 #else
 constexpr int N_K = 2;
@@ -236,8 +258,33 @@ constexpr real H_SEARCH = 10.0;
 #else  // OTHER TESTS
 constexpr real H_SEARCH = 1.0;
 #endif // TEST_ABSORB_PATH_1D
-constexpr real V_FRAG = 1.0;
+constexpr real V_FRAG =
+#ifdef TEST_COLCHAIN_FRAG_2D
+    0.0;
+#else
+    1.0;
+#endif // TEST_COLCHAIN_FRAG_2D
 constexpr real CFL_COL = 0.01;
+
+#ifdef COL_CHAIN
+constexpr int COL_CHAIN_TPB = 256;
+constexpr int COL_EVENT_CAP =
+#ifdef TEST_CHAIN_CAP
+    TEST_CHAIN_CAP;
+#else
+    32;
+#endif // TEST_CHAIN_CAP
+constexpr int COL_BIN_X = 8;
+constexpr int COL_BIN_Y = 4;
+constexpr int COL_BIN_Z = 2;
+constexpr int COL_BIN_S = 8;
+constexpr int COL_BIN_MIN = 64;
+constexpr real COL_BATH_MAX = 0.05;
+constexpr real COL_BATH_EPS = 0.06;
+constexpr real COL_BATH_ALPHA = 1.0e-3;
+constexpr real COL_SIZE_MIN = 0.5*INIT_SMIN;
+constexpr real COL_SIZE_MAX = 8.0*INIT_SMAX;
+#endif // COL_CHAIN
 #endif
 
 #ifdef COLLISION_MORTON
@@ -247,17 +294,30 @@ constexpr int MORTON_MAX_LEVEL = 20;
 constexpr int MORTON_WORK_SIZE = 1024;
 #endif
 
-#if defined(TEST_PERF_COLLISION_2D) && defined(TEST_SAVE_MAX)
+#ifdef TEST_COLCHAIN_RESTART_2D
+constexpr int SAVE_MAX = 2;
+#elif defined(TEST_PERF_COLLISION_2D) && defined(TEST_SAVE_MAX)
 constexpr int SAVE_MAX = TEST_SAVE_MAX;
 #else
 constexpr int SAVE_MAX = 1;
-#endif
-#if defined(TEST_PERF_COLLISION_2D) && defined(TEST_DT_OUT)
+#endif // TEST_COLCHAIN_RESTART_2D
+#if defined(TEST_COLCHAIN_3D)
+constexpr real DT_OUT = 1.0e-2;
+#elif defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
+    || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_RESTART_2D) \
+    || defined(TEST_COLREUSE_2D)
+constexpr real DT_OUT = 1.0e-3;
+#elif defined(TEST_PERF_COLLISION_2D) && defined(TEST_DT_OUT)
 constexpr real DT_OUT = TEST_DT_OUT;
 #else
 constexpr real DT_OUT = 1.0;
 #endif
-constexpr real DT_MAX = 1.0;
+constexpr real DT_MAX =
+#ifdef TEST_COLREUSE_2D
+    2.5e-4;
+#else
+    1.0;
+#endif // TEST_COLREUSE_2D
 constexpr real CFL_DYN = 0.5;
 constexpr int LIN_BASE = 1;
 

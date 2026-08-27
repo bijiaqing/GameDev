@@ -142,6 +142,9 @@ endif
 ifneq ($(strip $(OUT_TIME)),)
 GPU_FLAGS += -DTEST_DT_OUT=$(OUT_TIME)
 endif
+ifneq ($(strip $(CHAIN_CAP)),)
+GPU_FLAGS += -DTEST_CHAIN_CAP=$(CHAIN_CAP)
+endif
 ifneq ($(strip $(PARTICLES)),)
 GPU_FLAGS += -DPERF_PARTICLES=$(PARTICLES)
 endif

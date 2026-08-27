@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run the production collision-chain base and continuation qualification"""
+"""Run the production custom-kernel fragmentation-chain qualification"""
 
 from pathlib import Path
 import sys
@@ -11,3 +11,4 @@ from run_chain import run
 
 
 run(Path(__file__).resolve().parent.name)
+

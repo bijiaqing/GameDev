@@ -173,6 +173,58 @@ def check_rocm_sources(errors: list[str]) -> None:
                 )
 
 
+def check_chain_port(errors: list[str]) -> None:
+    """Keep the guarded collision-chain mathematics and QAV coverage paired"""
+
+    headers = {
+        "cuda": PROJECT_ROOT/"inc"/"cuda"/"swarm"/"_col_chain.cuh",
+        "rocm": PROJECT_ROOT/"inc"/"rocm"/"swarm"/"_col_chain.cuh",
+    }
+    for backend, path in headers.items():
+        if not path.is_file():
+            errors.append(f"missing {backend} collision-chain header")
+            return
+    cuda_chain = headers["cuda"].read_text().replace(
+        "curand_uniform_double", "backend_uniform_double"
+    ).rstrip()
+    rocm_chain = headers["rocm"].read_text().replace(
+        "hiprand_uniform_double", "backend_uniform_double"
+    ).rstrip()
+    if cuda_chain != rocm_chain:
+        errors.append("CUDA and ROCm collision-chain headers differ beyond RNG API spelling")
+
+    models = (
+        "test_colchain_2d",
+        "test_colchain_frag_2d",
+        "test_colchain_wedge_2d",
+        "test_colchain_3d",
+        "test_colchain_restart_2d",
+        "test_colreuse_2d",
+    )
+    expected_files = {"const_defs.cuh", "flags.mk", "run.py"}
+    restart_runner = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"run_chain_restart.py"
+    if not restart_runner.is_file():
+        errors.append(f"missing {restart_runner.relative_to(PROJECT_ROOT)}")
+    reuse_runner = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"run_geometry_reuse.py"
+    if not reuse_runner.is_file():
+        errors.append(f"missing {reuse_runner.relative_to(PROJECT_ROOT)}")
+    for backend in ("cuda", "rocm"):
+        common_runner = PROJECT_ROOT/"qav"/backend/"swarm"/"test_common"/"run_chain.py"
+        if not common_runner.is_file():
+            errors.append(f"missing {common_runner.relative_to(PROJECT_ROOT)}")
+        for model in models:
+            model_dir = PROJECT_ROOT/"qav"/backend/"swarm"/model
+            actual = {
+                path.name for path in model_dir.iterdir() if path.is_file()
+            } if model_dir.is_dir() else set()
+            missing = expected_files - actual
+            if missing:
+                errors.append(
+                    f"{backend}/{model}: missing collision-chain QAV files: "
+                    f"{', '.join(sorted(missing))}"
+                )
+
+
 def check_naming(errors: list[str]) -> None:
     """Enforce the production spelling contract without rewriting vendored KD-tree APIs"""
 
@@ -321,6 +373,32 @@ def check_make_resolution(errors: list[str]) -> None:
             "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=cuda",
             "GPU_TARGET=sm_80", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
         ],
+        [
+            "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=morton", "QAV_SCOPE=qualification",
+        ],
+        [
+            "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
+        ],
+        [
+            "make", "-n", "MODEL=test_colchain_restart_2d", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=qualification",
+        ],
+        [
+            "make", "-n", "MODEL=test_colchain_restart_2d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
+        ],
+        [
+            "make", "-n", "MODEL=test_colreuse_2d", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=chain",
+            "CUDA_FLAGS=-DCOL_CHAIN -DKNN_FRESH",
+        ],
+        [
+            "make", "-n", "MODEL=test_colreuse_2d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=chain",
+            "ROCM_FLAGS=-DKNN_FRESH",
+        ],
         ["make", "-n", "MODEL=test_failure_2d", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
         ["make", "-n", "MODEL=test_lds_x", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
     )
@@ -382,6 +460,7 @@ def main() -> None:
     check_numerical_defaults(errors)
     check_python(errors)
     check_rocm_sources(errors)
+    check_chain_port(errors)
     check_naming(errors)
     check_metadata(errors)
     check_qav_contract(errors)

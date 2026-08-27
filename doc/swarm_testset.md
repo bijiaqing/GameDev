@@ -279,7 +279,12 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_collision_2d` | 2D accessible-neighborhood measure and coagulation-kernel numerators | disk and circular-cap areas plus constant, additive, and product rates |
 | `test_collision_3d` | 3D accessible-neighborhood measure and coagulation-kernel numerators | interior, radial-cap, and polar-cap ball volumes plus the same three rates |
 | `test_import_1d` | imported vertically integrated gas coupling | exact $\mathrm{St}=\mathrm{St}_0\Sigma_0/\Sigma_g$ and external-$\Sigma_g$ turbulent Reynolds scaling |
-| `test_colchain_2d` | guarded CUDA production runtime with KD-tree and Morton collision-chain caches | finite positive species, nontrivial evolution, represented-mass conservation, provenance, equal initialization, RNG checkpointing, and exact repeat determinism within each search backend |
+| `test_colchain_2d` | guarded GPU production runtime with KD-tree and Morton caches at event caps 1 and 32 | finite positive species, mass conservation, exact continuation invariance, controller-record validity, provenance, and repeat determinism |
+| `test_colchain_frag_2d` | custom physical kernel with a zero fragmentation threshold | native fragmentation, positive species, mass conservation, exact compensator diagnostics, and repeat determinism |
+| `test_colchain_wedge_2d` | partial-azimuth production runtime with periodic search images | duplicate-safe KD-tree and Morton chain execution, controller diagnostics, conservation, and repeat determinism |
+| `test_colchain_3d` | full three-dimensional production runtime | volume-density collision closure, both search caches, controller diagnostics, conservation, and repeat determinism |
+| `test_colchain_restart_2d` | two-output production chain resumed in a new process from frame one | exact position/species and RNG continuation, velocity round-trip tolerance, controller reset equivalence, conservation, and unchanged checkpoint inputs |
+| `test_colreuse_2d` | transported production runtime with reusable and forced-fresh search preparation | exact final particle/RNG equivalence and geometry-epoch build/reuse/invalidation accounting for legacy and chain integrators with KD-tree and Morton search |
 | `test_boundary_1d` | radial-only transport absorption and diffusion reflection | exact inactive-coordinate locking, repeated radial folding, and absorbing radial endpoint states |
 | `test_boundary_2d` | radial–azimuthal boundary helpers on a narrow periodic wedge | exact multi-wrap azimuth, radial diffusion reflection, radial absorption, and inactive polar state |
 | `test_boundary_3d` | full-disk 3D boundary helpers | exact periodic azimuth, radial/polar diffusion reflection, and radial/polar transport absorption |
@@ -1130,18 +1135,48 @@ is a direct device-helper test with fixed inputs.
 
 ### Guarded production collision-chain runtime
 
-`test_colchain_2d` is a CUDA-only qualification case that builds the actual production
-`src/cuda/swarm/swarm_runtime.cu` twice with `COL_CHAIN`: once with `COLLISION_MORTON` and once with
-`COLLISION_KDTREE`. Both variants use $N_P=2048$, $N_K=200$, and a $32\times32\times1$
-radial–azimuthal grid. Unlike the collision-helper cases, each constructs its production search
-index, caches physical neighbors, selects controller baths, advances exact local event chains with
-continuation support, writes production checkpoints, and runs through the production output path.
+The backend-specific `chain` qualification group builds the actual production
+`src/BACKEND/swarm/swarm_runtime` with both `COLLISION_MORTON` and `COLLISION_KDTREE`. Every case uses
+$N_P=2048$ and $N_K=200$. Unlike the collision-helper cases, each constructs its production search
+index, caches physical neighbors, selects controller baths, advances exact local event chains,
+writes production checkpoints and controller JSON, and runs through the production output path.
 
-The wrapper starts each search variant twice from the same deterministic initialization and
-validates both the particle and RNG checkpoints. It also requires the two search variants to begin
-from byte-identical particle checkpoints; their final stochastic paths need not be byte-identical
-because an exact top-$K$ set may be traversed in a different slot order. With particle size $s_i$
-and represented grain number $N_i$, the conserved mass proxy is
+`test_colchain_2d` compiles both event-cap 1 and event-cap 32 variants. The cap-one run must require
+more continuation launches than completed baths, and its final particle and RNG checkpoints must be
+byte-identical to the cap-32 result for the same search backend. `test_colchain_frag_2d` selects the
+custom kernel with `V_FRAG=0` and requires at least one owner to shrink. `test_colchain_wedge_2d`
+uses a narrow periodic azimuthal domain that forces image deduplication. `test_colchain_3d` activates
+the polar dimension and the volume-density collision closure. `test_colchain_restart_2d` evolves
+two output intervals continuously, archives frame two, then launches a fresh process from the frame-one
+particle and RNG checkpoint and evolves the same second interval again.
+
+`test_colreuse_2d` enables transport and collision together and limits the dynamics step so one
+output contains at least four transported steps. For each of the legacy Bernoulli and collision-chain
+integrators, it builds KD-tree and Morton variants twice: the production reuse path and the QAV-only
+`KNN_FRESH` baseline that deliberately rebuilds before every collision operator. For $M$ transported
+steps, the reused path must report
+
+$$
+N_{\rm call}=2M,
+\qquad
+N_{\rm build}=M+1,
+\qquad
+N_{\rm reuse}=M-1,
+\qquad
+N_{\rm invalidate}=M,
+$$
+
+whereas the forced-fresh path must report $N_{\rm build}=N_{\rm call}$ and $N_{\rm reuse}=0$.
+Each reuse/fresh pair must have byte-identical final particle and RNG checkpoints. This is a
+trajectory-level test of the lifetime optimization, not merely a comparison of aggregate collision
+statistics.
+
+For the first four models, each search/cap variant starts twice from the same deterministic
+initialization and validates the particle, RNG, and `collision_chain_FRAME.json` records. All
+variants must begin from byte-identical particle checkpoints; different search backends need not
+finish byte-identically because an exact top-$K$ set may be traversed in a different slot order.
+With particle size $s_i$ and represented
+grain number $N_i$, the conserved mass proxy is
 
 $$
 \mathcal M_3=\sum_iN_is_i^3,
@@ -1154,12 +1189,49 @@ because the constant factor $\pi\rho_0/6$ cancels in the relative comparison. A 
 - $|\mathcal M_3^{\rm final}-\mathcal M_3^{\rm initial}|/\mathcal M_3^{\rm initial}\le2\times10^{-12}$
 - `variables.txt` records the chain integrator and the requested search backend
 - a nonempty RNG checkpoint is written
-- the two fresh runs of each search backend have identical final-particle and RNG SHA-256 digests
+- the controller record is finite and complete, contains one record per bath, and reports no
+  persistent minimum-scale overshoot
+- the two fresh runs of each variant have identical final-particle and RNG SHA-256 digests, while
+  controller records agree structurally and numerically to $10^{-12}$ relative or absolute
+  tolerance
 
-This is an integration and reproducibility gate, not an analytical collision-distribution test. It
-does not by itself establish bath-size convergence, force an event-cap continuation, validate the
-custom physical kernel or fragmentation, exercise imported gas or operator coupling, or determine
-production-scale memory and performance.
+The restart case additionally requires the frame-one particle and RNG files to remain unchanged,
+the resumed frame-two positions, sizes, and represented numbers to equal the continuous result
+exactly, and the resumed RNG checkpoint to be byte-identical. File output stores linear velocities,
+whereas the device state uses angular variables, so the velocity round trip is compared with
+$L_\infty\le2\times10^{-14}$ rather than a bytewise condition. Continuous and resumed controller
+records must be structurally equivalent within the same $10^{-12}$ numerical tolerance because both
+paths reset controller memory at the supported output boundary.
+
+The original native CUDA `sm_80` campaign passed on 2026-08-27 for the first four models and both search
+backends. The 2D cap-one and cap-32 variants began from identical particles and ended with
+byte-identical particle and RNG checkpoints for each search: cap one used 149 continuation launches
+for 46 baths, whereas cap 32 used 46 launches. The forced-fragmentation case shrank 11 owners in
+one bath for each backend. The periodic wedge changed 1969 Morton and 1971 KD-tree owners in 150 and
+148 baths, respectively. The full-3D case changed 730 Morton and 729 KD-tree owners and completed
+7139 baths. Every variant remained finite and positive, reported zero recorded drift in
+$\mathcal M_3$, reproduced its particle and RNG checkpoints across two fresh runs, and produced
+controller records consistent to the stated tolerance.
+
+The subsequent native CUDA restart qualification also passed for Morton and KD-tree searches. The
+continuous and resumed frame-two particle files were byte-identical, including the velocity fields,
+and their RNG checkpoints were byte-identical. The restart changed 638 particles with Morton and 636
+with the KD-tree, left the frame-one input checkpoints unchanged, and recorded zero relative mass
+drift on both paths. Controller summaries were structurally and numerically equivalent to
+$10^{-12}$ but not byte-identical: the largest absolute difference was $4.44\times10^{-16}$ and no
+integer or Boolean controller decision differed. These last-bit differences arise in atomic
+floating-point diagnostic reductions and do not change the stochastic trajectory. The reconstructed
+CUDA group manifest therefore reports five of five models passed.
+
+The geometry-epoch test is a sixth `chain`-group component added after that archived campaign. Its
+CUDA and ROCm source graphs and Python validator pass static checks, but native results are not yet
+recorded; the historical five-model result must not be interpreted as evidence for search reuse.
+
+These are integration and reproducibility gates rather than analytical collision-distribution
+tests. They qualify continuation invariance, forced fragmentation, partial-wedge search geometry,
+the 3D volume-density closure, and controller-record integrity at $N_P=2048$ and $N_K=200$. They do
+not establish bath-size convergence, axisymmetric or imported-gas behavior, broader operator
+combinations, or production-scale memory and performance.
 
 ## KNN implementation and periodic-ghost comparison
 
@@ -1402,11 +1474,12 @@ needed. Vendor RNG-state files must only be tested by same-backend restart cases
 
 ### Qualification branches
 
-The complete campaign does not refresh same-backend restart or deliberate failure injection.
+The complete campaign does not refresh the standalone diffusion restart or deliberate failure injection.
 Run those qualification-only branches independently when their claims are needed:
 
 ```bash
 python3 qav/cuda/swarm/test_common/run_suite.py --group chain --target sm_80
+python3 qav/rocm/swarm/test_common/run_suite.py --group chain --target gfx942
 python3 qav/rocm/swarm/test_common/run_suite.py --group restart --res 32 --target gfx942
 python3 qav/rocm/swarm/test_common/run_suite.py --group failure --target gfx942
 ```
@@ -1414,14 +1487,18 @@ python3 qav/rocm/swarm/test_common/run_suite.py --group failure --target gfx942
 Focused evidence is stored below `groups/GROUP/`, so it cannot replace the common `all` archive.
 The complete backend-neutral transfer and comparison workflow is specified in `qav/README.md`.
 
-The source-matched native `sm_80` chain qualification completed on 2026-08-26. Its two fresh
-production-runtime executions each changed 516 of 2048 representatives, retained finite positive
-states, and reported zero relative drift in $\mathcal M_3$. Their final particle checkpoints were
-byte-identical with SHA-256
-`bbdb178cf729b42767c27542159319aa4ba79b6193485220a8ac6727df051973`; their RNG checkpoints were
-also byte-identical with SHA-256
-`2dca612c5d133cc44f5eb95fb14d71c9f5ec9cbcc21097c8b8288737c5c95e2c`. The aggregate and component
-manifests both report `passed: true`.
+The archived native `sm_80` chain qualification completed on 2026-08-27. All five then-existing component
+manifests and the reconstructed aggregate manifest report `passed: true`. The base 2D case proves
+pathwise event-cap invariance with 149 cap-one launches versus 46 cap-32 launches over the same 46
+baths. The additional cases exercise forced fragmentation, periodic-wedge image handling, and the
+full-3D volume-density closure. Across both Morton and KD-tree variants, all states remained finite
+and positive, the recorded $\mathcal M_3$ drift was zero, and two fresh runs reproduced their
+particle and RNG checkpoints exactly as well as their controller records within tolerance.
+The restart component additionally reproduced its continuous frame-two particle and RNG files
+exactly after starting a new process from frame one.
+
+The current group contains the additional `test_colreuse_2d` component and therefore requires a new
+native campaign before the complete six-model group can be reported as passing.
 
 The accompanying CUDA legacy-collision regression also passed all four $N=32$ cases after the RNG
 commit correction. Maximum $L_\infty$ errors were zero in 1D, $2.78\times10^{-17}$ for imported-gas
@@ -1560,8 +1637,9 @@ python3 qav/cuda/swarm/test_common/run_suite.py --group knn       --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group chain     --target sm_80
 ```
 
-The `chain` group is a CUDA-only qualification branch and is intentionally excluded from `all`
-until the same production method exists and passes natively on ROCm.
+The `chain` group is a backend-specific qualification branch and is intentionally excluded from
+`all`. The CUDA campaign has passed natively; the mirrored ROCm campaign is implemented but still
+requires a native `gfx942` run.
 
 The radial implementation can be isolated before the full regression with
 
@@ -1658,9 +1736,9 @@ gradients is also deferred.
 
 ### Other missing verification
 
-- Extend the current-source production collision-chain runtime gate beyond its CUDA 2D
-  qualification case to axisymmetry, partial wedges, full 3D, imported gas, coupled operators, and
-  $N_P=10^6$; statistically compare complete histories and bath-size convergence
+- Run and archive the mirrored ROCm collision-chain qualification, then extend the collision-chain
+  qualification to axisymmetry, imported gas, coupled
+  operators, and $N_P=10^6$; statistically compare complete histories and bath-size convergence
 - Test complete legacy frozen collision batches, the exact Bernoulli probability
   $1-e^{-\lambda\Delta t}$, and partner sampling; for both integrators, add convergence with
   `CFL_COL` or bath tolerance, $N_K$, $N_P$, and `H_SEARCH`, including a uniform-density field with
@@ -1686,9 +1764,8 @@ gradients is also deferred.
   timesteps do not exceed the configured crossing or diffusion limits
 - Test finite attenuation by coupling the reconstructed optical depth to
   $\beta e^{-\tau}$; the current grid and radiation cases validate the two pieces separately
-- Compare uninterrupted and restarted stochastic runs with byte-identical restored RNG files but
-  tolerance-based physical state, conservation, and ensemble criteria because velocity-file
-  conversion need not preserve internal angular momentum bitwise
+- Run and archive `test_colchain_restart_2d` on ROCm; extend it to fragmentation or
+  coupled operators only if those paths introduce checkpoint state beyond particles and RNG streams
 - Compare the radial-only model with an azimuthally uniform radial–azimuthal model using matched
   surface density, gas targets, and enabled physics
 - Add end-to-end operator-combination tests for transport plus diffusion, transport plus radiation,

@@ -1115,6 +1115,8 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COL_BATH_MAX   = " << std::scientific << std::setprecision(8) << COL_BATH_MAX << std::endl;
     file << "COL_BATH_EPS   = " << std::scientific << std::setprecision(8) << COL_BATH_EPS << std::endl;
     file << "COL_BATH_ALPHA = " << std::scientific << std::setprecision(8) << COL_BATH_ALPHA << std::endl;
+    file << "COL_CONTROLLER_AUDIT = path_integrated"                                  << std::endl;
+    file << "COL_CONTROLLER_FAILURE = two_consecutive_minimum_scale_overshoots"        << std::endl;
     file << "COL_CONTROLLER_BINS = " << COL_BIN_X << " " << COL_BIN_Y << " "
          << COL_BIN_Z << " " << COL_BIN_S                                           << std::endl;
     file << "COL_BIN_MIN    = " << COL_BIN_MIN                                            << std::endl;

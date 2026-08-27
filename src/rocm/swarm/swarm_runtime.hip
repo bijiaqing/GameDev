@@ -2,11 +2,13 @@
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
+#include <fstream>          // std::ofstream
 #include <iomanip>          // std::setw, std::setfill
 #include <iostream>         // std::cout, std::endl
 #include <limits>           // std::numeric_limits
 #include <sstream>          // std::stringstream
 #include <stdexcept>        // std::runtime_error
+#include <string>           // std::string, std::to_string
 #include <vector>           // std::vector
 
 #if defined(TRANSPORT) || defined(COLLISION)
@@ -16,6 +18,10 @@
 
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
+
+#ifdef COL_CHAIN
+#include <_col_chain.cuh>
+#endif // COL_CHAIN
 
 #ifdef COLLISION_MORTON
 #include <morton/morton_ghost.cuh>
@@ -134,11 +140,42 @@ int main (int argc, char **argv)
     morton_ghost_index morton_owner;
     #endif // COLLISION_KDTREE
 
-    real *dev_size_old, *dev_numr_old, *dev_col_rate, *dev_col_dist;
+    real *dev_size_old, *dev_numr_old, *dev_col_rate;
     HIP_CHECK(hipMalloc((void**)&dev_size_old, sizeof(real)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
+
+    #ifdef COL_CHAIN
+    const std::size_t col_neighbor_count = static_cast<std::size_t>(N_P)*N_K;
+    const int col_raw_count = _get_col_raw_count();
+    int *dev_col_neighbor, *dev_col_events, *dev_col_spatial;
+    int *dev_col_count, *dev_col_binmap, *dev_col_error, *dev_col_unfinished;
+    real *dev_col_measure, *dev_col_time, *dev_col_hazard;
+    real *dev_col_jump1_int, *dev_col_jump2_int, *dev_col_jumpmax_int;
+    unsigned char *dev_col_complete;
+    col_rate_bin *dev_col_ratebin;
+    col_audit_accum *dev_col_audit;
+    HIP_CHECK(hipMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
+    HIP_CHECK(hipMalloc((void**)&dev_col_events, sizeof(int)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_spatial, sizeof(int)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_count, sizeof(int)*col_raw_count));
+    HIP_CHECK(hipMalloc((void**)&dev_col_binmap, sizeof(int)*col_raw_count));
+    HIP_CHECK(hipMalloc((void**)&dev_col_error, sizeof(int)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_unfinished, sizeof(int)));
+    HIP_CHECK(hipMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_time, sizeof(real)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_hazard, sizeof(real)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_jump1_int, sizeof(real)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_jump2_int, sizeof(real)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_jumpmax_int, sizeof(real)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_complete, sizeof(unsigned char)*N_P));
+    HIP_CHECK(hipMalloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
+    HIP_CHECK(hipMalloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
+    HIP_CHECK(hipMemset(dev_col_error, 0, sizeof(int)*N_P));
+    #else  // LEGACY_COLLISION
+    real *dev_col_dist;
     HIP_CHECK(hipMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
+    #endif // COL_CHAIN
     #endif // COLLISION
 
     #if defined(COLLISION) || defined(DIFFUSION)
@@ -296,59 +333,298 @@ int main (int argc, char **argv)
     #endif // LOGTIMING
 
     #ifdef COLLISION
-    // evolve collisions over a fixed-position interval with controlled frozen-rate Bernoulli batches
+    bool col_geom_valid = false;
+
+    #ifdef COL_GEOM_QAV
+    int col_geom_calls = 0;
+    int col_geom_builds = 0;
+    int col_geom_reuses = 0;
+    int col_geom_invalidations = 0;
+    #endif // COL_GEOM_QAV
+
+    #ifdef COLLISION_KDTREE
+    float image_dist_min = -1.0f;
+    if (N_T > N_P)
+    {
+        image_dist_min = static_cast<float>(
+            2.0*Y_MIN*std::fmin(std::sin(Z_MIN), std::sin(Z_MAX))
+            *std::fabs(std::sin(0.5*(X_MAX - X_MIN)))
+        );
+    }
+    #endif // COLLISION_KDTREE
+
+    #ifdef COL_CHAIN
+    col_bath_state bath_state;
+    col_controller_summary col_summary;
+    #endif // COL_CHAIN
+
+    // invalidate the search package only when a position update ends its current geometry epoch
+    auto invalidate_col_geometry = [&] ()
+    {
+        #ifdef COL_GEOM_QAV
+        if (col_geom_valid) col_geom_invalidations++;
+        #endif // COL_GEOM_QAV
+        col_geom_valid = false;
+    };
+
+    // evolve collisions over a fixed-position interval with the configured collision integrator
     auto evolve_collisions = [&] (real duration)
     {
-        // collisions change grain properties but not positions, so one search index serves the full interval
-        HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
-        #ifdef COLLISION_KDTREE
-        col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle, dev_bad_part);
-        HIP_KERNEL_CHECK("col_site_init");
-        int bad_part = 0;
-        HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
-        if (bad_part != 0)
+        #ifdef KNN_FRESH
+        // QAV baseline: deliberately rebuild an otherwise reusable fixed-position search package
+        col_geom_valid = false;
+        #endif // KNN_FRESH
+
+        #ifdef COL_GEOM_QAV
+        col_geom_calls++;
+        #endif // COL_GEOM_QAV
+
+        // geometry reuse must not suppress the per-operator nonfinite-state failure path
+        if (col_geom_valid)
         {
-            std::cerr << "Error: non-finite particle state before collision search at particle "
-                << bad_part - 1 << std::endl;
-            std::exit(EXIT_FAILURE);
+            HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
+            colstate_flag <<< NB_P, TPB >>> (dev_particle, dev_bad_part);
+            HIP_KERNEL_CHECK("colstate_flag");
+            int bad_part = 0;
+            HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
+            if (bad_part != 0)
+            {
+                std::cerr << "Error: non-finite particle state before collision search at particle "
+                    << bad_part - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
         }
-        kdtree::buildTree <kdtree_node, kdtree_traits> (
-            dev_kdtree_node, N_T, dev_kdtree_box
-        );
-        HIP_KERNEL_CHECK("kdtree::buildTree");
-        float image_dist_min = -1.0f;
-        if (N_T > N_P)
+
+        // rebuild the complete geometric search package only after particle positions change
+        if (!col_geom_valid)
         {
-            image_dist_min = static_cast<float>(
-                2.0*Y_MIN*std::fmin(std::sin(Z_MIN), std::sin(Z_MAX))
-                *std::fabs(std::sin(0.5*(X_MAX - X_MIN)))
+            HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
+            #ifdef COLLISION_KDTREE
+            col_site_init <<< NB_P, TPB >>> (
+                dev_kdtree_node, dev_col_active, dev_particle, dev_bad_part
             );
+            HIP_KERNEL_CHECK("col_site_init");
+            int bad_part = 0;
+            HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
+            if (bad_part != 0)
+            {
+                std::cerr << "Error: non-finite particle state before collision search at particle "
+                    << bad_part - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            kdtree::buildTree <kdtree_node, kdtree_traits> (
+                dev_kdtree_node, N_T, dev_kdtree_box
+            );
+            HIP_KERNEL_CHECK("kdtree::buildTree");
+            #else  // COLLISION_MORTON
+            col_site_init <<< NB_P, TPB >>> (
+                dev_morton_point, dev_morton_posx, dev_search_dist,
+                dev_col_active, dev_particle, dev_bad_part
+            );
+            HIP_KERNEL_CHECK("col_site_init");
+            int bad_part = 0;
+            HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
+            if (bad_part != 0)
+            {
+                std::cerr << "Error: non-finite particle state before collision search at particle "
+                    << bad_part - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+
+            thrust::device_ptr <const float> search_dist_ptr(dev_search_dist);
+            float max_search_dist = *thrust::max_element(search_dist_ptr, search_dist_ptr + N_P);
+            morton_owner.build(
+                dev_morton_point, dev_morton_posx, N_P, max_search_dist,
+                static_cast<float>(X_MIN), static_cast<float>(X_MAX),
+                static_cast<float>(Y_MIN), static_cast<float>(Y_MAX),
+                static_cast<float>(Z_MIN), static_cast<float>(Z_MAX),
+                N_X > 1, (N_Z > 1) ? 3 : 2, MORTON_LEAF_TARGET, MORTON_MAX_LEVEL
+            );
+            #endif // COLLISION_KDTREE
+
+            #ifdef COL_CHAIN
+            // retain the fixed geometric neighborhood while baths refresh only collision properties
+            #ifdef COLLISION_KDTREE
+            col_cache_get <<< NB_T, TPB >>> (
+                dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
+                dev_col_active, dev_particle, image_dist_min
+            );
+            HIP_KERNEL_CHECK("col_cache_get");
+            #else  // COLLISION_MORTON
+            col_cache_get <<< N_P, MORTON_TPB >>> (
+                dev_col_neighbor, dev_col_measure, dev_morton_overflow, dev_morton_point,
+                dev_col_active, dev_particle, morton_owner.view(), morton_owner.unique_ids()
+            );
+            HIP_KERNEL_CHECK("col_cache_get");
+            thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
+            unsigned int max_morton_overflow = *thrust::max_element(
+                morton_overflow_ptr, morton_overflow_ptr + N_P
+            );
+            if (max_morton_overflow != 0)
+                throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
+            #endif // COLLISION_KDTREE
+
+            col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
+            HIP_KERNEL_CHECK("col_space_bin");
+            #endif // COL_CHAIN
+
+            // publish validity only after every required hierarchy, cache, and guard has completed
+            col_geom_valid = true;
+            #ifdef COL_GEOM_QAV
+            col_geom_builds++;
+            #endif // COL_GEOM_QAV
         }
-        #else  // COLLISION_MORTON
-        col_site_init <<< NB_P, TPB >>> (
-            dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle, dev_bad_part
-        );
-        HIP_KERNEL_CHECK("col_site_init");
-        int bad_part = 0;
-        HIP_CHECK(hipMemcpy(&bad_part, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
-        if (bad_part != 0)
+        #ifdef COL_GEOM_QAV
+        else
         {
-            std::cerr << "Error: non-finite particle state before collision search at particle "
-                << bad_part - 1 << std::endl;
-            std::exit(EXIT_FAILURE);
+            col_geom_reuses++;
         }
+        #endif // COL_GEOM_QAV
 
-        thrust::device_ptr <const float> search_dist_ptr(dev_search_dist);
-        float max_search_dist = *thrust::max_element(search_dist_ptr, search_dist_ptr + N_P);
-        morton_owner.build(
-            dev_morton_point, dev_morton_posx, N_P, max_search_dist,
-            static_cast<float>(X_MIN), static_cast<float>(X_MAX),
-            static_cast<float>(Y_MIN), static_cast<float>(Y_MAX),
-            static_cast<float>(Z_MIN), static_cast<float>(Z_MAX),
-            N_X > 1, (N_Z > 1) ? 3 : 2, MORTON_LEAF_TARGET, MORTON_MAX_LEVEL
-        );
-        #endif // COLLISION_KDTREE
+        #ifdef COL_CHAIN
+        std::vector<int> col_count(col_raw_count);
+        std::vector<int> col_binmap(col_raw_count);
+        std::vector<col_rate_bin> col_ratebin(col_raw_count);
+        std::vector<col_audit_accum> col_audit(col_raw_count);
+        col_summary.operator_count++;
+        int operator_index = col_summary.operator_count;
+        int bath_index = 0;
+        real elapsed = 0.0;
+        while (elapsed < duration)
+        {
+            col_bath_init <<< NB_P, TPB >>> (
+                dev_size_old, dev_numr_old, dev_col_time, dev_col_events,
+                dev_col_complete, dev_particle
+            );
+            HIP_KERNEL_CHECK("col_bath_init");
+            col_bath_rate <<< N_P, COL_CHAIN_TPB >>> (
+                dev_col_rate, dev_particle, dev_col_neighbor, dev_col_measure, dev_col_active,
+                dev_size_old, dev_numr_old,
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass
+            );
+            HIP_KERNEL_CHECK("col_bath_rate");
 
+            HIP_CHECK(hipMemset(dev_col_count, 0, sizeof(int)*col_raw_count));
+            col_count_bin <<< NB_P, TPB >>> (
+                dev_col_count, dev_particle, dev_col_spatial, dev_col_active
+            );
+            HIP_KERNEL_CHECK("col_count_bin");
+            HIP_CHECK(hipMemcpy(
+                col_count.data(), dev_col_count, sizeof(int)*col_raw_count, hipMemcpyDeviceToHost
+            ));
+            int col_merged_count = _build_col_binmap(col_count, col_binmap);
+            HIP_CHECK(hipMemcpy(
+                dev_col_binmap, col_binmap.data(), sizeof(int)*col_raw_count, hipMemcpyHostToDevice
+            ));
+
+            HIP_CHECK(hipMemset(dev_col_ratebin, 0, sizeof(col_rate_bin)*col_raw_count));
+            col_rate_bins <<< NB_P, TPB >>> (
+                dev_col_ratebin, dev_particle, dev_col_rate,
+                dev_col_spatial, dev_col_binmap, dev_col_active
+            );
+            HIP_KERNEL_CHECK("col_rate_bins");
+            HIP_CHECK(hipMemcpy(
+                col_ratebin.data(), dev_col_ratebin, sizeof(col_rate_bin)*col_merged_count,
+                hipMemcpyDeviceToHost
+            ));
+
+            real active_mass = 0.0;
+            for (int idx_bin = 0; idx_bin < col_merged_count; idx_bin++)
+            {
+                if (col_ratebin[idx_bin].invalid_count != 0)
+                    throw std::runtime_error("collision bath controller returned invalid rate moments");
+                active_mass += col_ratebin[idx_bin].mass;
+            }
+            if (!(active_mass > 0.0))
+            {
+                dt_col = duration - elapsed;
+                elapsed = duration;
+                break;
+            }
+
+            dt_col = _choose_col_bath(
+                col_ratebin, col_merged_count, duration - elapsed, bath_state.limit_scale
+            );
+            real limit_before = bath_state.limit_scale;
+            HIP_CHECK(hipMemset(dev_col_hazard, 0, sizeof(real)*N_P));
+            HIP_CHECK(hipMemset(dev_col_jump1_int, 0, sizeof(real)*N_P));
+            HIP_CHECK(hipMemset(dev_col_jump2_int, 0, sizeof(real)*N_P));
+            HIP_CHECK(hipMemset(dev_col_jumpmax_int, 0, sizeof(real)*N_P));
+            int unfinished = N_P;
+            int continuation_count = 0;
+            while (unfinished > 0)
+            {
+                if (++continuation_count > 1000000)
+                    throw std::runtime_error("collision chain continuation limit exceeded");
+                HIP_CHECK(hipMemset(dev_col_unfinished, 0, sizeof(int)));
+                col_chain_run <<< N_P, COL_CHAIN_TPB >>> (
+                    dev_particle, dev_rngstate, dev_col_error, dev_col_unfinished,
+                    dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
+                    dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, dev_col_neighbor,
+                    dev_col_measure, dev_col_active, dev_size_old, dev_numr_old,
+                    #ifdef IMPORTGAS
+                    dev_gas_dens,
+                    #endif // IMPORTGAS
+                    N_P / (N_K - 1.0) / total_dust_mass, dt_col
+                );
+                HIP_KERNEL_CHECK("col_chain_run");
+                HIP_CHECK(hipMemcpy(
+                    &unfinished, dev_col_unfinished, sizeof(int), hipMemcpyDeviceToHost
+                ));
+            }
+
+            thrust::device_ptr <const int> col_error_ptr(dev_col_error);
+            int max_col_error = *thrust::max_element(col_error_ptr, col_error_ptr + N_P);
+            if (max_col_error != 0)
+                throw std::runtime_error("collision chain returned error " + std::to_string(max_col_error));
+
+            HIP_CHECK(hipMemset(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
+            col_audit_bin <<< NB_P, TPB >>> (
+                dev_col_audit, dev_particle, dev_size_old, dev_numr_old, dev_col_rate,
+                dev_col_hazard, dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int,
+                dev_col_events,
+                dev_col_spatial, dev_col_binmap, dev_col_active, dt_col
+            );
+            HIP_KERNEL_CHECK("col_audit_bin");
+            HIP_CHECK(hipMemcpy(
+                col_audit.data(), dev_col_audit, sizeof(col_audit_accum)*col_merged_count,
+                hipMemcpyDeviceToHost
+            ));
+            col_bath_result bath_result = _finish_col_bath(
+                col_audit, col_merged_count, bath_state
+            );
+            col_bath_record bath_record;
+            bath_record.operator_index = operator_index;
+            bath_record.bath_index = ++bath_index;
+            bath_record.merged_bins = col_merged_count;
+            bath_record.continuation_launches = continuation_count;
+            bath_record.duration = dt_col;
+            bath_record.limit_before = limit_before;
+            bath_record.limit_after = bath_state.limit_scale;
+            bath_record.result = bath_result;
+            _record_col_bath(col_summary, bath_record);
+            if (bath_result.persistent_overshoot)
+            {
+                std::string failure_file = PATH + "collision_chain_failure.json";
+                if (!save_col_controller(failure_file, col_summary))
+                    throw std::runtime_error(
+                        "collision bath controller failed and its diagnostics could not be saved"
+                    );
+                throw std::runtime_error(
+                    "collision bath controller remained outside tolerance at minimum scale"
+                );
+            }
+
+            elapsed += dt_col;
+            if (duration - elapsed < 8.0*std::numeric_limits<real>::epsilon()*duration)
+                elapsed = duration;
+            clock_dyn = elapsed;
+            count_col++;
+        }
+        #else  // LEGACY_COLLISION
         real elapsed = 0.0;
         while (elapsed < duration)
         {
@@ -450,6 +726,7 @@ int main (int argc, char **argv)
             clock_dyn = elapsed;
             count_col++;
         }
+        #endif // COL_CHAIN
     };
     #endif // COLLISION
 
@@ -468,6 +745,12 @@ int main (int argc, char **argv)
         #ifdef TRANSPORT
         count_dyn = 0;
         #endif // TRANSPORT
+
+        #ifdef COL_CHAIN
+        // restart controller memory at checkpoint boundaries while retaining it across split operators
+        bath_state = col_bath_state{};
+        col_summary = col_controller_summary{};
+        #endif // COL_CHAIN
 
         PRINT_TITLE_TO_SCREEN();
         
@@ -509,12 +792,18 @@ int main (int argc, char **argv)
             // apply the first half of the spatial diffusion operator
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
             HIP_KERNEL_CHECK("diffusion_pos");
+            #ifdef COLLISION
+            invalidate_col_geometry();
+            #endif // COLLISION
             #endif // DIFFUSION
 
             #ifdef RADIATION
             // drift to midpoint positions and reconstruct the optical depth used by the force solve
             ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt_dyn);
             HIP_KERNEL_CHECK("ssa_substep_1");
+            #ifdef COLLISION
+            invalidate_col_geometry();
+            #endif // COLLISION
             optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
             HIP_KERNEL_CHECK("optdepth_init");
             optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);
@@ -536,6 +825,9 @@ int main (int argc, char **argv)
                 dt_dyn
             );
             HIP_KERNEL_CHECK("ssa_substep_2");
+            #ifdef COLLISION
+            invalidate_col_geometry();
+            #endif // COLLISION
             #else  // NO RADIATION
             // complete transport in one launch when no midpoint radiation field is required
             ssa_transport <<< NB_P, TPB >>> (dev_particle,
@@ -545,12 +837,18 @@ int main (int argc, char **argv)
                 dt_dyn
             );
             HIP_KERNEL_CHECK("ssa_transport");
+            #ifdef COLLISION
+            invalidate_col_geometry();
+            #endif // COLLISION
             #endif // RADIATION
 
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
             HIP_KERNEL_CHECK("diffusion_pos");
+            #ifdef COLLISION
+            invalidate_col_geometry();
+            #endif // COLLISION
             #endif // DIFFUSION
 
             #ifdef COLLISION
@@ -614,9 +912,43 @@ int main (int argc, char **argv)
         if (idx_file % LIN_BASE == 0) SAVE_PARTICLE_TO_FILE(idx_file);
         #endif // LOGTIMING
 
+        #ifdef COL_CHAIN
+        std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
+        if (!save_col_controller(controller_file, col_summary))
+        {
+            std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
+            return 1;
+        }
+        #endif // COL_CHAIN
+
+        #ifdef COL_GEOM_QAV
+        std::string geometry_file = PATH + "collision_geometry_" + frame_num(idx_file) + ".json";
+        std::ofstream geometry_stream(geometry_file);
+        if (!geometry_stream)
+        {
+            std::cerr << "Error: Failed to save file: " << geometry_file << std::endl;
+            return 1;
+        }
+        geometry_stream
+            << "{\n"
+            << "  \"schema\": 1,\n"
+            << "  \"backend\": \"rocm\",\n"
+            << "  \"frame\": " << idx_file << ",\n"
+            << "  \"search_calls\": " << col_geom_calls << ",\n"
+            << "  \"geometry_builds\": " << col_geom_builds << ",\n"
+            << "  \"geometry_reuses\": " << col_geom_reuses << ",\n"
+            << "  \"geometry_invalidations\": " << col_geom_invalidations << "\n"
+            << "}\n";
+        if (!geometry_stream)
+        {
+            std::cerr << "Error: Failed to write file: " << geometry_file << std::endl;
+            return 1;
+        }
+        #endif // COL_GEOM_QAV
+
         msg_output(idx_file);
     }
- 
+
     return 0;
 }
 

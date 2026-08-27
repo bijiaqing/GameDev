@@ -122,7 +122,7 @@ int _get_col_sizebin (real size)
 __device__ __forceinline__
 real _get_col_uniform (curs *rngstate)
 {
-    return fmin(curand_uniform_double(rngstate), nextafter(1.0, 0.0));
+    return fmin(hiprand_uniform_double(rngstate), nextafter(1.0, 0.0));
 }
 
 __device__ __forceinline__
@@ -975,3 +975,4 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
 #endif // COL_CHAIN
 
 #endif // SWARM_COL_CHAIN_CUH
+

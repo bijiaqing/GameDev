@@ -36,7 +36,19 @@
 #endif // COLLISION backend selection
 
 #ifdef COL_CHAIN
-#error "COL_CHAIN is not yet implemented for ROCm"
+static_assert(COL_CHAIN_TPB > 0 && COL_CHAIN_TPB <= 1024,
+    "COL_CHAIN requires 0 < COL_CHAIN_TPB <= 1024");
+static_assert(COL_EVENT_CAP > 0, "COL_CHAIN requires COL_EVENT_CAP > 0");
+static_assert(COL_BIN_X > 0 && COL_BIN_Y > 0 && COL_BIN_Z > 0 && COL_BIN_S > 0,
+    "COL_CHAIN controller-bin counts must be positive");
+static_assert(COL_BIN_MIN > 0, "COL_CHAIN requires COL_BIN_MIN > 0");
+static_assert(COL_BATH_MAX > 0.0, "COL_CHAIN requires COL_BATH_MAX > 0");
+static_assert(COL_BATH_EPS > 0.0 && COL_BATH_EPS < 1.0,
+    "COL_CHAIN requires 0 < COL_BATH_EPS < 1");
+static_assert(COL_BATH_ALPHA > 0.0 && COL_BATH_ALPHA < 1.0,
+    "COL_CHAIN requires 0 < COL_BATH_ALPHA < 1");
+static_assert(COL_SIZE_MIN > 0.0 && COL_SIZE_MAX > COL_SIZE_MIN,
+    "COL_CHAIN requires COL_SIZE_MAX > COL_SIZE_MIN > 0");
 #endif // COL_CHAIN
 
 #if !defined(TRANSPORT) && !defined(COLLISION)
@@ -98,6 +110,7 @@ __global__ void dustdens_calc (real *dev_dustdens);
 
 #ifdef COLLISION
 __global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
+__global__ void colstate_flag (const swarm *dev_particle, int *dev_bad_part);
 __global__ void inf_rate_flag (const real *dev_col_rate, const real *dev_col_dist, int *dev_bad_part);
 
 #ifdef COLLISION_KDTREE
