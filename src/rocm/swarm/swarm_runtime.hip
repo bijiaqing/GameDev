@@ -1,9 +1,9 @@
-#include <chrono>           // std::chrono::system_clock
+#include <chrono>           // std::chrono clocks and durations
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
 #include <fstream>          // std::ofstream
-#include <iomanip>          // std::setw, std::setfill
+#include <iomanip>          // std::setw, std::setfill, std::setprecision
 #include <iostream>         // std::cout, std::endl
 #include <limits>           // std::numeric_limits
 #include <sstream>          // std::stringstream
@@ -19,13 +19,21 @@
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
 
-#ifdef COL_CHAIN
+#if defined(COLLISION) && !defined(BERNOULLI)
 #include <_col_chain.cuh>
-#endif // COL_CHAIN
+#endif // COLLISION && !BERNOULLI
+
+#ifdef KNN_CACHE
+#include <_col_cache.cuh>
+#endif // KNN_CACHE
 
 #ifdef COLLISION_MORTON
 #include <morton/morton_ghost.cuh>
 #endif // COLLISION_MORTON
+
+#if defined(COL_PERF_QAV) && !defined(COL_GEOM_QAV)
+#error "COL_PERF_QAV requires COL_GEOM_QAV"
+#endif
 
 std::mt19937 rand_generator;
 
@@ -145,24 +153,29 @@ int main (int argc, char **argv)
     HIP_CHECK(hipMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
 
-    #ifdef COL_CHAIN
+    #if !defined(BERNOULLI) || defined(KNN_CACHE)
     const std::size_t col_neighbor_count = static_cast<std::size_t>(N_P)*N_K;
+    int *dev_col_neighbor;
+    real *dev_col_measure;
+    HIP_CHECK(hipMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
+    HIP_CHECK(hipMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
+    #endif // FROZEN_BATH || KNN_CACHE
+
+    #ifndef BERNOULLI
     const int col_raw_count = _get_col_raw_count();
-    int *dev_col_neighbor, *dev_col_events, *dev_col_spatial;
+    int *dev_col_events, *dev_col_spatial;
     int *dev_col_count, *dev_col_binmap, *dev_col_error, *dev_col_unfinished;
-    real *dev_col_measure, *dev_col_time, *dev_col_hazard;
+    real *dev_col_time, *dev_col_hazard;
     real *dev_col_jump1_int, *dev_col_jump2_int, *dev_col_jumpmax_int;
     unsigned char *dev_col_complete;
     col_rate_bin *dev_col_ratebin;
     col_audit_accum *dev_col_audit;
-    HIP_CHECK(hipMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
     HIP_CHECK(hipMalloc((void**)&dev_col_events, sizeof(int)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_spatial, sizeof(int)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_count, sizeof(int)*col_raw_count));
     HIP_CHECK(hipMalloc((void**)&dev_col_binmap, sizeof(int)*col_raw_count));
     HIP_CHECK(hipMalloc((void**)&dev_col_error, sizeof(int)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_unfinished, sizeof(int)));
-    HIP_CHECK(hipMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_time, sizeof(real)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_hazard, sizeof(real)*N_P));
     HIP_CHECK(hipMalloc((void**)&dev_col_jump1_int, sizeof(real)*N_P));
@@ -172,10 +185,10 @@ int main (int argc, char **argv)
     HIP_CHECK(hipMalloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
     HIP_CHECK(hipMalloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
     HIP_CHECK(hipMemset(dev_col_error, 0, sizeof(int)*N_P));
-    #else  // LEGACY_COLLISION
+    #elif !defined(KNN_CACHE)  // DIRECT_BERNOULLI
     real *dev_col_dist;
     HIP_CHECK(hipMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
-    #endif // COL_CHAIN
+    #endif // FROZEN_BATH / KNN_CACHE / DIRECT_BERNOULLI
     #endif // COLLISION
 
     #if defined(COLLISION) || defined(DIFFUSION)
@@ -342,6 +355,30 @@ int main (int argc, char **argv)
     int col_geom_invalidations = 0;
     #endif // COL_GEOM_QAV
 
+    #ifdef COL_PERF_QAV
+    double col_perf_total_ms = 0.0;
+    double col_perf_geometry_ms = 0.0;
+    double col_perf_rate_ms = 0.0;
+    double col_perf_event_ms = 0.0;
+    double col_perf_audit_ms = 0.0;
+    long long col_perf_batches = 0;
+    long long col_perf_launches = 0;
+
+    // synchronize benchmark boundaries so every phase owns all of its GPU work
+    auto col_perf_start = [] ()
+    {
+        HIP_CHECK(hipDeviceSynchronize());
+        return std::chrono::steady_clock::now();
+    };
+    auto col_perf_stop = [] (const std::chrono::steady_clock::time_point &start)
+    {
+        HIP_CHECK(hipDeviceSynchronize());
+        return std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start
+        ).count();
+    };
+    #endif // COL_PERF_QAV
+
     #ifdef COLLISION_KDTREE
     float image_dist_min = -1.0f;
     if (N_T > N_P)
@@ -353,10 +390,10 @@ int main (int argc, char **argv)
     }
     #endif // COLLISION_KDTREE
 
-    #ifdef COL_CHAIN
+    #ifndef BERNOULLI
     col_bath_state bath_state;
     col_controller_summary col_summary;
-    #endif // COL_CHAIN
+    #endif // FROZEN_BATH
 
     // invalidate the search package only when a position update ends its current geometry epoch
     auto invalidate_col_geometry = [&] ()
@@ -370,6 +407,10 @@ int main (int argc, char **argv)
     // evolve collisions over a fixed-position interval with the configured collision integrator
     auto evolve_collisions = [&] (real duration)
     {
+        #ifdef COL_PERF_QAV
+        auto col_operator_start = col_perf_start();
+        #endif // COL_PERF_QAV
+
         #ifdef KNN_FRESH
         // QAV baseline: deliberately rebuild an otherwise reusable fixed-position search package
         col_geom_valid = false;
@@ -398,6 +439,10 @@ int main (int argc, char **argv)
         // rebuild the complete geometric search package only after particle positions change
         if (!col_geom_valid)
         {
+            #ifdef COL_PERF_QAV
+            auto col_geometry_start = col_perf_start();
+            #endif // COL_PERF_QAV
+
             HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
             #ifdef COLLISION_KDTREE
             col_site_init <<< NB_P, TPB >>> (
@@ -442,8 +487,8 @@ int main (int argc, char **argv)
             );
             #endif // COLLISION_KDTREE
 
-            #ifdef COL_CHAIN
-            // retain the fixed geometric neighborhood while baths refresh only collision properties
+            #if !defined(BERNOULLI) || defined(KNN_CACHE)
+            // retain fixed physical neighbors while collision properties continue to evolve
             #ifdef COLLISION_KDTREE
             col_cache_get <<< NB_T, TPB >>> (
                 dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
@@ -463,16 +508,21 @@ int main (int argc, char **argv)
             if (max_morton_overflow != 0)
                 throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
             #endif // COLLISION_KDTREE
+            #endif // FROZEN_BATH || KNN_CACHE
 
+            #ifndef BERNOULLI
             col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
             HIP_KERNEL_CHECK("col_space_bin");
-            #endif // COL_CHAIN
+            #endif // FROZEN_BATH
 
             // publish validity only after every required hierarchy, cache, and guard has completed
             col_geom_valid = true;
             #ifdef COL_GEOM_QAV
             col_geom_builds++;
             #endif // COL_GEOM_QAV
+            #ifdef COL_PERF_QAV
+            col_perf_geometry_ms += col_perf_stop(col_geometry_start);
+            #endif // COL_PERF_QAV
         }
         #ifdef COL_GEOM_QAV
         else
@@ -481,7 +531,7 @@ int main (int argc, char **argv)
         }
         #endif // COL_GEOM_QAV
 
-        #ifdef COL_CHAIN
+        #ifndef BERNOULLI
         std::vector<int> col_count(col_raw_count);
         std::vector<int> col_binmap(col_raw_count);
         std::vector<col_rate_bin> col_ratebin(col_raw_count);
@@ -492,12 +542,16 @@ int main (int argc, char **argv)
         real elapsed = 0.0;
         while (elapsed < duration)
         {
+            #ifdef COL_PERF_QAV
+            auto col_rate_start = col_perf_start();
+            #endif // COL_PERF_QAV
+
             col_bath_init <<< NB_P, TPB >>> (
                 dev_size_old, dev_numr_old, dev_col_time, dev_col_events,
                 dev_col_complete, dev_particle
             );
             HIP_KERNEL_CHECK("col_bath_init");
-            col_bath_rate <<< N_P, COL_CHAIN_TPB >>> (
+            col_bath_rate <<< N_P, COL_BATH_TPB >>> (
                 dev_col_rate, dev_particle, dev_col_neighbor, dev_col_measure, dev_col_active,
                 dev_size_old, dev_numr_old,
                 #ifdef IMPORTGAS
@@ -540,6 +594,9 @@ int main (int argc, char **argv)
             }
             if (!(active_mass > 0.0))
             {
+                #ifdef COL_PERF_QAV
+                col_perf_rate_ms += col_perf_stop(col_rate_start);
+                #endif // COL_PERF_QAV
                 dt_col = duration - elapsed;
                 elapsed = duration;
                 break;
@@ -549,6 +606,11 @@ int main (int argc, char **argv)
                 col_ratebin, col_merged_count, duration - elapsed, bath_state.limit_scale
             );
             real limit_before = bath_state.limit_scale;
+            #ifdef COL_PERF_QAV
+            col_perf_rate_ms += col_perf_stop(col_rate_start);
+            auto col_event_start = col_perf_start();
+            #endif // COL_PERF_QAV
+
             HIP_CHECK(hipMemset(dev_col_hazard, 0, sizeof(real)*N_P));
             HIP_CHECK(hipMemset(dev_col_jump1_int, 0, sizeof(real)*N_P));
             HIP_CHECK(hipMemset(dev_col_jump2_int, 0, sizeof(real)*N_P));
@@ -560,7 +622,7 @@ int main (int argc, char **argv)
                 if (++continuation_count > 1000000)
                     throw std::runtime_error("collision chain continuation limit exceeded");
                 HIP_CHECK(hipMemset(dev_col_unfinished, 0, sizeof(int)));
-                col_chain_run <<< N_P, COL_CHAIN_TPB >>> (
+                col_chain_run <<< N_P, COL_BATH_TPB >>> (
                     dev_particle, dev_rngstate, dev_col_error, dev_col_unfinished,
                     dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
                     dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, dev_col_neighbor,
@@ -580,6 +642,11 @@ int main (int argc, char **argv)
             int max_col_error = *thrust::max_element(col_error_ptr, col_error_ptr + N_P);
             if (max_col_error != 0)
                 throw std::runtime_error("collision chain returned error " + std::to_string(max_col_error));
+
+            #ifdef COL_PERF_QAV
+            col_perf_event_ms += col_perf_stop(col_event_start);
+            auto col_audit_start = col_perf_start();
+            #endif // COL_PERF_QAV
 
             HIP_CHECK(hipMemset(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
             col_audit_bin <<< NB_P, TPB >>> (
@@ -606,6 +673,11 @@ int main (int argc, char **argv)
             bath_record.limit_after = bath_state.limit_scale;
             bath_record.result = bath_result;
             _record_col_bath(col_summary, bath_record);
+            #ifdef COL_PERF_QAV
+            col_perf_audit_ms += col_perf_stop(col_audit_start);
+            col_perf_batches++;
+            col_perf_launches += continuation_count;
+            #endif // COL_PERF_QAV
             if (bath_result.persistent_overshoot)
             {
                 std::string failure_file = PATH + "collision_chain_failure.json";
@@ -624,13 +696,31 @@ int main (int argc, char **argv)
             clock_dyn = elapsed;
             count_col++;
         }
-        #else  // LEGACY_COLLISION
+        #else  // BERNOULLI
         real elapsed = 0.0;
         while (elapsed < duration)
         {
+            #ifdef COL_PERF_QAV
+            auto col_rate_start = col_perf_start();
+            #endif // COL_PERF_QAV
+
             // freeze only the species fields changed by collisions while positions and velocities remain fixed
             col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
             HIP_KERNEL_CHECK("col_snap_save");
+            #ifdef KNN_CACHE
+            #ifdef COLLISION_KDTREE
+            col_rate_calc <<< NB_P, TPB >>> (
+            #else  // COLLISION_MORTON
+            col_rate_calc <<< N_P, MORTON_TPB >>> (
+            #endif // COLLISION_KDTREE
+                dev_col_rate, dev_particle, dev_col_neighbor, dev_col_measure,
+                dev_col_active, dev_size_old, dev_numr_old,
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass
+            );
+            #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
             col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
@@ -651,10 +741,18 @@ int main (int argc, char **argv)
                 N_P / (N_K - 1.0) / total_dust_mass
             );
             #endif // COLLISION_KDTREE
+            #endif // KNN_CACHE
             HIP_KERNEL_CHECK("col_rate_calc");
 
             HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
-            inf_rate_flag <<< NB_P, TPB >>> (dev_col_rate, dev_col_dist, dev_bad_part);
+            inf_rate_flag <<< NB_P, TPB >>> (dev_col_rate,
+                #ifdef KNN_CACHE
+                dev_col_measure,
+                #else  // DIRECT_BERNOULLI
+                dev_col_dist,
+                #endif // KNN_CACHE
+                dev_bad_part
+            );
             HIP_KERNEL_CHECK("inf_rate_flag");
             int bad_result = 0;
             HIP_CHECK(hipMemcpy(&bad_result, dev_bad_part, sizeof(int), hipMemcpyDeviceToHost));
@@ -665,19 +763,22 @@ int main (int argc, char **argv)
                 std::exit(EXIT_FAILURE);
             }
 
-            #ifdef COLLISION_MORTON
+            #if defined(COLLISION_MORTON) && !defined(KNN_CACHE)
             thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
             unsigned int max_morton_overflow = *thrust::max_element(
                 morton_overflow_ptr, morton_overflow_ptr + N_P
             );
             if (max_morton_overflow != 0)
                 throw std::runtime_error("Morton traversal stack overflow in col_rate_calc");
-            #endif // COLLISION_MORTON
+            #endif // COLLISION_MORTON && !KNN_CACHE
 
             // use the largest total propensity to control every representative's event probability
             thrust::device_ptr <const real> col_rate_ptr(dev_col_rate);
             real max_col_rate = *thrust::max_element(col_rate_ptr, col_rate_ptr + N_P);
             real remaining = duration - elapsed;
+            #ifdef COL_PERF_QAV
+            col_perf_rate_ms += col_perf_stop(col_rate_start);
+            #endif // COL_PERF_QAV
 
             if (!(max_col_rate > 0.0))
             {
@@ -689,6 +790,24 @@ int main (int argc, char **argv)
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
             dt_col = fmin(CFL_COL / max_col_rate, remaining);
+            #ifdef COL_PERF_QAV
+            auto col_event_start = col_perf_start();
+            #endif // COL_PERF_QAV
+            #ifdef KNN_CACHE
+            #ifdef COLLISION_KDTREE
+            col_event_run <<< NB_P, TPB >>> (
+            #else  // COLLISION_MORTON
+            col_event_run <<< N_P, MORTON_TPB >>> (
+            #endif // COLLISION_KDTREE
+                dev_particle, dev_rngstate, dev_col_rate, dev_col_neighbor, dev_col_measure,
+                dev_col_active, dev_size_old, dev_numr_old,
+                #ifdef IMPORTGAS
+                dev_gas_dens,
+                #endif // IMPORTGAS
+                N_P / (N_K - 1.0) / total_dust_mass,
+                dt_col
+            );
+            #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
             col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
@@ -711,22 +830,33 @@ int main (int argc, char **argv)
                 dt_col
             );
             #endif // COLLISION_KDTREE
+            #endif // KNN_CACHE
             HIP_KERNEL_CHECK("col_event_run");
             HIP_CHECK(hipDeviceSynchronize());
 
-            #ifdef COLLISION_MORTON
+            #if defined(COLLISION_MORTON) && !defined(KNN_CACHE)
             max_morton_overflow = *thrust::max_element(
                 morton_overflow_ptr, morton_overflow_ptr + N_P
             );
             if (max_morton_overflow != 0)
                 throw std::runtime_error("Morton traversal stack overflow in col_event_run");
-            #endif // COLLISION_MORTON
+            #endif // COLLISION_MORTON && !KNN_CACHE
+
+            #ifdef COL_PERF_QAV
+            col_perf_event_ms += col_perf_stop(col_event_start);
+            col_perf_batches++;
+            col_perf_launches++;
+            #endif // COL_PERF_QAV
 
             elapsed += dt_col;
             clock_dyn = elapsed;
             count_col++;
         }
-        #endif // COL_CHAIN
+        #endif // FROZEN_BATH / BERNOULLI
+
+        #ifdef COL_PERF_QAV
+        col_perf_total_ms += col_perf_stop(col_operator_start);
+        #endif // COL_PERF_QAV
     };
     #endif // COLLISION
 
@@ -746,11 +876,11 @@ int main (int argc, char **argv)
         count_dyn = 0;
         #endif // TRANSPORT
 
-        #ifdef COL_CHAIN
+        #ifndef BERNOULLI
         // restart controller memory at checkpoint boundaries while retaining it across split operators
         bath_state = col_bath_state{};
         col_summary = col_controller_summary{};
-        #endif // COL_CHAIN
+        #endif // FROZEN_BATH
 
         PRINT_TITLE_TO_SCREEN();
         
@@ -912,14 +1042,14 @@ int main (int argc, char **argv)
         if (idx_file % LIN_BASE == 0) SAVE_PARTICLE_TO_FILE(idx_file);
         #endif // LOGTIMING
 
-        #ifdef COL_CHAIN
+        #ifndef BERNOULLI
         std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
         if (!save_col_controller(controller_file, col_summary))
         {
             std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
             return 1;
         }
-        #endif // COL_CHAIN
+        #endif // FROZEN_BATH
 
         #ifdef COL_GEOM_QAV
         std::string geometry_file = PATH + "collision_geometry_" + frame_num(idx_file) + ".json";
@@ -945,6 +1075,85 @@ int main (int argc, char **argv)
             return 1;
         }
         #endif // COL_GEOM_QAV
+
+        #ifdef COL_PERF_QAV
+        std::string performance_file = PATH + "collision_performance_" + frame_num(idx_file) + ".json";
+        std::ofstream performance_stream(performance_file);
+        if (!performance_stream)
+        {
+            std::cerr << "Error: Failed to save file: " << performance_file << std::endl;
+            return 1;
+        }
+        double col_perf_accounted_ms = col_perf_geometry_ms + col_perf_rate_ms
+            + col_perf_event_ms + col_perf_audit_ms;
+        performance_stream
+            << std::setprecision(17)
+            << "{\n"
+            << "  \"schema\": 1,\n"
+            << "  \"backend\": \"rocm\",\n"
+            << "  \"frame\": " << idx_file << ",\n"
+            << "  \"particles\": " << N_P << ",\n"
+            << "  \"neighbors\": " << N_K << ",\n"
+            << "  \"integrator\": \""
+            #ifndef BERNOULLI
+            << "frozen_bath"
+            #else  // BERNOULLI
+            #ifdef KNN_CACHE
+            << "bernoulli_cache"
+            #else  // DIRECT_BERNOULLI
+            << "bernoulli_direct"
+            #endif // KNN_CACHE
+            #endif // FROZEN_BATH
+            << "\",\n"
+            << "  \"search\": \""
+            #ifdef COLLISION_KDTREE
+            << "kdtree"
+            #else  // COLLISION_MORTON
+            << "morton"
+            #endif // COLLISION_KDTREE
+            << "\",\n"
+            << "  \"forced_fresh\": "
+            #ifdef KNN_FRESH
+            << "true"
+            #else  // REUSED_GEOMETRY
+            << "false"
+            #endif // KNN_FRESH
+            << ",\n"
+            << "  \"neighbor_cache\": "
+            #if !defined(BERNOULLI) || defined(KNN_CACHE)
+            << "true"
+            #else  // DIRECT_BERNOULLI
+            << "false"
+            #endif // FROZEN_BATH || KNN_CACHE
+            << ",\n"
+            << "  \"neighbor_cache_bytes\": "
+            #if !defined(BERNOULLI) || defined(KNN_CACHE)
+            << sizeof(int)*col_neighbor_count + sizeof(real)*static_cast<std::size_t>(N_P)
+            #else  // DIRECT_BERNOULLI
+            << 0
+            #endif // FROZEN_BATH || KNN_CACHE
+            << ",\n"
+            << "  \"collision_calls\": " << col_geom_calls << ",\n"
+            << "  \"geometry_builds\": " << col_geom_builds << ",\n"
+            << "  \"geometry_reuses\": " << col_geom_reuses << ",\n"
+            << "  \"geometry_invalidations\": " << col_geom_invalidations << ",\n"
+            << "  \"collision_batches\": " << col_perf_batches << ",\n"
+            << "  \"event_launches\": " << col_perf_launches << ",\n"
+            << "  \"timing_ms\": {\n"
+            << "    \"collision_total\": " << col_perf_total_ms << ",\n"
+            << "    \"geometry\": " << col_perf_geometry_ms << ",\n"
+            << "    \"rate_and_control\": " << col_perf_rate_ms << ",\n"
+            << "    \"events\": " << col_perf_event_ms << ",\n"
+            << "    \"audit\": " << col_perf_audit_ms << ",\n"
+            << "    \"other\": " << col_perf_total_ms - col_perf_accounted_ms << "\n"
+            << "  }\n"
+            << "}\n";
+        if (!performance_stream)
+        {
+            std::cerr << "Error: Failed to write file: " << performance_file << std::endl;
+            return 1;
+        }
+        #endif // COL_PERF_QAV
 
         msg_output(idx_file);
     }

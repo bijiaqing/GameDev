@@ -118,8 +118,8 @@ const real  H_SEARCH    = 1.0;              // KNN search radius in units of the
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
 const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
 
-#ifdef COL_CHAIN
-const int   COL_CHAIN_TPB = 256;            // cooperative threads assigned to one collision-chain owner
+#ifndef BERNOULLI
+const int   COL_BATH_TPB  = 256;            // cooperative threads assigned to one frozen-bath owner
 const int   COL_EVENT_CAP = 32;              // accepted events permitted per representative and continuation launch
 const int   COL_BIN_X     = 8;               // azimuthal controller bins before reduced-dimension collapse
 const int   COL_BIN_Y     = 4;               // radial controller bins
@@ -129,7 +129,7 @@ const int   COL_BIN_MIN   = 64;              // target minimum representatives a
 const real  COL_BATH_MAX  = 0.05;            // maximum frozen-reservoir bath duration
 const real  COL_BATH_EPS  = 0.06;            // common activity and distribution-change tolerance
 const real  COL_BATH_ALPHA = 1.0e-3;         // family-wise confidence-tail probability for realized audits
-#endif // COL_CHAIN
+#endif // FROZEN_BATH
 #endif // COLLISION
 
 #ifdef COLLISION_MORTON
@@ -151,10 +151,10 @@ const real INIT_SMIN    = 1.0e+00;          // minimum grain size for particle i
 const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle initialization
 #endif // MULTISIZE
 
-#ifdef COL_CHAIN
+#if defined(COLLISION) && !defined(BERNOULLI)
 const real COL_SIZE_MIN = 0.5*INIT_SMIN;    // lower fixed edge of the logarithmic controller size axis
 const real COL_SIZE_MAX = 8.0*INIT_SMAX;    // upper fixed edge of the logarithmic controller size axis
-#endif // COL_CHAIN
+#endif // COLLISION && !BERNOULLI
 
 // =========================================================================================================================
 // time step and output parameters

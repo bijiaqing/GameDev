@@ -1951,9 +1951,10 @@ where the transition coefficient is
 B_3=\frac{S-s}{S+s}\left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
 ```
 
-### 8.2 Frozen Bernoulli collision batches
+### 8.2 Optional frozen Bernoulli collision batches
 
-The GPU event update is a controlled parallel Bernoulli leap, not the exact serial stochastic
+Defining `BERNOULLI` replaces the default frozen-bath chain with a controlled parallel Bernoulli
+leap. It is not the exact serial stochastic
 simulation algorithm of [Gillespie (1977)](https://doi.org/10.1021/j100540a008). It is closer in
 spirit to an explicit tau leap, as discussed by
 [Cao, Gillespie & Petzold (2005)](https://people.cs.vt.edu/~ycao/publication/JChemPhys_123_054104.pdf),
@@ -2000,10 +2001,11 @@ The exponential event probability is exact for one frozen Poisson clock; the app
 restriction to at most one event for each representative during the batch and the use of frozen
 partner properties.
 
-For the Morton backend, the block evaluates the individual pair propensities cooperatively after
-the neighbor search. Thread zero then accumulates the stored values and samples the partner in the
-original Morton neighbor order. This preserves the serial floating-point summation and stochastic
-selection rule while avoiding one-thread evaluation of all pair physics.
+Without `KNN_CACHE`, each Bernoulli batch performs its own neighbor query. Adding `KNN_CACHE`
+retains the physical top-$K$ identities and KNN measure across the complete fixed-position
+collision operator, while recomputing current pair propensities every batch. For the Morton
+backend, one block evaluates the individual pair propensities cooperatively. Thread zero then
+accumulates the stored values and samples the partner in retained-neighbor order.
 
 Coagulation uses
 
@@ -2039,10 +2041,10 @@ $$
 
 which preserves the mass represented by $i$ but is a model-specific one-fragment sampling law.
 
-#### Guarded GPU continuous-time collision chain
+#### Default GPU continuous-time collision chain
 
-Defining `COL_CHAIN` selects an alternative GPU integrator while leaving the Bernoulli
-method as the default. The spatial index and each owner's physical top-$K$ neighbor identities and
+When `COLLISION` is enabled without `BERNOULLI`, both GPU backends use the frozen-bath
+continuous-time chain. The spatial index and each owner's physical top-$K$ neighbor identities and
 KNN measure are fixed over one collision operator because positions do not change. At every shorter
 bath boundary, the partner sizes and represented numbers are refreshed from the current population.
 Within a bath, owner $i$ evolves by the Gillespie direct method against that immutable reservoir:
@@ -2380,7 +2382,7 @@ is controlled by the fastest representative. Raising `CFL_COL` does not solve th
 $\lambda_i\Delta t$ is large, collapsing several expected physical events into one Bernoulli trial
 changes the stochastic process.
 
-The guarded GPU implementation is a frozen-bath local continuous-time event chain. Over a larger
+The default GPU implementation is a frozen-bath local continuous-time event chain. Over a larger
 bath interval $\tau_{\mathrm{bath}}$, each representative keeps a local clock, draws exact waiting
 times
 
@@ -2392,10 +2394,11 @@ and processes zero, one, or many events against immutable partner properties. Af
 own rate and partner weights are recomputed. This removes the fastest-particle global microstep and
 is exact conditional on the frozen bath; convergence under halving $\tau_{\mathrm{bath}}$ controls
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
-chain lengths without truncating a stochastic path. The current Bernoulli method remains the default
-until production-scale memory and performance, bath-interval convergence, coupled-operator behavior,
-and native ROCm behavior are qualified. Native CUDA checkpoint-boundary restart has been qualified
-for both supported searches; equivalent ROCm restart evidence remains pending.
+chain lengths without truncating a stochastic path. The Bernoulli method remains available through
+`BERNOULLI` for controlled comparisons or configurations that explicitly require that older
+discretization; `KNN_CACHE` selects its cached-neighbor variant. CUDA and ROCm have both qualified
+the frozen-bath chain and checkpoint-boundary restart, while the newly exposed ROCm cached-Bernoulli
+path still requires a native post-port run.
 
 ## 9. Operator composition, timestep hierarchy, and boundaries
 
@@ -2627,8 +2630,9 @@ the imported pointer-free tree implementation, with a query associated with each
 record. Morton construction sorts compact keys and assigns one cooperative GPU block to each
 physical query. In both search backends, particle positions remain fixed across the complete opening
 or closing collision interval, so one spatial index is reused across all internal batches. The
-default integrator freezes collision species once per Bernoulli batch; the guarded GPU chain instead
-keeps neighbor identities fixed while refreshing partner species at every controlled bath boundary.
+default frozen-bath integrator keeps neighbor identities fixed while refreshing partner species at
+every controlled bath boundary. The optional Bernoulli integrator freezes collision species once
+per global batch and may either query neighbors directly or retain them with `KNN_CACHE`.
 
 Ignoring allocator and alignment overhead, the persistent particle-state storage is approximately
 
@@ -2747,8 +2751,8 @@ model itself rather than current test coverage.
 - Imported-gas position sampling currently assumes a strictly positive integrated
   $\rho_g\epsilon$ mass; an all-zero imported profile reaches an undefined CDF normalization and
   should be rejected by the caller until an explicit host guard is added.
-- The guarded GPU chain rejects invalid pair rates, clocks, states, and Morton traversal overflow;
-  native ROCm chain qualification is still required before claiming backend parity.
+- The frozen-bath chain rejects invalid pair rates, clocks, states, and Morton traversal overflow;
+  the post-port ROCm cached-Bernoulli branch still requires native qualification.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.
 - Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and a

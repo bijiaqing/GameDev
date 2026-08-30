@@ -1,5 +1,9 @@
 #ifdef COLLISION
 
+#ifdef KNN_CACHE
+#include <cstddef>  // std::size_t
+#endif // KNN_CACHE
+
 #include <_collision.cuh>
 #include <_transport.cuh>
 #include <param_grid.cuh>
@@ -269,6 +273,209 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     dev_rngstate[idx_old_i] = rngstate;
 }
 #endif // COLLISION_KDTREE
+
+#ifdef KNN_CACHE
+
+// =========================================================================================================================
+// kernel overload: col_event_run
+// sample frozen Bernoulli events and select partners from the persistent physical-neighbor cache
+//
+// parallelization: one KD-tree thread or one Morton block per representative particle
+// =========================================================================================================================
+
+#ifdef COLLISION_KDTREE
+__global__
+void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
+    const int *dev_col_neighbor, const real *dev_col_measure,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0,
+    real dt_col)
+{
+    int idx_old_i = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_old_i >= N_P) return;
+
+    real col_rate_i = dev_col_rate[idx_old_i];
+    if (col_rate_i <= 0.0) return;
+
+    curs rngstate = dev_rngstate[idx_old_i];
+    real event_prob = -expm1(-col_rate_i*dt_col);
+    bool run_event = hiprand_uniform_double(&rngstate) <= event_prob;
+    dev_rngstate[idx_old_i] = rngstate;
+    if (!run_event) return;
+
+    real measure = dev_col_measure[idx_old_i];
+    if (!(measure > 0.0)) return;
+
+    real target = col_rate_i*hiprand_uniform_double(&rngstate);
+    dev_rngstate[idx_old_i] = rngstate;
+    real cumulative = 0.0;
+    int idx_old_j = -1;
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+    {
+        std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
+        int idx_old_j_try = dev_col_neighbor[idx_cache];
+        if (idx_old_j_try < 0 || idx_old_j_try == idx_old_i) continue;
+        if (!_is_particle_active(
+            dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
+        )) continue;
+
+        idx_old_j = idx_old_j_try;
+        cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+            dev_particle, dev_size_old, dev_numr_old,
+            #ifdef IMPORTGAS
+            dev_gas_dens,
+            #endif // IMPORTGAS
+            idx_old_i, idx_old_j_try, lambda_0
+        ) / measure;
+        if (cumulative >= target) break;
+    }
+    if (idx_old_j < 0) return;
+
+    #ifdef MULTISIZE
+    real vrel = 0.0;
+    if (COAG_KERNEL == CUSTOM_KERNEL)
+    {
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+            #ifdef IMPORTGAS
+            , dev_gas_dens
+            #endif // IMPORTGAS
+        );
+    }
+
+    real size_i = dev_size_old[idx_old_i];
+    real size_j = dev_size_old[idx_old_j];
+    real size_k = cbrt(size_i*size_i*size_i + size_j*size_j*size_j);
+    if (vrel <= V_FRAG)
+    {
+        dev_particle[idx_old_i].par_size = size_k;
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*size_i*size_i*size_i
+            / (size_k*size_k*size_k);
+    }
+    else
+    {
+        real frag_sample = hiprand_uniform_double(&rngstate);
+        size_k = fmax(INIT_SMIN, size_k*frag_sample*frag_sample);
+        dev_particle[idx_old_i].par_size = size_k;
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*size_i*size_i*size_i
+            / (size_k*size_k*size_k);
+    }
+    #endif // MULTISIZE
+
+    dev_rngstate[idx_old_i] = rngstate;
+}
+#else  // COLLISION_MORTON
+__global__
+void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
+    const int *dev_col_neighbor, const real *dev_col_measure,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0,
+    real dt_col)
+{
+    int idx_old_i = blockIdx.x;
+    if (idx_old_i >= N_P) return;
+
+    __shared__ bool run_event;
+    curs rngstate; // keep the HIP RNG object local because shared objects cannot be initialized
+    if (threadIdx.x == 0)
+    {
+        real col_rate_i = dev_col_rate[idx_old_i];
+        run_event = col_rate_i > 0.0;
+        if (run_event)
+        {
+            rngstate = dev_rngstate[idx_old_i];
+            real event_prob = -expm1(-col_rate_i*dt_col);
+            run_event = hiprand_uniform_double(&rngstate) <= event_prob;
+            dev_rngstate[idx_old_i] = rngstate;
+        }
+    }
+    __syncthreads();
+    if (!run_event) return;
+
+    __shared__ real pair_rate[N_K];
+    for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
+    {
+        pair_rate[idx_neighbor] = 0.0;
+        std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
+        int idx_old_j = dev_col_neighbor[idx_cache];
+        if (idx_old_j < 0 || idx_old_j == idx_old_i) continue;
+        if (!_is_particle_active(
+            dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
+        )) continue;
+
+        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+            dev_particle, dev_size_old, dev_numr_old,
+            #ifdef IMPORTGAS
+            dev_gas_dens,
+            #endif // IMPORTGAS
+            idx_old_i, idx_old_j, lambda_0
+        );
+    }
+    __syncthreads();
+    if (threadIdx.x != 0) return;
+
+    real measure = dev_col_measure[idx_old_i];
+    if (!(measure > 0.0)) return;
+
+    real target = dev_col_rate[idx_old_i]*hiprand_uniform_double(&rngstate);
+    dev_rngstate[idx_old_i] = rngstate;
+    real cumulative = 0.0;
+    int idx_old_j = -1;
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+    {
+        std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
+        int idx_old_j_try = dev_col_neighbor[idx_cache];
+        if (idx_old_j_try < 0 || idx_old_j_try == idx_old_i) continue;
+        if (!_is_particle_active(
+            dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
+        )) continue;
+
+        idx_old_j = idx_old_j_try;
+        cumulative += pair_rate[idx_neighbor] / measure;
+        if (cumulative >= target) break;
+    }
+    if (idx_old_j < 0) return;
+
+    #ifdef MULTISIZE
+    real vrel = 0.0;
+    if (COAG_KERNEL == CUSTOM_KERNEL)
+    {
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+            #ifdef IMPORTGAS
+            , dev_gas_dens
+            #endif // IMPORTGAS
+        );
+    }
+
+    real size_i = dev_size_old[idx_old_i];
+    real size_j = dev_size_old[idx_old_j];
+    real size_k = cbrt(size_i*size_i*size_i + size_j*size_j*size_j);
+    if (vrel <= V_FRAG)
+    {
+        dev_particle[idx_old_i].par_size = size_k;
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*size_i*size_i*size_i
+            / (size_k*size_k*size_k);
+    }
+    else
+    {
+        real frag_sample = hiprand_uniform_double(&rngstate);
+        size_k = fmax(INIT_SMIN, size_k*frag_sample*frag_sample);
+        dev_particle[idx_old_i].par_size = size_k;
+        dev_particle[idx_old_i].par_numr = dev_numr_old[idx_old_i]*size_i*size_i*size_i
+            / (size_k*size_k*size_k);
+    }
+    #endif // MULTISIZE
+
+    dev_rngstate[idx_old_i] = rngstate;
+}
+#endif // COLLISION_KDTREE
+
+#endif // KNN_CACHE
 
 // =========================================================================================================================
 

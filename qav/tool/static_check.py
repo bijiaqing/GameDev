@@ -186,12 +186,77 @@ def check_chain_port(errors: list[str]) -> None:
             return
     cuda_chain = headers["cuda"].read_text().replace(
         "curand_uniform_double", "backend_uniform_double"
+    ).replace(
+        "    __shared__ curs rngstate;", "    backend_rngstate;"
     ).rstrip()
-    rocm_chain = headers["rocm"].read_text().replace(
+    rocm_text = headers["rocm"].read_text()
+    if "__shared__ curs" in rocm_text:
+        errors.append("ROCm collision chain cannot construct a HIP RNG object in shared memory")
+    rocm_chain = rocm_text.replace(
         "hiprand_uniform_double", "backend_uniform_double"
+    ).replace(
+        "    curs rngstate; // keep the HIP RNG object local because shared objects cannot be initialized",
+        "    backend_rngstate;",
     ).rstrip()
     if cuda_chain != rocm_chain:
         errors.append("CUDA and ROCm collision-chain headers differ beyond RNG API spelling")
+
+    cache_headers = {
+        backend: PROJECT_ROOT/"inc"/backend/"swarm"/"_col_cache.cuh"
+        for backend in ("cuda", "rocm")
+    }
+    if any(not path.is_file() for path in cache_headers.values()):
+        errors.append("missing CUDA or ROCm collision-neighbor cache header")
+    elif cache_headers["cuda"].read_text() != cache_headers["rocm"].read_text():
+        errors.append("CUDA and ROCm collision-neighbor cache headers differ")
+
+    cache_sources = {
+        "rate": (
+            PROJECT_ROOT/"src"/"cuda"/"swarm"/"col_rate_calc.cu",
+            PROJECT_ROOT/"src"/"rocm"/"swarm"/"col_rate_calc.hip",
+        ),
+        "event": (
+            PROJECT_ROOT/"src"/"cuda"/"swarm"/"col_event_run.cu",
+            PROJECT_ROOT/"src"/"rocm"/"swarm"/"col_event_run.hip",
+        ),
+    }
+    for name, (cuda_path, rocm_path) in cache_sources.items():
+        cuda_text = cuda_path.read_text()
+        rocm_text = rocm_path.read_text()
+        marker = "\n#ifdef KNN_CACHE\n\n// "
+        if marker not in cuda_text or marker not in rocm_text:
+            errors.append(f"missing cached-Bernoulli {name} kernel block")
+            continue
+        cuda_block = cuda_text[cuda_text.rfind(marker):]
+        rocm_block = rocm_text[rocm_text.rfind(marker):]
+        if name == "event":
+            cuda_block = cuda_block.replace(
+                "curand_uniform_double", "backend_uniform_double"
+            ).replace(
+                "    __shared__ curs rngstate;",
+                "    backend_rngstate;",
+            )
+            rocm_block = rocm_block.replace(
+                "hiprand_uniform_double", "backend_uniform_double"
+            ).replace(
+                "    curs rngstate; // keep the HIP RNG object local because shared objects cannot be initialized",
+                "    backend_rngstate;",
+            )
+        if cuda_block != rocm_block:
+            errors.append(f"CUDA and ROCm cached-Bernoulli {name} kernels differ")
+
+    rocm_runtime = (PROJECT_ROOT/"src"/"rocm"/"swarm"/"swarm_runtime.hip").read_text()
+    required_cache_runtime = (
+        "#include <_col_cache.cuh>",
+        "#if !defined(BERNOULLI) || defined(KNN_CACHE)",
+        "dev_col_neighbor, dev_col_measure",
+        "#if defined(COLLISION_MORTON) && !defined(KNN_CACHE)",
+        "#ifdef COL_PERF_QAV",
+        '<< "  \\\"backend\\\": \\\"rocm\\\",\\n"',
+    )
+    for token in required_cache_runtime:
+        if token not in rocm_runtime:
+            errors.append(f"ROCm cached-Bernoulli runtime is missing {token!r}")
 
     models = (
         "test_colchain_2d",
@@ -392,12 +457,12 @@ def check_make_resolution(errors: list[str]) -> None:
         [
             "make", "-n", "MODEL=test_colreuse_2d", "GPU_BACKEND=cuda",
             "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=chain",
-            "CUDA_FLAGS=-DCOL_CHAIN -DKNN_FRESH",
+            "CUDA_FLAGS=-DKNN_FRESH",
         ],
         [
             "make", "-n", "MODEL=test_colreuse_2d", "GPU_BACKEND=rocm",
             "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=chain",
-            "ROCM_FLAGS=-DKNN_FRESH",
+            "ROCM_FLAGS=-DBERNOULLI -DKNN_CACHE -DKNN_FRESH",
         ],
         ["make", "-n", "MODEL=test_failure_2d", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
         ["make", "-n", "MODEL=test_lds_x", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],

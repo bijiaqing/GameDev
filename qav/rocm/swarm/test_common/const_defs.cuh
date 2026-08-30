@@ -36,7 +36,9 @@ constexpr real S_0 = 1.0;
 
 // particle counts are test samples rather than production population choices: use only enough representatives to cover the
 // analytical cases, except for stochastic and performance tests that need a statistically meaningful ensemble
-#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
+#if defined(TEST_COLREUSE_2D) && defined(PERF_PARTICLES)
+constexpr int N_P = PERF_PARTICLES;
+#elif defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
     || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D) \
     || defined(TEST_COLCHAIN_RESTART_2D) || defined(TEST_COLREUSE_2D)
 constexpr int N_P = 2048;
@@ -266,8 +268,8 @@ constexpr real V_FRAG =
 #endif // TEST_COLCHAIN_FRAG_2D
 constexpr real CFL_COL = 0.01;
 
-#ifdef COL_CHAIN
-constexpr int COL_CHAIN_TPB = 256;
+#if defined(COLLISION) && !defined(BERNOULLI)
+constexpr int COL_BATH_TPB = 256;
 constexpr int COL_EVENT_CAP =
 #ifdef TEST_CHAIN_CAP
     TEST_CHAIN_CAP;
@@ -284,7 +286,7 @@ constexpr real COL_BATH_EPS = 0.06;
 constexpr real COL_BATH_ALPHA = 1.0e-3;
 constexpr real COL_SIZE_MIN = 0.5*INIT_SMIN;
 constexpr real COL_SIZE_MAX = 8.0*INIT_SMAX;
-#endif // COL_CHAIN
+#endif // COLLISION && !BERNOULLI
 #endif
 
 #ifdef COLLISION_MORTON

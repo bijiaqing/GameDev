@@ -1,5 +1,9 @@
 #ifdef COLLISION
 
+#ifdef KNN_CACHE
+#include <cstddef>  // std::size_t
+#endif // KNN_CACHE
+
 #include <_collision.cuh>
 #include <_transport.cuh>
 #include <param_grid.cuh>
@@ -199,6 +203,118 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
     dev_col_rate[idx_old_i] = (measure > 0.0) ? col_rate_i / measure : 0.0;
 }
 #endif // COLLISION_KDTREE
+
+#ifdef KNN_CACHE
+
+// =========================================================================================================================
+// kernel overload: col_rate_calc
+// recalculate frozen Bernoulli rates from the persistent physical-neighbor cache
+//
+// parallelization: one KD-tree thread or one Morton block per representative particle
+// =========================================================================================================================
+
+#ifdef COLLISION_KDTREE
+__global__
+void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
+    const int *dev_col_neighbor, const real *dev_col_measure,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0)
+{
+    int idx_old_i = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_old_i >= N_P) return;
+
+    dev_col_rate[idx_old_i] = 0.0;
+    real x = dev_particle[idx_old_i].position.x;
+    real y = dev_particle[idx_old_i].position.y;
+    real z = dev_particle[idx_old_i].position.z;
+    real loc_x = _get_loc_x(x);
+    real loc_y = _get_loc_y(y);
+    real loc_z = _get_loc_z(z);
+    real measure = dev_col_measure[idx_old_i];
+    if (dev_col_active[idx_old_i] == 0 || !_is_in_bounds(loc_x, loc_y, loc_z)
+        || !(measure > 0.0)) return;
+
+    real col_rate_i = 0.0;
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+    {
+        std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
+        int idx_old_j = dev_col_neighbor[idx_cache];
+        if (idx_old_j < 0 || idx_old_j == idx_old_i) continue;
+        if (!_is_particle_active(
+            dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
+        )) continue;
+
+        col_rate_i += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+            dev_particle, dev_size_old, dev_numr_old,
+            #ifdef IMPORTGAS
+            dev_gas_dens,
+            #endif // IMPORTGAS
+            idx_old_i, idx_old_j, lambda_0
+        );
+    }
+    dev_col_rate[idx_old_i] = col_rate_i / measure;
+}
+#else  // COLLISION_MORTON
+__global__
+void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
+    const int *dev_col_neighbor, const real *dev_col_measure,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0)
+{
+    int idx_old_i = blockIdx.x;
+    if (idx_old_i >= N_P) return;
+
+    if (threadIdx.x == 0) dev_col_rate[idx_old_i] = 0.0;
+    __syncthreads();
+
+    real x = dev_particle[idx_old_i].position.x;
+    real y = dev_particle[idx_old_i].position.y;
+    real z = dev_particle[idx_old_i].position.z;
+    real loc_x = _get_loc_x(x);
+    real loc_y = _get_loc_y(y);
+    real loc_z = _get_loc_z(z);
+    real measure = dev_col_measure[idx_old_i];
+    if (dev_col_active[idx_old_i] == 0 || !_is_in_bounds(loc_x, loc_y, loc_z)
+        || !(measure > 0.0)) return;
+
+    __shared__ real pair_rate[N_K];
+    for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
+    {
+        pair_rate[idx_neighbor] = 0.0;
+        std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
+        int idx_old_j = dev_col_neighbor[idx_cache];
+        if (idx_old_j < 0 || idx_old_j == idx_old_i) continue;
+        if (!_is_particle_active(
+            dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
+        )) continue;
+
+        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+            dev_particle, dev_size_old, dev_numr_old,
+            #ifdef IMPORTGAS
+            dev_gas_dens,
+            #endif // IMPORTGAS
+            idx_old_i, idx_old_j, lambda_0
+        );
+    }
+    __syncthreads();
+    if (threadIdx.x != 0) return;
+
+    real col_rate_i = 0.0;
+    for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+    {
+        col_rate_i += pair_rate[idx_neighbor];
+    }
+    dev_col_rate[idx_old_i] = col_rate_i / measure;
+}
+#endif // COLLISION_KDTREE
+
+#endif // KNN_CACHE
 
 // =========================================================================================================================
 

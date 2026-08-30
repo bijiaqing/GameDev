@@ -36,20 +36,32 @@
 #endif // COLLISION backend selection
 
 #ifdef COL_CHAIN
-static_assert(COL_CHAIN_TPB > 0 && COL_CHAIN_TPB <= 1024,
-    "COL_CHAIN requires 0 < COL_CHAIN_TPB <= 1024");
-static_assert(COL_EVENT_CAP > 0, "COL_CHAIN requires COL_EVENT_CAP > 0");
-static_assert(COL_BIN_X > 0 && COL_BIN_Y > 0 && COL_BIN_Z > 0 && COL_BIN_S > 0,
-    "COL_CHAIN controller-bin counts must be positive");
-static_assert(COL_BIN_MIN > 0, "COL_CHAIN requires COL_BIN_MIN > 0");
-static_assert(COL_BATH_MAX > 0.0, "COL_CHAIN requires COL_BATH_MAX > 0");
-static_assert(COL_BATH_EPS > 0.0 && COL_BATH_EPS < 1.0,
-    "COL_CHAIN requires 0 < COL_BATH_EPS < 1");
-static_assert(COL_BATH_ALPHA > 0.0 && COL_BATH_ALPHA < 1.0,
-    "COL_CHAIN requires 0 < COL_BATH_ALPHA < 1");
-static_assert(COL_SIZE_MIN > 0.0 && COL_SIZE_MAX > COL_SIZE_MIN,
-    "COL_CHAIN requires COL_SIZE_MAX > COL_SIZE_MIN > 0");
+#error "COL_CHAIN is obsolete; COLLISION now selects frozen-bath collisions by default"
 #endif // COL_CHAIN
+
+#if defined(BERNOULLI) && !defined(COLLISION)
+#error "BERNOULLI requires COLLISION"
+#endif // BERNOULLI && !COLLISION
+
+#if defined(KNN_CACHE) && !defined(BERNOULLI)
+#error "KNN_CACHE requires BERNOULLI"
+#endif // KNN_CACHE && !BERNOULLI
+
+#if defined(COLLISION) && !defined(BERNOULLI)
+static_assert(COL_BATH_TPB > 0 && COL_BATH_TPB <= 1024,
+    "frozen-bath collisions require 0 < COL_BATH_TPB <= 1024");
+static_assert(COL_EVENT_CAP > 0, "frozen-bath collisions require COL_EVENT_CAP > 0");
+static_assert(COL_BIN_X > 0 && COL_BIN_Y > 0 && COL_BIN_Z > 0 && COL_BIN_S > 0,
+    "frozen-bath controller-bin counts must be positive");
+static_assert(COL_BIN_MIN > 0, "frozen-bath collisions require COL_BIN_MIN > 0");
+static_assert(COL_BATH_MAX > 0.0, "frozen-bath collisions require COL_BATH_MAX > 0");
+static_assert(COL_BATH_EPS > 0.0 && COL_BATH_EPS < 1.0,
+    "frozen-bath collisions require 0 < COL_BATH_EPS < 1");
+static_assert(COL_BATH_ALPHA > 0.0 && COL_BATH_ALPHA < 1.0,
+    "frozen-bath collisions require 0 < COL_BATH_ALPHA < 1");
+static_assert(COL_SIZE_MIN > 0.0 && COL_SIZE_MAX > COL_SIZE_MIN,
+    "frozen-bath collisions require COL_SIZE_MAX > COL_SIZE_MIN > 0");
+#endif // COLLISION && !BERNOULLI
 
 #if !defined(TRANSPORT) && !defined(COLLISION)
 #error "No evolution module is enabled"
@@ -157,6 +169,26 @@ __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
 __global__ void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
     unsigned char *dev_col_active, const swarm *dev_particle);
 #endif // COLLISION_KDTREE
+
+#ifdef KNN_CACHE
+__global__ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
+    const int *dev_col_neighbor, const real *dev_col_measure,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0
+);
+__global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
+    const real *dev_col_rate, const int *dev_col_neighbor, const real *dev_col_measure,
+    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0,
+    real dt_col
+);
+#endif // KNN_CACHE
 #endif // COLLISION
 
 #if defined(COLLISION) || defined(DIFFUSION)

@@ -130,14 +130,17 @@ def run(model: str, backend: str) -> None:
     executable = model_dir/"gamedev"
     backend_flag = "CUDA_FLAGS" if backend == "cuda" else "ROCM_FLAGS"
     records = {}
-    for integrator in ("legacy", "chain"):
+    integrators = (
+        ("bernoulli_direct", ["-DBERNOULLI"], "bernoulli_direct", "direct"),
+        ("bernoulli_cache", ["-DBERNOULLI", "-DKNN_CACHE"], "bernoulli_cache", "cached"),
+        ("frozen_bath", [], "frozen_bath", "cached"),
+    )
+    for integrator, integrator_defines, provenance_integrator, provenance_neighbors in integrators:
         for search in ("kdtree", "morton"):
             pair = {}
             for mode in ("reuse", "fresh"):
                 tag = f"{integrator}_{search}_{mode}"
-                defines = []
-                if integrator == "chain":
-                    defines.append("-DCOL_CHAIN")
+                defines = list(integrator_defines)
                 if mode == "fresh":
                     defines.append("-DKNN_FRESH")
                 make_base = [
@@ -158,8 +161,9 @@ def run(model: str, backend: str) -> None:
                 continue
             reuse = pair["reuse"]
             fresh = pair["fresh"]
-            expected_integrator = f"COLLISION_INTEGRATOR = {integrator}"
+            expected_integrator = f"COLLISION_INTEGRATOR = {provenance_integrator}"
             provenance = expected_integrator in reuse["variables"] \
+                and f"COLLISION_NEIGHBORS = {provenance_neighbors}" in reuse["variables"] \
                 and f"COLLISION_SEARCH = {search}" in reuse["variables"]
             exact = reuse["particle_sha256"] == fresh["particle_sha256"] \
                 and reuse["rng_sha256"] == fresh["rng_sha256"]

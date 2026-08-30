@@ -146,7 +146,8 @@ The swarm solver uses:
 - staggered semi-analytic drag, gravity, and geometric trajectory updates
 - midpoint radiation pressure and optional Poynting-Robertson drag
 - cylindrical Ito Euler-Maruyama diffusion followed by coordinate reprojection
-- frozen-snapshot Bernoulli collision batches, with an opt-in CUDA continuous-time chain
+- a default frozen-bath continuous-time collision chain, with optional direct or cached Bernoulli
+  batches
 - exact top-$K$ nearest-neighbor candidates from either a KD tree or an adaptive Morton hierarchy
 - Strang composition of the enabled transport, diffusion, and collision operators
 
@@ -317,7 +318,8 @@ NVCC += -DCODE_UNIT
 | `PR_EFFECT` | add Poynting-Robertson drag; requires `RADIATION` |
 | `VISC_FLOW` | use viscous gas radial flow; requires `DIFFUSION` and excludes `IMPORTGAS` |
 | `COLLISION` | enable representative-particle collisions; requires `MULTISIZE` |
-| `COL_CHAIN` | select the guarded CUDA continuous-time frozen-bath chain with either collision-search backend; default off |
+| `BERNOULLI` | replace the default frozen-bath chain by the globally stepped Bernoulli integrator |
+| `KNN_CACHE` | cache physical neighbors for `BERNOULLI`; requires `BERNOULLI` |
 | `MULTISIZE` | store and evolve individual grain sizes and represented grain counts |
 | `IMPORTGAS` | read gridded gas density and velocity fields |
 | `CONST_ST` | hold the Stokes number fixed; incompatible with `IMPORTGAS` |
@@ -572,9 +574,9 @@ relevant observables.
   approximation
 - Swarm diffusion and collisions are stochastic and require particle-number and ensemble
   convergence, not only mesh convergence
-- The default Bernoulli collision timestep can become globally restrictive in dense or strongly
-  clumped regions; the guarded CUDA chain removes that global microstep but is not yet the
-  cross-backend or production-scale default
+- The default frozen-bath chain removes the fastest-particle global collision microstep, but its
+  bath tolerance and neighbor reservoir still require convergence checks for each scientific use;
+  the optional Bernoulli method retains the globally restrictive timestep
 - Collision KNN searches use a local planar metric with a documented search-radius validity limit
 - Multi-GPU domain decomposition is not implemented
 - CUDA and ROCm are selected from one build tree, but checkpoints and vendor RNG-state files are

@@ -1108,9 +1108,9 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
-    #ifdef COL_CHAIN
-    file << "COLLISION_INTEGRATOR = chain"                                               << std::endl;
-    file << "COL_CHAIN_TPB = " << COL_CHAIN_TPB                                           << std::endl;
+    #ifndef BERNOULLI
+    file << "COLLISION_INTEGRATOR = frozen_bath"                                         << std::endl;
+    file << "COL_BATH_TPB  = " << COL_BATH_TPB                                            << std::endl;
     file << "COL_EVENT_CAP  = " << COL_EVENT_CAP                                          << std::endl;
     file << "COL_BATH_MAX   = " << std::scientific << std::setprecision(8) << COL_BATH_MAX << std::endl;
     file << "COL_BATH_EPS   = " << std::scientific << std::setprecision(8) << COL_BATH_EPS << std::endl;
@@ -1122,10 +1122,19 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COL_BIN_MIN    = " << COL_BIN_MIN                                            << std::endl;
     file << "COL_SIZE_RANGE = " << std::scientific << std::setprecision(8)
          << COL_SIZE_MIN << " " << COL_SIZE_MAX                                      << std::endl;
-    #else  // LEGACY_COLLISION
-    file << "COLLISION_INTEGRATOR = legacy"                                              << std::endl;
+    #else  // BERNOULLI
+    #ifdef KNN_CACHE
+    file << "COLLISION_INTEGRATOR = bernoulli_cache"                                     << std::endl;
+    #else  // DIRECT_BERNOULLI
+    file << "COLLISION_INTEGRATOR = bernoulli_direct"                                    << std::endl;
+    #endif // KNN_CACHE
     file << "CFL_COL     = " << std::defaultfloat   << std::setprecision(8) << CFL_COL      << std::endl;
-    #endif // COL_CHAIN
+    #endif // FROZEN_BATH / BERNOULLI
+    #if !defined(BERNOULLI) || defined(KNN_CACHE)
+    file << "COLLISION_NEIGHBORS = cached"                                              << std::endl;
+    #else  // DIRECT_BERNOULLI
+    file << "COLLISION_NEIGHBORS = direct"                                              << std::endl;
+    #endif // FROZEN_BATH || KNN_CACHE
     file << "RNG_STREAM_POLICY = shared_per_particle"                                    << std::endl;
     #ifdef COLLISION_KDTREE
     file << "COLLISION_SEARCH = kdtree"                                                   << std::endl;

@@ -284,7 +284,7 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_colchain_wedge_2d` | partial-azimuth production runtime with periodic search images | duplicate-safe KD-tree and Morton chain execution, controller diagnostics, conservation, and repeat determinism |
 | `test_colchain_3d` | full three-dimensional production runtime | volume-density collision closure, both search caches, controller diagnostics, conservation, and repeat determinism |
 | `test_colchain_restart_2d` | two-output production chain resumed in a new process from frame one | exact position/species and RNG continuation, velocity round-trip tolerance, controller reset equivalence, conservation, and unchanged checkpoint inputs |
-| `test_colreuse_2d` | transported production runtime with reusable and forced-fresh search preparation | exact final particle/RNG equivalence and geometry-epoch build/reuse/invalidation accounting for legacy and chain integrators with KD-tree and Morton search |
+| `test_colreuse_2d` | transported production runtime with reusable and forced-fresh search preparation | exact final particle/RNG equivalence and geometry-epoch build/reuse/invalidation accounting for direct Bernoulli, cached Bernoulli, and frozen-bath integrators with KD-tree and Morton search |
 | `test_boundary_1d` | radial-only transport absorption and diffusion reflection | exact inactive-coordinate locking, repeated radial folding, and absorbing radial endpoint states |
 | `test_boundary_2d` | radial–azimuthal boundary helpers on a narrow periodic wedge | exact multi-wrap azimuth, radial diffusion reflection, radial absorption, and inactive polar state |
 | `test_boundary_3d` | full-disk 3D boundary helpers | exact periodic azimuth, radial/polar diffusion reflection, and radial/polar transport absorption |
@@ -1133,7 +1133,7 @@ independently evaluated CPU formulas above to the stated absolute tolerance. The
 not used as the reference, and resolution convergence is neither required nor implied because this
 is a direct device-helper test with fixed inputs.
 
-### Guarded production collision-chain runtime
+### Default production collision-chain runtime
 
 The backend-specific `chain` qualification group builds the actual production
 `src/BACKEND/swarm/swarm_runtime` with both `COLLISION_MORTON` and `COLLISION_KDTREE`. Every case uses
@@ -1151,10 +1151,10 @@ two output intervals continuously, archives frame two, then launches a fresh pro
 particle and RNG checkpoint and evolves the same second interval again.
 
 `test_colreuse_2d` enables transport and collision together and limits the dynamics step so one
-output contains at least four transported steps. For each of the legacy Bernoulli and collision-chain
-integrators, it builds KD-tree and Morton variants twice: the production reuse path and the QAV-only
-`KNN_FRESH` baseline that deliberately rebuilds before every collision operator. For $M$ transported
-steps, the reused path must report
+output contains at least four transported steps. For each of direct Bernoulli, cached Bernoulli,
+and the default frozen-bath chain, it builds KD-tree and Morton variants twice: the production reuse
+path and the QAV-only `KNN_FRESH` baseline that deliberately rebuilds before every collision
+operator. For $M$ transported steps, the reused path must report
 
 $$
 N_{\rm call}=2M,
@@ -1187,7 +1187,7 @@ because the constant factor $\pi\rho_0/6$ cancels in the relative comparison. A 
 - every stored particle scalar is finite and every final $s_i,N_i$ is positive
 - at least one particle size changes, proving the event path was exercised
 - $|\mathcal M_3^{\rm final}-\mathcal M_3^{\rm initial}|/\mathcal M_3^{\rm initial}\le2\times10^{-12}$
-- `variables.txt` records the chain integrator and the requested search backend
+- `variables.txt` records the frozen-bath integrator and the requested search backend
 - a nonempty RNG checkpoint is written
 - the controller record is finite and complete, contains one record per bath, and reports no
   persistent minimum-scale overshoot
@@ -1621,8 +1621,9 @@ python3 qav/cuda/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The current complete command performs 75 analytical-suite builds plus four KNN driver builds and
-six production backend/geometry links.
+The current complete command performs 75 analytical-suite builds plus four KNN driver builds.
+The separately selected `chain` group builds the production runtime across both search methods,
+event-cap variants, restart, and the three geometry-reuse modes.
 Individual groups can be selected with
 
 ```bash
@@ -1638,8 +1639,9 @@ python3 qav/cuda/swarm/test_common/run_suite.py --group chain     --target sm_80
 ```
 
 The `chain` group is a backend-specific qualification branch and is intentionally excluded from
-`all`. The CUDA campaign has passed natively; the mirrored ROCm campaign is implemented but still
-requires a native `gfx942` run.
+`all`. CUDA and ROCm campaigns have passed the frozen-bath and restart cases natively. Because the
+selector was subsequently inverted and cached Bernoulli was added to ROCm, both backends must rerun
+this group to archive post-change evidence for all three integrator modes.
 
 The radial implementation can be isolated before the full regression with
 
@@ -1736,10 +1738,10 @@ gradients is also deferred.
 
 ### Other missing verification
 
-- Run and archive the mirrored ROCm collision-chain qualification, then extend the collision-chain
-  qualification to axisymmetry, imported gas, coupled
+- Rerun the mirrored CUDA and ROCm collision-chain qualification after the default-selector change,
+  including the new cached-Bernoulli variants, then extend it to axisymmetry, imported gas, coupled
   operators, and $N_P=10^6$; statistically compare complete histories and bath-size convergence
-- Test complete legacy frozen collision batches, the exact Bernoulli probability
+- Test complete optional Bernoulli batches, the exact event probability
   $1-e^{-\lambda\Delta t}$, and partner sampling; for both integrators, add convergence with
   `CFL_COL` or bath tolerance, $N_K$, $N_P$, and `H_SEARCH`, including a uniform-density field with
   a known rate and forced fragmentation that exercises the size and represented-number update
@@ -1764,8 +1766,8 @@ gradients is also deferred.
   timesteps do not exceed the configured crossing or diffusion limits
 - Test finite attenuation by coupling the reconstructed optical depth to
   $\beta e^{-\tau}$; the current grid and radiation cases validate the two pieces separately
-- Run and archive `test_colchain_restart_2d` on ROCm; extend it to fragmentation or
-  coupled operators only if those paths introduce checkpoint state beyond particles and RNG streams
+- Extend checkpoint/restart testing to fragmentation or coupled operators only if those paths
+  introduce checkpoint state beyond particles and RNG streams
 - Compare the radial-only model with an azimuthally uniform radial–azimuthal model using matched
   surface density, gas targets, and enabled physics
 - Add end-to-end operator-combination tests for transport plus diffusion, transport plus radiation,

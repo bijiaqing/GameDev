@@ -228,7 +228,7 @@ def run_variant(
     mass_error_continuous = abs(mass_continuous - mass_initial) / mass_initial
     mass_error_resumed = abs(mass_resumed - mass_initial) / mass_initial
     variables = variable_path.read_text()
-    provenance = "COLLISION_INTEGRATOR = chain" in variables \
+    provenance = "COLLISION_INTEGRATOR = frozen_bath" in variables \
         and f"COLLISION_SEARCH = {search}" in variables \
         and "COL_EVENT_CAP  = 32" in variables \
         and "COL_CONTROLLER_AUDIT = path_integrated" in variables
@@ -334,7 +334,7 @@ def run(model: str, backend: str) -> None:
         "backend": backend,
         "gpu_target": args.target,
         "tier": "qualification",
-        "integrator": "chain",
+        "integrator": "frozen_bath",
         "restart_frame": 1,
         "final_frame": 2,
         "variants": variants,
