@@ -186,7 +186,33 @@ def run(model: str, backend: str) -> None:
     if args.build_only:
         return
 
-    passed = all(record["passed"] for record in records.values())
+    bernoulli_equivalence = {}
+    for search in ("kdtree", "morton"):
+        modes = {}
+        for mode in ("reuse", "fresh"):
+            direct = records[f"bernoulli_direct_{search}"][mode]
+            cached = records[f"bernoulli_cache_{search}"][mode]
+            particle_equal = direct["particle_sha256"] == cached["particle_sha256"]
+            rng_equal = direct["rng_sha256"] == cached["rng_sha256"]
+            modes[mode] = {
+                "particle_equal": particle_equal,
+                "rng_equal": rng_equal,
+                "passed": particle_equal and rng_equal,
+            }
+        comparison_passed = all(value["passed"] for value in modes.values())
+        bernoulli_equivalence[search] = {
+            "modes": modes,
+            "passed": comparison_passed,
+        }
+        print(
+            f"{model}/bernoulli_direct_vs_cache/{search}: "
+            f"{'PASS' if comparison_passed else 'FAIL'} "
+            f"reuse={modes['reuse']['passed']} fresh={modes['fresh']['passed']}",
+            flush=True,
+        )
+
+    passed = all(record["passed"] for record in records.values()) \
+        and all(record["passed"] for record in bernoulli_equivalence.values())
     manifest = {
         "schema": 1,
         "model": model,
@@ -194,6 +220,7 @@ def run(model: str, backend: str) -> None:
         "gpu_target": args.target,
         "tier": "qualification",
         "records": records,
+        "bernoulli_direct_cache_equivalence": bernoulli_equivalence,
         "passed": passed,
         "finished_utc": utc_now(),
     }

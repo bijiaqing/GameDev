@@ -1,5 +1,6 @@
 #include <chrono>           // std::chrono clocks and durations
 #include <cmath>            // std::fabs, std::fmin, std::sin
+#include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
 #include <fstream>          // std::ofstream
 #include <iomanip>          // std::setw, std::setfill, std::setprecision
@@ -126,6 +127,9 @@ int main (int argc, char **argv)
     #ifdef COLLISION
     unsigned char *dev_col_active;
     CUDA_CHECK(cudaMalloc((void**)&dev_col_active, sizeof(unsigned char)*N_P));
+
+    int *dev_bad_part;
+    CUDA_CHECK(cudaMalloc((void**)&dev_bad_part, sizeof(int)));
 
     #ifdef COLLISION_KDTREE
     kdtree_boxf *dev_kdtree_box;
@@ -416,6 +420,22 @@ int main (int argc, char **argv)
         col_geom_calls++;
         #endif // COL_GEOM_QAV
 
+        // geometry reuse must not suppress the per-operator nonfinite-state failure path
+        if (col_geom_valid)
+        {
+            CUDA_CHECK(cudaMemset(dev_bad_part, 0, sizeof(int)));
+            colstate_flag <<< NB_P, TPB >>> (dev_particle, dev_bad_part);
+            CUDA_KERNEL_CHECK("colstate_flag");
+            int bad_part = 0;
+            CUDA_CHECK(cudaMemcpy(&bad_part, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            if (bad_part != 0)
+            {
+                std::cerr << "Error: non-finite particle state before collision search at particle "
+                    << bad_part - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+        }
+
         // rebuild the complete geometric search package only after particle positions change
         if (!col_geom_valid)
         {
@@ -423,18 +443,38 @@ int main (int argc, char **argv)
             auto col_geometry_start = col_perf_start();
             #endif // COL_PERF_QAV
 
+            CUDA_CHECK(cudaMemset(dev_bad_part, 0, sizeof(int)));
             #ifdef COLLISION_KDTREE
-            col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle);
+            col_site_init <<< NB_P, TPB >>> (
+                dev_kdtree_node, dev_col_active, dev_particle, dev_bad_part
+            );
             CUDA_KERNEL_CHECK("col_site_init");
+            int bad_part = 0;
+            CUDA_CHECK(cudaMemcpy(&bad_part, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            if (bad_part != 0)
+            {
+                std::cerr << "Error: non-finite particle state before collision search at particle "
+                    << bad_part - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
             kdtree::buildTree <kdtree_node, kdtree_traits> (
                 dev_kdtree_node, N_T, dev_kdtree_box
             );
             CUDA_KERNEL_CHECK("kdtree::buildTree");
             #else  // COLLISION_MORTON
             col_site_init <<< NB_P, TPB >>> (
-                dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle
+                dev_morton_point, dev_morton_posx, dev_search_dist,
+                dev_col_active, dev_particle, dev_bad_part
             );
             CUDA_KERNEL_CHECK("col_site_init");
+            int bad_part = 0;
+            CUDA_CHECK(cudaMemcpy(&bad_part, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            if (bad_part != 0)
+            {
+                std::cerr << "Error: non-finite particle state before collision search at particle "
+                    << bad_part - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
 
             thrust::device_ptr <const float> search_dist_ptr(dev_search_dist);
             float max_search_dist = *thrust::max_element(search_dist_ptr, search_dist_ptr + N_P);
@@ -650,7 +690,10 @@ int main (int argc, char **argv)
                 );
             }
 
+            real elapsed_old = elapsed;
             elapsed += dt_col;
+            if (!(elapsed > elapsed_old))
+                throw std::runtime_error("collision timestep cannot advance the operator clock");
             if (duration - elapsed < 8.0*std::numeric_limits<real>::epsilon()*duration)
                 elapsed = duration;
             clock_dyn = elapsed;
@@ -789,7 +832,10 @@ int main (int argc, char **argv)
             col_perf_launches++;
             #endif // COL_PERF_QAV
 
+            real elapsed_old = elapsed;
             elapsed += dt_col;
+            if (!(elapsed > elapsed_old))
+                throw std::runtime_error("collision timestep cannot advance the operator clock");
             clock_dyn = elapsed;
             count_col++;
         }

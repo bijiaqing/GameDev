@@ -1141,6 +1141,13 @@ $N_P=2048$ and $N_K=200$. Unlike the collision-helper cases, each constructs its
 index, caches physical neighbors, selects controller baths, advances exact local event chains,
 writes production checkpoints and controller JSON, and runs through the production output path.
 
+The public selector is itself part of this regression contract: `COLLISION` must record
+`COLLISION_INTEGRATOR = frozen_bath`, `BERNOULLI` must record `bernoulli_direct`, and
+`BERNOULLI + KNN_CACHE` must record `bernoulli_cache`. Static checks reject `BERNOULLI` without
+`COLLISION`, `KNN_CACHE` without both prerequisites, and the obsolete `COL_CHAIN` selector. A
+checkpoint comparison is valid only within one source and integrator configuration; files made
+before a selector change are evidence, not a cross-version restart format.
+
 `test_colchain_2d` compiles both event-cap 1 and event-cap 32 variants. The cap-one run must require
 more continuation launches than completed baths, and its final particle and RNG checkpoints must be
 byte-identical to the cap-32 result for the same search backend. `test_colchain_frag_2d` selects the
@@ -1169,7 +1176,10 @@ $$
 whereas the forced-fresh path must report $N_{\rm build}=N_{\rm call}$ and $N_{\rm reuse}=0$.
 Each reuse/fresh pair must have byte-identical final particle and RNG checkpoints. This is a
 trajectory-level test of the lifetime optimization, not merely a comparison of aggregate collision
-statistics.
+statistics. For each search backend, direct and cached Bernoulli must additionally produce
+byte-identical particle and RNG checkpoints in both geometry modes. This second comparison proves
+that replacing repeated traversal by the persistent physical-neighbor list does not change the
+Bernoulli event path.
 
 For the first four models, each search/cap variant starts twice from the same deterministic
 initialization and validates the particle, RNG, and `collision_chain_FRAME.json` records. All
@@ -1223,9 +1233,23 @@ integer or Boolean controller decision differed. These last-bit differences aris
 floating-point diagnostic reductions and do not change the stochastic trajectory. The reconstructed
 CUDA group manifest therefore reports five of five models passed.
 
-The geometry-epoch test is a sixth `chain`-group component added after that archived campaign. Its
-CUDA and ROCm source graphs and Python validator pass static checks, but native results are not yet
-recorded; the historical five-model result must not be interpreted as evidence for search reuse.
+The post-inversion CUDA `sm_80` campaign completed all six current models on 2026-08-30. The five
+existing chain and restart models remained passing, and `test_colreuse_2d` qualified all three
+integrators with both search backends. Reused geometry produced five hierarchy builds and three
+reuse hits across eight searches, while forced-fresh geometry produced eight builds and no reuse.
+For direct and cached Bernoulli, both the reused and forced-fresh variants produced byte-identical
+particle and RNG checkpoints for the same search backend. This closes the CUDA qualification gap
+for selector inversion, cached Bernoulli, and geometry-epoch reuse.
+
+The matching ROCm `gfx942` campaign completed all six models on 2026-08-30. All 47 archived JSON
+records are parseable and finite, and every recorded acceptance gate passes. The cap-one and
+cap-32 2D variants remain pathwise identical within each search backend. In `test_colreuse_2d`,
+reused geometry produces five hierarchy builds and three reuse hits across eight searches, whereas
+forced-fresh geometry produces eight builds and no reuse. Direct and cached Bernoulli produce
+identical particle and RNG checkpoints in both geometry modes for Morton and KD-tree search. The
+restart, fragmentation, periodic-wedge, and full-3D components also pass, so the native CUDA and
+ROCm campaigns now have equal six-model coverage. These are within-backend reproducibility tests;
+they do not require vendor RNG states or stochastic trajectories to match across backends.
 
 These are integration and reproducibility gates rather than analytical collision-distribution
 tests. They qualify continuation invariance, forced fragmentation, partial-wedge search geometry,
@@ -1487,8 +1511,8 @@ python3 qav/rocm/swarm/test_common/run_suite.py --group failure --target gfx942
 Focused evidence is stored below `groups/GROUP/`, so it cannot replace the common `all` archive.
 The complete backend-neutral transfer and comparison workflow is specified in `qav/README.md`.
 
-The archived native `sm_80` chain qualification completed on 2026-08-27. All five then-existing component
-manifests and the reconstructed aggregate manifest report `passed: true`. The base 2D case proves
+The first archived native `sm_80` chain qualification completed on 2026-08-27. All five
+then-existing component manifests and the reconstructed aggregate manifest report `passed: true`. The base 2D case proves
 pathwise event-cap invariance with 149 cap-one launches versus 46 cap-32 launches over the same 46
 baths. The additional cases exercise forced fragmentation, periodic-wedge image handling, and the
 full-3D volume-density closure. Across both Morton and KD-tree variants, all states remained finite
@@ -1497,8 +1521,13 @@ particle and RNG checkpoints exactly as well as their controller records within 
 The restart component additionally reproduced its continuous frame-two particle and RNG files
 exactly after starting a new process from frame one.
 
-The current group contains the additional `test_colreuse_2d` component and therefore requires a new
-native campaign before the complete six-model group can be reported as passing.
+The refreshed post-inversion CUDA campaign completed on 2026-08-30 and reports six of six current
+components passing. In addition to preserving the five results above, `test_colreuse_2d` passed
+reused-versus-fresh geometry accounting for frozen bath, direct Bernoulli, and cached Bernoulli
+with KD-tree and Morton search. Direct and cached Bernoulli produced identical particle and RNG
+checkpoints in both geometry modes. The equivalent ROCm `gfx942` campaign also completed on
+2026-08-30 with six of six components passing and the same variant coverage and geometry-accounting
+criteria.
 
 The accompanying CUDA legacy-collision regression also passed all four $N=32$ cases after the RNG
 commit correction. Maximum $L_\infty$ errors were zero in 1D, $2.78\times10^{-17}$ for imported-gas
@@ -1639,9 +1668,9 @@ python3 qav/cuda/swarm/test_common/run_suite.py --group chain     --target sm_80
 ```
 
 The `chain` group is a backend-specific qualification branch and is intentionally excluded from
-`all`. CUDA and ROCm campaigns have passed the frozen-bath and restart cases natively. Because the
-selector was subsequently inverted and cached Bernoulli was added to ROCm, both backends must rerun
-this group to archive post-change evidence for all three integrator modes.
+`all`. Current CUDA `sm_80` and ROCm `gfx942` campaigns have both passed the post-inversion
+six-model group, including frozen bath, direct and cached Bernoulli, geometry reuse, continuation,
+fragmentation, periodic wedge geometry, full 3D, and restart.
 
 The radial implementation can be isolated before the full regression with
 
@@ -1738,9 +1767,12 @@ gradients is also deferred.
 
 ### Other missing verification
 
-- Rerun the mirrored CUDA and ROCm collision-chain qualification after the default-selector change,
-  including the new cached-Bernoulli variants, then extend it to axisymmetry, imported gas, coupled
-  operators, and $N_P=10^6$; statistically compare complete histories and bath-size convergence
+- Extend the qualified CUDA and ROCm collision-chain campaigns to axisymmetry, imported gas,
+  coupled operators, and $N_P=10^6$; statistically compare complete histories and bath-size
+  convergence
+- Add a production Bernoulli near-tie fixture with equidistant candidate neighbors and require the
+  direct and cached KD-tree slot order to remain identical; the existing KNN edge tests establish
+  the selected top-$K$ set but do not exercise inverse-CDF partner sampling through both paths
 - Test complete optional Bernoulli batches, the exact event probability
   $1-e^{-\lambda\Delta t}$, and partner sampling; for both integrators, add convergence with
   `CFL_COL` or bath tolerance, $N_K$, $N_P$, and `H_SEARCH`, including a uniform-density field with

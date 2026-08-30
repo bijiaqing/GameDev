@@ -116,7 +116,11 @@ int _get_col_sizebin (real size)
 __device__ __forceinline__
 real _get_col_uniform (curs *rngstate)
 {
+    #ifdef GAMEDEV_CUDA
     return fmin(curand_uniform_double(rngstate), nextafter(1.0, 0.0));
+    #else  // GAMEDEV_ROCM
+    return fmin(hiprand_uniform_double(rngstate), nextafter(1.0, 0.0));
+    #endif // GAMEDEV_CUDA
 }
 
 __device__ __forceinline__
@@ -355,7 +359,11 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
     __shared__ real jump1_i;
     __shared__ real jump2_i;
     __shared__ real jumpmax_i;
+    #ifdef GAMEDEV_CUDA
     __shared__ curs rngstate;
+    #else  // GAMEDEV_ROCM
+    curs rngstate; // keep the HIP RNG object local because shared objects cannot be initialized
+    #endif // GAMEDEV_CUDA
     __shared__ int event_count;
     __shared__ int accepted;
     __shared__ bool keep_running;

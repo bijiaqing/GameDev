@@ -690,7 +690,10 @@ int main (int argc, char **argv)
                 );
             }
 
+            real elapsed_old = elapsed;
             elapsed += dt_col;
+            if (!(elapsed > elapsed_old))
+                throw std::runtime_error("collision timestep cannot advance the operator clock");
             if (duration - elapsed < 8.0*std::numeric_limits<real>::epsilon()*duration)
                 elapsed = duration;
             clock_dyn = elapsed;
@@ -848,7 +851,10 @@ int main (int argc, char **argv)
             col_perf_launches++;
             #endif // COL_PERF_QAV
 
+            real elapsed_old = elapsed;
             elapsed += dt_col;
+            if (!(elapsed > elapsed_old))
+                throw std::runtime_error("collision timestep cannot advance the operator clock");
             clock_dyn = elapsed;
             count_col++;
         }

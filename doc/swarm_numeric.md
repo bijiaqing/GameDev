@@ -337,6 +337,8 @@ The swarm executable is likewise a compile-time specialization:
 | `RADIATION` | deposit and accumulate optical depth and add radiation pressure |
 | `PR_EFFECT` | add first-order Poynting–Robertson drag; requires `RADIATION` |
 | `COLLISION` | evolve representative-particle coagulation and fragmentation |
+| `BERNOULLI` | replace the default frozen-bath chain with the globally stepped Bernoulli reference integrator; requires `COLLISION` |
+| `KNN_CACHE` | retain physical top-$K$ neighbors for Bernoulli batches; requires `COLLISION` and `BERNOULLI` |
 | `MULTISIZE` | store sampled grain size and represented grain count for every swarm |
 | `IMPORTGAS` | interpolate density and velocity from external gas snapshots |
 | `VISC_FLOW` | prescribe viscous analytical gas motion; requires `DIFFUSION` and excludes imported gas velocity |
@@ -350,8 +352,11 @@ The swarm executable is likewise a compile-time specialization:
 | `COLLISION_SEARCH=kdtree` or `morton` | select the exact KNN implementation used by collisions |
 
 `DIFFUSION` and `RADIATION` require `TRANSPORT`, `PR_EFFECT` requires `RADIATION`, and `COLLISION`
-requires `MULTISIZE` plus exactly one search backend. These dependencies specify which equations
-exist in an executable; they do not dynamically turn operators on or off during a run.
+requires `MULTISIZE` plus exactly one search backend. `BERNOULLI` requires `COLLISION`, and
+`KNN_CACHE` requires both. The former `COL_CHAIN` selector is obsolete: `COLLISION` without
+`BERNOULLI` now selects the frozen-bath chain, and explicitly defining `COL_CHAIN` is a compilation
+error. These dependencies specify which equations exist in an executable; they do not dynamically
+turn operators on or off during a run.
 
 ## 3. Disk model, mass normalization, and initialization
 
@@ -2007,6 +2012,10 @@ collision operator, while recomputing current pair propensities every batch. For
 backend, one block evaluates the individual pair propensities cooperatively. Thread zero then
 accumulates the stored values and samples the partner in retained-neighbor order.
 
+Both Bernoulli variants require every accepted batch to advance the collision-operator clock
+strictly in floating-point arithmetic. A positive mathematical timestep that rounds away at the
+current elapsed time is treated as a runtime error rather than retried indefinitely.
+
 Coagulation uses
 
 $$
@@ -2067,6 +2076,12 @@ using the fastest particle to impose a global collision microstep. An event cap 
 launch but not the stochastic path: local time, event count, and RNG state persist across
 continuation launches, and the cap is checked before drawing another clock.
 
+The frozen-bath driver applies the same strict collision-clock progress requirement after every
+bath. Before constructing a search hierarchy, and before reusing an existing hierarchy in a new
+collision operator, both GPU backends also reject any particle with a nonfinite position, velocity,
+size, or represented grain number. These guards prevent invalid states from entering the spatial
+search and prevent a sub-ulp bath duration from creating a nonterminating host loop.
+
 The bath duration is controlled in merged geometry-and-size bins. With represented mass
 $w_i=N_im_g(s_i)$, bin mass $M_q=\sum_{i\in q}w_i$, and bath-start rate $\lambda_i$, the candidate
 duration is
@@ -2077,6 +2092,21 @@ $$
 \min_q\frac{\epsilon s_{\rm safe}M_q}{\sum_{i\in q}w_i\lambda_i}
 \right].
 $$
+
+This expression uses the linear upper bound
+$1-\exp(-\lambda_i\tau)\le\lambda_i\tau$ to keep the host-side duration solve compact. For the
+actual selected duration, the predicted mass-weighted touched fraction and event activity are
+
+$$
+F_q=\frac{1}{M_q}\sum_{i\in q}w_i
+\left[1-\exp(-\lambda_i^{(b)}\tau_b)\right],
+\qquad
+E_q=\frac{1}{M_q}\sum_{i\in q}w_iH_i,
+$$
+
+where $\lambda_i^{(b)}$ is the bath-start rate and $H_i$ is the path-integrated hazard defined
+below. The first-event probability depends only on the bath-start state because the owner cannot
+change before that event; the expected total activity must instead follow the complete owner path.
 
 The bath-start rate remains the inexpensive pre-control used to select the candidate duration. The
 post-bath audit does not assume that this rate remains fixed after the owner changes size. Along the
@@ -2100,6 +2130,48 @@ event. Event activity is compared with $H_i$, while absolute logarithmic size ch
 with $J_{1,i}$ and its second-moment compensator $J_{2,i}$. This removes the bath-start-rate bias
 from the realized E/G audit for the linear, product, and custom kernels.
 
+Writing $n_i$ for the realized number of events and $s_i^{(0)},s_i^{(1)}$ for the bath endpoints,
+the corresponding realized summaries are
+
+$$
+\widehat F_q=\frac{1}{M_q}\sum_{i\in q}w_i\mathbf 1_{n_i>0},
+\qquad
+\widehat E_q=\frac{1}{M_q}\sum_{i\in q}w_in_i,
+$$
+
+$$
+\widehat G_q=\frac{1}{M_q}\sum_{i\in q}w_i
+\left|\ln\frac{s_i^{(1)}}{s_i^{(0)}}\right|.
+$$
+
+With $p_i=1-\exp(-\lambda_i^{(b)}\tau_b)$, the predictor for logarithmic activity is
+$G_q^{\rm pred}=M_q^{-1}\sum_{i\in q}w_iJ_{1,i}$. The controller constructs Bernstein envelopes for
+$F_q$, $E_q$, and $G_q^{\rm pred}$. For $Q$ occupied merged bins and
+$L=\ln(2Q/\mathtt{COL\_BATH\_ALPHA})$, each envelope has the form
+
+$$
+U_{X,q}=X_q^{\rm pred}+\sqrt{2V_{X,q}L}+\frac{b_{X,q}L}{3}.
+$$
+
+Here the mass-normalized variances are assembled from
+$w_i^2p_i(1-p_i)$ for touched owners, $w_i^2H_i$ for event activity, and $w_i^2J_{2,i}$ for
+logarithmic activity. The bounded-increment terms use the largest $w_i/M_q$ for $F$ and $E$, and
+the largest mass-weighted single-event logarithmic jump for $G$. The touched fraction is additionally
+bounded above by one.
+
+To measure how much represented mass moved between the fixed joint spatial-size bins, the code also
+records
+
+$$
+D_{\rm bath}=\frac{1}{2M_{\rm tot}}
+\sum_q\left|M_q^{(1)}-M_q^{(0)}\right|.
+$$
+
+Owners retain their bath-start bin for the $F/E/G$ summaries, whereas the end state is re-binned on
+the same fixed edges for $D_{\rm bath}$. A bath is flagged when realized touched or event activity
+exceeds its confidence envelope, when $\widehat G_q$ exceeds both the configured tolerance and its
+envelope, or when $D_{\rm bath}$ exceeds the configured tolerance.
+
 The next bath's safety factor is reduced after persistent activity or distribution overshoot and
 relaxed only after three quiet baths. Completed baths are not rejected and replayed, because
 conditioning acceptance on a random post-bath fluctuation would bias the stochastic process.
@@ -2109,24 +2181,26 @@ continuing outside the controller contract. The full bath schedule and compact F
 are written to `collision_chain_FRAME.json` at every output boundary; controller memory is then
 reset so restart files remain sufficient at that boundary.
 
-Both search backends populate the same full physical-neighbor cache on CUDA and ROCm. The KD-tree path performs
-one exact heap query for each physical tree record and deduplicates overlapping wedge images by
+Both search backends populate the same full physical-neighbor cache on CUDA and ROCm. The KD-tree
+path performs one exact heap query for each physical tree record and deduplicates overlapping wedge images by
 original particle identifier. The Morton path constructs the same physical top-$K$ contract with
 one cooperative query block per owner. Subsequent bath selection, local chains, controller audits,
 and RNG handling are independent of the search backend.
 
-The cache requires
+With 32-bit neighbor identifiers and one double-precision KNN measure per owner, the principal
+cache requires
 
 $$
-M_{\rm cache}=N_P N_K\,\mathrm{sizeof}(\mathtt{int}),
+M_{\rm cache}=4N_PN_K+8N_P\quad\text{bytes},
 $$
 
-which is $8.0$ GB in decimal units for $N_P=10^7$ and $N_K=200$, before the selected search index and
-other particle/controller arrays. This initial policy is explicit rather than a production-scale
-memory recommendation. Both GPU backends accept either `COLLISION_KDTREE` or `COLLISION_MORTON`.
-`variables.txt`
-records the selected integrator, controller constants, search method, and shared per-particle
-RNG-stream policy.
+which is approximately $0.808$ GB for $N_P=10^6$ and $8.08$ GB for $N_P=10^7$ at $N_K=200$,
+before the selected search index and other particle/controller arrays. No per-neighbor pair-rate
+array is retained because rates become stale when the owner changes size. This initial policy is
+explicit rather than a production-scale memory recommendation. Both GPU backends accept either
+`COLLISION_KDTREE` or `COLLISION_MORTON`. `variables.txt` records one of
+`frozen_bath`, `bernoulli_direct`, or `bernoulli_cache`, together with the controller constants,
+search method, cache allocation, backend, and shared per-particle RNG-stream policy.
 
 ### 8.3 Exact neighbor-search contract
 
@@ -2396,9 +2470,12 @@ is exact conditional on the frozen bath; convergence under halving $\tau_{\mathr
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
 chain lengths without truncating a stochastic path. The Bernoulli method remains available through
 `BERNOULLI` for controlled comparisons or configurations that explicitly require that older
-discretization; `KNN_CACHE` selects its cached-neighbor variant. CUDA and ROCm have both qualified
-the frozen-bath chain and checkpoint-boundary restart, while the newly exposed ROCm cached-Bernoulli
-path still requires a native post-port run.
+discretization; `KNN_CACHE` selects its cached-neighbor variant. The post-inversion CUDA chain
+campaign has qualified the frozen-bath, direct-Bernoulli, and cached-Bernoulli paths with both
+search backends, including geometry reuse and checkpoint-boundary restart. The matching ROCm
+`gfx942` campaign has qualified the same six models and all three collision-integrator selections.
+Together these campaigns establish native execution of frozen bath, direct Bernoulli, and cached
+Bernoulli with Morton and KD-tree search on both supported GPU backends.
 
 ## 9. Operator composition, timestep hierarchy, and boundaries
 
@@ -2593,6 +2670,8 @@ The main numerical components map to the production source as follows:
 | semi-analytic dynamics | `src/comm/swarm/ssa_substep_1.cu`, `src/comm/swarm/ssa_substep_2.cu`, `src/comm/swarm/ssa_transport.cu` |
 | stochastic diffusion | `src/{cuda,rocm}/swarm/diffusion_pos.*` |
 | density and opacity deposition | `src/comm/swarm/dustdens_*.cu`, `src/comm/swarm/optdepth_*.cu` |
+| pairwise collision physics | `inc/comm/swarm/_collision.cuh` |
+| neighbor caching and frozen-bath chain | `inc/comm/swarm/_col_cache.cuh`, `inc/comm/swarm/_col_chain.cuh` |
 | collision rates and events | `src/{cuda,rocm}/swarm/col_rate_calc.*`, `src/{cuda,rocm}/swarm/col_event_run.*` |
 | KD-tree and Morton search | `inc/{cuda,rocm}/swarm/kdtree/`, `inc/{cuda,rocm}/swarm/morton/` |
 | operator driver and output clock | `src/{cuda,rocm}/swarm/swarm_runtime.*` |
@@ -2633,6 +2712,38 @@ or closing collision interval, so one spatial index is reused across all interna
 default frozen-bath integrator keeps neighbor identities fixed while refreshing partner species at
 every controlled bath boundary. The optional Bernoulli integrator freezes collision species once
 per global batch and may either query neighbors directly or retain them with `KNN_CACHE`.
+
+A collision **geometry epoch** is the maximal interval during which particle positions, active
+identities, and the mapping between particle identity and array index remain unchanged. Search
+coordinates, the hierarchy, periodic ghosts, position-dependent cutoffs, physical top-$K$
+identities, accessible measures, and controller spatial bins are invariant inside such an epoch.
+Sizes, represented numbers, pair rates, gas-dependent microphysics, random clocks, size bins, and
+controller state are not geometry and are refreshed at their normal numerical frequency.
+
+Initialization, checkpoint loading, transport, diffusion, and any future operation that moves,
+inserts, removes, reorders, or migrates representatives invalidate the epoch. Collision events,
+rate calculations, gas interpolation, deposition, checkpoint writing, and output-boundary
+controller reset do not. A resumed process therefore begins invalid and rebuilds once, whereas an
+uninterrupted output boundary does not force a rebuild.
+
+This lifetime rule preserves the two separate collision half-operators in the Strang sequence; it
+reuses only their unchanged geometry. For $M$ transported dynamics steps, the production reuse path
+has
+
+$$
+N_{\rm call}=2M,
+\qquad
+N_{\rm build}=M+1,
+\qquad
+N_{\rm reuse}=M-1,
+\qquad
+N_{\rm invalidate}=M.
+$$
+
+Thus hierarchy construction approaches a factor-two reduction for long transported runs, but this
+must not be described as a factor-two reduction in total collision time. Frozen bath always retains
+the complete topology cache. Bernoulli retains only the hierarchy by default and adds the full
+top-$K$ cache only under `KNN_CACHE`, preserving a deliberate VRAM-versus-traversal choice.
 
 Ignoring allocator and alignment overhead, the persistent particle-state storage is approximately
 
@@ -2751,8 +2862,10 @@ model itself rather than current test coverage.
 - Imported-gas position sampling currently assumes a strictly positive integrated
   $\rho_g\epsilon$ mass; an all-zero imported profile reaches an undefined CDF normalization and
   should be rejected by the caller until an explicit host guard is added.
-- The frozen-bath chain rejects invalid pair rates, clocks, states, and Morton traversal overflow;
-  the post-port ROCm cached-Bernoulli branch still requires native qualification.
+- The frozen-bath chain rejects invalid pair rates, clocks, states, and Morton traversal overflow,
+  and the complete post-inversion chain group is natively qualified on both GPU backends. Bath
+  tolerance, neighbor count, search radius, and representative count nevertheless remain
+  model-dependent scientific convergence requirements.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.
 - Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and a

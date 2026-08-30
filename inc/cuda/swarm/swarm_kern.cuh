@@ -122,6 +122,7 @@ __global__ void dustdens_calc (real *dev_dustdens);
 
 #ifdef COLLISION
 __global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
+__global__ void colstate_flag (const swarm *dev_particle, int *dev_bad_part);
 
 #ifdef COLLISION_KDTREE
 __global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
@@ -145,7 +146,7 @@ __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const re
     real dt_col
 );
 __global__ void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
-    const swarm *dev_particle);
+    const swarm *dev_particle, int *dev_bad_part);
 #else  // COLLISION_MORTON
 __global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_morton_overflow,
     const swarm *dev_particle, const unsigned char *dev_col_active,
@@ -167,7 +168,7 @@ __global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     real dt_col
 );
 __global__ void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
-    unsigned char *dev_col_active, const swarm *dev_particle);
+    unsigned char *dev_col_active, const swarm *dev_particle, int *dev_bad_part);
 #endif // COLLISION_KDTREE
 
 #ifdef KNN_CACHE

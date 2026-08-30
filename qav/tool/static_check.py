@@ -176,39 +176,31 @@ def check_rocm_sources(errors: list[str]) -> None:
 def check_chain_port(errors: list[str]) -> None:
     """Keep the guarded collision-chain mathematics and QAV coverage paired"""
 
-    headers = {
-        "cuda": PROJECT_ROOT/"inc"/"cuda"/"swarm"/"_col_chain.cuh",
-        "rocm": PROJECT_ROOT/"inc"/"rocm"/"swarm"/"_col_chain.cuh",
-    }
-    for backend, path in headers.items():
-        if not path.is_file():
-            errors.append(f"missing {backend} collision-chain header")
-            return
-    cuda_chain = headers["cuda"].read_text().replace(
-        "curand_uniform_double", "backend_uniform_double"
-    ).replace(
-        "    __shared__ curs rngstate;", "    backend_rngstate;"
-    ).rstrip()
-    rocm_text = headers["rocm"].read_text()
-    if "__shared__ curs" in rocm_text:
-        errors.append("ROCm collision chain cannot construct a HIP RNG object in shared memory")
-    rocm_chain = rocm_text.replace(
-        "hiprand_uniform_double", "backend_uniform_double"
-    ).replace(
-        "    curs rngstate; // keep the HIP RNG object local because shared objects cannot be initialized",
-        "    backend_rngstate;",
-    ).rstrip()
-    if cuda_chain != rocm_chain:
-        errors.append("CUDA and ROCm collision-chain headers differ beyond RNG API spelling")
+    chain_header = PROJECT_ROOT/"inc"/"comm"/"swarm"/"_col_chain.cuh"
+    cache_header = PROJECT_ROOT/"inc"/"comm"/"swarm"/"_col_cache.cuh"
+    if not chain_header.is_file():
+        errors.append("missing shared collision-chain header")
+        return
+    if not cache_header.is_file():
+        errors.append("missing shared collision-neighbor cache header")
+        return
+    for backend in ("cuda", "rocm"):
+        for name in ("_col_chain.cuh", "_col_cache.cuh"):
+            duplicate = PROJECT_ROOT/"inc"/backend/"swarm"/name
+            if duplicate.exists():
+                errors.append(f"backend collision header should be shared: {duplicate.relative_to(PROJECT_ROOT)}")
 
-    cache_headers = {
-        backend: PROJECT_ROOT/"inc"/backend/"swarm"/"_col_cache.cuh"
-        for backend in ("cuda", "rocm")
-    }
-    if any(not path.is_file() for path in cache_headers.values()):
-        errors.append("missing CUDA or ROCm collision-neighbor cache header")
-    elif cache_headers["cuda"].read_text() != cache_headers["rocm"].read_text():
-        errors.append("CUDA and ROCm collision-neighbor cache headers differ")
+    chain_text = chain_header.read_text()
+    required_chain_tokens = (
+        "#ifdef GAMEDEV_CUDA",
+        "curand_uniform_double(rngstate)",
+        "hiprand_uniform_double(rngstate)",
+        "__shared__ curs rngstate;",
+        "curs rngstate; // keep the HIP RNG object local",
+    )
+    for token in required_chain_tokens:
+        if token not in chain_text:
+            errors.append(f"shared collision-chain header is missing {token!r}")
 
     cache_sources = {
         "rate": (
@@ -258,6 +250,19 @@ def check_chain_port(errors: list[str]) -> None:
         if token not in rocm_runtime:
             errors.append(f"ROCm cached-Bernoulli runtime is missing {token!r}")
 
+    runtime_paths = {
+        "CUDA": PROJECT_ROOT/"src"/"cuda"/"swarm"/"swarm_runtime.cu",
+        "ROCm": PROJECT_ROOT/"src"/"rocm"/"swarm"/"swarm_runtime.hip",
+    }
+    for backend, path in runtime_paths.items():
+        runtime = path.read_text()
+        if runtime.count("collision timestep cannot advance the operator clock") != 2:
+            errors.append(
+                f"{backend} runtime must guard collision-clock progress in both integrators"
+            )
+        if "colstate_flag <<< NB_P, TPB >>>" not in runtime:
+            errors.append(f"{backend} runtime is missing the reused-geometry particle-state guard")
+
     models = (
         "test_colchain_2d",
         "test_colchain_frag_2d",
@@ -273,6 +278,8 @@ def check_chain_port(errors: list[str]) -> None:
     reuse_runner = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"run_geometry_reuse.py"
     if not reuse_runner.is_file():
         errors.append(f"missing {reuse_runner.relative_to(PROJECT_ROOT)}")
+    elif "bernoulli_direct_cache_equivalence" not in reuse_runner.read_text():
+        errors.append("geometry-reuse QAV is missing direct-versus-cached Bernoulli equivalence")
     for backend in ("cuda", "rocm"):
         common_runner = PROJECT_ROOT/"qav"/backend/"swarm"/"test_common"/"run_chain.py"
         if not common_runner.is_file():

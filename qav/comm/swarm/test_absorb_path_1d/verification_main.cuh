@@ -117,20 +117,16 @@ int main ()
     qav_malloc(&dev_col_dist, N_P, "allocate absorption collision radii");
     qav_malloc(&dev_size_old, N_P, "allocate absorption frozen sizes");
     qav_malloc(&dev_numr_old, N_P, "allocate absorption frozen numbers");
+    int *dev_bad_part;
+    qav_malloc(&dev_bad_part, 1, "allocate absorption bad-particle flag");
+    int bad_part = 0;
+    qav_copy_h2d(dev_bad_part, &bad_part, 1, "clear absorption bad-particle flag");
     #ifdef COLLISION_KDTREE
     kdtree_node *dev_kdtree_node;
     kdtree_boxf *dev_kdtree_box;
     qav_malloc(&dev_kdtree_node, N_T, "allocate absorption KD-tree sites");
     qav_malloc(&dev_kdtree_box, 1, "allocate absorption KD-tree bounds");
-    #ifdef GAMEDEV_CUDA
-    col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle);
-    #else  // GAMEDEV_ROCM
-    int *dev_bad_part;
-    qav_malloc(&dev_bad_part, 1, "allocate absorption bad-particle flag");
-    int bad_part = 0;
-    qav_copy_h2d(dev_bad_part, &bad_part, 1, "clear absorption bad-particle flag");
     col_site_init <<< NB_P, TPB >>> (dev_kdtree_node, dev_col_active, dev_particle, dev_bad_part);
-    #endif // GAMEDEV_CUDA
     qav_kernel_check("inactive collision-site exclusion");
     kdtree::buildTree <kdtree_node, kdtree_traits> (dev_kdtree_node, N_T, dev_kdtree_box);
     qav_kernel_check("absorption KD-tree build");
@@ -140,19 +136,9 @@ int main ()
     qav_malloc(&dev_morton_point, N_P, "allocate absorption Morton sites");
     qav_malloc(&dev_morton_posx, N_P, "allocate absorption Morton azimuths");
     qav_malloc(&dev_search_dist, N_P, "allocate absorption Morton search radii");
-    #ifdef GAMEDEV_CUDA
-    col_site_init <<< NB_P, TPB >>> (
-        dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle
-    );
-    #else  // GAMEDEV_ROCM
-    int *dev_bad_part;
-    qav_malloc(&dev_bad_part, 1, "allocate absorption bad-particle flag");
-    int bad_part = 0;
-    qav_copy_h2d(dev_bad_part, &bad_part, 1, "clear absorption bad-particle flag");
     col_site_init <<< NB_P, TPB >>> (
         dev_morton_point, dev_morton_posx, dev_search_dist, dev_col_active, dev_particle, dev_bad_part
     );
-    #endif // GAMEDEV_CUDA
     qav_kernel_check("inactive collision-site exclusion");
     std::vector<float> search_dist(N_P);
     qav_copy_d2h(search_dist.data(), dev_search_dist, N_P, "copy absorption Morton search radii");
@@ -280,9 +266,7 @@ int main ()
     qav_free(dev_size_old, "free absorption frozen sizes");
     qav_free(dev_col_dist, "free absorption collision radii");
     qav_free(dev_col_rate, "free absorption collision rates");
-    #ifndef GAMEDEV_CUDA
     qav_free(dev_bad_part, "free absorption bad-particle flag");
-    #endif // GAMEDEV_CUDA
     qav_free(dev_col_active, "free absorption collision mask");
     qav_free(dev_optdepth, "free absorption optical-depth grid");
     qav_free(dev_dustdens, "free absorption density grid");
