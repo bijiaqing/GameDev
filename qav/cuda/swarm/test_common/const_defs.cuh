@@ -36,7 +36,7 @@ constexpr real S_0 = 1.0;
 
 // particle counts are test samples rather than production population choices: use only enough representatives to cover the
 // analytical cases, except for stochastic distribution tests that need a statistically meaningful ensemble
-#if defined(TEST_COLREUSE_2D) && defined(PERF_PARTICLES)
+#ifdef PERF_PARTICLES
 constexpr int N_P = PERF_PARTICLES;
 #elif defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
     || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D) \
@@ -232,14 +232,18 @@ constexpr int COAG_KERNEL =
 #else
     0;
 #endif // TEST_COLCHAIN_FRAG_2D
-#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
+#ifdef TEST_N_K
+constexpr int N_K = TEST_N_K;
+#elif defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
     || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D) \
     || defined(TEST_COLCHAIN_RESTART_2D) || defined(TEST_COLREUSE_2D)
 constexpr int N_K = 200;
 #else
 constexpr int N_K = 2;
 #endif // TEST_COLCHAIN_2D
-#ifdef TEST_ABSORB_PATH_1D
+#ifdef TEST_H_SEARCH
+constexpr real H_SEARCH = TEST_H_SEARCH;
+#elif defined(TEST_ABSORB_PATH_1D)
 constexpr real H_SEARCH = 10.0;
 #else  // OTHER TESTS
 constexpr real H_SEARCH = 1.0;
@@ -250,7 +254,12 @@ constexpr real V_FRAG =
 #else
     1.0;
 #endif // TEST_COLCHAIN_FRAG_2D
-constexpr real CFL_COL = 0.01;
+constexpr real CFL_COL =
+#ifdef TEST_CFL_COL
+    TEST_CFL_COL;
+#else
+    0.01;
+#endif // TEST_CFL_COL
 
 #if defined(COLLISION) && !defined(BERNOULLI)
 constexpr int COL_BATH_TPB = 256;
@@ -265,8 +274,18 @@ constexpr int COL_BIN_Y = 4;
 constexpr int COL_BIN_Z = 2;
 constexpr int COL_BIN_S = 8;
 constexpr int COL_BIN_MIN = 64;
-constexpr real COL_BATH_MAX = 0.05;
-constexpr real COL_BATH_EPS = 0.06;
+constexpr real COL_BATH_MAX =
+#ifdef TEST_BATH_MAX
+    TEST_BATH_MAX;
+#else
+    0.05;
+#endif // TEST_BATH_MAX
+constexpr real COL_BATH_EPS =
+#ifdef TEST_BATH_EPS
+    TEST_BATH_EPS;
+#else
+    0.06;
+#endif // TEST_BATH_EPS
 constexpr real COL_BATH_ALPHA = 1.0e-3;
 constexpr real COL_SIZE_MIN = 0.5*INIT_SMIN;
 constexpr real COL_SIZE_MAX = 8.0*INIT_SMAX;
@@ -287,7 +306,9 @@ constexpr int SAVE_MAX =
     1;
 #endif // TEST_COLCHAIN_RESTART_2D
 constexpr real DT_OUT =
-#ifdef TEST_COLCHAIN_3D
+#ifdef TEST_DT_OUT
+    TEST_DT_OUT;
+#elif defined(TEST_COLCHAIN_3D)
     1.0e-2;
 #elif defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) \
     || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_RESTART_2D) \
@@ -295,7 +316,7 @@ constexpr real DT_OUT =
     1.0e-3;
 #else
     1.0;
-#endif // COLLISION-CHAIN TESTS
+#endif // TEST_DT_OUT
 constexpr real DT_MAX =
 #ifdef TEST_COLREUSE_2D
     2.5e-4;

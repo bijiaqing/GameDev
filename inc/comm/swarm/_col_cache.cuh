@@ -6,6 +6,7 @@
 #include <climits>  // INT_MAX
 #include <cstddef>  // std::size_t
 
+
 #include <_collision.cuh>
 #ifdef COLLISION_MORTON
 #include <morton/morton_query.cuh>
@@ -64,9 +65,6 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
 
     real radius = sqrt(static_cast<real>(max_dist_sq));
     real measure = _get_ball_measure(y, z, radius);
-    #ifdef COLLISION_UNIT_VOLUME
-    measure = 1.0;
-    #endif // COLLISION_UNIT_VOLUME
     dev_col_measure[idx_old_i] = measure;
 }
 #else  // COLLISION_MORTON
@@ -130,14 +128,12 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
         }
         real radius = sqrt(static_cast<real>(max_dist_sq));
         real measure = _get_ball_measure(y, z, radius);
-        #ifdef COLLISION_UNIT_VOLUME
-        measure = 1.0;
-        #endif // COLLISION_UNIT_VOLUME
         dev_col_measure[idx_old_i] = measure;
         dev_morton_overflow[idx_old_i] = stack_overflow;
     }
 }
 #endif // COLLISION_KDTREE
+
 
 #endif // COLLISION && (FROZEN_BATH || KNN_CACHE)
 

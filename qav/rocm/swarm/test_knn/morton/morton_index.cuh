@@ -1,6 +1,8 @@
 #ifndef GAMEDEV_MORTON_INDEX_CUH
 #define GAMEDEV_MORTON_INDEX_CUH
 
+// QAV header override: retain standalone query and digest kernels used only by test_knn
+
 #include <cfloat>                         // FLT_EPSILON
 #include <climits>                        // INT_MAX
 #include <cmath>                          // fabsf, fmaxf, fminf
@@ -11,20 +13,20 @@
 #include <string>                         // std::string
 #include <vector>                         // std::vector
 
-#include <cuda_runtime.h>                 // CUDA allocation and kernel-launch API
-#include <math_constants.h>  // CUDART_INF_F
+#include <hip/hip_runtime.h>                 // HIP allocation and kernel-launch API
 
 #include <thrust/device_ptr.h>             // thrust::device_ptr
 #include <thrust/execution_policy.h>       // thrust::device
+#include <thrust/system/hip/execution_policy.h> // thrust::hip_rocprim::par
 #include <thrust/sort.h>                   // thrust::stable_sort_by_key
 
 #include <morton/morton_types.cuh>
 
-// convert CUDA failures into exceptions usable by the host-side index owner
-inline void _morton_cuda_check (cudaError_t status, const char *operation)
+// convert HIP failures into exceptions usable by the host-side index owner
+inline void _morton_hip_check (hipError_t status, const char *operation)
 {
-    if (status == cudaSuccess) return;
-    throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
+    if (status == hipSuccess) return;
+    throw std::runtime_error(std::string(operation) + ": " + hipGetErrorString(status));
 }
 
 // quantize Cartesian points at the deepest level and emit sortable Morton keys
@@ -77,9 +79,9 @@ public:
         root_width_ = root_width;
 
         std::uint64_t *dev_key = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_key, sizeof(std::uint64_t)*point_count_),
+        _morton_hip_check(hipMalloc((void**)&dev_key, sizeof(std::uint64_t)*point_count_),
             "allocate adaptive Morton keys");
-        _morton_cuda_check(cudaMalloc((void**)&dev_point_, sizeof(morton_point)*point_count_),
+        _morton_hip_check(hipMalloc((void**)&dev_point_, sizeof(morton_point)*point_count_),
             "allocate adaptive Morton points");
 
         constexpr int thread_count = 256;
@@ -88,16 +90,18 @@ public:
             dev_key, dev_point_, dev_source_point, dev_source_idx_old,
             point_count_, root_origin_, root_width_, max_level_, dim_
         );
-        _morton_cuda_check(cudaGetLastError(), "launch morton_keygen");
+        _morton_hip_check(hipGetLastError(), "launch morton_keygen");
 
         thrust::device_ptr<std::uint64_t> key_ptr(dev_key);
         thrust::device_ptr<morton_point> point_ptr(dev_point_);
-        thrust::stable_sort_by_key(thrust::device, key_ptr, key_ptr + point_count_, point_ptr);
-        _morton_cuda_check(cudaDeviceSynchronize(), "sort adaptive Morton points");
+        thrust::stable_sort_by_key(
+            thrust::hip_rocprim::par, key_ptr, key_ptr + point_count_, point_ptr
+        );
+        _morton_hip_check(hipDeviceSynchronize(), "sort adaptive Morton points");
 
         std::vector<std::uint64_t> host_keys(point_count_);
-        _morton_cuda_check(cudaMemcpy(host_keys.data(), dev_key, sizeof(std::uint64_t)*point_count_,
-            cudaMemcpyDeviceToHost), "copy adaptive Morton keys");
+        _morton_hip_check(hipMemcpy(host_keys.data(), dev_key, sizeof(std::uint64_t)*point_count_,
+            hipMemcpyDeviceToHost), "copy adaptive Morton keys");
 
         std::vector<morton_node> host_nodes;
         host_nodes.reserve(static_cast<std::size_t>(2*point_count_ / leaf_target_ + 64));
@@ -164,17 +168,17 @@ public:
         node_count_ = static_cast<int>(host_nodes.size());
         leaf_count_ = static_cast<int>(leaf_counts_.size());
 
-        _morton_cuda_check(cudaMalloc((void**)&dev_node_, sizeof(morton_node)*node_count_),
+        _morton_hip_check(hipMalloc((void**)&dev_node_, sizeof(morton_node)*node_count_),
             "allocate adaptive Morton nodes");
-        _morton_cuda_check(cudaMemcpy(dev_node_, host_nodes.data(), sizeof(morton_node)*node_count_,
-            cudaMemcpyHostToDevice), "copy adaptive Morton nodes");
-        _morton_cuda_check(cudaFree(dev_key), "release adaptive Morton keys");
+        _morton_hip_check(hipMemcpy(dev_node_, host_nodes.data(), sizeof(morton_node)*node_count_,
+            hipMemcpyHostToDevice), "copy adaptive Morton nodes");
+        _morton_hip_check(hipFree(dev_key), "release adaptive Morton keys");
     }
 
     void release () noexcept
     {
-        if (dev_point_) cudaFree(dev_point_);
-        if (dev_node_) cudaFree(dev_node_);
+        if (dev_point_) (void)hipFree(dev_point_);
+        if (dev_node_) (void)hipFree(dev_node_);
         dev_point_ = nullptr;
         dev_node_ = nullptr;
         point_count_ = 0;
@@ -277,7 +281,7 @@ void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
     for (int idx_slot = K + candidate_count + threadIdx.x;
         idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
     {
-        dist_sq[idx_slot] = CUDART_INF_F;
+        dist_sq[idx_slot] = MORTON_INF_F;
         idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
@@ -299,7 +303,7 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
 
     for (int idx_slot = threadIdx.x; idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
     {
-        near_dist_sq[idx_slot] = CUDART_INF_F;
+        near_dist_sq[idx_slot] = MORTON_INF_F;
         near_idx_old[idx_slot] = INT_MAX;
     }
     if (threadIdx.x == 0)
@@ -346,7 +350,7 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                     float candidate_dist_sq =
                         _get_morton_point_dist_sq(query_point, candidate.cartesian);
                     int idx_slot = K + batch_offset + idx_local;
-                    near_dist_sq[idx_slot] = CUDART_INF_F;
+                    near_dist_sq[idx_slot] = MORTON_INF_F;
                     near_idx_old[idx_slot] = INT_MAX;
                     if (candidate_dist_sq <= search_dist_sq
                         && (!dev_active || dev_active[candidate.idx_old] != 0))
@@ -424,6 +428,87 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
         _morton_pair_merge<K, BLOCK_SIZE, SORT_SIZE>(near_dist_sq, near_idx_old, batch_count);
         if (threadIdx.x == 0) batch_count = 0;
         __syncthreads();
+    }
+}
+
+// expose one cooperative exact top-K query per HIP block for tests and standalone consumers
+template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
+__global__
+void morton_search (int *dev_near_idx_old, float *dev_near_dist_sq, unsigned int *dev_leaf_visit_count,
+    unsigned int *dev_candidate_count, unsigned int *dev_stack_overflow,
+    const float3 *dev_query_point, int query_count, morton_view morton_data, float search_dist,
+    const unsigned char *dev_active = nullptr)
+{
+    int idx_query = blockIdx.x;
+    if (idx_query >= query_count) return;
+
+    __shared__ float work_dist_sq[SORT_SIZE];
+    __shared__ int work_idx_old[SORT_SIZE];
+    __shared__ int idx_node_stack[STACK_SIZE];
+    __shared__ int stack_count;
+    __shared__ int idx_node;
+    __shared__ int batch_count;
+    __shared__ unsigned int leaf_count;
+    __shared__ unsigned int candidate_total;
+    __shared__ unsigned int overflow;
+
+    _morton_topk<K, BLOCK_SIZE, SORT_SIZE, STACK_SIZE>(
+        morton_data, dev_query_point[idx_query], search_dist, work_dist_sq, work_idx_old,
+        idx_node_stack, stack_count, idx_node, batch_count,
+        leaf_count, candidate_total, overflow, dev_active
+    );
+
+    for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
+    {
+        int idx_out = idx_query*K + idx_neighbor;
+        dev_near_idx_old[idx_out] =
+            (work_idx_old[idx_neighbor] == INT_MAX) ? -1 : work_idx_old[idx_neighbor];
+        dev_near_dist_sq[idx_out] = work_dist_sq[idx_neighbor];
+    }
+    if (threadIdx.x == 0)
+    {
+        if (dev_leaf_visit_count) dev_leaf_visit_count[idx_query] = leaf_count;
+        if (dev_candidate_count) dev_candidate_count[idx_query] = candidate_total;
+        if (dev_stack_overflow) dev_stack_overflow[idx_query] = overflow;
+    }
+}
+
+// reduce each top-K result to a deterministic checksum for timing without large output transfers
+template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>
+__global__
+void morton_digest (double *dev_checksum, unsigned int *dev_stack_overflow,
+    const float3 *dev_query_point, int query_count, morton_view morton_data, float search_dist)
+{
+    int idx_query = blockIdx.x;
+    if (idx_query >= query_count) return;
+
+    __shared__ float work_dist_sq[SORT_SIZE];
+    __shared__ int work_idx_old[SORT_SIZE];
+    __shared__ int idx_node_stack[STACK_SIZE];
+    __shared__ int stack_count;
+    __shared__ int idx_node;
+    __shared__ int batch_count;
+    __shared__ unsigned int leaf_count;
+    __shared__ unsigned int candidate_count;
+    __shared__ unsigned int overflow;
+
+    _morton_topk<K, BLOCK_SIZE, SORT_SIZE, STACK_SIZE>(
+        morton_data, dev_query_point[idx_query], search_dist, work_dist_sq, work_idx_old,
+        idx_node_stack, stack_count, idx_node, batch_count,
+        leaf_count, candidate_count, overflow
+    );
+
+    if (threadIdx.x == 0)
+    {
+        double value = 0.0;
+        for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
+        {
+            if (work_idx_old[idx_neighbor] == INT_MAX) continue;
+            value += static_cast<double>(work_dist_sq[idx_neighbor])
+                + 1.0e-12*static_cast<double>(work_idx_old[idx_neighbor]);
+        }
+        dev_checksum[idx_query] = value;
+        if (dev_stack_overflow) dev_stack_overflow[idx_query] = overflow;
     }
 }
 

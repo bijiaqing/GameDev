@@ -150,10 +150,15 @@ GPU_FLAGS += -DPERF_PARTICLES=$(PARTICLES)
 endif
 endif
 
+QAV_BACKEND_COMMON_DIR = $(QAV_ROOT)/$(GPU_BACKEND)/$(DUST_REPR)/test_common
+QAV_REPR_COMMON_DIR = $(QAV_ROOT)/comm/$(DUST_REPR)/test_common
+
 MODEL_SOURCE_DIRS := $(strip $(MODEL_BACKEND_DIR) $(MODEL_DIR))
 MODEL_HEADER_DIRS := $(MODEL_SOURCE_DIRS)
 ifneq ($(IS_QAV),)
-MODEL_HEADER_DIRS += $(QAV_ROOT)/$(GPU_BACKEND)/$(DUST_REPR)/test_common
+# allow QAV to replace complete translation units and headers without adding test branches to production files
+MODEL_SOURCE_DIRS += $(QAV_BACKEND_COMMON_DIR) $(QAV_REPR_COMMON_DIR)
+MODEL_HEADER_DIRS += $(QAV_BACKEND_COMMON_DIR) $(QAV_REPR_COMMON_DIR)
 endif
 MODEL_HEADER_DIRS += $(MODEL_INCLUDE_DIRS)
 MODEL_INCLUDE_FLAGS := $(addprefix -I ,$(MODEL_HEADER_DIRS))

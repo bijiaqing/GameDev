@@ -62,9 +62,6 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     );
 
     real measure = _get_ball_measure(y, z, dev_col_dist[idx_old_i]);
-    #ifdef COLLISION_UNIT_VOLUME
-    measure = 1.0;
-    #endif // COLLISION_UNIT_VOLUME
     if (measure <= 0.0) return;
 
     // select the collision partner from cumulative pair propensity rather than neighbor rank
@@ -216,9 +213,6 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     if (threadIdx.x != 0) return;
 
     real measure = _get_ball_measure(y, z, dev_col_dist[idx_old_i]);
-    #ifdef COLLISION_UNIT_VOLUME
-    measure = 1.0;
-    #endif // COLLISION_UNIT_VOLUME
     if (measure <= 0.0) return;
 
     real target = dev_col_rate[idx_old_i]*curand_uniform_double(&rngstate);

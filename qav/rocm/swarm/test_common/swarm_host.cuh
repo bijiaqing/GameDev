@@ -1,19 +1,21 @@
 #ifndef SWARM_HOST_CUH
 #define SWARM_HOST_CUH
 
+// QAV header override: retain the analytic collision-test initializer outside inc/
+
 #include <algorithm>        // std::copy, std::lower_bound, std::max, std::minmax_element
 #include <chrono>           // std::chrono::system_clock
 #include <cmath>            // std::abs, std::acos, std::atan2, std::cos, std::erf, std::erfc, std::exp, std::log, std::pow, std::sin, std::sqrt
 #include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
-#include <cuda_runtime.h>   // cudaError_t, cudaGetErrorString, cudaGetLastError, cudaSuccess
+#include <hip/hip_runtime.h>   // hipError_t, hipGetErrorString, hipGetLastError, hipSuccess
 #include <fstream>          // std::ofstream, std::ifstream
 #include <iomanip>          // std::setw, std::setfill, std::setprecision
 #include <iostream>         // std::cout, std::cerr, std::endl
 #include <limits>           // std::numeric_limits
 #include <random>           // std::mt19937
-#include <stdexcept>        // std::runtime_error
+#include <stdexcept>        // std::domain_error, std::runtime_error
 #include <string>           // std::string, std::to_string
 #include <vector>           // std::vector
 
@@ -165,8 +167,12 @@ int _get_mass_bin_count ()
     #ifdef IMPORTGAS
     return 1;
     #else  // ANALYTIC_GAS
+    #ifdef COLLISION_LINEAR_TEST
+    return 1;
+    #else  // STANDARD_INITIALIZATION
     if (N_Z == 1 || INIT_SMIN == INIT_SMAX) return 1;
     return 128;
+    #endif // COLLISION_LINEAR_TEST
     #endif // IMPORTGAS
     #else  // MONOSIZE
     return 1;
@@ -437,6 +443,9 @@ void initmass_calc (std::vector <real> &mass_bank)
     #ifdef IMPORTGAS
     mass_bank[0] = disk_cdf_calc(cdf, initdens, S_0);
     #else  // ANALYTIC_GAS
+    #ifdef COLLISION_LINEAR_TEST
+    mass_bank[0] = disk_cdf_calc(cdf, initdens, S_0);
+    #else  // STANDARD_INITIALIZATION
     real log_size_min = std::log(INIT_SMIN);
     real dlog_size = (mass_bin_count > 1)
         ? (std::log(INIT_SMAX) - log_size_min) / static_cast<real>(mass_bin_count - 1)
@@ -447,6 +456,7 @@ void initmass_calc (std::vector <real> &mass_bank)
         real size = std::exp(log_size_min + static_cast<real>(idx_size)*dlog_size);
         mass_bank[idx_size] = disk_cdf_calc(cdf, initdens, size);
     }
+    #endif // COLLISION_LINEAR_TEST
     #endif // IMPORTGAS
     #else  // MONOSIZE
     mass_bank[0] = disk_cdf_calc(cdf, initdens, S_0);
@@ -567,9 +577,15 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
     }
 
     // tabulate conditional CDFs uniformly in log size and interpolate their normalized probabilities
+    #ifdef COLLISION_LINEAR_TEST
+    int size_bin_count = 128;
+    real log_size_min = std::log(size_min);
+    real log_size_max = std::log(size_max);
+    #else  // STANDARD_INITIALIZATION
     int size_bin_count = _get_mass_bin_count();
     real log_size_min = std::log(INIT_SMIN);
     real log_size_max = std::log(INIT_SMAX);
+    #endif // COLLISION_LINEAR_TEST
     int radial_bin_count = _get_init_Rbin_count();
     real dlog_size = (log_size_max - log_size_min) / static_cast<real>(size_bin_count - 1);
 
@@ -606,6 +622,49 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
 }
 #endif // MULTISIZE && DIFFUSION
 #endif // !IMPORTGAS
+
+// =========================================================================================================================
+// collision-test random profiles
+// =========================================================================================================================
+
+#ifdef COLLISION
+// solve the negative real Lambert-W branch with Newton iteration
+inline static __host__
+real _get_lambertW_m1 (real z, int max_iter = 50, real tol = 1e-12)
+{
+    if (z < -1.0 / std::exp(1.0) || z >= 0.0) 
+    {
+        throw std::domain_error("lambertWm1: z out of domain");
+    }
+
+    // initialize from the asymptotic form of the negative branch
+    double val = std::log(-z);
+
+    for (int idx_iter = 0; idx_iter < max_iter; ++idx_iter)
+    {
+        double exp_val = std::exp(val);
+        double d_val = (val*exp_val - z) / (exp_val*(val + 1.0));
+        
+        val -= d_val;
+
+        if (std::abs(d_val) < tol*(1.0 + std::abs(val))) return val;
+    }
+
+    throw std::runtime_error("lambertWm1: did not converge");
+}
+
+// sample the analytic initial distribution used by the linear-kernel collision test
+inline __host__
+void rand_gamma_k2 (real *randsize, int count)
+{
+    std::uniform_real_distribution <real> random(0.0, 1.0);
+
+    for (int idx = 0; idx < count; idx++)
+    {
+        randsize[idx] = -(_get_lambertW_m1((random(rand_generator) - 1.0) / std::exp(1.0)) + 1.0);
+    }
+}
+#endif // COLLISION
 
 // =========================================================================================================================
 // imported dust distribution
@@ -709,33 +768,33 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 #endif // IMPORTGAS
 
 // =========================================================================================================================
-// cuda error handling
+// HIP error handling
 // =========================================================================================================================
 
 inline __host__
-void cuda_fail (cudaError_t status, const char *operation, const char *file, int line)
+void hip_fail (hipError_t status, const char *operation, const char *file, int line)
 {
     std::cerr
-    << "CUDA error at " << file << ":" << line
-    << " during " << operation << ": " << cudaGetErrorString(status)
+    << "HIP error at " << file << ":" << line
+    << " during " << operation << ": " << hipGetErrorString(status)
     << " (" << static_cast<int>(status) << ")" 
     << std::endl;
     
     std::exit(EXIT_FAILURE);
 }
 
-#define CUDA_CHECK(OPERATION)                                                       \
+#define HIP_CHECK(OPERATION)                                                       \
 do {                                                                                \
-    cudaError_t cuda_status_ = (OPERATION);                                         \
-    if (cuda_status_ != cudaSuccess)                                                \
-    { cuda_fail(cuda_status_, #OPERATION, __FILE__, __LINE__); }                    \
+    hipError_t hip_status_ = (OPERATION);                                         \
+    if (hip_status_ != hipSuccess)                                                \
+    { hip_fail(hip_status_, #OPERATION, __FILE__, __LINE__); }                    \
 } while (0)
 
-#define CUDA_KERNEL_CHECK(KERNEL_NAME)                                              \
+#define HIP_KERNEL_CHECK(KERNEL_NAME)                                              \
 do {                                                                                \
-    cudaError_t cuda_status_ = cudaGetLastError();                                  \
-    if (cuda_status_ != cudaSuccess)                                                \
-    { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
+    hipError_t hip_status_ = hipGetLastError();                                  \
+    if (hip_status_ != hipSuccess)                                                \
+    { hip_fail(hip_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
 } while (0)
 
 // =========================================================================================================================
@@ -834,7 +893,7 @@ bool save_device_binary (const std::string &file_name, const DataType *dev_data,
     for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
         std::size_t chunk = std::min(chunk_max, count - offset);
-        CUDA_CHECK(cudaMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, cudaMemcpyDeviceToHost));
+        HIP_CHECK(hipMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, hipMemcpyDeviceToHost));
         file.write(reinterpret_cast<const char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
     }
@@ -862,7 +921,7 @@ bool load_device_binary (const std::string &file_name, DataType *dev_data, std::
         std::size_t chunk = std::min(chunk_max, count - offset);
         file.read(reinterpret_cast<char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
-        CUDA_CHECK(cudaMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, cudaMemcpyHostToDevice));
+        HIP_CHECK(hipMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, hipMemcpyHostToDevice));
     }
 
     return true;
@@ -1171,7 +1230,7 @@ bool save_particle_data (const std::string &path, int idx_file, swarm *particle,
     #endif // COLLISION || DIFFUSION
 )
 {
-    CUDA_CHECK(cudaMemcpy(particle, dev_particle, sizeof(swarm)*N_P, cudaMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(particle, dev_particle, sizeof(swarm)*N_P, hipMemcpyDeviceToHost));
     save_sam_as_velocity(particle);
 
     std::string file_name = path + "particle_" + frame_num(idx_file) + ".dat";
@@ -1209,7 +1268,7 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
     }
 
     load_velocity_as_sam(particle);
-    CUDA_CHECK(cudaMemcpy(dev_particle, particle, sizeof(swarm)*N_P, cudaMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(dev_particle, particle, sizeof(swarm)*N_P, hipMemcpyHostToDevice));
 
     #if defined(COLLISION) || defined(DIFFUSION)
     file_name = path + "rngstate_" + frame_num(idx_file) + ".dat";
@@ -1251,10 +1310,10 @@ do {                                                                            
         std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
         return 1;                                                                           \
     }                                                                                       \
-    CUDA_CHECK(cudaMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, cudaMemcpyHostToDevice));             \
-    CUDA_CHECK(cudaMemcpy(dev_gas_velx, gas_velx, sizeof(real)*N_G, cudaMemcpyHostToDevice));             \
-    CUDA_CHECK(cudaMemcpy(dev_gas_vely, gas_vely, sizeof(real)*N_G, cudaMemcpyHostToDevice));             \
-    CUDA_CHECK(cudaMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, cudaMemcpyHostToDevice));             \
+    HIP_CHECK(hipMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, hipMemcpyHostToDevice));             \
+    HIP_CHECK(hipMemcpy(dev_gas_velx, gas_velx, sizeof(real)*N_G, hipMemcpyHostToDevice));             \
+    HIP_CHECK(hipMemcpy(dev_gas_vely, gas_vely, sizeof(real)*N_G, hipMemcpyHostToDevice));             \
+    HIP_CHECK(hipMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, hipMemcpyHostToDevice));             \
 } while(0)
 
 #define LOAD_GAS_NEXT_TO_VRAM(idx_file)                                                     \
@@ -1264,10 +1323,10 @@ do {                                                                            
         std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
         return 1;                                                                           \
     }                                                                                       \
-    CUDA_CHECK(cudaMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, cudaMemcpyHostToDevice));        \
-    CUDA_CHECK(cudaMemcpy(dev_gas_velx_next, gas_velx, sizeof(real)*N_G, cudaMemcpyHostToDevice));        \
-    CUDA_CHECK(cudaMemcpy(dev_gas_vely_next, gas_vely, sizeof(real)*N_G, cudaMemcpyHostToDevice));        \
-    CUDA_CHECK(cudaMemcpy(dev_gas_velz_next, gas_velz, sizeof(real)*N_G, cudaMemcpyHostToDevice));        \
+    HIP_CHECK(hipMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, hipMemcpyHostToDevice));        \
+    HIP_CHECK(hipMemcpy(dev_gas_velx_next, gas_velx, sizeof(real)*N_G, hipMemcpyHostToDevice));        \
+    HIP_CHECK(hipMemcpy(dev_gas_vely_next, gas_vely, sizeof(real)*N_G, hipMemcpyHostToDevice));        \
+    HIP_CHECK(hipMemcpy(dev_gas_velz_next, gas_velz, sizeof(real)*N_G, hipMemcpyHostToDevice));        \
 } while(0)
 #endif // IMPORTGAS
 
@@ -1275,12 +1334,12 @@ do {                                                                            
 #define SAVE_DUSTDENS_TO_FILE(idx_file)                                                     \
 do {                                                                                        \
     dustdens_init <<< NB_G, TPB >>> (dev_dustdens);                                         \
-    CUDA_KERNEL_CHECK("dustdens_init");                                                     \
+    HIP_KERNEL_CHECK("dustdens_init");                                                     \
     dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, total_dust_mass);          \
-    CUDA_KERNEL_CHECK("dustdens_depo");                                                     \
+    HIP_KERNEL_CHECK("dustdens_depo");                                                     \
     dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);                                         \
-    CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
-    CUDA_CHECK(cudaMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, cudaMemcpyDeviceToHost));           \
+    HIP_KERNEL_CHECK("dustdens_calc");                                                     \
+    HIP_CHECK(hipMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, hipMemcpyDeviceToHost));           \
     std::string file_name = PATH + "dustdens_" + frame_num(idx_file) + ".dat";              \
     if (!save_host_binary(file_name, dustdens, N_G))                                        \
     {                                                                                       \
@@ -1294,19 +1353,19 @@ do {                                                                            
 #define SAVE_OPTDEPTH_TO_FILE(idx_file, do_avg)                                             \
 do {                                                                                        \
     optdepth_init <<< NB_G, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_init");                                                     \
+    HIP_KERNEL_CHECK("optdepth_init");                                                     \
     optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);          \
-    CUDA_KERNEL_CHECK("optdepth_depo");                                                     \
+    HIP_KERNEL_CHECK("optdepth_depo");                                                     \
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_calc");                                                     \
+    HIP_KERNEL_CHECK("optdepth_calc");                                                     \
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_csum");                                                     \
+    HIP_KERNEL_CHECK("optdepth_csum");                                                     \
     if (do_avg)                                                                             \
     {                                                                                       \
         optdepth_mean <<< NB_X, TPB >>> (dev_optdepth);                                     \
-        CUDA_KERNEL_CHECK("optdepth_mean");                                                 \
+        HIP_KERNEL_CHECK("optdepth_mean");                                                 \
     }                                                                                       \
-    CUDA_CHECK(cudaMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, cudaMemcpyDeviceToHost));           \
+    HIP_CHECK(hipMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, hipMemcpyDeviceToHost));           \
     std::string file_name = PATH + "optdepth_" + frame_num(idx_file) + ".dat";              \
     if (!save_host_binary(file_name, optdepth, N_G))                                        \
     {                                                                                       \

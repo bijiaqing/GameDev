@@ -96,9 +96,6 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
 
     real radius = sqrt(static_cast<real>(max_dist_sq));
     real measure = _get_ball_measure(y, z, radius);
-    #ifdef COLLISION_UNIT_VOLUME
-    measure = 1.0;
-    #endif // COLLISION_UNIT_VOLUME
 
     dev_col_dist[idx_old_i] = radius;
     dev_col_rate[idx_old_i] = (measure > 0.0) ? col_rate_i / measure : 0.0;
@@ -195,9 +192,6 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
 
     real radius = sqrt(static_cast<real>(max_dist_sq));
     real measure = _get_ball_measure(y, z, radius);
-    #ifdef COLLISION_UNIT_VOLUME
-    measure = 1.0;
-    #endif // COLLISION_UNIT_VOLUME
 
     dev_col_dist[idx_old_i] = radius;
     dev_col_rate[idx_old_i] = (measure > 0.0) ? col_rate_i / measure : 0.0;

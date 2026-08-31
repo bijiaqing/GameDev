@@ -243,12 +243,37 @@ def check_chain_port(errors: list[str]) -> None:
         "#if !defined(BERNOULLI) || defined(KNN_CACHE)",
         "dev_col_neighbor, dev_col_measure",
         "#if defined(COLLISION_MORTON) && !defined(KNN_CACHE)",
-        "#ifdef COL_PERF_QAV",
-        '<< "  \\\"backend\\\": \\\"rocm\\\",\\n"',
     )
     for token in required_cache_runtime:
         if token not in rocm_runtime:
             errors.append(f"ROCm cached-Bernoulli runtime is missing {token!r}")
+
+    qav_runtime_paths = {
+        "CUDA QAV": PROJECT_ROOT/"qav"/"cuda"/"swarm"/"test_common"/"swarm_runtime.cu",
+        "ROCm QAV": PROJECT_ROOT/"qav"/"rocm"/"swarm"/"test_common"/"swarm_runtime.hip",
+    }
+    for backend, path in qav_runtime_paths.items():
+        if not path.is_file():
+            errors.append(f"missing test-only runtime override: {path.relative_to(PROJECT_ROOT)}")
+            continue
+        runtime = path.read_text()
+        for token in ("#ifdef COL_PERF_QAV", "#ifdef COL_CACHE_QAV", "#ifdef QAV_RUNTIME_SEED"):
+            if token not in runtime:
+                errors.append(f"{backend} runtime override is missing {token!r}")
+
+    qav_cache = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"_col_cache.cuh"
+    if not qav_cache.is_file() or "struct col_cache_qav_sample" not in qav_cache.read_text():
+        errors.append("missing test-only collision-cache diagnostic header override")
+
+    for backend in ("cuda", "rocm"):
+        qav_common = PROJECT_ROOT/"qav"/backend/"swarm"/"test_common"
+        qav_host = qav_common/"swarm_host.cuh"
+        if not qav_host.is_file() or "rand_gamma_k2" not in qav_host.read_text():
+            errors.append(f"{backend} QAV is missing the collision-initialization header override")
+        qav_morton = PROJECT_ROOT/"qav"/backend/"swarm"/"test_knn"/"morton"/"morton_index.cuh"
+        if not qav_morton.is_file() or "void morton_search" not in qav_morton.read_text() \
+            or "void morton_digest" not in qav_morton.read_text():
+            errors.append(f"{backend} QAV is missing the standalone Morton-query header override")
 
     runtime_paths = {
         "CUDA": PROJECT_ROOT/"src"/"cuda"/"swarm"/"swarm_runtime.cu",
@@ -262,6 +287,27 @@ def check_chain_port(errors: list[str]) -> None:
             )
         if "colstate_flag <<< NB_P, TPB >>>" not in runtime:
             errors.append(f"{backend} runtime is missing the reused-geometry particle-state guard")
+
+    test_only_tokens = (
+        "COL_CACHE_QAV", "COL_GEOM_QAV", "COL_PERF_QAV", "QAV_RUNTIME_SEED",
+        "KNN_FRESH", "COLLISION_UNIT_VOLUME", "COLLISION_LINEAR_TEST",
+        "PERF_PARTICLES", "defined(TEST_", "#ifdef TEST_", "#ifndef TEST_",
+        "rand_gamma_k2", "void morton_search", "void morton_digest",
+    )
+    production_paths = []
+    for root in (PROJECT_ROOT/"inc", PROJECT_ROOT/"src"):
+        production_paths.extend(
+            path for path in root.rglob("*")
+            if path.is_file() and path.suffix in {".cuh", ".cu", ".hip", ".h", ".hpp"}
+        )
+    for path in production_paths:
+        source = path.read_text()
+        for token in test_only_tokens:
+            if token in source:
+                errors.append(
+                    f"production source contains test-only token {token!r}: "
+                    f"{path.relative_to(PROJECT_ROOT)}"
+                )
 
     models = (
         "test_colchain_2d",

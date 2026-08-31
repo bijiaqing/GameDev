@@ -1,9 +1,6 @@
-#include <chrono>           // std::chrono clocks and durations
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
-#include <fstream>          // std::ofstream
-#include <iomanip>          // std::setw, std::setfill, std::setprecision
 #include <iostream>         // std::cout, std::endl
 #include <limits>           // std::numeric_limits
 #include <sstream>          // std::stringstream
@@ -31,9 +28,7 @@
 #include <morton/morton_ghost.cuh>
 #endif // COLLISION_MORTON
 
-#if defined(COL_PERF_QAV) && !defined(COL_GEOM_QAV)
-#error "COL_PERF_QAV requires COL_GEOM_QAV"
-#endif
+
 
 std::mt19937 rand_generator;
 
@@ -159,6 +154,7 @@ int main (int argc, char **argv)
     real *dev_col_measure;
     HIP_CHECK(hipMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
     HIP_CHECK(hipMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
+
     #endif // FROZEN_BATH || KNN_CACHE
 
     #ifndef BERNOULLI
@@ -232,11 +228,7 @@ int main (int argc, char **argv)
         #ifdef RADIATION
         power_idx = -1.5;       // full-column equal-area sampling proposal, see _get_grain_number
         #endif // RADIATION
-        #ifdef COLLISION_LINEAR_TEST
-        rand_gamma_k2(randsize, N_P);
-        #else  // STANDARD_INITIALIZATION
         rand_powerlaw(randsize, N_P, INIT_SMIN, INIT_SMAX, power_idx);
-        #endif // COLLISION_LINEAR_TEST
 
         // correct size sampling and finite-domain containment so represented masses sum exactly to total_dust_mass
         real mass_norm = get_mass_norm(randsize, mass_bank, total_dust_mass);
@@ -348,36 +340,7 @@ int main (int argc, char **argv)
     #ifdef COLLISION
     bool col_geom_valid = false;
 
-    #ifdef COL_GEOM_QAV
-    int col_geom_calls = 0;
-    int col_geom_builds = 0;
-    int col_geom_reuses = 0;
-    int col_geom_invalidations = 0;
-    #endif // COL_GEOM_QAV
 
-    #ifdef COL_PERF_QAV
-    double col_perf_total_ms = 0.0;
-    double col_perf_geometry_ms = 0.0;
-    double col_perf_rate_ms = 0.0;
-    double col_perf_event_ms = 0.0;
-    double col_perf_audit_ms = 0.0;
-    long long col_perf_batches = 0;
-    long long col_perf_launches = 0;
-
-    // synchronize benchmark boundaries so every phase owns all of its GPU work
-    auto col_perf_start = [] ()
-    {
-        HIP_CHECK(hipDeviceSynchronize());
-        return std::chrono::steady_clock::now();
-    };
-    auto col_perf_stop = [] (const std::chrono::steady_clock::time_point &start)
-    {
-        HIP_CHECK(hipDeviceSynchronize());
-        return std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - start
-        ).count();
-    };
-    #endif // COL_PERF_QAV
 
     #ifdef COLLISION_KDTREE
     float image_dist_min = -1.0f;
@@ -398,27 +361,14 @@ int main (int argc, char **argv)
     // invalidate the search package only when a position update ends its current geometry epoch
     auto invalidate_col_geometry = [&] ()
     {
-        #ifdef COL_GEOM_QAV
-        if (col_geom_valid) col_geom_invalidations++;
-        #endif // COL_GEOM_QAV
         col_geom_valid = false;
     };
 
     // evolve collisions over a fixed-position interval with the configured collision integrator
     auto evolve_collisions = [&] (real duration)
     {
-        #ifdef COL_PERF_QAV
-        auto col_operator_start = col_perf_start();
-        #endif // COL_PERF_QAV
 
-        #ifdef KNN_FRESH
-        // QAV baseline: deliberately rebuild an otherwise reusable fixed-position search package
-        col_geom_valid = false;
-        #endif // KNN_FRESH
 
-        #ifdef COL_GEOM_QAV
-        col_geom_calls++;
-        #endif // COL_GEOM_QAV
 
         // geometry reuse must not suppress the per-operator nonfinite-state failure path
         if (col_geom_valid)
@@ -439,9 +389,6 @@ int main (int argc, char **argv)
         // rebuild the complete geometric search package only after particle positions change
         if (!col_geom_valid)
         {
-            #ifdef COL_PERF_QAV
-            auto col_geometry_start = col_perf_start();
-            #endif // COL_PERF_QAV
 
             HIP_CHECK(hipMemset(dev_bad_part, 0, sizeof(int)));
             #ifdef COLLISION_KDTREE
@@ -510,6 +457,7 @@ int main (int argc, char **argv)
             #endif // COLLISION_KDTREE
             #endif // FROZEN_BATH || KNN_CACHE
 
+
             #ifndef BERNOULLI
             col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
             HIP_KERNEL_CHECK("col_space_bin");
@@ -517,19 +465,7 @@ int main (int argc, char **argv)
 
             // publish validity only after every required hierarchy, cache, and guard has completed
             col_geom_valid = true;
-            #ifdef COL_GEOM_QAV
-            col_geom_builds++;
-            #endif // COL_GEOM_QAV
-            #ifdef COL_PERF_QAV
-            col_perf_geometry_ms += col_perf_stop(col_geometry_start);
-            #endif // COL_PERF_QAV
         }
-        #ifdef COL_GEOM_QAV
-        else
-        {
-            col_geom_reuses++;
-        }
-        #endif // COL_GEOM_QAV
 
         #ifndef BERNOULLI
         std::vector<int> col_count(col_raw_count);
@@ -542,9 +478,6 @@ int main (int argc, char **argv)
         real elapsed = 0.0;
         while (elapsed < duration)
         {
-            #ifdef COL_PERF_QAV
-            auto col_rate_start = col_perf_start();
-            #endif // COL_PERF_QAV
 
             col_bath_init <<< NB_P, TPB >>> (
                 dev_size_old, dev_numr_old, dev_col_time, dev_col_events,
@@ -594,9 +527,6 @@ int main (int argc, char **argv)
             }
             if (!(active_mass > 0.0))
             {
-                #ifdef COL_PERF_QAV
-                col_perf_rate_ms += col_perf_stop(col_rate_start);
-                #endif // COL_PERF_QAV
                 dt_col = duration - elapsed;
                 elapsed = duration;
                 break;
@@ -606,10 +536,6 @@ int main (int argc, char **argv)
                 col_ratebin, col_merged_count, duration - elapsed, bath_state.limit_scale
             );
             real limit_before = bath_state.limit_scale;
-            #ifdef COL_PERF_QAV
-            col_perf_rate_ms += col_perf_stop(col_rate_start);
-            auto col_event_start = col_perf_start();
-            #endif // COL_PERF_QAV
 
             HIP_CHECK(hipMemset(dev_col_hazard, 0, sizeof(real)*N_P));
             HIP_CHECK(hipMemset(dev_col_jump1_int, 0, sizeof(real)*N_P));
@@ -643,10 +569,6 @@ int main (int argc, char **argv)
             if (max_col_error != 0)
                 throw std::runtime_error("collision chain returned error " + std::to_string(max_col_error));
 
-            #ifdef COL_PERF_QAV
-            col_perf_event_ms += col_perf_stop(col_event_start);
-            auto col_audit_start = col_perf_start();
-            #endif // COL_PERF_QAV
 
             HIP_CHECK(hipMemset(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
             col_audit_bin <<< NB_P, TPB >>> (
@@ -673,11 +595,6 @@ int main (int argc, char **argv)
             bath_record.limit_after = bath_state.limit_scale;
             bath_record.result = bath_result;
             _record_col_bath(col_summary, bath_record);
-            #ifdef COL_PERF_QAV
-            col_perf_audit_ms += col_perf_stop(col_audit_start);
-            col_perf_batches++;
-            col_perf_launches += continuation_count;
-            #endif // COL_PERF_QAV
             if (bath_result.persistent_overshoot)
             {
                 std::string failure_file = PATH + "collision_chain_failure.json";
@@ -703,9 +620,6 @@ int main (int argc, char **argv)
         real elapsed = 0.0;
         while (elapsed < duration)
         {
-            #ifdef COL_PERF_QAV
-            auto col_rate_start = col_perf_start();
-            #endif // COL_PERF_QAV
 
             // freeze only the species fields changed by collisions while positions and velocities remain fixed
             col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
@@ -779,9 +693,6 @@ int main (int argc, char **argv)
             thrust::device_ptr <const real> col_rate_ptr(dev_col_rate);
             real max_col_rate = *thrust::max_element(col_rate_ptr, col_rate_ptr + N_P);
             real remaining = duration - elapsed;
-            #ifdef COL_PERF_QAV
-            col_perf_rate_ms += col_perf_stop(col_rate_start);
-            #endif // COL_PERF_QAV
 
             if (!(max_col_rate > 0.0))
             {
@@ -793,9 +704,6 @@ int main (int argc, char **argv)
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
             dt_col = fmin(CFL_COL / max_col_rate, remaining);
-            #ifdef COL_PERF_QAV
-            auto col_event_start = col_perf_start();
-            #endif // COL_PERF_QAV
             #ifdef KNN_CACHE
             #ifdef COLLISION_KDTREE
             col_event_run <<< NB_P, TPB >>> (
@@ -845,11 +753,6 @@ int main (int argc, char **argv)
                 throw std::runtime_error("Morton traversal stack overflow in col_event_run");
             #endif // COLLISION_MORTON && !KNN_CACHE
 
-            #ifdef COL_PERF_QAV
-            col_perf_event_ms += col_perf_stop(col_event_start);
-            col_perf_batches++;
-            col_perf_launches++;
-            #endif // COL_PERF_QAV
 
             real elapsed_old = elapsed;
             elapsed += dt_col;
@@ -860,9 +763,6 @@ int main (int argc, char **argv)
         }
         #endif // FROZEN_BATH / BERNOULLI
 
-        #ifdef COL_PERF_QAV
-        col_perf_total_ms += col_perf_stop(col_operator_start);
-        #endif // COL_PERF_QAV
     };
     #endif // COLLISION
 
@@ -1046,7 +946,7 @@ int main (int argc, char **argv)
         if (is_log_power(idx_file)) SAVE_PARTICLE_TO_FILE(idx_file);
         #else  // LINEAR_OUTPUT
         if (idx_file % LIN_BASE == 0) SAVE_PARTICLE_TO_FILE(idx_file);
-        #endif // LOGTIMING
+        #endif // LOGTIMING / LOGOUTPUT / LINEAR_OUTPUT
 
         #ifndef BERNOULLI
         std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
@@ -1057,109 +957,7 @@ int main (int argc, char **argv)
         }
         #endif // FROZEN_BATH
 
-        #ifdef COL_GEOM_QAV
-        std::string geometry_file = PATH + "collision_geometry_" + frame_num(idx_file) + ".json";
-        std::ofstream geometry_stream(geometry_file);
-        if (!geometry_stream)
-        {
-            std::cerr << "Error: Failed to save file: " << geometry_file << std::endl;
-            return 1;
-        }
-        geometry_stream
-            << "{\n"
-            << "  \"schema\": 1,\n"
-            << "  \"backend\": \"rocm\",\n"
-            << "  \"frame\": " << idx_file << ",\n"
-            << "  \"search_calls\": " << col_geom_calls << ",\n"
-            << "  \"geometry_builds\": " << col_geom_builds << ",\n"
-            << "  \"geometry_reuses\": " << col_geom_reuses << ",\n"
-            << "  \"geometry_invalidations\": " << col_geom_invalidations << "\n"
-            << "}\n";
-        if (!geometry_stream)
-        {
-            std::cerr << "Error: Failed to write file: " << geometry_file << std::endl;
-            return 1;
-        }
-        #endif // COL_GEOM_QAV
 
-        #ifdef COL_PERF_QAV
-        std::string performance_file = PATH + "collision_performance_" + frame_num(idx_file) + ".json";
-        std::ofstream performance_stream(performance_file);
-        if (!performance_stream)
-        {
-            std::cerr << "Error: Failed to save file: " << performance_file << std::endl;
-            return 1;
-        }
-        double col_perf_accounted_ms = col_perf_geometry_ms + col_perf_rate_ms
-            + col_perf_event_ms + col_perf_audit_ms;
-        performance_stream
-            << std::setprecision(17)
-            << "{\n"
-            << "  \"schema\": 1,\n"
-            << "  \"backend\": \"rocm\",\n"
-            << "  \"frame\": " << idx_file << ",\n"
-            << "  \"particles\": " << N_P << ",\n"
-            << "  \"neighbors\": " << N_K << ",\n"
-            << "  \"integrator\": \""
-            #ifndef BERNOULLI
-            << "frozen_bath"
-            #else  // BERNOULLI
-            #ifdef KNN_CACHE
-            << "bernoulli_cache"
-            #else  // DIRECT_BERNOULLI
-            << "bernoulli_direct"
-            #endif // KNN_CACHE
-            #endif // FROZEN_BATH
-            << "\",\n"
-            << "  \"search\": \""
-            #ifdef COLLISION_KDTREE
-            << "kdtree"
-            #else  // COLLISION_MORTON
-            << "morton"
-            #endif // COLLISION_KDTREE
-            << "\",\n"
-            << "  \"forced_fresh\": "
-            #ifdef KNN_FRESH
-            << "true"
-            #else  // REUSED_GEOMETRY
-            << "false"
-            #endif // KNN_FRESH
-            << ",\n"
-            << "  \"neighbor_cache\": "
-            #if !defined(BERNOULLI) || defined(KNN_CACHE)
-            << "true"
-            #else  // DIRECT_BERNOULLI
-            << "false"
-            #endif // FROZEN_BATH || KNN_CACHE
-            << ",\n"
-            << "  \"neighbor_cache_bytes\": "
-            #if !defined(BERNOULLI) || defined(KNN_CACHE)
-            << sizeof(int)*col_neighbor_count + sizeof(real)*static_cast<std::size_t>(N_P)
-            #else  // DIRECT_BERNOULLI
-            << 0
-            #endif // FROZEN_BATH || KNN_CACHE
-            << ",\n"
-            << "  \"collision_calls\": " << col_geom_calls << ",\n"
-            << "  \"geometry_builds\": " << col_geom_builds << ",\n"
-            << "  \"geometry_reuses\": " << col_geom_reuses << ",\n"
-            << "  \"geometry_invalidations\": " << col_geom_invalidations << ",\n"
-            << "  \"collision_batches\": " << col_perf_batches << ",\n"
-            << "  \"event_launches\": " << col_perf_launches << ",\n"
-            << "  \"timing_ms\": {\n"
-            << "    \"collision_total\": " << col_perf_total_ms << ",\n"
-            << "    \"geometry\": " << col_perf_geometry_ms << ",\n"
-            << "    \"rate_and_control\": " << col_perf_rate_ms << ",\n"
-            << "    \"events\": " << col_perf_event_ms << ",\n"
-            << "    \"audit\": " << col_perf_audit_ms << ",\n"
-            << "    \"other\": " << col_perf_total_ms - col_perf_accounted_ms << "\n"
-            << "  }\n"
-            << "}\n";
-        if (!performance_stream)
-        {
-            std::cerr << "Error: Failed to write file: " << performance_file << std::endl;
-            return 1;
-        }
-        #endif // COL_PERF_QAV
 
         msg_output(idx_file);
     }

@@ -32,7 +32,7 @@ $(CONFIG_STAMP):
 
 $(TARGET): $(TEST_DIR)/knn_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/kdtree/index_heap.cuh \
-	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
+	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(TEST_DIR)/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
@@ -41,14 +41,14 @@ $(TARGET): $(TEST_DIR)/knn_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 $(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.cu $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/kdtree/builder.h $(ROOT_DIR)/inc/cuda/swarm/kdtree/index_heap.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/kdtree/knn.h \
-	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
+	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(TEST_DIR)/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
 
 $(PERIODIC_TARGET): $(TEST_DIR)/knn_periodic_tests.cu $(TEST_DIR)/periodic_query.cuh \
-	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
+	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh $(TEST_DIR)/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/periodic_query.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
@@ -57,7 +57,7 @@ $(PERIODIC_TARGET): $(TEST_DIR)/knn_periodic_tests.cu $(TEST_DIR)/periodic_query
 $(WEDGE_TARGET): $(TEST_DIR)/knn_wedge_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/kdtree/index_heap.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_types.cuh \
-	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_index.cuh \
+	$(TEST_DIR)/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_ghost.cuh \
 	$(ROOT_DIR)/inc/cuda/swarm/morton/morton_query.cuh $(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
