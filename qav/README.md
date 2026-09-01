@@ -15,6 +15,11 @@ documented in [`doc/fluid_testset.md`](../doc/fluid_testset.md) and
 [`doc/swarm_testset.md`](../doc/swarm_testset.md). This file contains only the cross-backend archive
 workflow and output contract.
 
+The all-in-one runner includes publication, release, and qualification records in both common
+matrices. It also launches the backend-specific swarm nonfinite-injection group after the common
+swarm matrix. Consequently, an already queued `run_all.py` command needs no new arguments after
+these test sources are synchronized to the cluster.
+
 ## Transferable native campaign
 
 An invocation without `--compare` creates and checks only the selected native archive. For example,

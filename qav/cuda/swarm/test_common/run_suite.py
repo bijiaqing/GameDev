@@ -37,6 +37,7 @@ CUDA_GROUPS = {
         "test_colchain_restart_2d",
         "test_colreuse_2d",
     ],
+    "failure": ["test_failure_knn"],
 }
 
 
@@ -111,8 +112,9 @@ def main() -> None:
     qualification_group = args.group in CUDA_GROUPS
     for model in models:
         chain_model = collision_runtime_model(model)
+        fixed_resolution = model in SWARM_FIXED_RESOLUTION or model == "test_failure_knn"
         model_resolutions = [] if chain_model \
-            else (resolutions[:1] if model in SWARM_FIXED_RESOLUTION else resolutions)
+            else (resolutions[:1] if fixed_resolution else resolutions)
         if model == "test_knn":
             output = "test_knn/suite_manifest.json"
         else:
@@ -129,12 +131,17 @@ def main() -> None:
         })
 
     if qualification_group:
-        metric_tiers = {QUALIFICATION_TIER: len(models)}
+        qualification_metrics = sum(
+            1 if collision_runtime_model(entry["model"]) else len(entry["resolutions"])
+            for entry in entries if entry["model"] != "test_failure_knn"
+        )
+        metric_tiers = {QUALIFICATION_TIER: qualification_metrics}
         included_tiers = [QUALIFICATION_TIER]
     else:
         metric_tiers = swarm_metric_tiers(models, resolutions)
         included_tiers = [
-            tier for tier in (PUBLICATION_TIER, RELEASE_TIER) if metric_tiers[tier] > 0
+            tier for tier in (PUBLICATION_TIER, RELEASE_TIER, QUALIFICATION_TIER)
+            if metric_tiers[tier] > 0
         ]
         if args.knn_full and "test_knn" in models:
             included_tiers.append(QUALIFICATION_TIER)
@@ -153,7 +160,9 @@ def main() -> None:
         "reconstructed": args.rebuild_manifest,
         "gpu_target": args.target,
         "campaign_tier": QUALIFICATION_TIER if qualification_group else (
-            RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER
+            QUALIFICATION_TIER if QUALIFICATION_TIER in included_tiers else (
+                RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER
+            )
         ),
         "included_tiers": included_tiers,
         "metric_tiers": metric_tiers,
@@ -161,8 +170,10 @@ def main() -> None:
         "models_completed": 0,
         "analytical_builds_expected": sum(
             len(entry["resolutions"]) for entry in entries
-            if entry["model"] != "test_knn" and not collision_runtime_model(entry["model"])
+            if entry["model"] not in {"test_knn", "test_failure_knn"}
+            and not collision_runtime_model(entry["model"])
         ),
+        "failure_backend_builds_expected": 2 if "test_failure_knn" in models else 0,
         "knn_standalone_builds_expected": (
             2 if args.group == "radial" else 4
         ) if "test_knn" in models else 0,

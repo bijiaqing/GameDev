@@ -119,7 +119,9 @@ def main() -> None:
         "effective_resolutions": resolutions,
         "math_mode": args.math_mode,
         "gpu_target": args.target,
-        "campaign_tier": "release" if "release" in included_tiers else "publication",
+        "campaign_tier": "qualification" if "qualification" in included_tiers else (
+            "release" if "release" in included_tiers else "publication"
+        ),
         "included_tiers": included_tiers,
         "metric_tiers": metric_tiers,
         "cases_expected": len(entries),
@@ -140,8 +142,7 @@ def main() -> None:
             "--math-mode", args.math_mode,
         ]
 
-        # a model-specific --res, currently only the source test, takes priority
-        # over the suite-wide resolution list
+        # fixed-resolution source and qualification cases override the suite-wide convergence grid
         if "--res" not in extra:
             command += ["--res", *(str(value) for value in resolutions)]
         command += list(extra)

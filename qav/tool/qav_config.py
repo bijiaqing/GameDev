@@ -69,6 +69,7 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("test_y_outflow_3d", ()),
         ("test_z_outflow_3d", ()),
         ("test_z_reflect_3d", ()),
+        ("test_z_metric_3d", ()),
         ("test_z_transport_3d", ("--cfl", "0.05")),
         ("test_z_transport_3d", ("--cfl", "0.5")),
     ],
@@ -80,6 +81,7 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("test_z_diffusion_3d", ()),
         ("test_diffusion_poslimit", ()),
     ],
+    "stress": [("test_advect_limit_2d", ("--res", "64"))],
     "source": [("test_source_drag", ("--res", "8"))],
     "radiation": [
         *(('test_optdepth', ('--power', str(power))) for power in (0.0, -1.0, 1.0)),
@@ -88,6 +90,7 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
     "ring": [
         ("test_ring_transport_2d", ()),
         ("test_ring_diffusion_2d", ()),
+        ("test_ring_long_2d", ()),
         ("test_ring_radiation_2d", ()),
         ("test_ring_all_2d", ()),
     ],
@@ -100,6 +103,7 @@ SWARM_GROUPS: dict[str, list[str]] = {
         "test_orbit_2d", "test_drag_2d", "test_orbit_ecc_2d", "test_orbit_beta_2d",
         "test_orbit_inc_3d", "test_drag_path_1d",
         "test_absorb_path_1d",
+        "test_dynrate_3d",
     ],
     "diffusion": [
         "test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d", "test_settle_diffuse_3d",
@@ -156,11 +160,12 @@ SWARM_FIXED_RESOLUTION = {
     "test_boundary_3d",
     "test_boundary_half",
     "test_knn",
+    "test_dynrate_3d",
 }
 
-EXPECTED_FLUID_METRICS = 133
-EXPECTED_SWARM_METRICS = 79
-EXPECTED_PUBLICATION_FLUID_METRICS = 105
+EXPECTED_FLUID_METRICS = 142
+EXPECTED_SWARM_METRICS = 80
+EXPECTED_PUBLICATION_FLUID_METRICS = 113
 EXPECTED_PUBLICATION_SWARM_METRICS = 61
 
 PUBLICATION_TIER = "publication"
@@ -175,7 +180,7 @@ SWARM_RELEASE_MODELS = {
     "test_boundary_half",
 }
 
-SWARM_QUALIFICATION_MODELS = {"test_failure_knn", "test_restart_2d"}
+SWARM_QUALIFICATION_MODELS = {"test_dynrate_3d", "test_failure_knn", "test_restart_2d"}
 
 SWARM_SINGLE_PUBLICATION_RESOLUTION = {
     "test_grid_1d",
@@ -251,6 +256,8 @@ def option_value(arguments: tuple[str, ...], option: str) -> str | None:
 def fluid_case_tier(model: str, arguments: tuple[str, ...]) -> str:
     """Classify one fluid parameter variant by its minimum evidence tier"""
 
+    if model == "test_advect_limit_2d":
+        return QUALIFICATION_TIER
     if model == "test_x_transport_2d" and option_value(arguments, "--shift") != "3.25":
         return RELEASE_TIER
     if model in {"test_y_transport_cyl", "test_y_transport_sph", "test_z_transport_3d"} \
@@ -266,7 +273,7 @@ def fluid_metric_tiers(
 ) -> dict[str, int]:
     """Count fluid metric records by minimum evidence tier"""
 
-    counts = {PUBLICATION_TIER: 0, RELEASE_TIER: 0}
+    counts = {PUBLICATION_TIER: 0, RELEASE_TIER: 0, QUALIFICATION_TIER: 0}
     for model, arguments in cases:
         records = 1 if "--res" in arguments else resolution_count
         counts[fluid_case_tier(model, arguments)] += records
@@ -318,7 +325,7 @@ def swarm_resolution_tiers(model: str, resolutions: list[int]) -> list[dict[str,
 def swarm_metric_tiers(models: list[str], resolutions: list[int]) -> dict[str, int]:
     """Count swarm analytical records by minimum evidence tier"""
 
-    counts = {PUBLICATION_TIER: 0, RELEASE_TIER: 0}
+    counts = {PUBLICATION_TIER: 0, RELEASE_TIER: 0, QUALIFICATION_TIER: 0}
     for model in models:
         if model == "test_knn":
             continue

@@ -149,11 +149,14 @@ def main() -> None:
     else:
         metric_tiers = swarm_metric_tiers(models, resolutions)
         included_tiers = [
-            tier for tier in (PUBLICATION_TIER, RELEASE_TIER) if metric_tiers[tier] > 0
+            tier for tier in (PUBLICATION_TIER, RELEASE_TIER, QUALIFICATION_TIER)
+            if metric_tiers[tier] > 0
         ]
         if args.knn_full and "test_knn" in models:
             included_tiers.append(QUALIFICATION_TIER)
-        campaign_tier = RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER
+        campaign_tier = QUALIFICATION_TIER if QUALIFICATION_TIER in included_tiers else (
+            RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER
+        )
 
     manifest = {
         "schema": 1,

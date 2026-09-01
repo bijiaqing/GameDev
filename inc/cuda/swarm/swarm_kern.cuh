@@ -123,6 +123,7 @@ __global__ void dustdens_calc (real *dev_dustdens);
 #ifdef COLLISION
 __global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
 __global__ void colstate_flag (const swarm *dev_particle, int *dev_bad_part);
+__global__ void inf_rate_flag (const real *dev_col_rate, const real *dev_col_dist, int *dev_bad_part);
 
 #ifdef COLLISION_KDTREE
 __global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,

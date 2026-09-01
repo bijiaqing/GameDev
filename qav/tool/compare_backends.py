@@ -158,9 +158,11 @@ def compare_metrics(
                 and record.get("backend") == backend
                 and record.get("group") == "all"
                 and record.get("passed") is True
-                and record.get("campaign_tier") == "release"
+                and record.get("campaign_tier") == "qualification"
                 and isinstance(record.get("included_tiers"), list)
-                and {"publication", "release"}.issubset(record["included_tiers"])
+                and {"publication", "release", "qualification"}.issubset(
+                    record["included_tiers"]
+                )
             )
             native_tiers[backend] = record.get("metric_tiers")
         native_manifests[backend] = {"path": str(path), "valid": valid}

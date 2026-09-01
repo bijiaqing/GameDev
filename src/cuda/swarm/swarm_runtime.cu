@@ -659,6 +659,25 @@ int main (int argc, char **argv)
             #endif // KNN_CACHE
             CUDA_KERNEL_CHECK("col_rate_calc");
 
+            CUDA_CHECK(cudaMemset(dev_bad_part, 0, sizeof(int)));
+            inf_rate_flag <<< NB_P, TPB >>> (dev_col_rate,
+                #ifdef KNN_CACHE
+                dev_col_measure,
+                #else  // DIRECT_BERNOULLI
+                dev_col_dist,
+                #endif // KNN_CACHE
+                dev_bad_part
+            );
+            CUDA_KERNEL_CHECK("inf_rate_flag");
+            int bad_result = 0;
+            CUDA_CHECK(cudaMemcpy(&bad_result, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            if (bad_result != 0)
+            {
+                std::cerr << "Error: non-finite collision result at particle "
+                    << bad_result - 1 << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+
             #if defined(COLLISION_MORTON) && !defined(KNN_CACHE)
             thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
             unsigned int max_morton_overflow = *thrust::max_element(

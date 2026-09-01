@@ -65,7 +65,7 @@ constexpr int N_Z = 1280;
 constexpr int N_X = 8;
 constexpr int N_Y = 1366;
 constexpr int N_Z = 1;
-#elif defined(VERIFY_DIFFUSION_POSLIMIT)
+#elif defined(VERIFY_DIFFUSION_POSLIMIT) || defined(VERIFY_ADVECTION_LIMIT)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = 1;
 constexpr int N_Z = 1;
@@ -89,6 +89,10 @@ constexpr int N_Z = 4;
 constexpr int N_X = 4;
 constexpr int N_Y = 4;
 constexpr int N_Z = VERIFY_RES;
+#elif defined(VERIFY_Z_METRIC)
+constexpr int N_X = 4;
+constexpr int N_Y = VERIFY_RES/8;
+constexpr int N_Z = 128;
 #elif defined(VERIFY_SOURCE_DRAG)
 constexpr int N_X = 8;
 constexpr int N_Y = 1;
@@ -96,6 +100,10 @@ constexpr int N_Z = 1;
 #elif defined(VERIFY_FAILURE)
 constexpr int N_X = 4;
 constexpr int N_Y = 3;
+constexpr int N_Z = 1;
+#elif defined(VERIFY_RING_LONG)
+constexpr int N_X = VERIFY_RES;
+constexpr int N_Y = 8;
 constexpr int N_Z = 1;
 #elif defined(VERIFY_RING)
 constexpr int N_X = VERIFY_RES;
@@ -112,7 +120,7 @@ constexpr real X_MAX =  0.8;
 constexpr real X_MIN = 0.0;
 constexpr real X_MAX = 2.0*M_PI;
 #endif
-#ifdef VERIFY_DIFFUSION_POSLIMIT
+#if defined(VERIFY_DIFFUSION_POSLIMIT) || defined(VERIFY_ADVECTION_LIMIT)
 constexpr real Y_MIN = 0.9;
 constexpr real Y_MAX = 1.1;
 #else
@@ -139,7 +147,7 @@ constexpr real Z_MAX = 0.5*M_PI + 0.4;
 #elif defined(VERIFY_Z_REFLECT)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = 0.5*M_PI;
-#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) \
+#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) || defined(VERIFY_Z_METRIC) \
     || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_3D) \
     || defined(VERIFY_Y_DIFFUSION_SPH) \
     || defined(VERIFY_LDS_Z)
@@ -182,6 +190,8 @@ const real IDX_Q = -1.0;
 #ifdef DIFFUSION
 #if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
 const real ALPHA = 4.0e-3;
+#elif defined(VERIFY_RING_LONG)
+const real NU = 5.0e-3;
 #else
 const real NU = 5.0e-2;
 #endif
@@ -272,6 +282,8 @@ const real VERIFY_TEND = 0.30;
 const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_SOURCE_DRAG)
 const real VERIFY_TEND = 1.0;
+#elif defined(VERIFY_RING_LONG)
+const real VERIFY_TEND = 8.0*M_PI;
 #elif defined(VERIFY_RING)
 const real VERIFY_TEND = 1.0;
 #else

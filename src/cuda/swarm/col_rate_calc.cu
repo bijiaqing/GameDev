@@ -14,6 +14,17 @@
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
 
+// identify a nonfinite collision propensity or KNN-ball radius before event sampling
+__global__
+void inf_rate_flag (const real *dev_col_rate, const real *dev_col_dist, int *dev_bad_part)
+{
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx >= N_P) return;
+
+    if (!isfinite(dev_col_rate[idx]) || !isfinite(dev_col_dist[idx]))
+        atomicCAS(dev_bad_part, 0, idx + 1);
+}
+
 // =========================================================================================================================
 // kernel: col_rate_calc
 // calculate each representative particle's total local collision propensity from its K nearest neighbors

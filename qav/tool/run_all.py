@@ -159,10 +159,8 @@ def main() -> None:
         "comparison_requested": args.compare,
         "counterpart_backend": counterpart if args.compare else None,
         "polar_fields": not args.skip_polar_fields,
-        "campaign_tier": "release",
-        "included_tiers": [
-            "publication", "release", *(["qualification"] if args.knn_full else []),
-        ],
+        "campaign_tier": "qualification",
+        "included_tiers": ["publication", "release", "qualification"],
         "status": "running",
         "passed": None,
         "started_utc": utc_now(),
@@ -204,6 +202,13 @@ def main() -> None:
                 sys.executable, str(backend_root/"swarm"/"test_common"/"run_suite.py"),
                 "--group", "all", *resolution_arguments, *quick_argument, *target_argument,
                 *(["--knn-full"] if args.knn_full else []),
+            ],
+        ),
+        (
+            "swarm nonfinite failure paths",
+            [
+                sys.executable, str(backend_root/"swarm"/"test_common"/"run_suite.py"),
+                "--group", "failure", *target_argument,
             ],
         ),
     ])

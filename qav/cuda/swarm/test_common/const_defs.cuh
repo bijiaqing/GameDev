@@ -46,6 +46,8 @@ constexpr int N_P = 2048;
 constexpr int N_P = 64;
 #elif defined(TEST_SETTLE_DIFFUSE_3D)
 constexpr int N_P = 65536;
+#elif defined(TEST_DYNRATE_3D)
+constexpr int N_P = 64;
 #elif defined(TEST_ORBIT_ECC_2D) || defined(TEST_ORBIT_BETA_2D) || defined(TEST_ORBIT_INC_3D)
 constexpr int N_P = 4;
 #elif defined(TEST_DRAG_PATH_1D)
@@ -111,7 +113,8 @@ constexpr int N_Z = VERIFY_RES;
 constexpr int N_X = 32;
 constexpr int N_Y = 16;
 constexpr int N_Z = 16;
-#elif defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) || defined(TEST_COLLISION_3D)
+#elif defined(TEST_DYNRATE_3D) || defined(TEST_DIFFUSION_3D) \
+    || defined(TEST_SETTLE_DIFFUSE_3D) || defined(TEST_COLLISION_3D)
 constexpr int N_X = 8;
 constexpr int N_Y = 16;
 constexpr int N_Z = 16;
@@ -155,6 +158,7 @@ constexpr real Y_MAX = 1.5;
 constexpr real Z_MIN = 0.5*M_PI - 0.01;
 constexpr real Z_MAX = 0.5*M_PI + 0.01;
 #elif defined(TEST_GRID_3D) || defined(TEST_IMPORT_3D) || defined(TEST_PARINIT_3D) || defined(TEST_ORBIT_INC_3D) \
+    || defined(TEST_DYNRATE_3D) \
     || defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) \
     || defined(TEST_COLLISION_3D) || defined(TEST_COLCHAIN_3D) \
     || defined(TEST_BOUNDARY_3D)
@@ -191,7 +195,10 @@ constexpr real ALPHA = 1.0e-4;
 #endif
 
 #ifdef DIFFUSION
-#if defined(TEST_DIFFUSION_1D)
+#if defined(TEST_DYNRATE_3D)
+constexpr real SCHMIDT_X = 1.0;
+constexpr real SCHMIDT_R = 1.0;
+#elif defined(TEST_DIFFUSION_1D)
 constexpr real SCHMIDT_X = 1.0e300;
 constexpr real SCHMIDT_R = 1.0;
 #elif defined(TEST_DIFFUSION_2D)
@@ -208,7 +215,8 @@ constexpr real SCHMIDT_X = 1.0e300;
 constexpr real SCHMIDT_R = 1.0e300;
 #endif
 constexpr real SCHMIDT_Z =
-#if defined(TEST_DIFFUSION_3D) || defined(TEST_SETTLE_DIFFUSE_3D) || defined(TEST_INITIAL_3D)
+#if defined(TEST_DYNRATE_3D) || defined(TEST_DIFFUSION_3D) \
+    || defined(TEST_SETTLE_DIFFUSE_3D) || defined(TEST_INITIAL_3D)
     1.0;
 #else
     1.0e300;

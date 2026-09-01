@@ -467,6 +467,28 @@ def check_qav_contract(errors: list[str]) -> None:
                     "normalizing .cu/.hip suffixes"
                 )
 
+    # backend-owned qualifications have no comm definition, but their two native overlays must retain the same interface
+    for component, model in (("swarm", "test_failure_knn"),):
+        overlay_files = {}
+        for backend in ("cuda", "rocm"):
+            native = PROJECT_ROOT/"qav"/backend/component/model
+            if not native.is_dir():
+                errors.append(
+                    f"missing {backend} QAV qualification: {native.relative_to(PROJECT_ROOT)}"
+                )
+                continue
+            overlay_files[backend] = {
+                f"{path.stem}.gpu" if path.suffix in {".cu", ".hip"} else path.name
+                for path in native.iterdir()
+                if path.is_file()
+                and (path.name == "Makefile" or path.suffix in overlay_suffixes)
+            }
+        if len(overlay_files) == 2 and overlay_files["cuda"] != overlay_files["rocm"]:
+            errors.append(
+                f"{component}/{model}: CUDA and ROCm qualification files differ after "
+                "normalizing .cu/.hip suffixes"
+            )
+
     forbidden_paths = ("qav/out", "backend_field_comparison_z.json")
     for path in (PROJECT_ROOT/"qav").rglob("*.py"):
         if "__pycache__" in path.parts or path == Path(__file__).resolve():
@@ -522,6 +544,30 @@ def check_make_resolution(errors: list[str]) -> None:
             "ROCM_FLAGS=-DBERNOULLI -DKNN_CACHE -DKNN_FRESH",
         ],
         ["make", "-n", "MODEL=test_failure_2d", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
+        [
+            "make", "-n", "MODEL=test_advect_limit_2d", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "FLUID_SWEEP=thread", "RES=64", "QAV_SCOPE=stress",
+        ],
+        [
+            "make", "-n", "MODEL=test_advect_limit_2d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "FLUID_SWEEP=block", "RES=64", "QAV_SCOPE=stress",
+        ],
+        [
+            "make", "-n", "MODEL=test_dynrate_3d", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "RES=32", "QAV_SCOPE=transport",
+        ],
+        [
+            "make", "-n", "MODEL=test_dynrate_3d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "RES=32", "QAV_SCOPE=transport",
+        ],
+        [
+            "make", "-n", "MODEL=test_failure_knn", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=failure",
+        ],
+        [
+            "make", "-n", "MODEL=test_failure_knn", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=morton", "QAV_SCOPE=failure",
+        ],
         ["make", "-n", "MODEL=test_lds_x", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
     )
     for command in commands:

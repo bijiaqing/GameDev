@@ -57,16 +57,17 @@ The common archive retains narrow regressions but distinguishes them from code-p
   P-R drag, imported-gas, collision-measure, collision-kernel, and compact KNN checks
 - **Release:** extra resolutions of exact grid and stationary-orbit cases, the intermediate
   initialization repetitions, and the four deterministic boundary-policy helper models
-- **Qualification:** restart, deliberate KNN/collision failure injection, extended million- and
-  ten-million-particle KNN runs, and performance/profiling campaigns
+- **Qualification:** direct dynamics-rate reconstruction, restart, deliberate KNN/collision failure injection,
+  extended million- and ten-million-particle KNN runs, and performance/profiling campaigns
 
 The source-matched archived analytical matrix contains 75 metrics partitioned into 57 publication
 and 18 release-only records. The current source adds two fixed-resolution physical-collision cases,
-one imported-gas qualification, and one resolved-vertical monodisperse initialization case, so its next complete native
-archive will contain 79 metrics partitioned into 61 publication and 18 release-only records. Focused collision-group runs have
+one imported-gas qualification, one resolved-vertical monodisperse initialization case, and one fixed-resolution
+dynamics-rate qualification. Its next complete native archive will contain 80 metrics partitioned into 61 publication,
+18 release, and one qualification record. Focused collision-group runs have
 qualified the physical-collision records on native CUDA and ROCm; the new imported-gas record
 passed on CUDA `sm_80` and still requires native ROCm execution. The revised monodisperse `test_viscflow_1d` and the new
-`test_parinit_3d` have also passed CUDA `sm_80`; their ROCm records and a complete 79-record archive
+`test_parinit_3d` have also passed CUDA `sm_80`; their ROCm records and a complete 80-record archive
 has not yet been run. The
 2026-08-23/24 CUDA/ROCm campaign completed all six earlier four-resolution sequences on both
 backends. The compact KNN suite is publication evidence for exact
@@ -270,6 +271,7 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_drag_1d` | radial-only frozen gas-drag response | exact exponential angular relaxation, radial response, and inactive-state invariants |
 | `test_drag_path_1d` | production staggered radial drift with QAV-only constant drag coefficients | exact velocity and displacement for three stopping times plus second-order position convergence |
 | `test_absorb_path_1d` | production staggered drift and radial transport boundary with QAV-only constant paths | exact crossings and sentinel plus density, optical-depth, dynamical-rate, collision-mask, and collision-rate exclusion |
+| `test_dynrate_3d` | complete analytic `dyn_rate_calc` candidate maximum with transport, acceleration, viscous flow, and cylindrical diffusion active | independent host reconstruction of every candidate rate, exact inactive-particle zero, and the resulting conservative inverse timestep |
 | `test_viscflow_1d` | monodisperse radial initialization with vertically integrated `VISC_FLOW` | exact viscous gas target and steady dust drift across several radii |
 | `test_parinit_3d` | resolved-polar monodisperse production initialization | exact hydrostatic Stokes scaling, off-midplane gas rotation, Kanagawa inflow, settling, radial drift, and spherical projection |
 | `test_drag_2d` | frozen-coefficient gas-drag response in `ssa_transport` | exact exponential angular relaxation and its induced radial response |
@@ -1279,7 +1281,7 @@ $1.64\times10^{-16}$ for the ROCm physical-unit case. Direct comparison of the 2
 arrays gives a maximum absolute difference of $5.55\times10^{-17}$ and relative $L_2$ differences
 of $1.17\times10^{-18}$ for both unit branches. The complete analytical archives remain the earlier
 75-record campaigns; the next complete run will incorporate the two physical records, the imported-gas record, and the
-resolved-vertical monodisperse initialization record and contain 79 metrics.
+resolved-vertical monodisperse initialization record and the dynamics-rate qualification and contain 80 metrics.
 
 ### Default collision-chain runtime qualification
 
@@ -1673,21 +1675,48 @@ relative and $10^{-11}$ absolute tolerances. The KNN comparison found equal comp
 and passing aggregate manifests on both backends. Independent local archive checks reproduced
 `PASS` for both downloaded archives without invoking either GPU runtime.
 
-The common `all` group is the current publication-and-release baseline. Same-backend restart,
-deliberate nonfinite injection, large-particle KNN, and performance measurements are qualification
-branches and are not included in these counts. Refresh them separately when those claims are
-needed. Vendor RNG-state files must only be tested by same-backend restart cases.
+The common `all` group contains the publication-and-release baseline plus the fixed-resolution `dyn_rate_calc`
+qualification. Same-backend restart, deliberate nonfinite injection, large-particle KNN, and performance measurements remain
+separate qualification branches. `qav/tool/run_all.py` invokes the nonfinite branch automatically after the common matrix;
+direct group commands remain useful for focused reruns. Vendor RNG-state files must only be tested by same-backend restart cases.
+
+### Direct dynamics-rate reconstruction
+
+`test_dynrate_3d` enables `TRANSPORT`, `DIFFUSION`, `VISC_FLOW`, and constant kinematic viscosity on a full 3D spherical
+mesh. Sixty-three deterministic active particles span the grid and several decades of $(\ell_x,v_y,\ell_z)$; one additional
+particle carries the inactive sentinel. For every active particle the validator reconstructs the orbital, mesh-crossing,
+radial and polar acceleration, viscous-target, diffusion-variance, and diffusivity-drift rates. In compact form, the required
+device result is
+
+$$
+r_{\rm dyn}=\max_c r_c,
+\qquad
+\Delta t_{\rm dyn}=r_{\rm dyn}^{-1},
+$$
+
+where the candidate set includes $|v|/(C_{\rm dyn}\Delta q)$, $\sqrt{|a|/(2C_{\rm dyn}\Delta q)}$,
+$2D/(C_{\rm dyn}^2\Delta q^2)$, and $|v_{\rm drift}|/(C_{\rm dyn}\Delta q)$ in every active projected direction. The host
+reference requires the kernel maximum to agree within $3\times10^{-11}$ after scaling by $\max(1,r_{\rm dyn})$, verifies
+that no independently reconstructed candidate exceeds the returned rate, records
+$\max_c(r_c\Delta t_{\rm dyn})\leq1$, and requires the inactive result to equal zero.
+At least three distinct candidate families must dominate the deterministic ensemble, preventing a single-rate fixture from
+standing in for the complete maximum. The native CUDA `sm_80` record passed on 2026-09-01. The returned rates agreed with
+the independent reconstruction to $4.07\times10^{-16}$ in relative $L_\infty$, the inactive rate was exactly zero, and the
+largest reconstructed candidate occupied exactly one accepted-step fraction. Five candidate families dominated at least
+one particle (`accel_y`, `cross_x`, `cross_y`, `cross_z`, and `visc_y`), so the fixture materially exercises multiple terms.
+Native ROCm evidence remains pending.
 
 ### Qualification branches
 
-The complete campaign does not refresh the standalone diffusion restart or deliberate failure injection.
-Run those qualification-only branches independently when their claims are needed:
+The complete `qav/tool/run_all.py` campaign refreshes deliberate nonfinite failure injection on its native backend but not
+the standalone restart or collision-chain groups. Run qualification branches independently when only those claims are needed:
 
 ```bash
 python3 qav/cuda/swarm/test_common/run_suite.py --group chain --target sm_80
 python3 qav/rocm/swarm/test_common/run_suite.py --group chain --target gfx942
 python3 qav/rocm/swarm/test_common/run_suite.py --group restart --res 32 --target gfx942
 python3 qav/rocm/swarm/test_common/run_suite.py --group failure --target gfx942
+python3 qav/cuda/swarm/test_common/run_suite.py --group failure --target sm_80
 ```
 
 Focused evidence is stored below `groups/GROUP/`, so it cannot replace the common `all` archive.
@@ -1712,6 +1741,14 @@ checkpoints in both geometry modes. The equivalent ROCm `gfx942` campaign also c
 criteria. The separate complete ROCm archive passes the 75/75 swarm-metric completeness gate; its
 source-matched CUDA comparison reports zero mismatches across those 75 analytical metrics, and the
 focused KNN result comparison passes.
+
+After adding CUDA parity for the production nonfinite collision-rate guard, the focused CUDA
+qualification was refreshed on 2026-09-01. `test_failure_knn` passed all 22 injected and clean
+cases with KD-tree search and all 22 with Morton search. The production-runtime
+`test_colreuse_2d` matrix also remained passing: all six integrator/search combinations retained
+exact reuse-versus-fresh particle and RNG checkpoints, and direct and cached Bernoulli remained
+byte-identical for both geometry modes. This jointly checks the guard kernel and its production
+Bernoulli wiring rather than relying on compilation alone.
 
 The accompanying CUDA legacy-collision regression also passed all four $N=32$ cases after the RNG
 commit correction. Maximum $L_\infty$ errors were zero in 1D, $2.78\times10^{-17}$ for imported-gas
@@ -1822,7 +1859,7 @@ From the repository root, run a short workflow check with
 python3 qav/cuda/swarm/test_common/run_suite.py --group all --quick
 ```
 
-This performs the 49 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
+This performs the 50 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
 and 3D production collision sources with both backends, and then runs the
 $10^5$-particle KNN matrix.
 
@@ -1834,7 +1871,7 @@ python3 qav/cuda/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The current complete command performs 79 analytical-suite builds plus four KNN driver builds.
+The current complete command performs 80 analytical-suite builds plus four KNN driver builds.
 The separately selected `chain` group builds the instrumented QAV runtime mirror across both search
 methods, event-cap variants, restart, and the three geometry-reuse modes; production collision
 kernels remain linked underneath that override.
@@ -1850,6 +1887,7 @@ python3 qav/cuda/swarm/test_common/run_suite.py --group boundary  --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group collision --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group knn       --res 32
 python3 qav/cuda/swarm/test_common/run_suite.py --group chain     --target sm_80
+python3 qav/cuda/swarm/test_common/run_suite.py --group failure   --target sm_80
 ```
 
 The `chain` group is a backend-specific qualification branch and is intentionally excluded from
@@ -1963,8 +2001,6 @@ gradients is also deferred.
   response to a depleted imported midplane density
 - Add boundary-event convergence tests that can detect within-step exits and returns; the current
   deterministic cases establish only the endpoint helper maps
-- Add a direct `dyn_rate_calc` test for every active rate and a regression proving accepted
-  timesteps do not exceed the configured crossing or diffusion limits
 - Test finite attenuation by coupling the reconstructed optical depth to
   $\beta e^{-\tau}$; the current grid and radiation cases validate the two pieces separately
 
@@ -1978,8 +2014,6 @@ requirements.
   surface density, gas targets, and enabled physics
 - Add end-to-end operator-combination tests for transport plus diffusion, transport plus radiation,
   transport plus collision, and all enabled swarm physics
-- Add CUDA nonfinite-injection coverage matching the existing ROCm particle, collision-rate, and
-  KNN-radius failure cases
 - Reject an all-zero imported $\rho_g\epsilon$ mass before CDF normalization and test that failure
   path, and directly test the documented outermost-half-cell optical-depth clamp
 - Validate the multisize radiation proposal and importance weights statistically, including their
