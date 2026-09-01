@@ -2506,7 +2506,16 @@ refinement `0.0015 -> 0.00075` change ensemble size CDFs and normalized moments 
 provisional compact-case tolerances and less than ordinary cross-seed scatter. These results bound
 the bath-freezing error for those cases only. The production header value `COL_BATH_EPS = 0.06`
 remains a model parameter that must be calibrated together with `N_K`, `H_SEARCH`, and `N_P` before
-a scientific production campaign; current compact spatial refinements have not converged.
+a scientific production campaign; current compact spatial refinements have not converged. A study
+that relies on the collisional size distribution should compare at least two successively smaller
+bath tolerances across independent seeds, using distributional observables at equal physical time.
+This qualification belongs to that physical model rather than to a permanent matrix of synthetic
+QAV cases.
+
+A binned or otherwise modified representative-particle collision scheme is not merely a faster
+implementation of the same stochastic process. It may change the estimator, population resolution,
+and sampling variance. Any future replacement or hybrid must therefore derive its conservation,
+bias, variance, and resolution properties before runtime comparisons can justify adoption.
 
 ## 9. Operator composition, timestep hierarchy, and boundaries
 

@@ -310,7 +310,9 @@ positions and KNN geometry are fixed, while the event chain updates particle pro
 accepted only when its measured activity and distribution changes remain within the controller
 limits. These tests establish conservation, deterministic continuation, search-backend coverage,
 and production-path integrity. They do not constitute a convergence proof for arbitrary physical
-coagulation histories.
+coagulation histories. When a publication depends on such a history, its model-specific evidence
+must add bath-tolerance refinement and independent-seed comparisons at equal physical time; those
+campaign outputs are scientific results, not additional permanent QAV records.
 
 ## 11. Running and interpreting the suite
 
