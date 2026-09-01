@@ -1128,7 +1128,10 @@ a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
 F_{m_a}=F_\varrho u_a.
 ```
 
-At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero.
+At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero. Here “reflecting”
+means an impermeable finite-volume symmetry wall; the fluid operator does not move a parcel through
+the face and then reverse its polar momentum. Reflection-symmetric continuum states instead have
+zero normal velocity at the midplane, which is the interpretation exercised by QAV.
 
 PPM is formally high order on smooth fields, but the complete multidimensional solver should be
 described as second-order accurate: Strang composition, Crank–Nicolson diffusion, boundary fluxes,
@@ -1784,8 +1787,10 @@ model itself rather than current test coverage.
   clumping claims rely on momentum transport by diffusion. The formulation of
   [Huang & Bai (2022)](https://arxiv.org/abs/2206.01023) provides relevant conservative structure
   but cannot be copied directly because it diffuses concentration rather than the selected density.
-- The 3D initializer balances diffusion only to discretization error and can produce a small
-  initial polar transient.
+- The 3D initializer balances polar advection and density diffusion only to discretization error. The normalized instantaneous
+  mismatch and its polar-resolution convergence are measured by `test_startup_3d`; later momentum relaxation can still
+  produce a physical startup transient and is not assumed to vanish under mesh refinement. The focused CUDA sequence
+  converges at approximately second order through $N_Y=N_Z=256$.
 - The block diffusion kernels still execute each Thomas or Sherman–Morrison recurrence serially
   within its line, and the block advection kernels retain a serial face-ordered correction pass.
   Further parallelization should use a conservation- and positivity-preserving face-budget limiter

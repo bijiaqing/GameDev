@@ -234,7 +234,13 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaMemcpy(dev_mass_bank, mass_bank.data(), sizeof(real)*mass_bank.size(), cudaMemcpyHostToDevice));
         #endif // MULTISIZE
 
-        rand_generator.seed(0); // keep initialization reproducible across runs
+        unsigned int init_seed = 0;
+        #ifdef QAV_RUNTIME_SEED
+        // vary the sampled particle population independently of the device collision stream
+        if (const char *seed_text = std::getenv("GAMEDEV_QAV_INIT_SEED"))
+            init_seed = static_cast<unsigned int>(std::stoul(seed_text));
+        #endif // QAV_RUNTIME_SEED
+        rand_generator.seed(init_seed);
 
         #ifdef MULTISIZE
         // sample grain properties before positions so settled spatial distributions can depend on size
@@ -310,7 +316,7 @@ int main (int argc, char **argv)
         
         #if defined(COLLISION) || defined(DIFFUSION)
         #ifdef QAV_RUNTIME_SEED
-        // vary only the stochastic device stream while retaining identical sampled initial particles
+        // vary the stochastic device stream independently of the sampled initial particles
         int rng_seed = 1;
         if (const char *seed_text = std::getenv("GAMEDEV_QAV_RNG_SEED"))
             rng_seed = std::stoi(seed_text);

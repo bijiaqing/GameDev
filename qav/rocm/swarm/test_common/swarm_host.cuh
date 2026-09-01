@@ -697,11 +697,21 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
                 real cell_measure = vol_x*vol_y*vol_z;
 
                 int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
+                if (!std::isfinite(gas_dens[idx_cell]) || gas_dens[idx_cell] < 0.0)
+                    throw std::runtime_error("invalid imported gas density at cell " + std::to_string(idx_cell));
+                if (!std::isfinite(epsilon[idx_cell]) || epsilon[idx_cell] < 0.0)
+                    throw std::runtime_error("invalid imported dust-to-gas ratio at cell " + std::to_string(idx_cell));
+
                 cell_mass[idx_cell] = gas_dens[idx_cell]*epsilon[idx_cell]*cell_measure;
+                if (!std::isfinite(cell_mass[idx_cell]))
+                    throw std::runtime_error("nonfinite imported dust mass at cell " + std::to_string(idx_cell));
                 total_mass += cell_mass[idx_cell];
             }
         }
     }
+
+    if (!std::isfinite(total_mass) || total_mass <= 0.0)
+        throw std::runtime_error("imported dust profile has zero or nonfinite total mass");
     
     // build the cell-mass cumulative distribution
     std::vector <real> cdf(N_G + 1);

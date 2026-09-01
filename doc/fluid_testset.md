@@ -7,7 +7,7 @@ The shared definitions under `qav/comm/fluid/`, together with the drivers under 
 analytical finite-volume solutions or with an independently executed implementation of the same
 discrete method. They are controlled verification problems, not production disk setups. The suite
 tests the radial–azimuthal surface-density model, individual spherical 3D directional operators,
-source integration, optical-depth construction, selected operator combinations, and both line-sweep
+complete 2D/3D production initialization, source integration, optical-depth construction, selected operator combinations, and both line-sweep
 implementations.
 
 Most cases call the production kernels directly from a backend test driver. The common test
@@ -45,8 +45,9 @@ equations are correct; that conclusion comes from the analytical cases.
 
 The tier controls how evidence should be presented, not whether a test is retained:
 
-- **Publication:** one fractional FARGO sequence (`shift=3.25`), the low-CFL cylindrical,
-  spherical-radial and polar transport convergence sequences, both radial-outflow sequences, all four directional diffusion
+- **Publication:** one fractional FARGO sequence (`shift=3.25`), wedge-periodic FARGO and cyclic-diffusion seam sequences, the low-CFL cylindrical,
+  spherical-radial and polar transport convergence sequences, radial and polar outflow, the `HALF_DISK` no-flux sequence,
+  all four directional diffusion
   cases, positivity-controlled CN subcycling, source quadrature, logarithmic and generic
   optical-depth profiles, attenuated source response, and all four coupled ring models
 - **Release:** the integer and additional fractional FARGO shifts, operational-CFL radial and
@@ -54,9 +55,15 @@ The tier controls how evidence should be presented, not whether a test is retain
 - **Qualification:** matched thread/block sweeps, deliberate failure paths, large-LDS launches,
   and performance/profiling records
 
-The expanded four-resolution common matrix retains both publication and release tiers: 77 of its
-105 metrics support the compact publication matrix and 28 are release-only regressions. The
-source-matched 2026-08-23/24 CUDA/ROCm campaign completed this expanded matrix on both backends.
+The latest archived four-resolution common matrix retains both publication and release tiers: 77 of its
+105 metrics support the compact publication matrix and 28 are release-only regressions. The current source adds twenty-eight
+publication-tier records: twelve for initialization and startup, eight for polar boundaries, and eight for non-full-disk
+periodic seams. Its next complete native matrix therefore contains 133 metrics, of which 105 are publication tier. The source-matched 2026-08-23/24 CUDA/ROCm
+campaign completed the preceding 105-record matrix on both backends. The three focused initialization models have since
+passed all twelve records on CUDA `sm_80`, including the polar-startup convergence sequence. The two focused polar-boundary
+models also passed all eight CUDA records on 2026-09-01. The two wedge-periodic cases are implemented with preregistered
+analytical gates but have not yet been executed natively. ROCm execution of all additions and the next complete 133-record
+archives remain pending.
 Per-case, per-model, and aggregate JSON manifests store these labels directly.
 
 The analytical runner writes every metric, applies a deliberately broad regression gate, and records
@@ -192,19 +199,19 @@ The shared resolution argument refines different axes according to the case:
 
 | Test family | Mesh generated from $N=$ `--res` | Meaning of refinement |
 |---|---|---|
-| azimuthal transport or diffusion | $(N_X,N_Y,N_Z)=(N,4,1)$ | refine the periodic $x$ operator |
+| azimuthal transport or diffusion, including a non-$2\pi$ wedge | $(N_X,N_Y,N_Z)=(N,4,1)$ | refine the periodic $x$ operator and seam |
 | positivity-controlled azimuthal diffusion | $(N,1,1)$ | refine the cyclic CN eigenmode while forcing automatic subcycling |
 | cylindrical radial transport, outflow, diffusion, or optical depth | $(4,N,1)$ | refine the 2D radial operator |
 | 2D attenuation and frozen source response | $(4,N,1)$ | refine optical-depth quadrature and its source coupling |
 | spherical radial transport, outflow, or diffusion | $(4,N,4)$ | refine the 3D radial operator while retaining transverse indexing |
-| polar transport or diffusion | $(4,4,N)$ | refine the spherical polar operator |
+| polar transport, boundary, or diffusion | $(4,4,N)$ | refine the spherical polar operator and its endpoint fluxes |
 | rotating-ring models | $(N,N,1)$ | refine both active 2D directions |
 | source drag | $(8,1,1)$ | eight stiffness parameters; fixed `--res 8`, not a spatial grid |
 | 2D thread/block sweep | $(N,N,1)$ | fixed-work implementation comparison |
 | 3D thread/block sweep | $(N,N,N)$ | fixed-work implementation comparison with diffusion |
 
 For the analytical matrix, `--quick` retains only the first two requested resolutions. Thus the
-expanded full matrix performs 105 builds/runs, while the default quick matrix performs 53. Every
+current full matrix performs 133 builds/runs, while the default quick matrix performs 67. Every
 resolution and parameter variant is cleaned and rebuilt because the mesh and control parameters
 are compile-time constants.
 
@@ -253,13 +260,20 @@ the cylindrical radial cases isolate a 2D directional operator rather than a sta
 
 | Model | Production calculation exercised | Analytical solution |
 |---|---|---|
+| `test_initstate_2d` | complete vertically integrated density and velocity initialization | independent convolution, gas targets, steady viscous dust drift, and exact inactive polar state |
+| `test_initstate_3d` | complete resolved-polar density and velocity initialization | independent convolution, hydrostatic stratification, Stokes scaling, Kanagawa gas flow, discrete polar diffusion balance, and spherical projection |
+| `test_startup_3d` | instantaneous resolved-polar startup balance | cancellation and polar-resolution convergence of the production advection and density-diffusion tendencies |
 | `test_x_transport_2d` | periodic FARGO, PPM/HLL, conservative limiter | rotating Fourier mode after one revolution |
+| `test_x_wedge_transport_2d` | non-full-disk periodic FARGO, PPM/HLL, conservative limiter, and seam wrapping | compact pulse translated across the wedge seam |
 | `test_y_transport_cyl` | radial PPM/HLL with $d=2$ geometry | compact homologous expansion |
 | `test_y_transport_sph` | radial PPM/HLL with $d=3$ geometry | compact homologous expansion |
 | `test_y_outflow_2d` | radial PPM/HLL with $d=2$ geometry and outer outflow flux | exact characteristic dilution and remaining mass |
 | `test_y_outflow_3d` | radial PPM/HLL with $d=3$ geometry and outer outflow flux | exact characteristic dilution and remaining mass |
+| `test_z_outflow_3d` | polar PPM/HLL and one-sided outer polar flux | translated compact $\rho_d\sin z$ pulse and exact remaining mass |
+| `test_z_reflect_3d` | polar PPM/HLL and `HALF_DISK` midplane wall | exact reflection-symmetric pressureless compression with zero midplane flux |
 | `test_z_transport_3d` | polar PPM/HLL and $\sin z$ geometry | translation of $\rho\sin z$ at constant $\ell_\theta$ |
 | `test_x_diffusion_2d` | cyclic Crank–Nicolson and diffusive momentum flux | Fourier decay on each ring |
+| `test_x_wedge_diffusion_2d` | non-full-disk cyclic Crank–Nicolson corner coupling and diffusive momentum flux | wedge-periodic Fourier decay on each ring |
 | `test_y_diffusion_cyl` | $d=2$ radial Crank–Nicolson | Neumann shell eigenmode |
 | `test_y_diffusion_sph` | $d=3$ radial Crank–Nicolson | Neumann shell eigenmode |
 | `test_z_diffusion_3d` | polar Crank–Nicolson | $P_2(\cos z)$ decay |
@@ -286,6 +300,95 @@ The spherical radial model is an extruded 3D grid that evolves only the radial o
 not validate multidirectional 3D coupling.
 
 ## Detailed test definitions
+
+### Complete production initialization
+
+`test_initstate_2d` and `test_initstate_3d` preserve the production initialization order:
+
+1. `initdens_calc` convolves the target dust surface-density profile on its uniform cylindrical-radius table
+2. `init_rho_calc` interpolates that table onto the spherical mesh, embeds it vertically when $N_Z>1$, and applies the
+   deterministic azimuthal perturbation
+3. `init_vel_calc` constructs the pressure-supported gas target, local Stokes number, viscous gas inflow, steady dust drift,
+   and the resolved-polar density-diffusion balance
+
+The QAV driver does not replace those three routines. A small diagnostic kernel only exposes the production intermediate
+values $(h_g,f_g,\rho_g,\mathrm{St},\eta,v_{R,g},v_{\phi,g})$ so the Python validator can identify which stage failed.
+The reference independently repeats the documented Gaussian convolution and evaluates
+
+$$
+f_g(R,Z)=\exp\!\left[\frac{R/\sqrt{R^2+Z^2}-1}{h_g^2}\right],
+\qquad
+\mathrm{St}(R,Z)=\mathrm{St}_0\left(\frac{R}{R_0}\right)^{-p}f_g^{-1},
+$$
+
+the complete off-midplane pressure-support and Kanagawa targets, and the steady radial drift. In 3D it also reconstructs the
+same one-sided boundary and centered interior stencil used for
+
+$$
+v_{z,\mathrm{diff}}=\frac{\nu}{\mathrm{Sc}_z}\frac{1}{y\rho_d}
+\frac{\partial\rho_d}{\partial z},
+$$
+
+before projecting cylindrical $(v_R,v_Z)$ into stored spherical $(v_y,\ell_z)$. Production intentionally applies one random
+multiplier per azimuth. The validator infers that single nuisance multiplier from one azimuthal column, then requires every
+radial and polar cell in the column to follow the independently reconstructed physical density. This tests the perturbation's
+intended separability without treating a backend-specific random sequence as analytical truth.
+
+Each record requires finite output, convolved-profile, density, and gas-target $L_\infty<5\times10^{-12}$, and complete
+velocity-state $L_\infty<2\times10^{-10}$. These are initial-state tests; they do not yet establish the decay of the subsequent
+3D polar startup transient.
+
+The native CUDA `sm_80` campaign completed on 2026-09-01 with all eight records passing. Across both geometries and all four
+resolutions, the convolved-profile error remained below $1.05\times10^{-17}$. The largest complete-velocity error was
+$2.30\times10^{-14}$, the largest gas-target error was $4.30\times10^{-13}$, and the largest deviation from one shared
+azimuthal density multiplier was $2.56\times10^{-12}$. These are direct consistency errors dominated by floating-point
+evaluation, not a spatial-convergence sequence.
+
+### Initial polar startup residual
+
+`test_startup_3d` isolates the density balance that the resolved-polar initializer is intended to impose. Its test constants
+set $q=0$, $p=3/2$, and disable viscous gas flow. Consequently $\eta=0$, $v_{R,g}=0$, and the initialized cylindrical radial
+dust velocity is zero. The only polar velocity is therefore the production density-diffusion balance
+
+$$
+v_z=\frac{D_z}{y\rho_d}\frac{\partial\rho_d}{\partial z},
+\qquad
+D_z=\frac{\nu}{\mathrm{Sc}_z}.
+$$
+
+In the continuum polar continuity equation, this choice makes the advective and diffusive tendencies cancel:
+
+$$
+\mathcal R_z =
+-\frac{1}{y\sin z}\frac{\partial}{\partial z}
+\left(\sin z\,\rho_d v_z\right)
++\frac{1}{y^2\sin z}\frac{\partial}{\partial z}
+\left(\sin z\,D_z\frac{\partial\rho_d}{\partial z}\right)=0.
+$$
+
+The test runs the production polar advection and polar diffusion kernels separately from bit-identical copies of the complete
+production-initialized conserved state. For a probe interval $\delta t=\Delta z/4$, it forms
+
+$$
+\mathcal R_{z,h}=
+\frac{\rho_d^{\mathrm{adv}}-\rho_d^0}{\delta t}
++\frac{\rho_d^{\mathrm{diff}}-\rho_d^0}{\delta t}.
+$$
+
+The reported norms divide $\mathcal R_{z,h}$ by the corresponding norm of
+$|\partial_t\rho_d|_{\mathrm{adv}}+|\partial_t\rho_d|_{\mathrm{diff}}$. The metric is therefore the fraction of the two
+individually resolved tendencies that fails to cancel, rather than the absolute size of either flux. Both $N_Y$ and $N_Z$
+are refined together because the production polar finite-volume operator uses a shell-averaged radial area-to-volume ratio,
+whereas initialization evaluates $1/y$ at the logarithmic cell center. The final observed order must be at least 1.5. A wide symmetric polar wedge
+makes the initialized density negligible at its outflow boundaries, preventing boundary loss from masquerading as an
+interior balance error. This is an instantaneous consistency and convergence test; it intentionally excludes later drag,
+gravity, and momentum relaxation, whose physical transient is not expected to vanish with spatial refinement.
+
+The native CUDA `sm_80` thread-sweep sequence passed on 2026-09-01. Its normalized $L_1$ residual was
+$1.14179\times10^{-1}$, $2.47411\times10^{-2}$, $6.21990\times10^{-3}$, and $1.58597\times10^{-3}$ at
+$N=32,64,128,256$, giving observed orders $2.2063$, $1.9919$, and $1.9715$. The largest integrated residual-mass fraction
+was $8.87\times10^{-13}$. The sequence therefore demonstrates the expected approximately second-order cancellation rather
+than relying only on the minimum-order acceptance gate.
 
 ### Periodic FARGO transport
 
@@ -319,6 +422,48 @@ order is meaningless. The fractional cases should show smooth second-order-or-be
 retain uniform $\ell_x$, and conserve periodic mass to roundoff. This case tests one complete
 azimuthal revolution but not radial shear between interacting rings, because each ring evolves
 independently at the same angular speed.
+
+### Non-full-disk periodic FARGO seam
+
+`test_x_wedge_transport_2d` uses the azimuthal interval
+
+$$
+X_{\min}=-0.4,
+\qquad
+X_{\max}=0.8,
+\qquad
+L_x=X_{\max}-X_{\min}=1.2<2\pi.
+$$
+
+It initializes a positive floor plus a smooth compact pulse $B$ supported on $[0.45,0.75]$,
+
+$$
+\rho_d(x,0)=1+\frac{1}{2}B(x),
+\qquad
+\Omega=0.25,
+$$
+
+with constant primitive ratios
+
+$$
+(\ell_x,v_y,\ell_z)=(R^2\Omega,0.10,-0.05).
+$$
+
+The exact periodic solution at $T=1$ is
+
+$$
+\rho_d(x,T)=1+\frac{1}{2}B\!\left([x-\Omega T]_{L_x}\right),
+$$
+
+where $[\cdot]_{L_x}$ wraps into the configured wedge. The unwrapped upper support moves from
+$0.75$ to $1.00$ and therefore crosses the seam at $0.8$ by a substantial distance. Nominal steps
+move the profile by $10/3$ cells, forcing every call through both the integer FARGO permutation and
+the fractional PPM/HLL residual update. The compact extrema and support shoulders activate the
+limiter without introducing a discontinuous analytical solution. This choice yields exactly
+$2$, $4$, $8$, and $16$ equal steps at $N=32$, $64$, $128$, and $256$, avoiding a resolution-dependent
+short final step. The validator requires the
+wrapped signal to be nonzero, all four conserved fields to approach independently integrated cell
+averages, and periodic mass to remain conserved.
 
 ### Homologous radial transport
 
@@ -440,6 +585,65 @@ validates the integrated radial polar-face measure, the $\sin z$ face measure, t
 $d(-\cos z)$ cell volume, and conservative transport, but not an actual polar outflow or
 midplane reflection.
 
+### Polar outflow and `HALF_DISK` wall
+
+`test_z_outflow_3d` uses the same conserved polar density
+
+$$
+q(z,t)=\rho_d(z,t)\sin z
+$$
+
+as the interior polar test, but initializes a compact pulse on $2.45<z<2.75$ and evolves it with
+constant effective angular speed $\omega=0.15$ until $T=1$. Since the outer boundary is
+$z_{\max}=\pi-0.35$, the translated support reaches $z=2.90$ and approximately 28% of the initial
+mass leaves the domain. The exact solution retained inside the domain is
+
+$$
+q(z,t)=B(z-\omega t),
+\qquad
+\ell_{z,j}=\frac{\omega y_j}{G_j},
+$$
+
+where $G_j=\Delta A_{z,j}/\Delta V_{y,j}$. The validator integrates this truncated pulse over every
+polar cell and compares density, polar momentum, and remaining mass. It therefore distinguishes
+the intended physical boundary loss from a conservation error.
+
+`test_z_reflect_3d` tests what `HALF_DISK` actually implements: an impermeable zero-flux wall, not a
+particle-like rule that reverses a parcel after it crosses the midplane. Let
+$s=\pi/2-z$, $a=0.2$, and extend the initial compact profile evenly across the midplane. The
+reflection-symmetric pressureless flow has effective angular speed
+
+$$
+w(z,0)=a s.
+$$
+
+Before characteristic crossing, its exact characteristic map is
+
+$$
+s(t)=(1-at)s_0,
+\qquad
+q(z,t)=\frac{q_0\!\left(\frac{\pi}{2}-\frac{s}{1-at}\right)}{1-at},
+\qquad
+w(z,t)=\frac{a s}{1-at}.
+$$
+
+The test stops at $T=1$, for which $1-aT=0.8$. The density is nonzero at the midplane while
+$w(\pi/2,t)=0$, so the exact normal mass and momentum fluxes vanish there. This activates a
+nontrivial compression against the wall while retaining an analytical density and polar-momentum
+reference and exact total-mass conservation. Both boundary validators require monotonically
+decreasing density and polar-momentum errors, a final order of at least 0.75, finite nonnegative
+density, and zero transverse momentum.
+
+The CUDA `sm_80` thread-sweep sequences passed at $N=32,64,128,256$. Polar outflow produced density
+$L_1$ orders $2.0401$, $1.4676$, and $2.0901$, with finest density $L_1=3.5132\times10^{-4}$,
+polar-momentum $L_1=1.8565\times10^{-4}$, and remaining-mass mismatch
+$1.5934\times10^{-3}$. Its analytical escaped fraction is $0.2762773$; the numerical value converges
+to $0.2778707$ on the finest mesh. The `HALF_DISK` sequence produced density $L_1$ orders $1.8018$,
+$2.0589$, and $2.3715$, with finest density $L_1=5.7814\times10^{-6}$ and polar-momentum
+$L_1=3.8245\times10^{-6}$. Its measured mass change remained between $1.31\times10^{-15}$ and
+$8.67\times10^{-15}$ across the sequence. These results establish the registered absolute gates;
+ROCm execution remains required for backend qualification.
+
 ### Diffusion eigenmodes
 
 All four isolated diffusion cases use constant $D=0.05$ and final time $T=0.5$. Their timestep is
@@ -464,6 +668,27 @@ $$
 
 The case exercises the cyclic Crank–Nicolson solve and its Sherman–Morrison closure. Each ring must
 retain its mean density, and the spatially smooth mode should converge at second order.
+
+`test_x_wedge_diffusion_2d` applies the same operator to the $L_x=1.2$ wedge. Its mode has
+
+$$
+k=\frac{2\pi}{L_x},
+\qquad
+\rho_d(x,0)=1+0.1\cos[k(x-0.17)],
+$$
+
+and the exact ring-dependent solution is
+
+$$
+\rho_d(x,t)=1+0.1\exp\!\left(-\frac{Dk^2t}{R^2}\right)
+\cos[k(x-0.17)],
+\qquad D=0.05.
+$$
+
+The phase gives a nonzero gradient at the seam, so omitting the cyclic corner coupling cannot pass
+by symmetry. The test also retains $(\ell_x,v_y,\ell_z)=(0.7,-0.15,0.11)$ and checks all momentum
+components transported by the time-centered diffusive mass flux. Its final time is $T=0.2$; the
+other isolated diffusion eigenmodes retain $T=0.5$.
 
 #### Radial diffusion
 
@@ -726,6 +951,8 @@ The new deterministic sequences passed their full four-resolution gates:
 |---|---|---:|---:|
 | 2D radial outflow | 1.3662, 1.6895, 1.5612 | $8.95\times10^{-4}$ | density $L_\infty=2.42\times10^{-2}$; remaining-mass mismatch $1.11\times10^{-3}$ |
 | 3D radial outflow | 1.4120, 1.6770, 1.5572 | $1.14\times10^{-3}$ | density $L_\infty=2.23\times10^{-2}$; remaining-mass mismatch $1.19\times10^{-3}$ |
+| 3D polar outflow | 2.0401, 1.4676, 2.0901 | $3.51\times10^{-4}$ | escaped fraction $0.27787$ versus exact $0.27628$; remaining-mass mismatch $1.59\times10^{-3}$ |
+| 3D `HALF_DISK` wall | 1.8018, 2.0589, 2.3715 | $5.78\times10^{-6}$ | polar-momentum $L_1=3.82\times10^{-6}$; mass change $8.67\times10^{-15}$ |
 | positivity-controlled diffusion | 1.9429, 1.9669, 1.9919 | $1.90\times10^{-5}$ | minimum substep density $0.102$; finite and nonnegative |
 | attenuation, $p=-1$ | 2.0148, 2.0076, 2.0038 | $1.94\times10^{-6}$ | source-response $L_\infty=4.44\times10^{-16}$ |
 | attenuation, $p=1$ | 2.0374, 2.0192, 2.0097 | $7.46\times10^{-6}$ | source-response $L_\infty=4.44\times10^{-16}$ |
@@ -857,13 +1084,14 @@ Run the complete reference-thread matrix with
 python3 qav/cuda/fluid/test_common/run_suite.py --group all --res 32 64 128 256
 ```
 
-The complete `--group all --res 32 64 128 256` matrix performs 105 builds/runs because several
+The complete `--group all --res 32 64 128 256` matrix performs 133 builds/runs because several
 models sweep CFL values, FARGO shifts, or optical-depth powers. Each resolution is cleaned and
 rebuilt so model-local compile-time constants cannot reuse stale objects.
 
 The analytical groups can be run separately:
 
 ```bash
+python3 qav/cuda/fluid/test_common/run_suite.py --group initialization --res 32 64 128 256
 python3 qav/cuda/fluid/test_common/run_suite.py --group transport --res 32 64 128 256
 python3 qav/cuda/fluid/test_common/run_suite.py --group diffusion --res 32 64 128 256
 python3 qav/cuda/fluid/test_common/run_suite.py --group source    --res 8
@@ -896,12 +1124,21 @@ python3 qav/cuda/fluid/test_x_transport_2d/run.py \
     --res 32 64 128 256 --shift 3.25
 ```
 
+The two wedge-periodic cases can be qualified directly with
+
+```bash
+QAV_SCOPE=transport python3 qav/cuda/fluid/test_x_wedge_transport_2d/run.py \
+    --res 32 64 128 256
+QAV_SCOPE=diffusion python3 qav/cuda/fluid/test_x_wedge_diffusion_2d/run.py \
+    --res 32 64 128 256
+```
+
 Keep the JSON metrics, `environment.json`, and any captured terminal-output JSON together when archiving a run.
 For the sweep branch, also retain `build.json`,
 `run.json`, `variables.json`, `timing.json`, and `sweep_comparison_*.json`. Analytical results are namespaced as
 `qav/logs/fluid/cuda/SWEEP/groups/manual/MODEL/`, where `SWEEP` is `thread` or `block`.
 
-The full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 105
+For the current source, the full analytical archive is complete when `manifest_all.json` reports `"passed": true`, all 133
 metric files are present, and `qav/tool/check_archive.py` accepts the archive. Focused groups write
 their models and manifest below `groups/GROUP/`, while direct wrappers use `groups/manual/`; neither
 can overwrite any full-suite artifact. The sweep branch is
@@ -929,26 +1166,14 @@ natural closed-form reduction.
 
 ### Other missing verification
 
-- Add production initialization tests for the convolved dust surface-density profile, exact
-  hydrostatic gas stratification, size-dependent Stokes number, equilibrium angular momentum, and
-  initial radial/polar drift in both 2D and 3D
-- Add production-settling equilibrium tests that quantify the initial polar transient
-- Add independent nonzero-$(p,q)$ tests of the midplane pressure-support target and the complete
-  3D gas rotation law, evaluating the fixed-$Z$ pressure gradient and cylindrical stellar gravity
-  separately before verifying their off-midplane cancellation
-- Add a polar case whose nonzero support crosses an outflow boundary and a `HALF_DISK`
-  midplane-reflection case; radial outflow is now covered in both supported radial geometries
-- Add periodic-wedge seam cases for FARGO transport, PPM limiting, and cyclic azimuthal diffusion
-  on domains with $X_{\max}-X_{\min}<2\pi$
+- Run and archive the passed CUDA polar-outflow and `HALF_DISK` no-flux sequences on ROCm
+- Run and archive the implemented periodic-wedge FARGO/PPM and cyclic-diffusion seam sequences on CUDA and ROCm
 - Run polar transport at fixed $N_Z$ while varying $N_Y$ independently, and verify both the exact
   $\Delta A_z/\Delta V_y$ radial metric and conservation under the complete 3D cell measure
 - Add a long-running periodic FARGO-plus-diffusion ring test that retains total mass and all three
   globally integrated conserved momentum components to roundoff
 - Add a limiter stress test with converging streams and near-vacuum cells, requiring nonnegative
   density, bounded momentum-to-density ratios, and no activation of the final vacuum fallback
-- Add a resolved-vertical `VISC_FLOW` test at several heights against the complete Kanagawa target
-- Add a vertically integrated `VISC_FLOW` test for the two-dimensional gas target and resulting
-  steady dust drift
 - Add restart-tolerance and legal flag-matrix regressions, including `HALF_DISK`, `DIFFUSION`,
   `RADIATION`, `VISC_FLOW`, and both fluid sweep implementations where compatible
 - Archive matched thread/block comparison JSON, build logs, `ptxas` resource reports, and profiler

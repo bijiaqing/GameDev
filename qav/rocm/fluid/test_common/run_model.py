@@ -342,17 +342,23 @@ def run(model: str) -> None:
     field = records[0].get(
         "primary_field", "optdepth" if records[0]["case"] == "optdepth" else "density"
     )
+    terminal_mode = records[0].get("terminal_mode", "convergence")
+    has_mass = any("mass_relative_change" in record for record in records)
     mass_label = records[0].get("mass_diagnostic_label", "mass rel")
-    print(f"\n{records[0]['case']}: {field} convergence")
-    print(f"{'N':>8} {'L1':>14} {'L2':>14} {'Linf':>14} {mass_label:>14}")
+    print(f"\n{records[0]['case']}: {field} {terminal_mode}")
+    header = f"{'N':>8} {'L1':>14} {'L2':>14} {'Linf':>14}"
+    if has_mass:
+        header += f" {mass_label:>14}"
+    print(header)
     l1_errors = []
     for record in records:
         error = record["errors"][field]
         l1_errors.append(error["l1"])
-        mass = record.get("mass_relative_change", float("nan"))
-        print(f"{record['resolution']:8d} {error['l1']:14.6e} {error['l2']:14.6e} "
-              f"{error['linf']:14.6e} {mass:14.6e}")
-    if len(l1_errors) > 1:
+        row = f"{record['resolution']:8d} {error['l1']:14.6e} {error['l2']:14.6e} {error['linf']:14.6e}"
+        if has_mass:
+            row += f" {record['mass_relative_change']:14.6e}"
+        print(row)
+    if terminal_mode == "convergence" and len(l1_errors) > 1:
         # orders are printed only for L1 here; l2 and Linf remain available in
         # every metrics JSON file for more detailed post-processing
         print("L1 orders:", " ".join(f"{order:.4f}" for order in observed_orders(l1_errors)))

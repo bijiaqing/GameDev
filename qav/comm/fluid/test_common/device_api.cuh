@@ -30,6 +30,10 @@ template <typename T>
 void qav_copy_d2h (T *target, const T *source, std::size_t count, const char *operation)
 { qav_check(cudaMemcpy(target, source, sizeof(T)*count, cudaMemcpyDeviceToHost), operation); }
 
+template <typename T>
+void qav_copy_d2d (T *target, const T *source, std::size_t count, const char *operation)
+{ qav_check(cudaMemcpy(target, source, sizeof(T)*count, cudaMemcpyDeviceToDevice), operation); }
+
 inline void qav_free (void *pointer, const char *operation)
 { qav_check(cudaFree(pointer), operation); }
 
@@ -60,6 +64,10 @@ void qav_copy_h2d (T *target, const T *source, std::size_t count, const char *op
 template <typename T>
 void qav_copy_d2h (T *target, const T *source, std::size_t count, const char *operation)
 { qav_check(hipMemcpy(target, source, sizeof(T)*count, hipMemcpyDeviceToHost), operation); }
+
+template <typename T>
+void qav_copy_d2d (T *target, const T *source, std::size_t count, const char *operation)
+{ qav_check(hipMemcpy(target, source, sizeof(T)*count, hipMemcpyDeviceToDevice), operation); }
 
 inline void qav_free (void *pointer, const char *operation)
 { qav_check(hipFree(pointer), operation); }

@@ -10,6 +10,17 @@ collision model and executes the collinear radial matrix plus radial-line and in
 checks. Its records remain isolated below
 `qav/logs/swarm/BACKEND/groups/radial/test_knn/`.
 
+The `collision` group also contains `test_colphys_code` and `test_colphys_cgs`. These are
+fixed-input formula checks, not convergence studies: they evaluate the production physical
+collision helpers in the code-unit and physical-unit compile branches and compare the results with
+the independent reference defined in `doc/swarm_testset.md`.
+
+The same group contains `test_import_3d`, a fixed-resolution imported-gas regression. Its common
+driver directly includes the selected production host sampler, while its backend kernels exercise
+production grid interpolation, temporal gas blending, and Stokes calibration. Invalid profile
+checks therefore remain outside production code without substituting a QAV copy for the guarded
+host function.
+
 ## QAV source overrides
 
 Test instrumentation is intentionally absent from production `inc/` and `src/`. For a QAV model,

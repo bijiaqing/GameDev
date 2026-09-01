@@ -37,11 +37,24 @@ const real R_0 = 1.0;
 // test constants deliberately replace a production model's physical setup with the smallest grid that isolates one claim
 // refine only the direction under test for isolated kernels and refine both active directions for ring tests; four cells in
 // an inactive transverse direction are enough to expose indexing mistakes without making every convergence run expensive
-#if defined(VERIFY_DIFFUSION_POSLIMIT)
+#if defined(VERIFY_INITSTATE_2D)
+constexpr int N_X = 4;
+constexpr int N_Y = VERIFY_RES;
+constexpr int N_Z = 1;
+#elif defined(VERIFY_INITSTATE_3D)
+constexpr int N_X = 4;
+constexpr int N_Y = VERIFY_RES;
+constexpr int N_Z = VERIFY_RES;
+#elif defined(VERIFY_STARTUP_3D)
+constexpr int N_X = 4;
+constexpr int N_Y = VERIFY_RES;
+constexpr int N_Z = VERIFY_RES;
+#elif defined(VERIFY_DIFFUSION_POSLIMIT)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = 1;
 constexpr int N_Z = 1;
-#elif defined(VERIFY_X_TRANSPORT) || defined(VERIFY_X_DIFFUSION)
+#elif defined(VERIFY_X_TRANSPORT) || defined(VERIFY_X_DIFFUSION) \
+    || defined(VERIFY_X_WEDGE_TRANSPORT) || defined(VERIFY_X_WEDGE_DIFFUSION)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = 4;
 constexpr int N_Z = 1;
@@ -55,7 +68,8 @@ constexpr int N_Z = 1;
 constexpr int N_X = 4;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = 4;
-#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_DIFFUSION)
+#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) || defined(VERIFY_Z_REFLECT) \
+    || defined(VERIFY_Z_DIFFUSION)
 constexpr int N_X = 4;
 constexpr int N_Y = 4;
 constexpr int N_Z = VERIFY_RES;
@@ -71,14 +85,24 @@ constexpr int N_Z = 1;
 #error "A VERIFY_* model selector must be defined in flags.mk"
 #endif
 
+#if defined(VERIFY_X_WEDGE_TRANSPORT) || defined(VERIFY_X_WEDGE_DIFFUSION)
+constexpr real X_MIN = -0.4;
+constexpr real X_MAX =  0.8;
+#else
 constexpr real X_MIN = 0.0;
 constexpr real X_MAX = 2.0*M_PI;
+#endif
 #ifdef VERIFY_DIFFUSION_POSLIMIT
 constexpr real Y_MIN = 0.9;
 constexpr real Y_MAX = 1.1;
 #else
+#ifdef VERIFY_STARTUP_3D
+constexpr real Y_MIN = 0.8;
+constexpr real Y_MAX = 1.2;
+#else
 constexpr real Y_MIN = 0.5;
 constexpr real Y_MAX = 2.5;
+#endif // VERIFY_STARTUP_3D
 #endif
 
 // polar diffusion uses a hemisphere with natural zero-flux boundaries; other 3D tests avoid the coordinate poles, while a
@@ -86,7 +110,17 @@ constexpr real Y_MAX = 2.5;
 #if defined(VERIFY_Z_DIFFUSION)
 constexpr real Z_MIN = 0.0;
 constexpr real Z_MAX = 0.5*M_PI;
-#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_3D) \
+#elif defined(VERIFY_INITSTATE_3D)
+constexpr real Z_MIN = 0.5*M_PI - 0.25;
+constexpr real Z_MAX = 0.5*M_PI + 0.25;
+#elif defined(VERIFY_STARTUP_3D)
+constexpr real Z_MIN = 0.5*M_PI - 0.4;
+constexpr real Z_MAX = 0.5*M_PI + 0.4;
+#elif defined(VERIFY_Z_REFLECT)
+constexpr real Z_MIN = 0.35;
+constexpr real Z_MAX = 0.5*M_PI;
+#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) \
+    || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_3D) \
     || defined(VERIFY_Y_DIFFUSION_SPH)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
@@ -95,25 +129,50 @@ constexpr real Z_MIN = 0.5*M_PI;
 constexpr real Z_MAX = 0.5*M_PI;
 #endif
 
+#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+const real SIGMA_0 = 1.3;
+const real ASPR_0  = 0.12;
+#else
 const real SIGMA_0 = 1.0;
 const real ASPR_0  = 0.5;
+#endif
 
 // radiation-supported ring equilibria require a gas profile consistent with the chosen beta; the remaining tests use the
 // simpler non-radiative exponent
-#ifdef VERIFY_RING_RADIATION
+#ifdef VERIFY_STARTUP_3D
+// p=3/2 and q=0 remove pressure-supported radial drift, isolating the polar advection-diffusion balance
+const real IDX_P = 1.5;
+#elif defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D)
+const real IDX_P = -0.8;
+#elif defined(VERIFY_RING_RADIATION)
 const real IDX_P = 1.2;
 #else
 const real IDX_P = 2.0;
 #endif
 
+#ifdef VERIFY_STARTUP_3D
+const real IDX_Q = 0.0;
+#elif defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D)
+const real IDX_Q = -0.4;
+#else
 const real IDX_Q = -1.0;
-
-#ifdef DIFFUSION
-const real NU = 5.0e-2;
 #endif
 
+#ifdef DIFFUSION
+#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+const real ALPHA = 4.0e-3;
+#else
+const real NU = 5.0e-2;
+#endif
+#endif
+
+#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+const real METAL_Z = 1.7e-2;
+const real STOKES_0 = 3.0e-2;
+#else
 const real METAL_Z = 1.0e-2;
 const real STOKES_0 = 1.0e-1;
+#endif
 
 #ifdef RADIATION
 #ifdef VERIFY_RING_RADIATION
@@ -131,7 +190,7 @@ const real T_BETA = 1.0;
 #ifdef DIFFUSION
 // a Schmidt number of one activates diffusion in the direction being tested; a numerically enormous value makes diffusion
 // negligible in every other direction while preserving the same production kernel interface
-#if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_RING_DIFFUSION) \
+#if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION) || defined(VERIFY_RING_DIFFUSION) \
     || defined(VERIFY_DIFFUSION_POSLIMIT)
 const real SCHMIDT_X = 1.0;
 #else
@@ -144,7 +203,9 @@ const real SCHMIDT_Y = 1.0;
 const real SCHMIDT_Y = 1.0e300;
 #endif
 
-#if defined(VERIFY_Z_DIFFUSION)
+#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+const real SCHMIDT_Z = 2.0;
+#elif defined(VERIFY_Z_DIFFUSION)
 const real SCHMIDT_Z = 1.0;
 #else
 const real SCHMIDT_Z = 1.0e300;
@@ -184,6 +245,8 @@ const real VERIFY_TEND = 0.25;
 const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_Z_TRANSPORT)
 const real VERIFY_TEND = 0.30;
+#elif defined(VERIFY_Z_OUTFLOW) || defined(VERIFY_Z_REFLECT)
+const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_SOURCE_DRAG)
 const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_RING)

@@ -434,7 +434,9 @@ record size.
 
 With `IMPORTGAS`, the swarm runtime expects matching input frames named `gasdens_*.dat`,
 `gasvelx_*.dat`, `gasvely_*.dat`, `gasvelz_*.dat`, and `epsilon_*.dat` in the configured output
-location. See the swarm numerical guide for calibration and interpolation semantics.
+location. Imported density and dust-to-gas ratio values must be finite and nonnegative, and their
+volume-weighted dust mass must be finite and positive. See the swarm numerical guide for
+calibration and interpolation semantics.
 
 ## Reading output with Python
 

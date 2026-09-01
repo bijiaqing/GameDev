@@ -76,6 +76,8 @@ const char *case_name ()
     return "drag_1d";
 #elif defined(TEST_VISCFLOW_1D)
     return "viscflow_1d";
+#elif defined(TEST_PARINIT_3D)
+    return "parinit_3d";
 #elif defined(TEST_DRAG_2D)
     return "drag_2d";
 #elif defined(TEST_DIFFUSION_1D)
@@ -412,7 +414,6 @@ int main ()
     std::vector<real> randposx(N_P, 0.0);
     std::vector<real> randposy(N_P);
     std::vector<real> randposz(N_P, 0.5*M_PI);
-    std::vector<real> randsize(N_P, S_0);
     for (int idx = 0; idx < N_P; idx++)
     {
         randposy[idx] = 0.7 + 0.6*static_cast<real>(idx) / static_cast<real>(N_P - 1);
@@ -421,23 +422,14 @@ int main ()
     real *dev_randposx = nullptr;
     real *dev_randposy = nullptr;
     real *dev_randposz = nullptr;
-    real *dev_randsize = nullptr;
-    real *dev_mass_bank = nullptr;
-    real domain_mass = 1.0;
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposx), sizeof(real)*N_P), "allocate x positions");
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposy), sizeof(real)*N_P), "allocate radial positions");
     cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposz), sizeof(real)*N_P), "allocate z positions");
-    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randsize), sizeof(real)*N_P), "allocate grain sizes");
-    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_mass_bank), sizeof(real)), "allocate domain mass");
     cuda_check(cudaMemcpy(dev_randposx, randposx.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload x positions");
     cuda_check(cudaMemcpy(dev_randposy, randposy.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload radial positions");
     cuda_check(cudaMemcpy(dev_randposz, randposz.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload z positions");
-    cuda_check(cudaMemcpy(dev_randsize, randsize.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload grain sizes");
-    cuda_check(cudaMemcpy(dev_mass_bank, &domain_mass, sizeof(real), cudaMemcpyHostToDevice), "upload domain mass");
 
-    particle_init <<< NB_P, TPB >>> (
-        dev_particle, dev_randposx, dev_randposy, dev_randposz, dev_randsize, dev_mass_bank, 1, 1.0
-    );
+    particle_init <<< NB_P, TPB >>> (dev_particle, dev_randposx, dev_randposy, dev_randposz);
     kernel_check("viscous-flow initialization");
     copy_state_from_device(particle, dev_particle);
     write_state(particle);
@@ -445,8 +437,40 @@ int main ()
     cuda_check(cudaFree(dev_randposx), "free x positions");
     cuda_check(cudaFree(dev_randposy), "free radial positions");
     cuda_check(cudaFree(dev_randposz), "free z positions");
-    cuda_check(cudaFree(dev_randsize), "free grain sizes");
-    cuda_check(cudaFree(dev_mass_bank), "free domain mass");
+
+#elif defined(TEST_PARINIT_3D)
+    // sample both sides of the midplane so one production launch exercises the complete resolved-vertical drift projection
+    std::vector<real> randposx(N_P);
+    std::vector<real> randposy(N_P);
+    std::vector<real> randposz(N_P);
+    for (int idx = 0; idx < N_P; idx++)
+    {
+        real fraction = static_cast<real>(idx) / static_cast<real>(N_P - 1);
+        real R = 0.7 + 0.6*fraction;
+        real Z = 0.03*R*static_cast<real>(idx % 5 - 2);
+        randposx[idx] = X_MIN + (static_cast<real>(idx) + 0.25)*(X_MAX - X_MIN)/static_cast<real>(N_P);
+        randposy[idx] = sqrt(R*R + Z*Z);
+        randposz[idx] = atan2(R, Z);
+    }
+
+    real *dev_randposx = nullptr;
+    real *dev_randposy = nullptr;
+    real *dev_randposz = nullptr;
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposx), sizeof(real)*N_P), "allocate x positions");
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposy), sizeof(real)*N_P), "allocate radial positions");
+    cuda_check(cudaMalloc(reinterpret_cast<void **>(&dev_randposz), sizeof(real)*N_P), "allocate z positions");
+    cuda_check(cudaMemcpy(dev_randposx, randposx.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload x positions");
+    cuda_check(cudaMemcpy(dev_randposy, randposy.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload radial positions");
+    cuda_check(cudaMemcpy(dev_randposz, randposz.data(), sizeof(real)*N_P, cudaMemcpyHostToDevice), "upload z positions");
+
+    particle_init <<< NB_P, TPB >>> (dev_particle, dev_randposx, dev_randposy, dev_randposz);
+    kernel_check("resolved-vertical particle initialization");
+    copy_state_from_device(particle, dev_particle);
+    write_state(particle);
+    write_meta(0.0, 0.0);
+    cuda_check(cudaFree(dev_randposx), "free x positions");
+    cuda_check(cudaFree(dev_randposy), "free radial positions");
+    cuda_check(cudaFree(dev_randposz), "free z positions");
 
 #elif defined(TEST_DRAG_1D) || defined(TEST_RADIATION_1D) || defined(TEST_PRDRAG_1D) \
     || defined(TEST_DRAG_2D) || defined(TEST_RADIATION_2D) || defined(TEST_PRDRAG_2D)

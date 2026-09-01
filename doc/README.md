@@ -58,8 +58,8 @@ cross-backend comparison requires both records. Checkpoints are not supported ac
 
 | Area | Current repository evidence | Interpretation |
 |---|---|---|
-| fluid analytical suite | source-matched CUDA and ROCm archives with 105/105 metrics on each backend, plus eight direct polar-field comparisons | both native archives and the cross-backend comparison passed on 2026-08-24 |
-| swarm analytical suite | source-matched CUDA and ROCm archives with 31/31 models and 75/75 metrics on each backend | both native archives and the cross-backend comparison passed on 2026-08-24 |
+| fluid analytical suite | source-matched CUDA and ROCm archives with 105/105 metrics on each backend, plus focused initialization/startup and polar-boundary evidence; the current source also adds eight wedge-periodic seam metrics | both archived native suites and the cross-backend comparison passed on 2026-08-24; all twenty previously focused CUDA additions passed on 2026-09-01, while the new wedge cases, paired ROCm qualification, and the next complete 133-metric archive remain pending |
+| swarm analytical suite | source-matched CUDA and ROCm archives with 31/31 models and 75/75 metrics on each backend, plus focused native records for physical collisions, imported gas, and monodisperse initialization | both archived complete suites passed on 2026-08-24; physical collisions passed on both backends, while the latest imported-gas and initialization additions have passed CUDA and still require ROCm plus the next complete 35-model/79-metric archive |
 | adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | all 52 compact cases and all four standalone builds passed on each backend with equal coverage |
 | default collision chain | mirrored CUDA/ROCm production-runtime qualifications with Morton and KD-tree caches plus the Bernoulli collision regression | the current six-model post-inversion campaigns passed on CUDA `sm_80` and ROCm `gfx942` |
 

@@ -52,20 +52,29 @@ def model_analyzer(
 
 
 FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
+    "initialization": [
+        ("test_initstate_2d", ()),
+        ("test_initstate_3d", ()),
+        ("test_startup_3d", ()),
+    ],
     "transport": [
         *(('test_x_transport_2d', ('--shift', str(shift)))
           for shift in (3.0, 3.25, 3.5, 3.75)),
+        ("test_x_wedge_transport_2d", ()),
         ("test_y_transport_cyl", ("--cfl", "0.05")),
         ("test_y_transport_cyl", ("--cfl", "0.5")),
         ("test_y_transport_sph", ("--cfl", "0.05")),
         ("test_y_transport_sph", ("--cfl", "0.5")),
         ("test_y_outflow_2d", ()),
         ("test_y_outflow_3d", ()),
+        ("test_z_outflow_3d", ()),
+        ("test_z_reflect_3d", ()),
         ("test_z_transport_3d", ("--cfl", "0.05")),
         ("test_z_transport_3d", ("--cfl", "0.5")),
     ],
     "diffusion": [
         ("test_x_diffusion_2d", ()),
+        ("test_x_wedge_diffusion_2d", ()),
         ("test_y_diffusion_cyl", ()),
         ("test_y_diffusion_sph", ()),
         ("test_z_diffusion_3d", ()),
@@ -95,7 +104,7 @@ SWARM_GROUPS: dict[str, list[str]] = {
     "diffusion": [
         "test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d", "test_settle_diffuse_3d",
     ],
-    "initialization": ["test_initial_3d"],
+    "initialization": ["test_initial_3d", "test_parinit_3d"],
     "radiation": [
         "test_radiation_1d", "test_prdrag_1d", "test_radiation_2d", "test_prdrag_2d",
     ],
@@ -103,7 +112,9 @@ SWARM_GROUPS: dict[str, list[str]] = {
         "test_boundary_1d", "test_boundary_2d", "test_boundary_3d", "test_boundary_half",
     ],
     "collision": [
-        "test_collision_1d", "test_import_1d", "test_collision_2d", "test_collision_3d",
+        "test_collision_1d", "test_import_1d", "test_import_3d",
+        "test_collision_2d", "test_collision_3d",
+        "test_colphys_code", "test_colphys_cgs",
     ],
     "knn": ["test_knn"],
 }
@@ -131,11 +142,15 @@ SWARM_FIXED_RESOLUTION = {
     "test_prdrag_1d",
     "test_collision_1d",
     "test_import_1d",
+    "test_import_3d",
+    "test_parinit_3d",
     "test_drag_2d",
     "test_radiation_2d",
     "test_prdrag_2d",
     "test_collision_2d",
     "test_collision_3d",
+    "test_colphys_code",
+    "test_colphys_cgs",
     "test_boundary_1d",
     "test_boundary_2d",
     "test_boundary_3d",
@@ -143,10 +158,10 @@ SWARM_FIXED_RESOLUTION = {
     "test_knn",
 }
 
-EXPECTED_FLUID_METRICS = 105
-EXPECTED_SWARM_METRICS = 75
-EXPECTED_PUBLICATION_FLUID_METRICS = 77
-EXPECTED_PUBLICATION_SWARM_METRICS = 57
+EXPECTED_FLUID_METRICS = 133
+EXPECTED_SWARM_METRICS = 79
+EXPECTED_PUBLICATION_FLUID_METRICS = 105
+EXPECTED_PUBLICATION_SWARM_METRICS = 61
 
 PUBLICATION_TIER = "publication"
 RELEASE_TIER = "release"

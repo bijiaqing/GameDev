@@ -929,15 +929,20 @@ azimuth is centered. Here $\epsilon$ controls the spatial shape of the dust samp
 the total represented dust mass is still normalized from `SIGMA_0`, `METAL_Z`, and the configured
 domain rather than taken as an independent absolute mass from the imported field.
 
-For cell $c$, the selection probability is
+For cell $c$, with $\rho_g$ interpreted as surface density when `N_Z == 1`, the selection
+probability is
 
 $$
 P_c=\frac{\epsilon_c\rho_{g,c}V_c}
-{\sum_m\epsilon_m\rho_{g,m}V_m},
+{\sum_m\epsilon_m\rho_{g,m}V_m}.
 $$
 
-with $\rho_g$ interpreted as surface density when `N_Z == 1`. After selecting a cell, the position
-is uniform in its exact volume coordinates
+Every imported density and dust-to-gas ratio must be finite and nonnegative, and the denominator
+must be finite and strictly positive. Initialization rejects the profile before normalizing or
+sampling if any of these conditions fails. Individual zero-mass cells remain valid and simply have
+zero selection probability.
+
+After selecting a cell, the position is uniform in its exact volume coordinates
 
 $$
 s_y=\frac{y^d}{d},
@@ -1214,6 +1219,24 @@ The analytic force model includes:
 
 When imported gas is enabled, the current and next snapshots are interpolated to each dynamics
 step midpoint. This avoids holding the gas piecewise constant over a complete output interval.
+If the two bracketing fields are $g_n$ and $g_{n+1}$ and the requested absolute frame fraction is
+$f$, the target field is
+
+$$
+g(f)=(1-f)g_n+fg_{n+1}.
+$$
+
+The runtime stores a working field already advanced to $f_{\rm old}$, so the kernel uses the
+incremental coefficient
+
+$$
+b=\frac{f-f_{\rm old}}{1-f_{\rm old}},
+\qquad
+g\leftarrow(1-b)g+b g_{n+1},
+$$
+
+which is algebraically identical to the direct interpolation above. The same operation is applied
+to gas density and all three stored gas-velocity components.
 
 For an initial state $i$, midpoint position $1$, and final state $j$, the first drift is
 
@@ -2477,6 +2500,14 @@ search backends, including geometry reuse and checkpoint-boundary restart. The m
 Together these campaigns establish native execution of frozen bath, direct Bernoulli, and cached
 Bernoulli with Morton and KD-tree search on both supported GPU backends.
 
+Finite-bath convergence is a separate scientific requirement. In compact CUDA populations, the
+finest tested coagulation refinement `COL_BATH_EPS = 0.0075 -> 0.00375` and fragmentation
+refinement `0.0015 -> 0.00075` change ensemble size CDFs and normalized moments by less than the
+provisional compact-case tolerances and less than ordinary cross-seed scatter. These results bound
+the bath-freezing error for those cases only. The production header value `COL_BATH_EPS = 0.06`
+remains a model parameter that must be calibrated together with `N_K`, `H_SEARCH`, and `N_P` before
+a scientific production campaign; current compact spatial refinements have not converged.
+
 ## 9. Operator composition, timestep hierarchy, and boundaries
 
 ### 9.1 Symmetric operator composition
@@ -2863,9 +2894,10 @@ model itself rather than current test coverage.
   $\rho_g\epsilon$ mass; an all-zero imported profile reaches an undefined CDF normalization and
   should be rejected by the caller until an explicit host guard is added.
 - The frozen-bath chain rejects invalid pair rates, clocks, states, and Morton traversal overflow,
-  and the complete post-inversion chain group is natively qualified on both GPU backends. Bath
-  tolerance, neighbor count, search radius, and representative count nevertheless remain
-  model-dependent scientific convergence requirements.
+  and the complete post-inversion chain group is natively qualified on both GPU backends. Compact
+  bath-refinement cases bound finite-bath error at much smaller tolerances than the current
+  production default, while neighbor count, search radius, and representative count remain
+  unconverged model-dependent controls.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.
 - Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and a

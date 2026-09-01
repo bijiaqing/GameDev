@@ -257,7 +257,10 @@ def check_chain_port(errors: list[str]) -> None:
             errors.append(f"missing test-only runtime override: {path.relative_to(PROJECT_ROOT)}")
             continue
         runtime = path.read_text()
-        for token in ("#ifdef COL_PERF_QAV", "#ifdef COL_CACHE_QAV", "#ifdef QAV_RUNTIME_SEED"):
+        for token in (
+            "#ifdef COL_PERF_QAV", "#ifdef COL_CACHE_QAV", "#ifdef QAV_RUNTIME_SEED",
+            "GAMEDEV_QAV_INIT_SEED", "GAMEDEV_QAV_RNG_SEED",
+        ):
             if token not in runtime:
                 errors.append(f"{backend} runtime override is missing {token!r}")
 
@@ -290,6 +293,7 @@ def check_chain_port(errors: list[str]) -> None:
 
     test_only_tokens = (
         "COL_CACHE_QAV", "COL_GEOM_QAV", "COL_PERF_QAV", "QAV_RUNTIME_SEED",
+        "GAMEDEV_QAV_INIT_SEED", "GAMEDEV_QAV_RNG_SEED",
         "KNN_FRESH", "COLLISION_UNIT_VOLUME", "COLLISION_LINEAR_TEST",
         "PERF_PARTICLES", "defined(TEST_", "#ifdef TEST_", "#ifndef TEST_",
         "rand_gamma_k2", "void morton_search", "void morton_digest",

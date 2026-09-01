@@ -176,7 +176,7 @@ real _get_stokes (real R, real Z, real h_g, real size
     real loc_z = _get_loc_z(z);
 
     real gas_dens = _interp_field(dev_gas_dens, loc_x, loc_y, loc_z);
-    if (gas_dens <= 0.0)
+    if (!isfinite(gas_dens) || gas_dens <= 0.0)
     {
         printf("ERROR: Invalid gas density = %e at (x,y,z) = (%e,%e,%e)\n", gas_dens, x, y, z);
         assert(false);

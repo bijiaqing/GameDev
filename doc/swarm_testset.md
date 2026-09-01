@@ -16,7 +16,7 @@ transport, stiff gas drag, cylindrical stochastic diffusion, radiation pressure,
 Robertson drag, collision-neighborhood measures, the three dimensionless coagulation kernels, and
 exact KD-tree/Morton neighbor search. Dedicated radial-only cases additionally test exact inactive
 coordinates, annular collision normalization, and imported surface-density Stokes/Reynolds scaling.
-It does not yet validate monodisperse initialization and initial drift together, complete stochastic
+It now validates monodisperse initialization and initial drift in vertically integrated and resolved-polar geometries. It does not yet validate complete stochastic
 collision events against an analytical or converged reference, boundary-event convergence, restart
 reproducibility, or long-term coupled evolution. It now includes non-equilibrium eccentric-orbit
 and multi-step constant-drag trajectories in addition to its equilibrium and one-step tests.
@@ -60,10 +60,16 @@ The common archive retains narrow regressions but distinguishes them from code-p
 - **Qualification:** restart, deliberate KNN/collision failure injection, extended million- and
   ten-million-particle KNN runs, and performance/profiling campaigns
 
-With the standard four requested resolutions, the expanded 75-metric analytical swarm matrix
-partitions into 57 publication and 18 release-only records. The source-matched 2026-08-23/24
-CUDA/ROCm campaign completed all six new four-resolution sequences on both backends. The compact
-KNN suite is publication evidence for exact
+The source-matched archived analytical matrix contains 75 metrics partitioned into 57 publication
+and 18 release-only records. The current source adds two fixed-resolution physical-collision cases,
+one imported-gas qualification, and one resolved-vertical monodisperse initialization case, so its next complete native
+archive will contain 79 metrics partitioned into 61 publication and 18 release-only records. Focused collision-group runs have
+qualified the physical-collision records on native CUDA and ROCm; the new imported-gas record
+passed on CUDA `sm_80` and still requires native ROCm execution. The revised monodisperse `test_viscflow_1d` and the new
+`test_parinit_3d` have also passed CUDA `sm_80`; their ROCm records and a complete 79-record archive
+has not yet been run. The
+2026-08-23/24 CUDA/ROCm campaign completed all six earlier four-resolution sequences on both
+backends. The compact KNN suite is publication evidence for exact
 neighbor search; `--knn-full` adds qualification evidence rather than strengthening a physical
 convergence claim. These labels are stored in model and aggregate manifests and do not remove any
 test from the release gate.
@@ -264,7 +270,8 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_drag_1d` | radial-only frozen gas-drag response | exact exponential angular relaxation, radial response, and inactive-state invariants |
 | `test_drag_path_1d` | production staggered radial drift with QAV-only constant drag coefficients | exact velocity and displacement for three stopping times plus second-order position convergence |
 | `test_absorb_path_1d` | production staggered drift and radial transport boundary with QAV-only constant paths | exact crossings and sentinel plus density, optical-depth, dynamical-rate, collision-mask, and collision-rate exclusion |
-| `test_viscflow_1d` | radial initialization with vertically integrated `VISC_FLOW` | exact viscous gas target and steady dust drift across several radii |
+| `test_viscflow_1d` | monodisperse radial initialization with vertically integrated `VISC_FLOW` | exact viscous gas target and steady dust drift across several radii |
+| `test_parinit_3d` | resolved-polar monodisperse production initialization | exact hydrostatic Stokes scaling, off-midplane gas rotation, Kanagawa inflow, settling, radial drift, and spherical projection |
 | `test_drag_2d` | frozen-coefficient gas-drag response in `ssa_transport` | exact exponential angular relaxation and its induced radial response |
 | `test_diffusion_1d` | direct cylindrical radial SDE | exact Itô mean and variance, invariant physical velocity, and exact inactive coordinates |
 | `test_diffusion_2d` | azimuthal cylindrical diffusion SDE and velocity reprojection | exact Gaussian angular moments and invariant Cartesian velocity |
@@ -278,11 +285,14 @@ suite, and therefore do not change the “no current registered case” entries.
 | `test_collision_1d` | exact radial annular KNN measure and coagulation-kernel numerators | interior, inner-edge, outer-edge, and both-edge annular areas plus constant, additive, and product rates |
 | `test_collision_2d` | 2D accessible-neighborhood measure and coagulation-kernel numerators | disk and circular-cap areas plus constant, additive, and product rates |
 | `test_collision_3d` | 3D accessible-neighborhood measure and coagulation-kernel numerators | interior, radial-cap, and polar-cap ball volumes plus the same three rates |
+| `test_colphys_code` | code-unit turbulent relative velocity and vertically integrated `CUSTOM_KERNEL` | independent values inside all six Ormel--Cuzzi regimes, both sides of all five regime boundaries, Cartesian relative speed, and complete pair propensity |
+| `test_colphys_cgs` | physical-unit Reynolds and Brownian closures plus the same `CUSTOM_KERNEL` path | the same turbulent and pair-rate references, ordinary Brownian speed, and the sound-speed cap |
 | `test_import_1d` | imported vertically integrated gas coupling | exact $\mathrm{St}=\mathrm{St}_0\Sigma_0/\Sigma_g$ and external-$\Sigma_g$ turbulent Reynolds scaling |
-| `test_colchain_2d` | guarded GPU production runtime with KD-tree and Morton caches at event caps 1 and 32 | finite positive species, mass conservation, exact continuation invariance, controller-record validity, provenance, and repeat determinism |
+| `test_import_3d` | imported volume-density sampling, interpolation, and stopping-time calibration | independent spatial stencils, exact temporal blends, analytical reference-density anchor, depleted-gap response, sparse-profile support, and fail-fast invalid profiles |
+| `test_colchain_2d` | guarded QAV runtime mirror of the production collision path with KD-tree and Morton caches at event caps 1 and 32 | finite positive species, mass conservation, exact continuation invariance, controller-record validity, provenance, and repeat determinism |
 | `test_colchain_frag_2d` | custom physical kernel with a zero fragmentation threshold | native fragmentation, positive species, mass conservation, exact compensator diagnostics, and repeat determinism |
-| `test_colchain_wedge_2d` | partial-azimuth production runtime with periodic search images | duplicate-safe KD-tree and Morton chain execution, controller diagnostics, conservation, and repeat determinism |
-| `test_colchain_3d` | full three-dimensional production runtime | volume-density collision closure, both search caches, controller diagnostics, conservation, and repeat determinism |
+| `test_colchain_wedge_2d` | partial-azimuth QAV runtime mirror with production periodic search images | duplicate-safe KD-tree and Morton chain execution, controller diagnostics, conservation, and repeat determinism |
+| `test_colchain_3d` | full three-dimensional QAV runtime mirror of the production collision path | volume-density collision closure, both search caches, controller diagnostics, conservation, and repeat determinism |
 | `test_colchain_restart_2d` | two-output production chain resumed in a new process from frame one | exact position/species and RNG continuation, velocity round-trip tolerance, controller reset equivalence, conservation, and unchanged checkpoint inputs |
 | `test_colreuse_2d` | transported production runtime with reusable and forced-fresh search preparation | exact final particle/RNG equivalence and geometry-epoch build/reuse/invalidation accounting for direct Bernoulli, cached Bernoulli, and frozen-bath integrators with KD-tree and Morton search |
 | `test_boundary_1d` | radial-only transport absorption and diffusion reflection | exact inactive-coordinate locking, repeated radial folding, and absorbing radial endpoint states |
@@ -683,7 +693,7 @@ from $\Delta t/t_s=0.078125$ through 10 without requiring explicit drag timestep
 
 ### Vertically integrated viscous flow
 
-`test_viscflow_1d` calls the production particle initializer at eight radii with constant kinematic
+`test_viscflow_1d` calls the monodisperse production particle initializer at eight radii with constant kinematic
 viscosity. For the test parameters $p=2$, $q=-1$, and $\nu=0.02$, pressure support vanishes and the
 vertically integrated Kanagawa target is
 
@@ -711,6 +721,32 @@ $2\times10^{-13}$ and requires the inactive $x$, $z$, and $\ell_\theta$ fields t
 checks the radial `VISC_FLOW` closure and its use by production initialization; it does not yet
 measure a long-time viscous mass flux.
 
+### Resolved-vertical monodisperse initialization
+
+`test_parinit_3d` supplies 64 deterministic cylindrical positions spanning $0.7\le R\le1.3$ and five heights from
+$Z/R=-0.06$ through $0.06$. The production `particle_init` kernel copies their spherical coordinates and evaluates the
+analytic gas and monodisperse reference-size grain without `MULTISIZE` or imported-gas branches. The independent validator
+reconstructs
+
+$$
+f_g=\exp\!\left[\frac{R/y-1}{h_g^2}\right],
+\qquad
+\mathrm{St}=\mathrm{St}_0R^{-p}f_g^{-1},
+\qquad
+v_Z=-\mathrm{St}\,\Omega_K Z,
+$$
+
+together with the full off-midplane $\eta$, alpha-viscosity Kanagawa $v_{R,g}$, steady radial drift, azimuthal angular
+momentum, and the cylindrical-to-spherical velocity projection. All six stored position/velocity components must be finite
+and agree jointly to $L_\infty<5\times10^{-12}$. Together with `test_viscflow_1d`, this covers both supported vertical
+closures of monodisperse production initialization; it does not test subsequent long-time settling equilibrium.
+
+The native CUDA `sm_80` records completed on 2026-09-01. The resolved-polar state passed with
+$L_\infty=2.91\times10^{-15}$, while the revised vertically integrated monodisperse viscous-flow state passed with
+$L_\infty=2.22\times10^{-16}$. The accompanying four-resolution multisize initialization rerun also passed unchanged,
+including $3.71\times10^{-15}$ maximum relative domain-mass error, $6.61\times10^{-9}$ middle-size mass-interpolation error,
+and radial/vertical CDF statistics of $5.22\times10^{-3}$ and $6.75\times10^{-3}$.
+
 ### Imported radial gas scaling
 
 `test_import_1d` stores a prescribed surface-density sequence
@@ -736,7 +772,45 @@ $$
 
 The case passes only when every GPU Stokes and inverse-Reynolds value agrees with these independent
 references to absolute error below $2\times10^{-13}$. It specifically detects treating imported
-$\Sigma_g$ as a volume density or retaining the analytical gas profile inside collision turbulence
+$\Sigma_g$ as a volume density or retaining the analytical gas profile inside collision turbulence.
+
+### Imported 3D gas fields and fail-fast initialization
+
+`test_import_3d` prescribes affine density and velocity fields on a $4\times8\times4$ spherical
+mesh. Four particle locations exercise an exact interior cell center, a fully trilinear interior
+stencil, the periodic azimuthal seam, and clamped radial and polar boundary stencils. The Python
+validator reconstructs the centroid offsets, logarithmic-radial interpolation weights, periodic
+neighbor offsets, and all eight trilinear weights independently. It compares density and all three
+gas-velocity components as well as the local imported-density Stokes number.
+
+The same case advances the working gas fields first to $f=0.25$ and then to $f=0.70$. The second
+kernel call uses the production incremental blend
+
+$$
+b=\frac{0.70-0.25}{1-0.25}=0.60,
+$$
+
+and the validator requires both archived fields to equal the direct references
+$0.75g_0+0.25g_1$ and $0.30g_0+0.70g_1$. A uniform field with
+
+$$
+\rho_{g,0}=\frac{\Sigma_0}{\sqrt{2\pi}H_{g,0}}
+$$
+
+must return $\mathrm{STOKES}_0$ at the reference midplane, while a tenfold depleted field must
+return $10\,\mathrm{STOKES}_0$.
+
+The host portion selects one positive-mass cell from an otherwise empty profile and requires all
+sampled positions to remain inside that exact cell. It separately requires rejection of zero total
+mass, negative density, negative dust-to-gas ratio, NaN density, infinite ratio, and overflowed
+cell mass. All deterministic scalar and array errors must remain below $2\times10^{-12}$. This is a
+fixed-resolution formula and failure-path regression, not a sampling-convergence experiment.
+
+The native CUDA `sm_80` record passed on 2026-09-01 using CUDA 12.1 and an NVIDIA
+A100-SXM4-40GB. All seven profile checks passed exactly. The maximum absolute errors were
+$4.44\times10^{-16}$ for spatial interpolation, $8.88\times10^{-16}$ for local Stokes number,
+$4.44\times10^{-16}$ for both temporal targets, and $6.67\times10^{-16}$ for the anchor/gap
+calculation. Native ROCm evidence and the direct backend comparison remain pending.
 
 ### Cylindrical stochastic diffusion
 
@@ -1133,13 +1207,96 @@ independently evaluated CPU formulas above to the stated absolute tolerance. The
 not used as the reference, and resolution convergence is neither required nor implied because this
 is a direct device-helper test with fixed inputs.
 
-### Default production collision-chain runtime
+### Physical custom-kernel formulas
 
-The backend-specific `chain` qualification group builds the actual production
-`src/BACKEND/swarm/swarm_runtime` with both `COLLISION_MORTON` and `COLLISION_KDTREE`. Every case uses
-$N_P=2048$ and $N_K=200$. Unlike the collision-helper cases, each constructs its production search
-index, caches physical neighbors, selects controller baths, advances exact local event chains,
-writes production checkpoints and controller JSON, and runs through the production output path.
+`test_colphys_code` and `test_colphys_cgs` evaluate the production physical collision helpers for
+one fixed pair rather than evolving a stochastic population. The two builds separate the
+compile-time unit branches. Their inverse square-root turbulent Reynolds numbers are
+
+$$
+\mathrm{Re}^{-1/2}
+=\left[
+\mathrm{Re}_0\frac{\alpha}{\alpha_0}\frac{\Sigma_g}{\Sigma_0}
+\right]^{-1/2}
+$$
+
+in code units and
+
+$$
+\mathrm{Re}^{-1/2}
+=\left(\frac{\alpha\Sigma_g X_{\rm sec}}{2M_{\rm mol}}\right)^{-1/2}
+$$
+
+in physical units. For each build, the validator independently evaluates the six Ormel--Cuzzi
+turbulent branches at interior points and samples immediately below and above the five boundaries
+
+$$
+0.2\,\mathrm{Re}^{-1/2},\qquad
+\frac{\mathrm{Re}^{-1/2}}{1.6},\qquad
+5\,\mathrm{Re}^{-1/2},\qquad
+0.2,\qquad 1.
+$$
+
+This gives 16 turbulent test values and explicitly verifies that every branch is activated. The
+physical-unit build additionally evaluates
+
+$$
+\Delta v_{\rm B}
+=\min\left[
+c_s,
+\sqrt{\frac{8c_s^2M_{\rm mol}(m_i+m_j)}{\pi m_i m_j}}
+\right]
+$$
+
+for an ordinary pair and for a very small pair that must reach the sound-speed cap. The complete
+relative speed is reconstructed independently as
+
+$$
+\Delta v_{ij}
+=\sqrt{|\boldsymbol v_i-\boldsymbol v_j|^2
+      +\Delta v_{\rm turb}^2+\Delta v_{\rm B}^2},
+$$
+
+where the Brownian term is absent in code units. Finally, because these are vertically integrated
+2D cases, the expected custom-kernel propensity numerator is
+
+$$
+\lambda_{ij}V_K
+=\frac{N_j\,\pi(s_i+s_j)^2\Delta v_{ij}}
+{4\sqrt{2\pi(H_{g,i}^2+H_{g,j}^2)}}.
+$$
+
+All 22 returned scalars must be finite and the maximum componentwise relative error must remain
+below $2\times10^{-11}$. The test does not perform a resolution, particle-number, neighbor-count,
+or bath-size convergence study. Existing chain cases remain responsible for event execution,
+fragmentation activation, restart, and represented-mass conservation.
+
+The native focused collision groups completed on 2026-09-01 with all six models passing on CUDA
+`sm_80` and ROCm `gfx942`. Both physical cases activated every required turbulent, Brownian, cap,
+custom-kernel, and vertical-overlap branch. The maximum relative errors against the independent
+reference were $1.84\times10^{-16}$ for both CUDA cases, zero for the ROCm code-unit case, and
+$1.64\times10^{-16}$ for the ROCm physical-unit case. Direct comparison of the 22-scalar backend
+arrays gives a maximum absolute difference of $5.55\times10^{-17}$ and relative $L_2$ differences
+of $1.17\times10^{-18}$ for both unit branches. The complete analytical archives remain the earlier
+75-record campaigns; the next complete run will incorporate the two physical records, the imported-gas record, and the
+resolved-vertical monodisperse initialization record and contain 79 metrics.
+
+### Default collision-chain runtime qualification
+
+The backend-specific `chain` qualification group builds an instrumented QAV copy of
+`src/BACKEND/swarm/swarm_runtime` with both `COLLISION_MORTON` and `COLLISION_KDTREE`. Production
+translation units still provide the collision kernels, search backends, deposition, and transport;
+the QAV runtime, host, and cache overrides add deterministic seeds and diagnostic records outside
+`inc/` and `src/`. Every case uses $N_P=2048$ and $N_K=200$. Unlike the collision-helper cases, each
+constructs the production search index, caches physical neighbors, selects controller baths,
+advances exact local event chains, writes normal checkpoints plus controller JSON, and follows the
+production operator sequence.
+
+The source boundary has two separate gates. Static analysis rejects QAV-only selectors and
+diagnostics in production files, while a native compile-only check builds and links the stripped
+production runtime against the collision model configuration. Native CUDA also reruns the QAV
+chain, KNN, deterministic-seed, and cache-diagnostic paths after the separation. This avoids
+claiming that an instrumented runtime copy by itself proves the uninstrumented host file compiles.
 
 The public selector is itself part of this regression contract: `COLLISION` must record
 `COLLISION_INTEGRATOR = frozen_bath`, `BERNOULLI` must record `bernoulli_direct`, and
@@ -1233,7 +1390,7 @@ integer or Boolean controller decision differed. These last-bit differences aris
 floating-point diagnostic reductions and do not change the stochastic trajectory. The reconstructed
 CUDA group manifest therefore reports five of five models passed.
 
-The post-inversion CUDA `sm_80` campaign completed all six current models on 2026-08-30. The five
+The post-inversion CUDA `sm_80` campaign completed all six current models on 2026-08-31. The five
 existing chain and restart models remained passing, and `test_colreuse_2d` qualified all three
 integrators with both search backends. Reused geometry produced five hierarchy builds and three
 reuse hits across eight searches, while forced-fresh geometry produced eight builds and no reuse.
@@ -1241,7 +1398,7 @@ For direct and cached Bernoulli, both the reused and forced-fresh variants produ
 particle and RNG checkpoints for the same search backend. This closes the CUDA qualification gap
 for selector inversion, cached Bernoulli, and geometry-epoch reuse.
 
-The matching ROCm `gfx942` campaign completed all six models on 2026-08-30. All 47 archived JSON
+The matching ROCm `gfx942` campaign completed all six models on 2026-08-31. All 47 archived JSON
 records are parseable and finite, and every recorded acceptance gate passes. The cap-one and
 cap-32 2D variants remain pathwise identical within each search backend. In `test_colreuse_2d`,
 reused geometry produces five hierarchy builds and three reuse hits across eight searches, whereas
@@ -1250,6 +1407,30 @@ identical particle and RNG checkpoints in both geometry modes for Morton and KD-
 restart, fragmentation, periodic-wedge, and full-3D components also pass, so the native CUDA and
 ROCm campaigns now have equal six-model coverage. These are within-backend reproducibility tests;
 they do not require vendor RNG states or stochastic trajectories to match across backends.
+
+The focused manifests themselves report all six chain models passing on each backend. Both compact
+KNN archives contain 7/7 ordinary, 15/15 edge, 14/14 periodic, and 10/10 wedge cases plus 6/6
+production collision links. The stripped ROCm production runtime additionally compiles and links
+all 21 HIP objects with the diagnostic QAV runtime removed. Separately, the existing complete
+archives have matching source fingerprints: the archive audit accepts all 75 ROCm swarm metrics,
+and the backend comparator finds 75 common analytical metrics with zero mismatches. The KNN
+comparator also accepts the two focused result trees, although its provenance field is inherited
+from those complete campaign records rather than a fingerprint embedded in the focused manifests.
+
+After these runs, the QAV-only runtime gained an independent host-initialization seed for the
+ignored representative-count convergence laboratory. That addition does not alter production
+`inc/` or `src/`, and the default seed preserves the qualified trajectories. Its first native CUDA
+campaign completed all 48 combinations of three particle counts, four initialization seeds, and
+four collision seeds with valid checkpoint provenance, finite populations, and exact represented
+mass conservation. This was a scientific non-convergence result rather than a qualification: the
+`8192 -> 32768` response exceeded both measured stochastic floors for every observable. Because
+that experiment held `N_K` and `H_SEARCH` fixed, a follow-up 24-run cache probe measured their
+effective support using four independent initial populations. Every `H_SEARCH = 1` case is radius
+limited. At `H_SEARCH = 4`, the 2048-particle case remains radius limited, while the 8192- and
+32768-particle cases are mixed and fill 73.76% and 96.12% of caches on average. The archived cache
+numerical aggregates reproduce exactly, and its source fingerprint matches the current 629-file
+tree. These diagnostics confirm that the particle-count campaign mixed
+representative sampling with changing KNN support; they do not themselves establish convergence.
 
 These are integration and reproducibility gates rather than analytical collision-distribution
 tests. They qualify continuation invariance, forced fragmentation, partial-wedge search geometry,
@@ -1481,6 +1662,7 @@ records, and zero acceptance mismatches. The analytical metrics partition into 5
 | radiation and P-R drag in 1D and 2D | 4 builds | PASS | PASS |
 | full-disk, wedge, and half-domain boundary maps | 4 builds | PASS | PASS |
 | collision and imported-gas helpers in 1D, 2D, and 3D | 4 builds | PASS | PASS |
+| physical `CUSTOM_KERNEL` formulas in code and physical units | 2 builds | PASS | PASS |
 
 The detailed KNN component counts, correctness criteria, memory ratios, and timing ranges are
 reported once in “Latest archived native KNN evidence” above.
@@ -1521,13 +1703,15 @@ particle and RNG checkpoints exactly as well as their controller records within 
 The restart component additionally reproduced its continuous frame-two particle and RNG files
 exactly after starting a new process from frame one.
 
-The refreshed post-inversion CUDA campaign completed on 2026-08-30 and reports six of six current
+The refreshed post-inversion CUDA campaign completed on 2026-08-31 and reports six of six current
 components passing. In addition to preserving the five results above, `test_colreuse_2d` passed
 reused-versus-fresh geometry accounting for frozen bath, direct Bernoulli, and cached Bernoulli
 with KD-tree and Morton search. Direct and cached Bernoulli produced identical particle and RNG
 checkpoints in both geometry modes. The equivalent ROCm `gfx942` campaign also completed on
-2026-08-30 with six of six components passing and the same variant coverage and geometry-accounting
-criteria.
+2026-08-31 with six of six components passing and the same variant coverage and geometry-accounting
+criteria. The separate complete ROCm archive passes the 75/75 swarm-metric completeness gate; its
+source-matched CUDA comparison reports zero mismatches across those 75 analytical metrics, and the
+focused KNN result comparison passes.
 
 The accompanying CUDA legacy-collision regression also passed all four $N=32$ cases after the RNG
 commit correction. Maximum $L_\infty$ errors were zero in 1D, $2.78\times10^{-17}$ for imported-gas
@@ -1638,7 +1822,7 @@ From the repository root, run a short workflow check with
 python3 qav/cuda/swarm/test_common/run_suite.py --group all --quick
 ```
 
-This performs the 45 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
+This performs the 49 analytical-suite builds, compiles the four KNN drivers, links the 1D, 2D,
 and 3D production collision sources with both backends, and then runs the
 $10^5$-particle KNN matrix.
 
@@ -1650,9 +1834,10 @@ python3 qav/cuda/swarm/test_common/run_suite.py \
     --res 32 64 128 256
 ```
 
-The current complete command performs 75 analytical-suite builds plus four KNN driver builds.
-The separately selected `chain` group builds the production runtime across both search methods,
-event-cap variants, restart, and the three geometry-reuse modes.
+The current complete command performs 79 analytical-suite builds plus four KNN driver builds.
+The separately selected `chain` group builds the instrumented QAV runtime mirror across both search
+methods, event-cap variants, restart, and the three geometry-reuse modes; production collision
+kernels remain linked underneath that override.
 Individual groups can be selected with
 
 ```bash
@@ -1767,29 +1952,13 @@ gradients is also deferred.
 
 ### Other missing verification
 
-- Extend the qualified CUDA and ROCm collision-chain campaigns to axisymmetry, imported gas,
-  coupled operators, and $N_P=10^6$; statistically compare complete histories and bath-size
-  convergence
 - Add a production Bernoulli near-tie fixture with equidistant candidate neighbors and require the
   direct and cached KD-tree slot order to remain identical; the existing KNN edge tests establish
   the selected top-$K$ set but do not exercise inverse-CDF partner sampling through both paths
 - Test complete optional Bernoulli batches, the exact event probability
-  $1-e^{-\lambda\Delta t}$, and partner sampling; for both integrators, add convergence with
-  `CFL_COL` or bath tolerance, $N_K$, $N_P$, and `H_SEARCH`, including a uniform-density field with
-  a known rate and forced fragmentation that exercises the size and represented-number update
-- Validate the physical `CUSTOM_KERNEL` directly across all Ormel–Cuzzi turbulent regimes and
-  their boundaries, the physical-unit Brownian term, and the vertically integrated Gaussian
-  overlap factor $[2\pi(H_{g,i}^2+H_{g,j}^2)]^{-1/2}$
-- Recover analytical constant, additive, and product Smoluchowski moment evolution rather than
-  checking only the pair-kernel numerators
+  $1-e^{-\lambda\Delta t}$, and inverse-CDF partner sampling at a fixed known uniform rate
 - Add an axisymmetric radial–polar collision-helper case for the revolved
   $2\pi R$ neighborhood measure
-- Add independent nonzero-$(p,q)$ tests of the midplane pressure-support target and complete 3D
-  gas rotation law, followed by the corresponding dust drift at several heights
-- Add a resolved-vertical `VISC_FLOW` test at several heights against the complete Kanagawa target
-- Test monodisperse initialization and initial drift velocities in the complete production path;
-  the native `test_initial_3d` archive now covers conditional multisize initialization, finite-domain
-  containment, intermediate-size interpolation, mass normalization, and independence from `N_Z`
 - Validate imported-gas spatial and temporal interpolation, the analytical `STOKES_0` anchor, and
   response to a depleted imported midplane density
 - Add boundary-event convergence tests that can detect within-step exits and returns; the current
@@ -1798,6 +1967,11 @@ gradients is also deferred.
   timesteps do not exceed the configured crossing or diffusion limits
 - Test finite attenuation by coupling the reconstructed optical depth to
   $\beta e^{-\tau}$; the current grid and radiation cases validate the two pieces separately
+
+Further collision population, particle-count, neighbor-count, search-radius, CFL, and bath-size
+convergence campaigns are intentionally stopped. Smoluchowski population-moment recovery and the
+previously proposed million-particle collision-history extensions are therefore not pending test
+requirements.
 - Extend checkpoint/restart testing to fragmentation or coupled operators only if those paths
   introduce checkpoint state beyond particles and RNG streams
 - Compare the radial-only model with an azimuthally uniform radial–azimuthal model using matched
