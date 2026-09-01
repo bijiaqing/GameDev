@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 from validate_case import analyze as default_analyze
 
 QAV_ROOT = Path(__file__).resolve().parents[3]
@@ -202,8 +204,5 @@ def run(model: str) -> None:
             f"{convergence_field} L1 orders:",
             " ".join(f"{value:.4f}" for value in convergence_orders),
         )
-    elif records[0]["case"] in {"orbit_1d", "orbit_2d"} and len(records) > 1:
-        values = [record["errors"]["state"]["l2"] for record in records]
-        print("observed orders:", " ".join(f"{value:.4f}" for value in orders(values)))
     if not passed:
         raise SystemExit(1)

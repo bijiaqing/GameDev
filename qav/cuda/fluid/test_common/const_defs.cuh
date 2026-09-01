@@ -37,19 +37,11 @@ const real R_0 = 1.0;
 // test constants deliberately replace a production model's physical setup with the smallest grid that isolates one claim
 // refine only the direction under test for isolated kernels and refine both active directions for ring tests; four cells in
 // an inactive transverse direction are enough to expose indexing mistakes without making every convergence run expensive
-#if defined(VERIFY_INITSTATE_2D)
-constexpr int N_X = 4;
-constexpr int N_Y = VERIFY_RES;
-constexpr int N_Z = 1;
-#elif defined(VERIFY_INITSTATE_3D)
+#if defined(VERIFY_STARTUP_3D)
 constexpr int N_X = 4;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = VERIFY_RES;
-#elif defined(VERIFY_STARTUP_3D)
-constexpr int N_X = 4;
-constexpr int N_Y = VERIFY_RES;
-constexpr int N_Z = VERIFY_RES;
-#elif defined(VERIFY_DIFFUSION_POSLIMIT) || defined(VERIFY_ADVECTION_LIMIT)
+#elif defined(VERIFY_DIFFUSION_POSLIMIT)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = 1;
 constexpr int N_Z = 1;
@@ -64,7 +56,7 @@ constexpr int N_Z = 1;
 constexpr int N_X = 4;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = 1;
-#elif defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_3D) || defined(VERIFY_Y_DIFFUSION_SPH)
+#elif defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_DIFFUSION_SPH)
 constexpr int N_X = 4;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = 4;
@@ -73,17 +65,9 @@ constexpr int N_Z = 4;
 constexpr int N_X = 4;
 constexpr int N_Y = 4;
 constexpr int N_Z = VERIFY_RES;
-#elif defined(VERIFY_Z_METRIC)
-constexpr int N_X = 4;
-constexpr int N_Y = VERIFY_RES/8;
-constexpr int N_Z = 128;
 #elif defined(VERIFY_SOURCE_DRAG)
 constexpr int N_X = 8;
 constexpr int N_Y = 1;
-constexpr int N_Z = 1;
-#elif defined(VERIFY_RING_LONG)
-constexpr int N_X = VERIFY_RES;
-constexpr int N_Y = 8;
 constexpr int N_Z = 1;
 #elif defined(VERIFY_RING)
 constexpr int N_X = VERIFY_RES;
@@ -100,7 +84,7 @@ constexpr real X_MAX =  0.8;
 constexpr real X_MIN = 0.0;
 constexpr real X_MAX = 2.0*M_PI;
 #endif
-#if defined(VERIFY_DIFFUSION_POSLIMIT) || defined(VERIFY_ADVECTION_LIMIT)
+#if defined(VERIFY_DIFFUSION_POSLIMIT)
 constexpr real Y_MIN = 0.9;
 constexpr real Y_MAX = 1.1;
 #else
@@ -118,17 +102,14 @@ constexpr real Y_MAX = 2.5;
 #if defined(VERIFY_Z_DIFFUSION)
 constexpr real Z_MIN = 0.0;
 constexpr real Z_MAX = 0.5*M_PI;
-#elif defined(VERIFY_INITSTATE_3D)
-constexpr real Z_MIN = 0.5*M_PI - 0.25;
-constexpr real Z_MAX = 0.5*M_PI + 0.25;
 #elif defined(VERIFY_STARTUP_3D)
 constexpr real Z_MIN = 0.5*M_PI - 0.4;
 constexpr real Z_MAX = 0.5*M_PI + 0.4;
 #elif defined(VERIFY_Z_REFLECT)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = 0.5*M_PI;
-#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) || defined(VERIFY_Z_METRIC) \
-    || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_3D) \
+#elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) \
+    || defined(VERIFY_Y_TRANSPORT_SPH) \
     || defined(VERIFY_Y_DIFFUSION_SPH)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
@@ -137,7 +118,7 @@ constexpr real Z_MIN = 0.5*M_PI;
 constexpr real Z_MAX = 0.5*M_PI;
 #endif
 
-#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+#ifdef VERIFY_STARTUP_3D
 const real SIGMA_0 = 1.3;
 const real ASPR_0  = 0.12;
 #else
@@ -150,8 +131,6 @@ const real ASPR_0  = 0.5;
 #ifdef VERIFY_STARTUP_3D
 // p=3/2 and q=0 remove pressure-supported radial drift, isolating the polar advection-diffusion balance
 const real IDX_P = 1.5;
-#elif defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D)
-const real IDX_P = -0.8;
 #elif defined(VERIFY_RING_RADIATION)
 const real IDX_P = 1.2;
 #else
@@ -160,23 +139,19 @@ const real IDX_P = 2.0;
 
 #ifdef VERIFY_STARTUP_3D
 const real IDX_Q = 0.0;
-#elif defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D)
-const real IDX_Q = -0.4;
 #else
 const real IDX_Q = -1.0;
 #endif
 
 #ifdef DIFFUSION
-#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+#ifdef VERIFY_STARTUP_3D
 const real ALPHA = 4.0e-3;
-#elif defined(VERIFY_RING_LONG)
-const real NU = 5.0e-3;
 #else
 const real NU = 5.0e-2;
 #endif
 #endif
 
-#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+#ifdef VERIFY_STARTUP_3D
 const real METAL_Z = 1.7e-2;
 const real STOKES_0 = 3.0e-2;
 #else
@@ -213,7 +188,7 @@ const real SCHMIDT_Y = 1.0;
 const real SCHMIDT_Y = 1.0e300;
 #endif
 
-#if defined(VERIFY_INITSTATE_2D) || defined(VERIFY_INITSTATE_3D) || defined(VERIFY_STARTUP_3D)
+#ifdef VERIFY_STARTUP_3D
 const real SCHMIDT_Z = 2.0;
 #elif defined(VERIFY_Z_DIFFUSION)
 const real SCHMIDT_Z = 1.0;
@@ -251,7 +226,7 @@ const real VERIFY_D   = 5.0e-2;
 const real VERIFY_TEND = 2.0*M_PI;
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
 const real VERIFY_TEND = 0.25;
-#elif defined(VERIFY_Y_OUTFLOW_2D) || defined(VERIFY_Y_OUTFLOW_3D)
+#elif defined(VERIFY_Y_OUTFLOW_2D)
 const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_Z_TRANSPORT)
 const real VERIFY_TEND = 0.30;
@@ -259,8 +234,6 @@ const real VERIFY_TEND = 0.30;
 const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_SOURCE_DRAG)
 const real VERIFY_TEND = 1.0;
-#elif defined(VERIFY_RING_LONG)
-const real VERIFY_TEND = 8.0*M_PI;
 #elif defined(VERIFY_RING)
 const real VERIFY_TEND = 1.0;
 #else

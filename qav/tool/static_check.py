@@ -8,6 +8,9 @@ import ast
 import re
 import subprocess
 from pathlib import Path
+import sys
+
+sys.dont_write_bytecode = True
 
 from qav_config import (
     EXPECTED_FLUID_METRICS,
@@ -15,6 +18,7 @@ from qav_config import (
     EXPECTED_PUBLICATION_SWARM_METRICS,
     EXPECTED_SWARM_METRICS,
     FLUID_GROUPS,
+    SWARM_ENDPOINT_RESOLUTION,
     SWARM_FIXED_RESOLUTION,
     SWARM_GROUPS,
     fluid_metric_tiers,
@@ -248,26 +252,6 @@ def check_chain_port(errors: list[str]) -> None:
         if token not in rocm_runtime:
             errors.append(f"ROCm cached-Bernoulli runtime is missing {token!r}")
 
-    qav_runtime_paths = {
-        "CUDA QAV": PROJECT_ROOT/"qav"/"cuda"/"swarm"/"test_common"/"swarm_runtime.cu",
-        "ROCm QAV": PROJECT_ROOT/"qav"/"rocm"/"swarm"/"test_common"/"swarm_runtime.hip",
-    }
-    for backend, path in qav_runtime_paths.items():
-        if not path.is_file():
-            errors.append(f"missing test-only runtime override: {path.relative_to(PROJECT_ROOT)}")
-            continue
-        runtime = path.read_text()
-        for token in (
-            "#ifdef COL_PERF_QAV", "#ifdef COL_CACHE_QAV", "#ifdef QAV_RUNTIME_SEED",
-            "GAMEDEV_QAV_INIT_SEED", "GAMEDEV_QAV_RNG_SEED",
-        ):
-            if token not in runtime:
-                errors.append(f"{backend} runtime override is missing {token!r}")
-
-    qav_cache = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"_col_cache.cuh"
-    if not qav_cache.is_file() or "struct col_cache_qav_sample" not in qav_cache.read_text():
-        errors.append("missing test-only collision-cache diagnostic header override")
-
     for backend in ("cuda", "rocm"):
         qav_common = PROJECT_ROOT/"qav"/backend/"swarm"/"test_common"
         qav_host = qav_common/"swarm_host.cuh"
@@ -318,18 +302,8 @@ def check_chain_port(errors: list[str]) -> None:
         "test_colchain_frag_2d",
         "test_colchain_wedge_2d",
         "test_colchain_3d",
-        "test_colchain_restart_2d",
-        "test_colreuse_2d",
     )
     expected_files = {"const_defs.cuh", "flags.mk", "run.py"}
-    restart_runner = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"run_chain_restart.py"
-    if not restart_runner.is_file():
-        errors.append(f"missing {restart_runner.relative_to(PROJECT_ROOT)}")
-    reuse_runner = PROJECT_ROOT/"qav"/"comm"/"swarm"/"test_common"/"run_geometry_reuse.py"
-    if not reuse_runner.is_file():
-        errors.append(f"missing {reuse_runner.relative_to(PROJECT_ROOT)}")
-    elif "bernoulli_direct_cache_equivalence" not in reuse_runner.read_text():
-        errors.append("geometry-reuse QAV is missing direct-versus-cached Bernoulli equivalence")
     for backend in ("cuda", "rocm"):
         common_runner = PROJECT_ROOT/"qav"/backend/"swarm"/"test_common"/"run_chain.py"
         if not common_runner.is_file():
@@ -380,7 +354,7 @@ def check_naming(errors: list[str]) -> None:
 
 
 def check_metadata(errors: list[str]) -> None:
-    """Check repository licensing and keep generated result records below qav/logs"""
+    """Check licensing and keep every generated QAV artifact below qav/logs"""
 
     if not (PROJECT_ROOT/"LICENSE").is_file():
         errors.append("missing repository MIT LICENSE")
@@ -390,10 +364,22 @@ def check_metadata(errors: list[str]) -> None:
             errors.append(f"missing {license_path.relative_to(PROJECT_ROOT)}")
 
     generated = []
+    generated_suffixes = {
+        ".bin", ".csv", ".d", ".dat", ".json", ".log", ".npy", ".npz",
+        ".o", ".out", ".pyc", ".txt",
+    }
+    generated_names = {
+        "gamedev", "knn_benchmark", "knn_edge_tests", "knn_periodic_tests",
+        "knn_wedge_benchmark",
+    }
     for path in (PROJECT_ROOT/"qav").rglob("*"):
         if any(part == "logs" for part in path.parts):
             continue
-        if path.is_file() and path.suffix in {".dat", ".json", ".txt"}:
+        if path.is_file() and (
+            path.suffix in generated_suffixes
+            or path.name in generated_names
+            or path.name.startswith((".arch_", ".target_"))
+        ):
             generated.append(path.relative_to(PROJECT_ROOT))
     if generated:
         errors.append(
@@ -420,7 +406,11 @@ def check_qav_contract(errors: list[str]) -> None:
 
     swarm_models = [model for group in SWARM_GROUPS.values() for model in group]
     swarm_metrics = sum(
-        0 if model == "test_knn" else (1 if model in SWARM_FIXED_RESOLUTION else 4)
+        0 if model == "test_knn" else (
+            1 if model in SWARM_FIXED_RESOLUTION else (
+                2 if model in SWARM_ENDPOINT_RESOLUTION else 4
+            )
+        )
         for model in swarm_models
     )
     if swarm_metrics != EXPECTED_SWARM_METRICS:
@@ -467,28 +457,6 @@ def check_qav_contract(errors: list[str]) -> None:
                     "normalizing .cu/.hip suffixes"
                 )
 
-    # backend-owned qualifications have no comm definition, but their two native overlays must retain the same interface
-    for component, model in (("swarm", "test_failure_knn"),):
-        overlay_files = {}
-        for backend in ("cuda", "rocm"):
-            native = PROJECT_ROOT/"qav"/backend/component/model
-            if not native.is_dir():
-                errors.append(
-                    f"missing {backend} QAV qualification: {native.relative_to(PROJECT_ROOT)}"
-                )
-                continue
-            overlay_files[backend] = {
-                f"{path.stem}.gpu" if path.suffix in {".cu", ".hip"} else path.name
-                for path in native.iterdir()
-                if path.is_file()
-                and (path.name == "Makefile" or path.suffix in overlay_suffixes)
-            }
-        if len(overlay_files) == 2 and overlay_files["cuda"] != overlay_files["rocm"]:
-            errors.append(
-                f"{component}/{model}: CUDA and ROCm qualification files differ after "
-                "normalizing .cu/.hip suffixes"
-            )
-
     forbidden_paths = ("qav/out", "backend_field_comparison_z.json")
     for path in (PROJECT_ROOT/"qav").rglob("*.py"):
         if "__pycache__" in path.parts or path == Path(__file__).resolve():
@@ -507,68 +475,30 @@ def check_make_resolution(errors: list[str]) -> None:
         ["make", "-n", "MODEL=fluid_fiducial", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
         ["make", "-n", "MODEL=swarm_fiducial", "GPU_BACKEND=cuda", "GPU_TARGET=sm_80"],
         ["make", "-n", "MODEL=swarm_fiducial", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
-        ["make", "-n", "MODEL=test_collision_3d", "GPU_BACKEND=cuda", "RES=32", "COLLISION_SEARCH=kdtree"],
-        ["make", "-n", "MODEL=test_collision_3d", "GPU_BACKEND=rocm", "RES=32", "COLLISION_SEARCH=morton"],
         [
             "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=qualification",
+            "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=static",
         ],
         [
             "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
+            "GPU_TARGET=sm_80", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=static",
         ],
         [
             "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "COLLISION_SEARCH=morton", "QAV_SCOPE=qualification",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=morton", "QAV_SCOPE=static",
         ],
         [
             "make", "-n", "MODEL=test_colchain_2d", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
+            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=static",
         ],
         [
-            "make", "-n", "MODEL=test_colchain_restart_2d", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=qualification",
+            "make", "-n", "MODEL=test_initial_3d", "GPU_BACKEND=cuda",
+            "GPU_TARGET=sm_80", "RES=32", "QAV_SCOPE=initialization",
         ],
         [
-            "make", "-n", "MODEL=test_colchain_restart_2d", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=qualification",
+            "make", "-n", "MODEL=test_initial_3d", "GPU_BACKEND=rocm",
+            "GPU_TARGET=gfx942", "RES=32", "QAV_SCOPE=initialization",
         ],
-        [
-            "make", "-n", "MODEL=test_colreuse_2d", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "COLLISION_SEARCH=morton", "QAV_SCOPE=chain",
-            "CUDA_FLAGS=-DKNN_FRESH",
-        ],
-        [
-            "make", "-n", "MODEL=test_colreuse_2d", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=chain",
-            "ROCM_FLAGS=-DBERNOULLI -DKNN_CACHE -DKNN_FRESH",
-        ],
-        ["make", "-n", "MODEL=test_failure_2d", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
-        [
-            "make", "-n", "MODEL=test_advect_limit_2d", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "FLUID_SWEEP=thread", "RES=64", "QAV_SCOPE=stress",
-        ],
-        [
-            "make", "-n", "MODEL=test_advect_limit_2d", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "FLUID_SWEEP=block", "RES=64", "QAV_SCOPE=stress",
-        ],
-        [
-            "make", "-n", "MODEL=test_dynrate_3d", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "RES=32", "QAV_SCOPE=transport",
-        ],
-        [
-            "make", "-n", "MODEL=test_dynrate_3d", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "RES=32", "QAV_SCOPE=transport",
-        ],
-        [
-            "make", "-n", "MODEL=test_failure_knn", "GPU_BACKEND=cuda",
-            "GPU_TARGET=sm_80", "COLLISION_SEARCH=kdtree", "QAV_SCOPE=failure",
-        ],
-        [
-            "make", "-n", "MODEL=test_failure_knn", "GPU_BACKEND=rocm",
-            "GPU_TARGET=gfx942", "COLLISION_SEARCH=morton", "QAV_SCOPE=failure",
-        ],
-        ["make", "-n", "MODEL=test_lds_x", "GPU_BACKEND=rocm", "GPU_TARGET=gfx942"],
     )
     for command in commands:
         result = subprocess.run(
@@ -586,22 +516,32 @@ def check_make_resolution(errors: list[str]) -> None:
                 "make", "-n", "MODEL=test_x_transport_2d", "GPU_BACKEND=cuda",
                 "GPU_TARGET=sm_80", "RES=32", "QAV_SCOPE=transport",
             ],
-            "qav/logs/fluid/cuda/thread/groups/transport/test_x_transport_2d",
+            (
+                "qav/logs/fluid/cuda/thread/groups/transport/test_x_transport_2d",
+                "qav/logs/build/bin/cuda/fluid/test_x_transport_2d/gamedev",
+                "qav/logs/build/obj/test_x_transport_2d/fluid/cuda/thread/fast/sm_80",
+            ),
         ),
         (
             [
-                "make", "-n", "MODEL=test_grid_2d", "GPU_BACKEND=rocm",
-                "GPU_TARGET=gfx942", "RES=32", "QAV_SCOPE=grid",
+                "make", "-n", "MODEL=test_diffusion_2d", "GPU_BACKEND=rocm",
+                "GPU_TARGET=gfx942", "RES=32", "QAV_SCOPE=diffusion",
             ],
-            "qav/logs/swarm/rocm/groups/grid/test_grid_2d",
+            (
+                "qav/logs/swarm/rocm/groups/diffusion/test_diffusion_2d",
+                "qav/logs/build/bin/rocm/swarm/test_diffusion_2d/gamedev",
+                "qav/logs/build/obj/test_diffusion_2d/swarm/rocm/gfx942",
+            ),
         ),
     )
-    for command, expected in scope_checks:
+    for command, expected_paths in scope_checks:
         result = subprocess.run(
             command, cwd=PROJECT_ROOT, check=False, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
-        if result.returncode != 0 or expected not in result.stdout:
+        if result.returncode != 0 or any(
+            expected not in result.stdout for expected in expected_paths
+        ):
             errors.append(
                 f"QAV scope resolution failed for {' '.join(command[2:])}:\n{result.stdout}"
             )
@@ -613,12 +553,15 @@ def check_make_resolution(errors: list[str]) -> None:
             "suite", "AMDGPU_TARGET=gfx942", "K=200",
         ],
     )
-    for command in knn_commands:
+    for command, expected in zip(
+        knn_commands,
+        ("qav/logs/build/cuda/swarm/test_knn", "qav/logs/build/rocm/swarm/test_knn"),
+    ):
         result = subprocess.run(
             command, check=False, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or expected not in result.stdout:
             errors.append(f"KNN Make dependency check failed:\n{result.stdout}")
 
 

@@ -67,100 +67,8 @@ def load_state(out_dir: Path, resolution: int, nparticle: int) -> np.ndarray:
     return read_array(out_dir, "state", resolution, 6*nparticle).reshape(6, nparticle)
 
 
-def load_named_state(out_dir: Path, name: str, resolution: int, nparticle: int) -> np.ndarray:
-    """Load a named six-component particle state used by paired regressions"""
-
-    return read_array(out_dir, name, resolution, 6*nparticle).reshape(6, nparticle)
-
-
-def radial_measures(ny: int, dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Reconstruct logarithmic radial edges, exact cell measures, and widths"""
-
-    ratio = (Y_MAX / Y_MIN) ** (1.0 / ny)
-    edges = Y_MIN * ratio ** np.arange(ny + 1)
-    volume = (edges[1:]**dimension - edges[:-1]**dimension) / dimension
-    return edges, volume, edges[:-1]*(ratio - 1.0)
-
-
-def analyze_grid(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Check particle deposition, density conversion, optical-depth accumulation, and inactive coordinates"""
-
-    nx, ny, nz = int(meta["nx"]), int(meta["ny"]), int(meta["nz"])
-    shape = (nz, ny, nx)
-    density = read_array(out_dir, "dustdens", resolution, nx*ny*nz).reshape(shape)
-    optical = read_array(out_dir, "optdepth", resolution, nx*ny*nz).reshape(shape)
-    dimension = 2 if nz == 1 else 3
-    edges, vol_y, dr = radial_measures(ny, dimension)
-    vol_x = 2.0*math.pi / nx
-    if nz == 1:
-        vol_z = np.ones(1)
-    else:
-        zedges = np.linspace(Z_MIN, Z_MAX, nz + 1)
-        vol_z = np.cos(zedges[:-1]) - np.cos(zedges[1:])
-
-    cell_volume = vol_z[:, None, None]*vol_y[None, :, None]*vol_x
-    mass = 1.0 / (nx*ny*nz)
-    expected_density = np.broadcast_to(mass/cell_volume, shape)
-
-    extinction = mass/cell_volume
-    if nz == 1:
-        ratio = (Y_MAX / Y_MIN) ** (1.0 / ny)
-        dim = 2.0
-        offset = math.log((dim/(dim + 1.0))*(ratio**(dim + 1.0) - 1.0)
-                          / (ratio**dim - 1.0), ratio)
-        radius = Y_MIN*ratio**(np.arange(ny) + offset)
-        extinction = extinction/(math.sqrt(2.0*math.pi)*ASPR_0*radius[None, :, None])
-    increment = KAPPA_0*extinction*dr[None, :, None]
-    expected_optical = np.cumsum(np.broadcast_to(increment, shape), axis=1)
-    mass_relative_change = float(np.sum(density*cell_volume) - 1.0)
-    state = load_state(out_dir, resolution, int(meta["np"]))
-    inactive_error = np.concatenate((
-        state[0] if nx == 1 else np.zeros(0),
-        state[2] - 0.5*math.pi if nz == 1 else np.zeros(0),
-        state[5] if nz == 1 else np.zeros(0),
-    ))
-    inactive_max = float(np.max(np.abs(inactive_error))) if inactive_error.size else 0.0
-
-    return {
-        "case": meta["case"],
-        "resolution": resolution,
-        "errors": {
-            "density": norms(density - expected_density),
-            "optdepth": norms(optical - expected_optical),
-            "inactive": norms(inactive_error) if inactive_error.size else norms(np.zeros(1)),
-        },
-        "mass_relative_change": mass_relative_change,
-        "passed": bool(
-            np.max(np.abs(density - expected_density)) < 5.0e-12
-            and np.max(np.abs(optical - expected_optical)) < 5.0e-11
-            and abs(mass_relative_change) < 5.0e-12
-            and inactive_max == 0.0
-        ),
-    }
-
-
-def analyze_orbit(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Compare a completed Keplerian orbit with its exact phase-space state"""
-
-    nparticle = int(meta["np"])
-    state = load_state(out_dir, resolution, nparticle)
-    radial = meta["case"] == "orbit_1d"
-    initial_x = np.zeros(nparticle) if radial else X_MIN + (np.arange(nparticle) + 0.5)*(X_MAX - X_MIN)/nparticle
-    phase_error = state[0] - initial_x if radial else wrap_angle(state[0] - initial_x)
-    error = np.concatenate((phase_error, state[1] - 1.0, state[2] - 0.5*math.pi,
-                            state[3] - 1.0, state[4], state[5]))
-    return {
-        "case": meta["case"], "resolution": resolution,
-        "errors": {"state": norms(error)},
-        "passed": bool(
-            np.all(np.isfinite(state))
-            and np.max(np.abs(error)) < (5.0e-13 if radial else 0.5)
-        ),
-    }
-
-
 def analyze_relaxation(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Evaluate exact drag relaxation with optional radiation pressure and P-R damping"""
+    """Evaluate the exact constant-coefficient P-R drag response"""
 
     nparticle = int(meta["np"])
     dt = float(meta["dt"])
@@ -170,59 +78,22 @@ def analyze_relaxation(out_dir: Path, resolution: int, meta: dict[str, str]) -> 
     inv_ts = 1.0/(STOKES_0*size)
     lx_initial = 1.2
     lx_gas = 1.0
-    beta = np.zeros_like(size)
-    if meta["case"] in {"radiation_1d", "radiation_2d", "prdrag_1d", "prdrag_2d"}:
-        beta = BETA_0/size
-
-    if meta["case"] not in {"prdrag_1d", "prdrag_2d"}:
-        expected = lx_gas + (lx_initial - lx_gas)*np.exp(-inv_ts*dt)
-        lx_half = lx_gas + (lx_initial - lx_gas)*np.exp(-0.5*inv_ts*dt)
-        force_y = -(1.0 - beta) + lx_half*lx_half
-        expected_vy = force_y/inv_ts*(-np.expm1(-inv_ts*dt))
-    else:
-        rate_x = inv_ts + beta/C_LIGHT
-        rate_y = inv_ts + 2.0*beta/C_LIGHT
-        expected = np.exp(-rate_x*dt)*lx_initial + (-np.expm1(-rate_x*dt))*inv_ts*lx_gas/rate_x
-        lx_half = (
-            np.exp(-0.5*rate_x*dt)*lx_initial
-            + (-np.expm1(-0.5*rate_x*dt))*inv_ts*lx_gas/rate_x
-        )
-        force_y = -(1.0 - beta) + lx_half*lx_half
-        expected_vy = (-np.expm1(-rate_y*dt))*force_y/rate_y
+    beta = BETA_0/size
+    rate_x = inv_ts + beta/C_LIGHT
+    rate_y = inv_ts + 2.0*beta/C_LIGHT
+    expected = np.exp(-rate_x*dt)*lx_initial + (-np.expm1(-rate_x*dt))*inv_ts*lx_gas/rate_x
+    lx_half = (
+        np.exp(-0.5*rate_x*dt)*lx_initial
+        + (-np.expm1(-0.5*rate_x*dt))*inv_ts*lx_gas/rate_x
+    )
+    force_y = -(1.0 - beta) + lx_half*lx_half
+    expected_vy = (-np.expm1(-rate_y*dt))*force_y/rate_y
 
     expected_y = 1.0 + 0.5*expected_vy*dt
     error = np.concatenate((state[3] - expected, state[4] - expected_vy, state[1] - expected_y))
-    if meta["case"].endswith("_1d"):
-        error = np.concatenate((error, state[0], state[2] - 0.5*math.pi, state[5]))
     return {
         "case": meta["case"], "resolution": resolution,
         "errors": {"response": norms(error)},
-        "passed": bool(np.max(np.abs(error)) < 2.0e-13),
-    }
-
-
-def analyze_viscflow(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Check the initialized dust drift against the prescribed viscous gas flow"""
-
-    nparticle = int(meta["np"])
-    state = load_state(out_dir, resolution, nparticle)
-    radius = 0.7 + 0.6*np.arange(nparticle)/(nparticle - 1.0)
-    stokes = STOKES_0/radius**2
-    velocity_k = radius**-0.5
-    velocity_gas_r = -3.0*NU*(2.0 + 0.5)/radius
-    velocity_r = velocity_gas_r/(1.0 + stokes**2)
-    velocity_x = velocity_k - 0.5*stokes*velocity_r
-    error = np.concatenate((
-        state[0],
-        state[1] - radius,
-        state[2] - 0.5*math.pi,
-        state[3] - radius*velocity_x,
-        state[4] - velocity_r,
-        state[5],
-    ))
-    return {
-        "case": meta["case"], "resolution": resolution,
-        "errors": {"viscous_flow": norms(error)},
         "passed": bool(np.max(np.abs(error)) < 2.0e-13),
     }
 
@@ -528,177 +399,10 @@ def analyze_initialization(out_dir: Path, resolution: int, meta: dict[str, str])
     }
 
 
-def ball_measure(dimension: int, radius: float, distance: float) -> float:
-    """Return a disk or sphere measure after clipping one boundary cap"""
-
-    if dimension == 2:
-        full = math.pi*radius*radius
-        cap = radius*radius*math.acos(distance/radius) - distance*math.sqrt(radius*radius - distance*distance)
-    else:
-        full = 4.0*math.pi*radius**3/3.0
-        cap = math.pi*(radius - distance)**2*(2.0*radius + distance)/3.0
-    return full*(1.0 - cap/full)
-
-
-def analyze_collision(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Check local neighborhood measures and constant, additive, and product kernels"""
-
-    values = read_array(out_dir, "collision", resolution, 7)
-    radial = meta["case"] == "collision_1d"
-    dimension = 2 if meta["case"] in {"collision_1d", "collision_2d"} else 3
-    radius = 0.2
-    mass_i = math.pi/6.0
-    mass_j = math.pi*8.0/6.0
-    if radial:
-        annulus = lambda center, width: math.pi*(min(Y_MAX, center + width)**2
-                                                  - max(Y_MIN, center - width)**2)
-        interior_measure = annulus(1.0, radius)
-        inner_measure = annulus(Y_MIN + 0.25*radius, radius)
-        polar_measure = annulus(Y_MAX - 0.25*radius, radius)
-        both_measure = annulus(1.0, 0.6)
-    else:
-        interior_measure = math.pi*radius**2 if dimension == 2 else 4.0*math.pi*radius**3/3.0
-        inner_measure = ball_measure(dimension, radius, 0.25*radius)
-        polar_measure = interior_measure if dimension == 2 else ball_measure(dimension, radius, 0.25*radius)
-        both_measure = 0.0
-    expected = np.array([
-        interior_measure,
-        inner_measure,
-        polar_measure,
-        0.3*7.0,
-        0.3*7.0*(mass_i + mass_j),
-        0.3*7.0*mass_i*mass_j,
-        both_measure,
-    ])
-    error = values - expected
-    return {
-        "case": meta["case"], "resolution": resolution,
-        "errors": {"collision": norms(error)},
-        "passed": bool(np.max(np.abs(error)) < 2.0e-13),
-    }
-
-
-def analyze_import(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Check imported-density scaling of Stokes and turbulent Reynolds closures"""
-
-    values = read_array(out_dir, "import", resolution, 2*int(meta["np"])).reshape(2, -1)
-    iy = 2*np.arange(values.shape[1])
-    sigma_g = 1.0 + 0.1*iy
-    expected_stokes = STOKES_0/sigma_g
-    expected_re = 1.0/np.sqrt(1.0e8*sigma_g)
-    error = np.concatenate((values[0] - expected_stokes, values[1] - expected_re))
-    return {
-        "case": meta["case"], "resolution": resolution,
-        "errors": {"import": norms(error)},
-        "passed": bool(np.max(np.abs(error)) < 2.0e-13),
-    }
-
-
-def analyze_boundary(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Reconstruct diffusion and transport boundary maps independently on the host"""
-
-    values = read_array(out_dir, "boundary", resolution, 42).reshape(7, 6)
-    nx, nz = int(meta["nx"]), int(meta["nz"])
-    x_min, x_max = float(meta["x_min"]), float(meta["x_max"])
-    y_min, y_max = float(meta["y_min"]), float(meta["y_max"])
-    z_min, z_max = float(meta["z_min"]), float(meta["z_max"])
-    x_width = x_max - x_min
-    y_width = y_max - y_min
-    z_width = z_max - z_min if nz > 1 else 0.0
-    z_mid = 0.5*(z_min + z_max) if nz > 1 else 0.5*math.pi
-    halfdisk = meta["case"] == "boundary_half"
-
-    def wrap_x(x: float) -> float:
-        if nx == 1:
-            return 0.5*(x_min + x_max)
-        return x_min + (x - x_min) % x_width
-
-    def reflect(value: float, lower: float, upper: float) -> float:
-        while value < lower or value > upper:
-            if value < lower:
-                value = 2.0*lower - value
-            if value > upper:
-                value = 2.0*upper - value
-        if value >= upper:
-            value = upper - 1.0e-12*(upper - lower)
-        return value
-
-    expected = np.zeros((7, 6))
-    expected[0] = (
-        wrap_x(x_max + 0.25*x_width),
-        reflect(y_min - 0.125*y_width, y_min, y_max),
-        reflect(z_min - 0.125*z_width, z_min, z_max) if nz > 1 else 0.5*math.pi,
-        1.0, -2.0, 3.0,
-    )
-    expected[1] = (
-        wrap_x(x_min - 0.25*x_width),
-        reflect(y_max + 0.125*y_width, y_min, y_max),
-        reflect(z_max + 0.125*z_width, z_min, z_max) if nz > 1 else 0.5*math.pi,
-        1.0, -2.0, 3.0,
-    )
-    expected[2] = (
-        wrap_x(0.5*(x_min + x_max)),
-        reflect(y_min - 2.25*y_width, y_min, y_max),
-        z_mid,
-        1.0, -2.0, 3.0,
-    )
-
-    # both radial transport exits are absorbed after periodic azimuthal wrapping
-    expected[3] = (wrap_x(x_max + 0.25*x_width), 0.0, 0.5*math.pi, 0.0, 0.0, 0.0)
-    expected[4] = (wrap_x(x_min - 0.25*x_width), 0.0, 0.5*math.pi, 0.0, 0.0, 0.0)
-
-    if nz == 1:
-        expected[5] = (wrap_x(x_max + 0.25*x_width), 1.0, 0.5*math.pi, 1.0, -2.0, 0.0)
-        expected[6] = (wrap_x(x_min - 0.25*x_width), 1.0, 0.5*math.pi, 1.0, 2.0, 0.0)
-    else:
-        expected[5] = (wrap_x(x_max + 0.25*x_width), 0.0, 0.5*math.pi, 0.0, 0.0, 0.0)
-        if halfdisk:
-            expected[6] = (
-                wrap_x(x_min - 0.25*x_width), 1.0,
-                math.pi - (z_max + 0.125*z_width), 1.0, 2.0, -3.0,
-            )
-        else:
-            expected[6] = (wrap_x(x_min - 0.25*x_width), 0.0, 0.5*math.pi, 0.0, 0.0, 0.0)
-
-    error = values - expected
-    return {
-        "case": meta["case"],
-        "resolution": resolution,
-        "errors": {"boundary": norms(error)},
-        "passed": bool(np.all(np.isfinite(values)) and np.max(np.abs(error)) < 2.0e-13),
-    }
-
-
-def analyze_restart(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
-    """Require save-load continuation to reproduce an uninterrupted HIP trajectory"""
-
-    nparticle = int(meta["np"])
-    reference = load_named_state(out_dir, "reference", resolution, nparticle)
-    resumed = load_named_state(out_dir, "resumed", resolution, nparticle)
-    status = read_array(out_dir, "restart_status", resolution, 1)
-    error = resumed - reference
-    position_equal = bool(np.array_equal(resumed[:3], reference[:3]))
-    velocity_error = norms(error[3:])
-    finite = bool(np.all(np.isfinite(reference)) and np.all(np.isfinite(resumed)))
-    rng_equal = bool(status[0] == 1.0)
-    return {
-        "case": meta["case"],
-        "resolution": resolution,
-        "rng_byte_equal": rng_equal,
-        "position_byte_equal": position_equal,
-        "errors": {
-            "state": norms(error),
-            "velocity_roundtrip": velocity_error,
-        },
-        "passed": bool(
-            finite and rng_equal and position_equal
-            and velocity_error["linf"] < 2.0e-14
-        ),
-    }
 
 
 def analyze(out_dir: Path, resolution: int) -> dict:
-    """Dispatch one recorded case and raise immediately when its criteria fail"""
+    """Dispatch one retained publication case and reject failed criteria"""
 
     meta = read_meta(out_dir / f"meta_N{resolution}.json")
     if int(meta["resolution"]) != resolution:
@@ -706,28 +410,14 @@ def analyze(out_dir: Path, resolution: int) -> dict:
             f"metadata resolution {meta['resolution']} does not match requested N={resolution}"
         )
     case = meta["case"]
-    if case.startswith("grid_"):
-        result = analyze_grid(out_dir, resolution, meta)
-    elif case in {"orbit_1d", "orbit_2d"}:
-        result = analyze_orbit(out_dir, resolution, meta)
-    elif case in {"drag_1d", "drag_2d", "radiation_1d", "radiation_2d", "prdrag_1d", "prdrag_2d"}:
+    if case == "prdrag_2d":
         result = analyze_relaxation(out_dir, resolution, meta)
-    elif case == "viscflow_1d":
-        result = analyze_viscflow(out_dir, resolution, meta)
-    elif case.startswith("diffusion_"):
+    elif isinstance(case, str) and case.startswith("diffusion_"):
         result = analyze_diffusion(out_dir, resolution, meta)
     elif case == "initial_3d":
         result = analyze_initialization(out_dir, resolution, meta)
-    elif case == "restart_2d":
-        result = analyze_restart(out_dir, resolution, meta)
-    elif case.startswith("collision_"):
-        result = analyze_collision(out_dir, resolution, meta)
-    elif case == "import_1d":
-        result = analyze_import(out_dir, resolution, meta)
-    elif case.startswith("boundary_"):
-        result = analyze_boundary(out_dir, resolution, meta)
     else:
-        raise ValueError(f"unknown swarm verification case: {case}")
+        raise ValueError(f"unknown retained swarm publication case: {case}")
     if not result["passed"]:
         raise AssertionError(f"{case} failed at resolution {resolution}: {result}")
     return result

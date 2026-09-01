@@ -21,10 +21,6 @@ gamedev
 
 # generated QAV artifacts
 /qav/logs/
-qav/*/swarm/test_knn/knn_*
-!qav/*/swarm/test_knn/knn_*.*
-qav/*/swarm/test_knn/production_test_collision_*
-qav/*/swarm/test_knn/.*_k_*
 
 # Python caches
 __pycache__/

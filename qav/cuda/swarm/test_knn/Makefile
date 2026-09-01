@@ -8,12 +8,13 @@ K ?= 200
 NVCC_FLAGS := -arch=$(ARCH) -O3 --use_fast_math -lineinfo -std=c++17 -DQAV_KNN_K=$(K)
 INCLUDES := -I $(TEST_DIR) -I $(ROOT_DIR)/inc/cuda/swarm -I $(ROOT_DIR)/inc/comm/swarm
 
-CONFIG_STAMP := $(TEST_DIR)/.arch_$(ARCH)_k_$(K)
+BUILD_DIR := $(ROOT_DIR)/qav/logs/build/cuda/swarm/test_knn
+CONFIG_STAMP := $(BUILD_DIR)/.arch_$(ARCH)_k_$(K)
 
-TARGET          := $(TEST_DIR)/knn_benchmark
-EDGE_TARGET     := $(TEST_DIR)/knn_edge_tests
-PERIODIC_TARGET := $(TEST_DIR)/knn_periodic_tests
-WEDGE_TARGET    := $(TEST_DIR)/knn_wedge_benchmark
+TARGET          := $(BUILD_DIR)/knn_benchmark
+EDGE_TARGET     := $(BUILD_DIR)/knn_edge_tests
+PERIODIC_TARGET := $(BUILD_DIR)/knn_periodic_tests
+WEDGE_TARGET    := $(BUILD_DIR)/knn_wedge_benchmark
 
 .PHONY: all edge periodic wedge suite clean
 
@@ -28,6 +29,7 @@ wedge: $(WEDGE_TARGET)
 suite: all edge periodic wedge
 
 $(CONFIG_STAMP):
+	@mkdir -p $(dir $@)
 	@touch $@
 
 $(TARGET): $(TEST_DIR)/knn_benchmark.cu $(TEST_DIR)/knn_types.cuh \
@@ -65,6 +67,5 @@ $(WEDGE_TARGET): $(TEST_DIR)/knn_wedge_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 	@$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -o $@ $<
 
 clean:
-	@printf "%-12s %s\n" "Cleaning" "$(TEST_DIR) executables"
-	@rm -f $(TARGET) $(EDGE_TARGET) $(PERIODIC_TARGET) $(WEDGE_TARGET) \
-		$(TEST_DIR)/.arch_* $(TEST_DIR)/production_test_collision_*
+	@printf "%-12s %s\n" "Cleaning" "$(BUILD_DIR)"
+	@rm -rf $(BUILD_DIR)

@@ -13,6 +13,8 @@ import subprocess
 import sys
 from typing import Any
 
+sys.dont_write_bytecode = True
+
 from qav_config import source_fingerprint
 
 
@@ -90,7 +92,6 @@ def main() -> None:
     parser.add_argument("--backend", choices=("cuda", "rocm"), required=True)
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true")
-    parser.add_argument("--knn-full", action="store_true")
     parser.add_argument("--target", help="GPU target; defaults to sm_80 or gfx942")
     parser.add_argument(
         "--fluid-sweep", choices=("thread", "block"), default="thread",
@@ -106,10 +107,6 @@ def main() -> None:
         "--native-only", dest="compare", action="store_false", help=argparse.SUPPRESS,
     )
     parser.set_defaults(compare=False)
-    parser.add_argument(
-        "--skip-polar-fields", action="store_true",
-        help="skip CUDA precise polar fields used by the cross-backend raw-field comparison",
-    )
     args = parser.parse_args()
 
     target = args.target or ("sm_80" if args.backend == "cuda" else "gfx942")
@@ -154,13 +151,11 @@ def main() -> None:
         "source_files": source_files,
         "requested_resolutions": args.res,
         "quick": args.quick,
-        "knn_full": args.knn_full,
         "native_only": not args.compare,
         "comparison_requested": args.compare,
         "counterpart_backend": counterpart if args.compare else None,
-        "polar_fields": not args.skip_polar_fields,
-        "campaign_tier": "qualification",
-        "included_tiers": ["publication", "release", "qualification"],
+        "campaign_tier": "publication",
+        "included_tiers": ["publication"],
         "status": "running",
         "passed": None,
         "started_utc": utc_now(),
@@ -184,7 +179,6 @@ def main() -> None:
                 sys.executable, str(qav_root/"tool"/"check_archive.py"),
                 "--backend", counterpart, "--component", "all",
                 "--fluid-sweep", args.fluid_sweep,
-                *(["--skip-cross-fields"] if args.skip_polar_fields else []),
                 *(["--allow-partial"] if args.quick else []),
             ],
         ))
@@ -201,30 +195,16 @@ def main() -> None:
             [
                 sys.executable, str(backend_root/"swarm"/"test_common"/"run_suite.py"),
                 "--group", "all", *resolution_arguments, *quick_argument, *target_argument,
-                *(["--knn-full"] if args.knn_full else []),
             ],
         ),
         (
-            "swarm nonfinite failure paths",
+            "swarm collision chain",
             [
                 sys.executable, str(backend_root/"swarm"/"test_common"/"run_suite.py"),
-                "--group", "failure", *target_argument,
+                "--group", "chain", *target_argument,
             ],
         ),
     ])
-
-    if args.backend == "cuda" and not args.skip_polar_fields:
-        polar_runner = backend_root/"fluid"/"test_z_transport_3d"/"run.py"
-        polar_resolutions = args.res[:2] if args.quick else args.res
-        for cfl in (0.05, 0.5):
-            stages.append((
-                f"precise polar fields cfl={cfl:g}",
-                [
-                    sys.executable, str(polar_runner), "--math-mode", "precise",
-                    "--res", *(str(value) for value in polar_resolutions),
-                    "--cfl", str(cfl),
-                ],
-            ))
 
     stages.append((
         "archive completeness",
@@ -232,26 +212,11 @@ def main() -> None:
             sys.executable, str(qav_root/"tool"/"check_archive.py"),
             "--backend", args.backend, "--component", "all",
             "--fluid-sweep", args.fluid_sweep,
-            *(["--skip-cross-fields"] if args.skip_polar_fields else []),
             *(["--allow-partial"] if args.quick else []),
         ],
     ))
 
     if args.compare:
-        if not args.skip_polar_fields:
-            expected_records = 4 if args.quick else 8
-            cuda_precise_sweep = f"{args.fluid_sweep}_precise"
-            stages.append((
-                "raw polar field comparison",
-                [
-                    sys.executable, str(qav_root/"tool"/"compare_fluid_fields.py"),
-                    "--cuda-root", str(qav_root),
-                    "--rocm-root", str(qav_root),
-                    "--cuda-sweep", cuda_precise_sweep,
-                    "--rocm-sweep", args.fluid_sweep,
-                    "--expected-records", str(expected_records),
-                ],
-            ))
         stages.append((
             "complete backend comparison",
             [

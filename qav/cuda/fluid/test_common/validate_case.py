@@ -339,18 +339,16 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         exact_mx[:] = vx[None, None, :]
         exact_my[:] = vy[None, None, :]
         exact_mz[:] = vz[None, None, :]
-    elif case.startswith("ring_"):
-        # combined ring tests rotate each radial shell at its radiation-modified
-        # keplerian omega; optional azimuthal density diffusion damps the
-        # fourier mode on top of the prescribed radial density profile
-        beta = 0.2 if case in {"ring_radiation_2d", "ring_all_2d"} else 0.0
-        has_diffusion = case in {"ring_diffusion_2d", "ring_all_2d"}
+    elif case == "ring_all_2d":
+        # the coupled ring rotates at the radiation-modified keplerian rate while
+        # azimuthal diffusion damps the prescribed Fourier mode
+        beta = 0.2
         mode_values = np.empty((ny, nx))
         ell = np.empty(ny)
         rho_g = gas_density(yc, beta)
         for j, radius in enumerate(yc):
             omega = math.sqrt((1.0 - beta) / radius**3)
-            decay = math.exp(-DIFFUSIVITY * MODE * MODE * time / radius**2) if has_diffusion else 1.0
+            decay = math.exp(-DIFFUSIVITY * MODE * MODE * time / radius**2)
             average = (np.sin(MODE * (x1 - omega * time))
                      - np.sin(MODE * (x0 - omega * time))) / (MODE * dx)
             mode_values[j] = Q0 + EPS * decay * average
@@ -392,7 +390,7 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     ):
         results["errors"][name] = norm_set(np.where(active, numerical - exact, 0.0), active_volume)
 
-    if case in {"ring_radiation_2d", "ring_all_2d"}:
+    if case == "ring_all_2d":
         # ring radiation tests set KAPPA_0=0 to isolate radiation acceleration
         # without attenuation, making zero optical depth the analytical answer
         tau = read_field(out_dir, "optdepth_final", resolution, shape)
@@ -416,7 +414,13 @@ def main() -> None:
     result = analyze(args.out_dir, args.resolution)
     print(json.dumps(result, indent=2, sort_keys=True))
     if args.write:
-        args.write.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        logs_root = (Path(__file__).resolve().parents[3]/"logs").resolve()
+        direct = args.write.expanduser().resolve()
+        output = direct if direct.is_relative_to(logs_root) else (logs_root/args.write).resolve()
+        if not output.is_relative_to(logs_root):
+            parser.error(f"QAV output must remain below {logs_root}: {args.write}")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":

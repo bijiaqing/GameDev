@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run the production partial-azimuth collision-chain qualification"""
+"""Run the production partial-azimuth collision-chain case"""
 
 from pathlib import Path
 import sys
@@ -11,4 +11,3 @@ from run_chain import run
 
 
 run(Path(__file__).resolve().parent.name)
-

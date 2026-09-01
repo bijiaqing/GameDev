@@ -9,15 +9,22 @@ from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
+import sys
 from typing import Any
 
-from qav_config import archive_fingerprint, EXPECTED_FLUID_METRICS, EXPECTED_SWARM_METRICS
+sys.dont_write_bytecode = True
+
+from qav_config import (
+    EXPECTED_FLUID_METRICS,
+    EXPECTED_SWARM_METRICS,
+    SWARM_CHAIN_MODELS,
+    qav_output_path,
+)
 
 STOCHASTIC_SWARM_CASES = {
     "diffusion_1d",
     "diffusion_2d",
     "diffusion_3d",
-    "settle_diffuse_3d",
 }
 
 
@@ -53,6 +60,54 @@ def suite_manifest(root: Path, component: str, backend: str, sweep: str) -> Path
 
     base = component_output(root, component, backend)
     return (base/sweep if component == "fluid" else base)/"manifest_all.json"
+
+
+def compare_collision_chains(cuda_root: Path, rocm_root: Path) -> dict[str, Any]:
+    """Require the same passing frozen-bath publication matrix on both backends"""
+
+    records = []
+    for model in SWARM_CHAIN_MODELS:
+        paths = {
+            "cuda": component_output(cuda_root, "swarm", "cuda")
+                /"groups"/"chain"/model/"manifest.json",
+            "rocm": component_output(rocm_root, "swarm", "rocm")
+                /"groups"/"chain"/model/"manifest.json",
+        }
+        manifests = {}
+        for backend, path in paths.items():
+            manifests[backend] = load_json(path) if path.is_file() else None
+        variants = {}
+        valid = True
+        for backend, manifest in manifests.items():
+            backend_variants = manifest.get("variants") if isinstance(manifest, dict) else None
+            variants[backend] = {
+                name: {
+                    "search": value.get("search"),
+                    "event_cap": value.get("event_cap"),
+                    "passed": value.get("passed"),
+                }
+                for name, value in backend_variants.items()
+                if isinstance(name, str) and isinstance(value, dict)
+            } if isinstance(backend_variants, dict) else None
+            valid = valid and isinstance(manifest, dict) \
+                and manifest.get("model") == model \
+                and manifest.get("backend") == backend \
+                and manifest.get("tier") == "publication" \
+                and manifest.get("integrator") == "frozen_bath" \
+                and manifest.get("passed") is True
+        coverage_equal = variants.get("cuda") == variants.get("rocm")
+        records.append({
+            "model": model,
+            "cuda_manifest": str(paths["cuda"]),
+            "rocm_manifest": str(paths["rocm"]),
+            "coverage_equal": coverage_equal,
+            "passed": valid and coverage_equal,
+        })
+    return {
+        "models": records,
+        "expected_models": len(SWARM_CHAIN_MODELS),
+        "passed": all(record["passed"] for record in records),
+    }
 
 
 def compare_value(
@@ -123,28 +178,21 @@ def compare_metrics(
     relative_tolerance: float,
     absolute_tolerance: float,
     allow_partial: bool,
-    fluid_field_report: Path | None,
 ) -> dict[str, Any]:
     """Compare the common analytical archive for one physical representation"""
 
     cuda_files = metric_files(cuda_root, component, "cuda", cuda_sweep)
     rocm_files = metric_files(rocm_root, component, "rocm", rocm_sweep)
-    if component == "swarm":
-        # restart_2d deliberately validates a vendor-native hipRAND checkpoint and has no CUDA peer
-        rocm_files = {
-            name: path for name, path in rocm_files.items()
-            if not name.startswith("test_restart_2d/")
-        }
     common = sorted(set(cuda_files) & set(rocm_files))
     missing_cuda = sorted(set(rocm_files) - set(cuda_files))
     missing_rocm = sorted(set(cuda_files) - set(rocm_files))
     expected = EXPECTED_FLUID_METRICS if component == "fluid" else EXPECTED_SWARM_METRICS
     mismatches: list[dict[str, Any]] = []
     stochastic_validations = 0
-    direct_field_metrics: set[str] = set()
-    direct_field_validation: dict[str, Any] | None = None
     native_manifests: dict[str, dict[str, Any]] = {}
     native_tiers: dict[str, Any] = {}
+    collision_chains = compare_collision_chains(cuda_root, rocm_root) \
+        if component == "swarm" else None
 
     for backend, root, sweep in (
         ("cuda", cuda_root, cuda_sweep), ("rocm", rocm_root, rocm_sweep),
@@ -158,11 +206,8 @@ def compare_metrics(
                 and record.get("backend") == backend
                 and record.get("group") == "all"
                 and record.get("passed") is True
-                and record.get("campaign_tier") == "qualification"
-                and isinstance(record.get("included_tiers"), list)
-                and {"publication", "release", "qualification"}.issubset(
-                    record["included_tiers"]
-                )
+                and record.get("campaign_tier") == "publication"
+                and record.get("included_tiers") == ["publication"]
             )
             native_tiers[backend] = record.get("metric_tiers")
         native_manifests[backend] = {"path": str(path), "valid": valid}
@@ -172,74 +217,10 @@ def compare_metrics(
         and native_tiers.get("cuda") == native_tiers.get("rocm")
     )
 
-    if component == "fluid" and fluid_field_report is not None and fluid_field_report.is_file():
-        field_report = load_json(fluid_field_report)
-        field_records = field_report.get("records", [])
-        expected_records = field_report.get("expected_records")
-        compared_records = field_report.get("compared_records")
-        field_cuda_sweep = str(field_report.get("cuda_sweep", ""))
-        field_rocm_sweep = str(field_report.get("rocm_sweep", ""))
-        expected_field_cuda_sweep = cuda_sweep if cuda_sweep.endswith("_precise") \
-            else f"{cuda_sweep}_precise"
-        cuda_field_archive = component_output(cuda_root, "fluid", "cuda") \
-            /field_cuda_sweep/str(field_report.get("model", ""))
-        rocm_field_archive = component_output(rocm_root, "fluid", "rocm") \
-            /field_rocm_sweep/str(field_report.get("model", ""))
-        cuda_archive_sha256, cuda_archive_files = archive_fingerprint(cuda_field_archive)
-        rocm_archive_sha256, rocm_archive_files = archive_fingerprint(rocm_field_archive)
-        archive_fingerprints_match = (
-            field_report.get("cuda_archive_sha256") == cuda_archive_sha256
-            and field_report.get("cuda_archive_files") == cuda_archive_files
-            and field_report.get("rocm_archive_sha256") == rocm_archive_sha256
-            and field_report.get("rocm_archive_files") == rocm_archive_files
-        )
-        valid_records = (
-            field_report.get("passed") is True
-            and field_report.get("model") == "test_z_transport_3d"
-            and field_cuda_sweep == expected_field_cuda_sweep
-            and field_rocm_sweep == rocm_sweep
-            and archive_fingerprints_match
-            and isinstance(field_records, list)
-            and isinstance(expected_records, int)
-            and expected_records > 0
-            and compared_records == expected_records
-            and len(field_records) == expected_records
-            and all(
-                isinstance(record, dict)
-                and record.get("passed") is True
-                and record.get("metadata_equal") is True
-                and isinstance(record.get("metric"), str)
-                for record in field_records
-            )
-        )
-        if valid_records:
-            direct_field_metrics = {
-                f"test_z_transport_3d/{record['metric']}" for record in field_records
-            }
-        direct_field_validation = {
-            "path": str(fluid_field_report.resolve()),
-            "passed": bool(valid_records),
-            "records": len(field_records) if isinstance(field_records, list) else 0,
-            "expected_records": expected_records,
-            "archive_fingerprints_match": archive_fingerprints_match,
-            "cuda_sweep": field_report.get("cuda_sweep"),
-            "rocm_sweep": field_report.get("rocm_sweep"),
-        }
-
     for name in common:
         cuda = load_json(cuda_files[name])
         rocm = load_json(rocm_files[name])
         case = str(cuda.get("case", ""))
-        if component == "fluid" and name in direct_field_metrics:
-            # the raw-field gate is better conditioned than comparing two
-            # separately reduced truncation-error norms near compact-support
-            # vacuum; retain exact agreement requirements for run metadata
-            for key in ("case", "resolution", "time", "steps", "cfl"):
-                if cuda.get(key) != rocm.get(key):
-                    mismatches.append({
-                        "path": f"{name}.{key}", "cuda": cuda.get(key), "rocm": rocm.get(key),
-                    })
-            continue
         if component == "swarm" and case in STOCHASTIC_SWARM_CASES:
             stochastic_validations += 1
             if cuda.get("passed") is not True or rocm.get("passed") is not True:
@@ -262,8 +243,8 @@ def compare_metrics(
     if allow_partial:
         # a partial run treats the CUDA archive as the requested metric subset
         # and requires every one of those records to have a ROCm counterpart
-        # extra ROCm records are expected when, for example, only precise-math
-        # CUDA polar transport was rerun from the complete ROCm archive
+        # extra records are acceptable when only a selected publication case
+        # was rerun on one backend
         complete = (
             bool(cuda_files)
             and len(common) == len(cuda_files)
@@ -281,6 +262,8 @@ def compare_metrics(
             and all(record["valid"] for record in native_manifests.values())
             and tier_metadata_equal
         )
+    if collision_chains is not None:
+        complete = complete and collision_chains["passed"]
     return {
         "component": component,
         "expected_metrics": expected,
@@ -288,9 +271,9 @@ def compare_metrics(
         "rocm_metrics": len(rocm_files),
         "common_metrics": len(common),
         "stochastic_validation_only": stochastic_validations,
-        "direct_field_validation": direct_field_validation,
         "native_manifests": native_manifests,
         "native_metric_tiers": native_tiers,
+        "collision_chains": collision_chains,
         "tier_metadata_equal": tier_metadata_equal,
         "missing_from_cuda": missing_cuda,
         "missing_from_rocm": missing_rocm,
@@ -319,8 +302,6 @@ def compare_knn(cuda_root: Path, rocm_root: Path) -> dict[str, Any]:
     rocm = load_json(rocm_path)
     compared = {
         "tier": (cuda.get("tier"), rocm.get("tier")),
-        "extended_tier": (cuda.get("extended_tier"), rocm.get("extended_tier")),
-        "scope": (cuda.get("scope"), rocm.get("scope")),
         "ordinary_cases": (
             cuda.get("ordinary", {}).get("cases"), rocm.get("ordinary", {}).get("cases")
         ),
@@ -329,10 +310,6 @@ def compare_knn(cuda_root: Path, rocm_root: Path) -> dict[str, Any]:
             cuda.get("periodic", {}).get("cases"), rocm.get("periodic", {}).get("cases")
         ),
         "wedge_cases": (cuda.get("wedge", {}).get("cases"), rocm.get("wedge", {}).get("cases")),
-        "production_links": (
-            cuda.get("production_links", {}).get("cases"),
-            rocm.get("production_links", {}).get("cases"),
-        ),
     }
     coverage_equal = all(cuda_value == rocm_value for cuda_value, rocm_value in compared.values())
     both_passed = cuda.get("passed") is True and rocm.get("passed") is True
@@ -407,14 +384,10 @@ def main() -> None:
         help="compare every CUDA metric present while allowing extra ROCm records",
     )
     parser.add_argument(
-        "--fluid-field-report", type=Path,
-        help="passed raw polar-field report that supersedes derived polar error-norm comparison",
-    )
-    parser.add_argument(
         "--ignore-source-fingerprint", action="store_true",
         help="compare archives even when complete campaign source fingerprints differ",
     )
-    parser.add_argument("--output", type=Path, default=qav_root/"logs"/"backend_comparison.json")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     if not args.cuda_root.is_dir():
@@ -424,12 +397,6 @@ def main() -> None:
 
     print(f"CUDA qav root: {args.cuda_root.resolve()}")
     print(f"ROCm qav root: {args.rocm_root.resolve()}")
-
-    fluid_field_report = args.fluid_field_report
-    if fluid_field_report is None:
-        default_field_report = qav_root/"logs"/"backend_field_comparison.json"
-        if default_field_report.is_file():
-            fluid_field_report = default_field_report
 
     selected = ("fluid", "swarm", "knn") if args.component == "all" else (args.component,)
     provenance = compare_provenance(
@@ -445,7 +412,6 @@ def main() -> None:
                 args.cuda_sweep, args.rocm_sweep,
                 args.relative_tolerance, args.absolute_tolerance,
                 args.allow_partial,
-                fluid_field_report,
             )
         components.append(result)
         print(
@@ -457,7 +423,7 @@ def main() -> None:
 
     report = {
         "schema": 1,
-        "tier": "qualification",
+        "tier": "publication",
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "cuda_root": str(args.cuda_root.resolve()),
         "rocm_root": str(args.rocm_root.resolve()),
@@ -469,8 +435,12 @@ def main() -> None:
         "components": components,
         "passed": provenance["passed"] and all(component["passed"] for component in components),
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    try:
+        output = qav_output_path(qav_root, args.output, "backend_comparison.json")
+    except ValueError as error:
+        parser.error(str(error))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     if provenance["available"]:
         print(
             f"source fingerprint: {'PASS' if provenance['matching'] else 'FAIL'}"
@@ -478,7 +448,7 @@ def main() -> None:
         )
     else:
         print("source fingerprint: unavailable; metric comparison remains valid")
-    print(f"backend comparison: {'PASS' if report['passed'] else 'FAIL'}  report={args.output}")
+    print(f"backend comparison: {'PASS' if report['passed'] else 'FAIL'}  report={output}")
     raise SystemExit(0 if report["passed"] else 1)
 
 

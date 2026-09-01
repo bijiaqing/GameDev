@@ -21,6 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
@@ -50,15 +52,8 @@ def main() -> None:
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
-        "--group", choices=("all", *FLUID_GROUPS, "sweep", "failure", "lds"),
+        "--group", choices=("all", *FLUID_GROUPS),
         default="all",
-    )
-    parser.add_argument("--sweep-dim", choices=("all", "2d", "3d"), default="all")
-    parser.add_argument("--sweep-res-2d", type=int, default=512)
-    parser.add_argument("--sweep-res-3d", type=int, default=128)
-    parser.add_argument(
-        "--progress-seconds", type=float, default=10.0,
-        help="wall-clock interval between sweep-test progress messages; use 0 to disable",
     )
     parser.add_argument(
         "--target", default=os.environ.get("AMDGPU_TARGET", "gfx942"),
@@ -77,44 +72,6 @@ def main() -> None:
     common = Path(__file__).resolve().parent
     model_root = common.parent
     project_root = common.parents[3]
-
-    # sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence; it remains a
-    # separate branch because the full 128^3 pair is substantially more expensive than the analytical matrix
-    if args.group == "sweep":
-        command = [
-            sys.executable, str(common/"run_sweep.py"),
-            "--dimension", args.sweep_dim,
-            "--res-2d", str(args.sweep_res_2d),
-            "--res-3d", str(args.sweep_res_3d),
-            "--target", args.target,
-            "--progress-seconds", str(args.progress_seconds),
-        ]
-        if args.quick:
-            command.append("--quick")
-        subprocess.run(command, check=True, env=run_environment)
-        return
-
-    if args.group == "failure":
-        subprocess.run(
-            [
-                sys.executable, str(model_root/"test_failure_2d"/"run.py"),
-                "--target", args.target,
-            ],
-            check=True,
-            env=run_environment,
-        )
-        return
-
-    if args.group == "lds":
-        subprocess.run(
-            [
-                sys.executable, str(common/"run_lds.py"),
-                "--target", args.target,
-            ],
-            check=True,
-            env=run_environment,
-        )
-        return
 
     commands = fluid_cases(args.group)
     selected_sweep = os.environ.get("FLUID_SWEEP", "thread")
@@ -142,9 +99,7 @@ def main() -> None:
         "requested_resolutions": args.res,
         "effective_resolutions": resolutions,
         "gpu_target": args.target,
-        "campaign_tier": "qualification" if "qualification" in included_tiers else (
-            "release" if "release" in included_tiers else "publication"
-        ),
+        "campaign_tier": "publication",
         "included_tiers": included_tiers,
         "metric_tiers": metric_tiers,
         "cases_expected": len(entries),
@@ -162,7 +117,7 @@ def main() -> None:
         # avoiding accidental changes of environment between the two scripts
         command = [sys.executable, str(model_root/model/"run.py")]
 
-        # fixed-resolution source and qualification cases override the suite-wide convergence grid
+        # fixed-resolution source cases override the suite-wide convergence grid
         if "--res" not in extra:
             command += ["--res", *(str(value) for value in resolutions)]
         command += list(extra)

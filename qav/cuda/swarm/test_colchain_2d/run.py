@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run the production collision-chain base and continuation qualification"""
+"""Run the production collision-chain base and continuation case"""
 
 from pathlib import Path
 import sys

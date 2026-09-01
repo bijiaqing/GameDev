@@ -37,8 +37,8 @@ def main() -> None:
     args = parser.parse_args()
 
     test_root = Path(__file__).resolve().parent
-    executable = test_root / "knn_wedge_benchmark"
     project_root = test_root.parents[3]
+    executable = project_root/"qav"/"logs"/"build"/"rocm"/"swarm"/"test_knn"/"knn_wedge_benchmark"
     archive_root = project_root/"qav"/"logs"/"swarm"/"rocm"
     scope = os.environ.get("QAV_SCOPE", "manual")
     scope_root = archive_root if scope == "all" else archive_root/"groups"/scope

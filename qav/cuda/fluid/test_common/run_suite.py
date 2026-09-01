@@ -21,6 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
@@ -54,12 +56,9 @@ def main() -> None:
         help="select CUDA arithmetic while keeping precise results in a separate archive",
     )
     parser.add_argument(
-        "--group", choices=("all", *FLUID_GROUPS, "sweep"),
+        "--group", choices=("all", *FLUID_GROUPS),
         default="all",
     )
-    parser.add_argument("--sweep-dim", choices=("all", "2d", "3d"), default="all")
-    parser.add_argument("--sweep-res-2d", type=int, default=1024)
-    parser.add_argument("--sweep-res-3d", type=int, default=128)
     parser.add_argument("--target", default=os.environ.get("CUDA_ARCH", "sm_80"))
     args = parser.parse_args()
 
@@ -74,22 +73,6 @@ def main() -> None:
     common = Path(__file__).resolve().parent
     model_root = common.parent
     project_root = common.parents[3]
-
-    # sweep cross-validation is a fixed-work implementation benchmark rather than a convergence sequence; it remains a
-    # separate branch because the full 128^3 pair is substantially more expensive than the analytical matrix
-    if args.group == "sweep":
-        command = [
-            sys.executable, str(common/"run_sweep.py"),
-            "--dimension", args.sweep_dim,
-            "--res-2d", str(args.sweep_res_2d),
-            "--res-3d", str(args.sweep_res_3d),
-            "--target", args.target,
-            "--math-mode", args.math_mode,
-        ]
-        if args.quick:
-            command.append("--quick")
-        subprocess.run(command, check=True, env=run_environment)
-        return
 
     commands = fluid_cases(args.group)
     selected_sweep = os.environ.get("FLUID_SWEEP", "thread")
@@ -119,9 +102,7 @@ def main() -> None:
         "effective_resolutions": resolutions,
         "math_mode": args.math_mode,
         "gpu_target": args.target,
-        "campaign_tier": "qualification" if "qualification" in included_tiers else (
-            "release" if "release" in included_tiers else "publication"
-        ),
+        "campaign_tier": "publication",
         "included_tiers": included_tiers,
         "metric_tiers": metric_tiers,
         "cases_expected": len(entries),
@@ -142,7 +123,7 @@ def main() -> None:
             "--math-mode", args.math_mode,
         ]
 
-        # fixed-resolution source and qualification cases override the suite-wide convergence grid
+        # fixed-resolution source cases override the suite-wide convergence grid
         if "--res" not in extra:
             command += ["--res", *(str(value) for value in resolutions)]
         command += list(extra)

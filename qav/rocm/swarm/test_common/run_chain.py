@@ -14,6 +14,14 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+
+QAV_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(QAV_ROOT/"tool"))
+
+from qav_config import model_executable
 
 
 EXPECTED_PARTICLES = 2048
@@ -222,8 +230,7 @@ def run(model: str) -> None:
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parents[4]
-    model_dir = project_root/"qav"/"rocm"/"swarm"/model
-    scope = os.environ.get("QAV_SCOPE", "qualification")
+    scope = os.environ.get("QAV_SCOPE", "manual")
     scope_root = project_root/"qav"/"logs"/"swarm"/"rocm"
     if scope != "all":
         scope_root = scope_root/"groups"/scope
@@ -238,7 +245,7 @@ def run(model: str) -> None:
     searches = ("morton", "kdtree") if args.search == "both" else (args.search,)
     event_caps = (1, 32) if model == "test_colchain_2d" else (32,)
     fragmentation = model == "test_colchain_frag_2d"
-    executable = model_dir/"gamedev"
+    executable = model_executable(project_root, model, "rocm", "swarm")
     variants = {}
     for search in searches:
         for event_cap in event_caps:
@@ -308,7 +315,7 @@ def run(model: str) -> None:
         "model": model,
         "backend": "rocm",
         "gpu_target": args.target,
-        "tier": "qualification",
+        "tier": "publication",
         "integrator": "frozen_bath",
         "variants": variants,
         "initial_byte_equal": initial_equal,

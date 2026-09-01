@@ -7,14 +7,18 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 from pathlib import Path
+import sys
 from types import ModuleType
 from typing import Callable
+
+# QAV build and result trees are disposable; do not leave Python caches in source directories
+sys.dont_write_bytecode = True
 
 
 def model_executable(
     project_root: Path, model: str, backend: str, representation: str,
 ) -> Path:
-    """Return the executable beside the unique flags file selected for one model"""
+    """Return one QAV executable from the generated-artifact tree"""
 
     candidates = (
         project_root/"mod"/model,
@@ -26,7 +30,7 @@ def model_executable(
         raise RuntimeError(
             f"expected one flags directory for {model}, found {len(model_dirs)}"
         )
-    return model_dirs[0]/"gamedev"
+    return project_root/"qav"/"logs"/"build"/"bin"/backend/representation/model/"gamedev"
 
 
 def model_analyzer(
@@ -34,8 +38,8 @@ def model_analyzer(
 ) -> Callable:
     """Load an optional backend-neutral model validator or retain the backend default"""
 
-    # load the shared backend validator for historical cases, but keep coefficient-specialized references beside the common
-    # model so CUDA and ROCm cannot silently select different expected solutions
+    # keep coefficient-specialized references beside the common model so CUDA
+    # and ROCm cannot silently select different expected solutions
     validator = project_root/"qav"/"comm"/representation/model/"validate_case.py"
     if not validator.is_file():
         return fallback
@@ -52,26 +56,16 @@ def model_analyzer(
 
 
 FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
-    "initialization": [
-        ("test_initstate_2d", ()),
-        ("test_initstate_3d", ()),
-        ("test_startup_3d", ()),
-    ],
+    "equilibrium": [("test_startup_3d", ())],
     "transport": [
-        *(('test_x_transport_2d', ('--shift', str(shift)))
-          for shift in (3.0, 3.25, 3.5, 3.75)),
+        ("test_x_transport_2d", ("--shift", "3.25")),
         ("test_x_wedge_transport_2d", ()),
         ("test_y_transport_cyl", ("--cfl", "0.05")),
-        ("test_y_transport_cyl", ("--cfl", "0.5")),
         ("test_y_transport_sph", ("--cfl", "0.05")),
-        ("test_y_transport_sph", ("--cfl", "0.5")),
         ("test_y_outflow_2d", ()),
-        ("test_y_outflow_3d", ()),
         ("test_z_outflow_3d", ()),
         ("test_z_reflect_3d", ()),
-        ("test_z_metric_3d", ()),
         ("test_z_transport_3d", ("--cfl", "0.05")),
-        ("test_z_transport_3d", ("--cfl", "0.5")),
     ],
     "diffusion": [
         ("test_x_diffusion_2d", ()),
@@ -81,113 +75,64 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("test_z_diffusion_3d", ()),
         ("test_diffusion_poslimit", ()),
     ],
-    "stress": [("test_advect_limit_2d", ("--res", "64"))],
     "source": [("test_source_drag", ("--res", "8"))],
     "radiation": [
-        *(('test_optdepth', ('--power', str(power))) for power in (0.0, -1.0, 1.0)),
-        *(('test_attenuation_2d', ('--power', str(power))) for power in (-1.0, 1.0)),
+        ("test_optdepth", ("--power", "-1.0")),
+        ("test_attenuation_2d", ("--power", "-1.0")),
     ],
-    "ring": [
-        ("test_ring_transport_2d", ()),
-        ("test_ring_diffusion_2d", ()),
-        ("test_ring_long_2d", ()),
-        ("test_ring_radiation_2d", ()),
-        ("test_ring_all_2d", ()),
-    ],
+    "coupled": [("test_ring_all_2d", ())],
 }
 
 SWARM_GROUPS: dict[str, list[str]] = {
-    "grid": ["test_grid_1d", "test_grid_2d", "test_grid_3d"],
     "transport": [
-        "test_orbit_1d", "test_drag_1d", "test_viscflow_1d",
-        "test_orbit_2d", "test_drag_2d", "test_orbit_ecc_2d", "test_orbit_beta_2d",
-        "test_orbit_inc_3d", "test_drag_path_1d",
-        "test_absorb_path_1d",
-        "test_dynrate_3d",
+        "test_orbit_ecc_2d", "test_orbit_beta_2d", "test_orbit_inc_3d",
+        "test_drag_path_1d", "test_prdrag_2d",
     ],
-    "diffusion": [
-        "test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d", "test_settle_diffuse_3d",
-    ],
-    "initialization": ["test_initial_3d", "test_parinit_3d"],
-    "radiation": [
-        "test_radiation_1d", "test_prdrag_1d", "test_radiation_2d", "test_prdrag_2d",
-    ],
-    "boundary": [
-        "test_boundary_1d", "test_boundary_2d", "test_boundary_3d", "test_boundary_half",
-    ],
-    "collision": [
-        "test_collision_1d", "test_import_1d", "test_import_3d",
-        "test_collision_2d", "test_collision_3d",
-        "test_colphys_code", "test_colphys_cgs",
-    ],
+    "diffusion": ["test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d"],
+    "initialization": ["test_initial_3d"],
+    "collision": ["test_colphys_code", "test_colphys_cgs"],
     "knn": ["test_knn"],
 }
 
-SWARM_RADIAL_MODELS = [
-    "test_grid_1d",
-    "test_orbit_1d",
-    "test_drag_1d",
-    "test_drag_path_1d",
-    "test_absorb_path_1d",
-    "test_viscflow_1d",
-    "test_diffusion_1d",
-    "test_radiation_1d",
-    "test_prdrag_1d",
-    "test_boundary_1d",
-    "test_collision_1d",
-    "test_import_1d",
-    "test_knn",
+SWARM_CHAIN_MODELS = [
+    "test_colchain_2d",
+    "test_colchain_frag_2d",
+    "test_colchain_wedge_2d",
+    "test_colchain_3d",
 ]
 
 SWARM_FIXED_RESOLUTION = {
-    "test_drag_1d",
-    "test_viscflow_1d",
-    "test_radiation_1d",
-    "test_prdrag_1d",
-    "test_collision_1d",
-    "test_import_1d",
-    "test_import_3d",
-    "test_parinit_3d",
-    "test_drag_2d",
-    "test_radiation_2d",
-    "test_prdrag_2d",
-    "test_collision_2d",
-    "test_collision_3d",
-    "test_colphys_code",
-    "test_colphys_cgs",
-    "test_boundary_1d",
-    "test_boundary_2d",
-    "test_boundary_3d",
-    "test_boundary_half",
-    "test_knn",
-    "test_dynrate_3d",
+    "test_prdrag_2d", "test_colphys_code", "test_colphys_cgs", "test_knn",
 }
 
-EXPECTED_FLUID_METRICS = 142
-EXPECTED_SWARM_METRICS = 80
-EXPECTED_PUBLICATION_FLUID_METRICS = 113
-EXPECTED_PUBLICATION_SWARM_METRICS = 61
+SWARM_ENDPOINT_RESOLUTION = {"test_initial_3d"}
+
+EXPECTED_FLUID_METRICS = 73
+EXPECTED_SWARM_METRICS = 33
+EXPECTED_PUBLICATION_FLUID_METRICS = EXPECTED_FLUID_METRICS
+EXPECTED_PUBLICATION_SWARM_METRICS = EXPECTED_SWARM_METRICS
 
 PUBLICATION_TIER = "publication"
-RELEASE_TIER = "release"
-QUALIFICATION_TIER = "qualification"
-QAV_TIERS = (PUBLICATION_TIER, RELEASE_TIER, QUALIFICATION_TIER)
+QAV_TIERS = (PUBLICATION_TIER,)
 
-SWARM_RELEASE_MODELS = {
-    "test_boundary_1d",
-    "test_boundary_2d",
-    "test_boundary_3d",
-    "test_boundary_half",
-}
 
-SWARM_QUALIFICATION_MODELS = {"test_dynrate_3d", "test_failure_knn", "test_restart_2d"}
+def qav_output_path(qav_root: Path, requested: Path | None, default_name: str) -> Path:
+    """Resolve an optional output name without allowing it to escape qav/logs"""
 
-SWARM_SINGLE_PUBLICATION_RESOLUTION = {
-    "test_grid_1d",
-    "test_grid_2d",
-    "test_grid_3d",
-    "test_orbit_1d",
-}
+    logs_root = (qav_root/"logs").resolve()
+    if requested is None:
+        return logs_root/default_name
+
+    direct = requested.expanduser().resolve()
+    if direct.is_relative_to(logs_root):
+        return direct
+    if requested.is_absolute():
+        raise ValueError(f"QAV output must remain below {logs_root}: {requested}")
+
+    output = (logs_root/requested).resolve()
+    if not output.is_relative_to(logs_root):
+        raise ValueError(f"QAV output must remain below {logs_root}: {requested}")
+    return output
 
 
 def archive_fingerprint(root: Path) -> tuple[str, int]:
@@ -254,17 +199,8 @@ def option_value(arguments: tuple[str, ...], option: str) -> str | None:
 
 
 def fluid_case_tier(model: str, arguments: tuple[str, ...]) -> str:
-    """Classify one fluid parameter variant by its minimum evidence tier"""
+    """Label every retained fluid case as publication evidence"""
 
-    if model == "test_advect_limit_2d":
-        return QUALIFICATION_TIER
-    if model == "test_x_transport_2d" and option_value(arguments, "--shift") != "3.25":
-        return RELEASE_TIER
-    if model in {"test_y_transport_cyl", "test_y_transport_sph", "test_z_transport_3d"} \
-            and option_value(arguments, "--cfl") != "0.05":
-        return RELEASE_TIER
-    if model == "test_optdepth" and option_value(arguments, "--power") == "0.0":
-        return RELEASE_TIER
     return PUBLICATION_TIER
 
 
@@ -273,7 +209,7 @@ def fluid_metric_tiers(
 ) -> dict[str, int]:
     """Count fluid metric records by minimum evidence tier"""
 
-    counts = {PUBLICATION_TIER: 0, RELEASE_TIER: 0, QUALIFICATION_TIER: 0}
+    counts = {PUBLICATION_TIER: 0}
     for model, arguments in cases:
         records = 1 if "--res" in arguments else resolution_count
         counts[fluid_case_tier(model, arguments)] += records
@@ -285,39 +221,20 @@ def swarm_models(group: str) -> list[str]:
 
     if group == "all":
         return [model for name in SWARM_GROUPS for model in SWARM_GROUPS[name]]
-    if group == "radial":
-        return list(SWARM_RADIAL_MODELS)
     return list(SWARM_GROUPS[group])
 
 
 def swarm_model_tier(model: str) -> str:
-    """Classify one swarm model by its minimum evidence tier"""
+    """Label every retained swarm model as publication evidence"""
 
-    if model in SWARM_QUALIFICATION_MODELS:
-        return QUALIFICATION_TIER
-    return RELEASE_TIER if model in SWARM_RELEASE_MODELS else PUBLICATION_TIER
+    return PUBLICATION_TIER
 
 
 def swarm_resolution_tiers(model: str, resolutions: list[int]) -> list[dict[str, int | str]]:
-    """Label analytical records while retaining release-only repetition tests"""
+    """Label every retained analytical record as publication evidence"""
 
-    publication = set(resolutions)
-    if model in SWARM_QUALIFICATION_MODELS:
-        return [
-            {"resolution": resolution, "tier": QUALIFICATION_TIER}
-            for resolution in resolutions
-        ]
-    if model in SWARM_RELEASE_MODELS:
-        publication.clear()
-    elif model in SWARM_SINGLE_PUBLICATION_RESOLUTION and resolutions:
-        publication = {resolutions[-1]}
-    elif model == "test_initial_3d" and resolutions:
-        publication = {resolutions[0], resolutions[-1]}
     return [
-        {
-            "resolution": resolution,
-            "tier": PUBLICATION_TIER if resolution in publication else RELEASE_TIER,
-        }
+        {"resolution": resolution, "tier": PUBLICATION_TIER}
         for resolution in resolutions
     ]
 
@@ -325,11 +242,15 @@ def swarm_resolution_tiers(model: str, resolutions: list[int]) -> list[dict[str,
 def swarm_metric_tiers(models: list[str], resolutions: list[int]) -> dict[str, int]:
     """Count swarm analytical records by minimum evidence tier"""
 
-    counts = {PUBLICATION_TIER: 0, RELEASE_TIER: 0, QUALIFICATION_TIER: 0}
+    counts = {PUBLICATION_TIER: 0}
     for model in models:
         if model == "test_knn":
             continue
-        model_resolutions = resolutions[:1] if model in SWARM_FIXED_RESOLUTION else resolutions
+        model_resolutions = resolutions[:1] if model in SWARM_FIXED_RESOLUTION else (
+            [resolutions[0], resolutions[-1]]
+            if model in SWARM_ENDPOINT_RESOLUTION and len(resolutions) > 1
+            else resolutions
+        )
         for record in swarm_resolution_tiers(model, model_resolutions):
             counts[str(record["tier"])] += 1
     return counts

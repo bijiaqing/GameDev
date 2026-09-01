@@ -131,8 +131,6 @@ const char *case_name ()
     return "y_transport_sph";
 #elif defined(VERIFY_Y_OUTFLOW_2D)
     return "y_outflow_2d";
-#elif defined(VERIFY_Y_OUTFLOW_3D)
-    return "y_outflow_3d";
 #elif defined(VERIFY_Z_TRANSPORT)
     return "z_transport";
 #elif defined(VERIFY_X_DIFFUSION)
@@ -147,14 +145,8 @@ const char *case_name ()
     return "source_drag";
 #elif defined(VERIFY_OPTDEPTH)
     return "optdepth";
-#elif defined(VERIFY_RING_DIFFUSION) && defined(VERIFY_RING_RADIATION)
-    return "ring_all_2d";
-#elif defined(VERIFY_RING_DIFFUSION)
-    return "ring_diffusion_2d";
-#elif defined(VERIFY_RING_RADIATION)
-    return "ring_radiation_2d";
 #elif defined(VERIFY_RING)
-    return "ring_transport_2d";
+    return "ring_all_2d";
 #else
     return "unknown";
 #endif
@@ -221,7 +213,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 mx[idx] = 0.7*rhod[idx];
                 my[idx] = my_int/volume;
                 mz[idx] = 0.11*rhod[idx];
-#elif defined(VERIFY_Y_OUTFLOW_2D) || defined(VERIFY_Y_OUTFLOW_3D)
+#elif defined(VERIFY_Y_OUTFLOW_2D)
                 // initialize exact finite-volume averages of a smooth pulse touching the outer-boundary region
                 // constant radial velocity then leaves the interior state and escaped mass analytically integrable
                 int dimension = (N_Z > 1) ? 3 : 2;
@@ -642,7 +634,7 @@ int main ()
         real dx = (X_MAX - X_MIN)/static_cast<real>(N_X);
         dt = fmin(static_cast<real>(VERIFY_SHIFT)*dx, VERIFY_TEND - clock);
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH) \
-    || defined(VERIFY_Y_OUTFLOW_2D) || defined(VERIFY_Y_OUTFLOW_3D) || defined(VERIFY_Z_TRANSPORT)
+    || defined(VERIFY_Y_OUTFLOW_2D) || defined(VERIFY_Z_TRANSPORT)
         // radial and polar transport use the current global production CFL condition
         dt = fmin(cfl_step(), VERIFY_TEND - clock);
 #else
@@ -663,7 +655,7 @@ int main ()
 #if defined(VERIFY_X_TRANSPORT)
         apply_advection_x(dt);
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH) \
-    || defined(VERIFY_Y_OUTFLOW_2D) || defined(VERIFY_Y_OUTFLOW_3D)
+    || defined(VERIFY_Y_OUTFLOW_2D)
         apply_advection_y(dt);
 #elif defined(VERIFY_Z_TRANSPORT)
         apply_advection_z(dt);

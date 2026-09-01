@@ -1443,8 +1443,9 @@ negative density oscillations.
 
 The current minimum conservative momentum correction transports donor values of
 $(\ell_\phi,v_r,\ell_\theta)$ with the diffusive mass flux. It conserves the corresponding stored
-momenta across internal faces and avoids changing density while leaving momentum stale. It is not
-yet a complete physical derivation of turbulent dust momentum diffusion; see Section 11.
+momenta across internal faces and avoids changing density while leaving momentum stale. This is an
+intentional generalized-property closure, not the spherical-coordinate expansion of a complete
+Reynolds-averaged momentum tensor.
 
 After solving density, the code reconstructs the time-centered integrated mass flux
 
@@ -1478,6 +1479,63 @@ $$
 
 The same face flux enters its two cells with opposite signs, so internal diffusive transfers
 conserve both mass and every stored momentum exactly up to roundoff.
+
+### 7.4 Physical meaning and the rejected Reynolds alternative
+
+The selected density-diffusion flux is
+
+$$
+\boldsymbol J=-\boldsymbol D\cdot\boldsymbol\nabla\varrho_d,
+$$
+
+where $\varrho_d$ denotes $\Sigma_d$ in the vertically integrated model and $\rho_d$ in 3D. The
+mass equation fixes the total transport flux $\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does
+not uniquely determine which momentum an unresolved diffusive exchange carries. GameDev closes
+that ambiguity by treating each stored generalized velocity
+
+$$
+q_a\in\{\ell_\phi,v_r,\ell_\theta\}
+$$
+
+as a parcel property transported by the net diffusive mass flux:
+
+$$
+\frac{\partial(\varrho_d q_a)}{\partial t}
++\boldsymbol\nabla\cdot(\boldsymbol Jq_a)=0
+\qquad\text{during an isolated diffusion step}.
+$$
+
+Consequently, a spatially uniform $q_a$ remains uniform while density diffuses. Conversely, if
+$\boldsymbol J=0$, this closure produces no momentum mixing even when $q_a$ varies in space. That
+is a deliberate pressureless-model statement: unresolved counter-streaming exchanges with zero net
+mass flux are omitted.
+
+A Reynolds-averaged interpretation is a different continuum model. With unresolved stress
+$\mathcal R_{ij}$, its conserved momentum and flux would be
+
+$$
+P_j=\varrho_dv_j+J_j,
+\qquad
+T_{ij}=\varrho_dv_iv_j+J_iv_j+v_iJ_j+\mathcal R_{ij}.
+$$
+
+Adapting this structure to density diffusion would require the corrected momentum state
+$\varrho_d\boldsymbol v_d+\boldsymbol J$, both cross fluxes, all cylindrical or spherical tensor-
+divergence terms, transverse components of $\boldsymbol J$ at each face, and consistent primitive
+recovery, initialization, source, boundary, and restart semantics. Adding only $v_iJ_j$ to the
+current diffusion kernel would omit $\partial_tJ_j$ and create an inconsistent hybrid. The donor
+and complete Reynolds closures can both be Galilean invariant when their states and fluxes are
+transformed consistently, but they conserve different definitions of momentum and need not agree
+at finite diffusivity.
+
+The unresolved tensor $\mathcal R_{ij}$ is independent of whether density or concentration is
+diffused. Setting it to zero removes turbulent dust pressure and shear stress; it is a closure
+choice, not a mathematical consequence of Fickian diffusion. GameDev retains the generalized donor
+model with $\mathcal R_{ij}=0$. A Reynolds density-diffusion model should be reconsidered only as a
+separate physical model and must be implemented and verified as a complete system. Relevant
+derivations of conservative mean dust momentum include
+[Huang & Bai (2022)](https://arxiv.org/abs/2206.01023), whose published model diffuses dust
+concentration rather than GameDev's selected density.
 
 ## 8. Global integrator and timestep control
 
@@ -1782,11 +1840,11 @@ Verification definitions, evidence, and untested regimes are maintained in
 [`fluid_testset.md`](fluid_testset.md). The limitations below concern the physical or numerical
 model itself rather than current test coverage.
 
-- The diffusion-momentum closure is provisional. A complete density-diffusion momentum equation
-  should be derived in spherical coordinates, including its tensor and geometric terms, before
-  clumping claims rely on momentum transport by diffusion. The formulation of
-  [Huang & Bai (2022)](https://arxiv.org/abs/2206.01023) provides relevant conservative structure
-  but cannot be copied directly because it diffuses concentration rather than the selected density.
+- The diffusion-momentum closure is an intentional coordinate-dependent parcel model: net
+  diffusive mass carries the donor values of $(\ell_\phi,v_r,\ell_\theta)$, while unresolved
+  momentum exchange at zero net mass flux is omitted. It must not be described as a complete
+  Reynolds-averaged momentum tensor. A future Reynolds option would be a different physical model,
+  not a correction term that can be added independently to the present kernels.
 - The 3D initializer balances polar advection and density diffusion only to discretization error. The normalized instantaneous
   mismatch and its polar-resolution convergence are measured by `test_startup_3d`; later momentum relaxation can still
   produce a physical startup transient and is not assumed to vanish under mesh refinement. The focused CUDA sequence

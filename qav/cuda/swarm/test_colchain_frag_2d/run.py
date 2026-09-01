@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run the production custom-kernel fragmentation-chain qualification"""
+"""Run the production custom-kernel fragmentation-chain case"""
 
 from pathlib import Path
 import sys

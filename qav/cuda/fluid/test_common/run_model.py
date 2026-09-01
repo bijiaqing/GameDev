@@ -18,6 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 from validate_case import analyze as default_analyze
 
 QAV_ROOT = Path(__file__).resolve().parents[3]

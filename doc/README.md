@@ -1,109 +1,79 @@
 # GameDev documentation
 
-This directory is the canonical documentation for the current merged GameDev project. It describes the active source tree, the verified numerical methods, the evidence retained in the repository, and future work that has not yet been promoted into production.
-
-Resolved audit diaries and rename histories are not canonical documents. Durable findings from the 2026-07-27 merged-code audit, the 2026-07-29 swarm-test audit, the 2026-07-30 KNN audit, and the 2026-08-01 static numerical audit have been incorporated into the documents below.
+This directory contains the canonical documentation for the published GameDev source. Historical
+audit diaries, private naming notes, non-fiducial model descriptions, exploratory benchmarks, and
+superseded test inventories are not part of the public documentation.
 
 ## Document map
 
 | Document | Responsibility |
 |---|---|
-| [`fluid_numeric.md`](fluid_numeric.md) | Eulerian dust-fluid user guide covering model selection, initialization, equations, discretization, composition, state semantics, and limitations |
-| [`fluid_testset.md`](fluid_testset.md) | Fluid analytical cases, measurement protocol, latest archived native results, commands, and missing verification |
-| [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm user guide covering model selection, mass normalization, initialization, transport, diffusion, radiation, collisions, state semantics, and limitations |
-| [`swarm_testset.md`](swarm_testset.md) | Swarm analytical and statistical cases, latest archived native results, commands, and missing verification |
+| [`fluid_numeric.md`](fluid_numeric.md) | Eulerian dust-fluid equations, initialization, geometry, operators, composition, and limitations |
+| [`fluid_testset.md`](fluid_testset.md) | retained fluid publication cases, analytical references, measurements, and acceptance criteria |
+| [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm equations, initialization, trajectories, diffusion, collisions, and limitations |
+| [`swarm_testset.md`](swarm_testset.md) | retained swarm publication cases, statistical references, KNN validation, and collision-chain criteria |
 
-Numerical equations belong in the two `*_numeric.md` documents. Test definitions and evidence
-belong in the two `*_testset.md` documents. Future designs must not be described as active
-production behavior.
+Physical equations and production algorithms belong in the numerical guides. Test definitions and
+evidence rules belong in the test guides. The paired fluid/swarm derivations remain independent even
+where their gas-disk assumptions are physically identical.
 
-## Repository and build layout
+## Source and QAV layout
 
-The active merged project is at the repository root:
+- `inc/comm/fluid/`, `inc/comm/swarm/`, `src/comm/fluid/`, and `src/comm/swarm/` contain complete
+  backend-neutral files.
+- `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files.
+- `mod/` contains the published production model configuration.
+- `qav/comm/` contains backend-neutral publication-test definitions and validators.
+- `qav/cuda/` and `qav/rocm/` contain native drivers and backend-owned test source.
+- `qav/tool/` contains archive and cross-backend utilities.
+- all ignored QAV build products and numerical evidence are written below `qav/logs/`.
 
-- `inc/comm/fluid/`, `inc/comm/swarm/`, `src/comm/fluid/`, and `src/comm/swarm/` contain complete backend-neutral files
-- `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files
-- `mod/` contains production model configurations
-- `qav/comm/fluid/` and `qav/comm/swarm/` contain shared verification definitions, criteria, and analyzers
-- `qav/cuda/` and `qav/rocm/` contain backend test drivers and backend-owned test source
-- `qav/tool/` contains backend-neutral QA utilities, while generated evidence is written below the
-  ignored `qav/logs/` tree
-- `qav/rocm/bench/` documents and runs the uninstrumented MI300A benchmark and profiler workflow
+The build shares a file only when the complete file is backend-neutral. It does not split partially
+portable translation units. Fluid and swarm files are also kept separate rather than creating a
+cross-representation shared layer.
 
-The root Makefile requires `MODEL`; `GPU_BACKEND=cuda|rocm` selects one compiler/backend and
-`DUST_REPR := fluid|swarm` in the model flags selects one physical representation. Fluid builds
-additionally select `FLUID_SWEEP := thread|block`. Collision-enabled swarm builds select
-`COLLISION_SEARCH := kdtree|morton`.
+Production models select one GPU backend, one fluid sweep implementation where applicable, and one
+collision-search backend. Their executable is written beside the model flags. QAV archives retain
+explicit CUDA/ROCm paths because completed native results must coexist for comparison. Checkpoints
+are not portable across backends.
 
-`qav/tool/run_all.py` is the canonical transferable campaign entry point. It writes disjoint CUDA
-and ROCm archives, checks each archive before transfer, and runs the cross-backend field and metric
-comparisons after both archives are present. The exact command sequence is documented in
-`qav/README.md`.
+## Publication validation state
 
-Model-local source files override same-named production translation units. Verification models use this mechanism only when an analytical setup cannot be expressed through the production interface.
+The current source defines a deliberately compact publication suite:
 
-The fluid and swarm representations do not share headers or translation units with one another
-inside `comm/`. Related algorithms, including optical-depth construction, remain independently
-implemented and tested. Backend-neutral complete files are shared between CUDA and ROCm.
+- fluid: 19 models and 73 analytical metric records;
+- swarm: 12 common models and 33 analytical/statistical records;
+- one standalone KNN correctness matrix at $10^5$ particles;
+- four production frozen-bath collision-chain models.
 
-The backend ownership rule is deliberately conservative: share a file only when the complete file
-is backend-neutral, and otherwise keep complete CUDA and ROCm versions. The selected build may use
-only `inc/comm`, `src/comm`, and one backend tree. Generated object directories remain
-configuration-specific. Each model instead owns one executable beside its `flags.mk` and one
-production output directory under `out/MODEL/`, because a production model selects only one
-backend and algorithm configuration. QAV result archives retain explicit backend paths because
-cross-backend comparison requires both records. Checkpoints are not supported across backends.
-
-## Latest archived evidence
-
-| Area | Current repository evidence | Interpretation |
-|---|---|---|
-| fluid analytical suite | source-matched CUDA and ROCm archives with 105/105 metrics on each backend, plus focused initialization/startup, polar-boundary, wedge-periodic, radial polar-metric, long-ring, and near-vacuum-limiter evidence | both archived native suites and the cross-backend comparison passed on 2026-08-24; all 36 focused publication additions and the limiter qualification now pass on CUDA `sm_80`; ROCm refreshes and the next complete 142-metric archives remain pending |
-| swarm analytical suite | source-matched CUDA and ROCm archives with 31/31 models and 75/75 metrics on each backend, plus focused native records for physical collisions, imported gas, and monodisperse initialization | both archived complete suites passed on 2026-08-24; the current 36-model/80-metric matrix also registers an independent dynamics-rate qualification, whose CUDA record passed on 2026-09-01 and whose ROCm record remains pending |
-| adaptive-Morton KNN | ordinary, edge, periodic, wedge, and production-link matrices on both backends | all 52 compact cases and all four standalone builds passed on each backend with equal coverage |
-| default collision chain | mirrored CUDA/ROCm production-runtime qualifications with Morton and KD-tree caches plus the Bernoulli collision regression | the current six-model post-inversion campaigns passed on CUDA `sm_80` and ROCm `gfx942` |
-
-The expanded CUDA campaign used target `sm_80` and remained internally source-stable at SHA-256
-`2d287994722315384ccc7c0541c1bc6b99840223e0136464d50ad75406fca6b7` across its complete run from
-2026-08-23 12:01 to 14:04 UTC. Its archive checker found no malformed, non-finite, failed, or missing
-records. The CUDA archive contains 523 valid JSON files. The recorded environment was CUDA
-12.1 (`nvcc` 12.1.105), an NVIDIA A100-SXM4-40GB with driver 580.159.04, and Python 3.13.5.
-
-The expanded ROCm campaign used the same 580-file source fingerprint and target `gfx942`; it ran
-with ROCm 7.2.4, AMD clang 22.0.0git, an AMD Instinct MI300A, amdgpu driver 6.16.13, and Python
-3.13.5. Its archive checker also found no invalid or missing records. The local comparison-only
-tool was subsequently corrected to apply the documented $10^{-5}$ deterministic tolerance and to
-treat settling--diffusion as a stochastic acceptance comparison; this does not change either
-native archive. The resulting metric, raw-field, KNN, and provenance comparisons all pass. The
-remaining coverage limits are listed in the two test-set documents.
+The former expanded archives and their micro-tests were retired. A fresh native CUDA and ROCm
+campaign is required to populate the new publication manifests after this reduction.
+The exact commands and archive contract are documented in [`qav/README.md`](../qav/README.md).
 
 ## Current cross-representation conventions
 
-Both branches use spherical computational coordinates and the same cylindrical conversions, gas profiles, initial dust surface-density prescription, physical linear-velocity file convention, and model-selection mechanism. They intentionally differ in:
+Both physical representations use spherical computational coordinates, consistent cylindrical
+conversions, the same gas-profile convention, and the same dust surface-density normalization.
+They intentionally differ in:
 
-- Eulerian conserved fields versus Lagrangian representative states
-- spherical fluid diffusion versus cylindrical swarm diffusion
-- conservative fluid transport versus semi-analytic particle trajectories
-- fluid density-diffusion momentum closure versus velocity-preserving stochastic particle displacement
-- fluid pressureless Riemann evolution versus swarm KNN collision sampling
+- Eulerian conserved fields versus Lagrangian representative particles;
+- spherical fluid diffusion versus cylindrical swarm diffusion;
+- conservative finite-volume transport versus semi-analytic particle trajectories;
+- diffusive fluid momentum transport versus velocity-preserving stochastic displacement;
+- pressureless Riemann evolution versus KNN-based stochastic collisions.
 
-These are parallel scientific conventions, not shared-code interfaces, and the two representations
-remain independently implemented.
+These are paired scientific conventions, not shared-code interfaces.
 
-## Authority and maintenance
+## Maintenance rule
 
-When statements disagree, use this order:
+When statements disagree, use this authority order:
 
-1. current production source, model constants, and model flags
-2. freshly generated machine-readable native results under the ignored `qav/logs/` tree
-3. the canonical documents in this directory
-4. transcribed historical results, laboratory notes, and Git history
+1. current production source, flags, and constants;
+2. freshly generated machine-readable evidence under `qav/logs/`;
+3. the canonical documents in this directory;
+4. historical results and development notes.
 
-After a numerical change:
-
-1. update the appropriate numerical-method document
-2. add or update an analytical, statistical, or regression test
-3. archive the metrics and environment needed to support the new claim
-4. update the evidence status here
-
-Do not create a new standalone audit diary for a resolved issue. Add the surviving invariant, limitation, or regression-test requirement to its canonical document
+Add a new publication test only when it establishes a distinct physical or numerical claim not
+already covered by the retained matrix. Local helper checks, failure injection, restart plumbing,
+and performance experiments should not expand the canonical scientific suite unless a publication
+claim explicitly depends on them.

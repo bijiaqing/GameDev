@@ -12,13 +12,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 QAV_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(QAV_ROOT/"tool"))
 
 from qav_config import (
     PUBLICATION_TIER,
-    QUALIFICATION_TIER,
-    RELEASE_TIER,
+    SWARM_CHAIN_MODELS,
+    SWARM_ENDPOINT_RESOLUTION,
     SWARM_FIXED_RESOLUTION,
     SWARM_GROUPS,
     swarm_metric_tiers,
@@ -29,23 +31,14 @@ from qav_config import (
 
 
 ROCM_GROUPS = {
-    "chain": [
-        "test_colchain_2d",
-        "test_colchain_frag_2d",
-        "test_colchain_wedge_2d",
-        "test_colchain_3d",
-        "test_colchain_restart_2d",
-        "test_colreuse_2d",
-    ],
-    "restart": ["test_restart_2d"],
-    "failure": ["test_failure_knn"],
+    "chain": SWARM_CHAIN_MODELS,
 }
 
 
 def collision_runtime_model(model: str) -> bool:
-    """Identify production-runtime qualifications that do not use resolution sweeps"""
+    """Identify production-runtime cases that do not use resolution sweeps"""
 
-    return model.startswith("test_colchain_") or model == "test_colreuse_2d"
+    return model.startswith("test_colchain_")
 
 
 def utc_now() -> str:
@@ -79,7 +72,7 @@ def write_manifest(path: Path, manifest: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--group", choices=("all", "radial", *SWARM_GROUPS, *ROCM_GROUPS), default="all"
+        "--group", choices=("all", *SWARM_GROUPS, *ROCM_GROUPS), default="all"
     )
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
     parser.add_argument("--quick", action="store_true")
@@ -88,7 +81,6 @@ def main() -> None:
         "--rebuild-manifest", action="store_true",
         help="reconstruct the aggregate manifest from downloaded component manifests without rerunning",
     )
-    parser.add_argument("--knn-full", action="store_true")
     parser.add_argument(
         "--target", default=os.environ.get("AMDGPU_TARGET", "gfx942"),
         help="AMDGPU target passed to hipcc",
@@ -109,18 +101,19 @@ def main() -> None:
     manifest_path = scope_root/("manifest_all.json" if args.group == "all" else "manifest.json")
     environment_path = scope_root/("environment_all.json" if args.group == "all" else "environment.json")
 
-    # preserve the order in GROUPS so terminal output follows the progression
-    # from grid primitives to coupled physical operators
+    # preserve the publication order from isolated trajectories through coupled collisions
     models = ROCM_GROUPS[args.group] if args.group in ROCM_GROUPS else swarm_models(args.group)
 
     entries = []
-    qualification_group = args.group in ROCM_GROUPS
     for model in models:
         chain_model = collision_runtime_model(model)
-        fixed_resolution = model in SWARM_FIXED_RESOLUTION \
-            or model in {"test_restart_2d", "test_failure_knn"}
+        fixed_resolution = model in SWARM_FIXED_RESOLUTION
         model_resolutions = [] if chain_model \
-            else (resolutions[:1] if fixed_resolution else resolutions)
+            else (resolutions[:1] if fixed_resolution else (
+                [resolutions[0], resolutions[-1]]
+                if model in SWARM_ENDPOINT_RESOLUTION and len(resolutions) > 1
+                else resolutions
+            ))
         if model == "test_knn":
             output = "test_knn/suite_manifest.json"
         else:
@@ -128,35 +121,23 @@ def main() -> None:
         entries.append({
             "model": model,
             "resolutions": model_resolutions,
-            "tier": QUALIFICATION_TIER if qualification_group else swarm_model_tier(model),
-            "resolution_tiers": [] if chain_model else [
-                {"resolution": resolution, "tier": QUALIFICATION_TIER}
-                for resolution in model_resolutions
-            ] if qualification_group else swarm_resolution_tiers(model, model_resolutions),
-            "extended_tier": "qualification" if model == "test_knn" and args.knn_full else None,
+            "tier": PUBLICATION_TIER,
+            "resolution_tiers": [] if chain_model \
+                else swarm_resolution_tiers(model, model_resolutions),
             "output": None if args.build_only else output,
             "status": "pending",
         })
 
-    if qualification_group:
-        qualification_metrics = sum(
+    if args.group in ROCM_GROUPS:
+        publication_metrics = sum(
             1 if collision_runtime_model(entry["model"]) else len(entry["resolutions"])
-            for entry in entries if entry["model"] != "test_failure_knn"
+            for entry in entries
         )
-        metric_tiers = {QUALIFICATION_TIER: qualification_metrics}
-        included_tiers = [QUALIFICATION_TIER]
-        campaign_tier = QUALIFICATION_TIER
+        metric_tiers = {PUBLICATION_TIER: publication_metrics}
     else:
         metric_tiers = swarm_metric_tiers(models, resolutions)
-        included_tiers = [
-            tier for tier in (PUBLICATION_TIER, RELEASE_TIER, QUALIFICATION_TIER)
-            if metric_tiers[tier] > 0
-        ]
-        if args.knn_full and "test_knn" in models:
-            included_tiers.append(QUALIFICATION_TIER)
-        campaign_tier = QUALIFICATION_TIER if QUALIFICATION_TIER in included_tiers else (
-            RELEASE_TIER if RELEASE_TIER in included_tiers else PUBLICATION_TIER
-        )
+    included_tiers = [PUBLICATION_TIER]
+    campaign_tier = PUBLICATION_TIER
 
     manifest = {
         "schema": 1,
@@ -167,7 +148,6 @@ def main() -> None:
         "requested_resolutions": args.res,
         "effective_resolutions": resolutions,
         "quick": args.quick,
-        "knn_full": args.knn_full,
         "build_only": args.build_only,
         "reconstructed": args.rebuild_manifest,
         "gpu_target": args.target,
@@ -178,16 +158,11 @@ def main() -> None:
         "models_completed": 0,
         "analytical_builds_expected": sum(
             len(entry["resolutions"]) for entry in entries
-            if entry["model"] not in {"test_knn", "test_failure_knn"}
+            if entry["model"] != "test_knn"
             and not collision_runtime_model(entry["model"])
         ),
-        "failure_backend_builds_expected": 2 if "test_failure_knn" in models else 0,
-        "knn_standalone_builds_expected": (
-            2 if args.group == "radial" else 4
-        ) if "test_knn" in models else 0,
-        "knn_production_links_expected": (
-            2 if args.group == "radial" else 6
-        ) if "test_knn" in models else 0,
+        "knn_standalone_builds_expected": 4 if "test_knn" in models else 0,
+        "knn_production_links_expected": 0,
         "status": "running",
         "passed": None,
         "started_utc": utc_now(),
@@ -257,10 +232,6 @@ def main() -> None:
             ]
         if args.build_only:
             command.append("--build-only")
-        if model == "test_knn" and args.group == "radial":
-            command.append("--radial-only")
-        if model == "test_knn" and args.knn_full:
-            command.append("--full")
         print(f"\n=== {model} ===", flush=True)
         entries[idx_model]["status"] = "running"
         write_manifest(manifest_path, manifest)

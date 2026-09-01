@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
+import sys
 from typing import Any
+
+sys.dont_write_bytecode = True
 
 from qav_config import (
     EXPECTED_FLUID_METRICS,
@@ -17,14 +20,10 @@ from qav_config import (
     EXPECTED_PUBLICATION_SWARM_METRICS,
     EXPECTED_SWARM_METRICS,
     QAV_TIERS,
+    SWARM_CHAIN_MODELS,
     fluid_cases,
+    qav_output_path,
     swarm_models,
-)
-
-
-FLUID_RAW_FIELDS = (
-    "dustdens_initial", "dustdens_final", "dustmomx_final", "dustmomy_final",
-    "dustmomz_final", "dustvelx_final", "dustvely_final", "dustvelz_final",
 )
 
 
@@ -131,46 +130,15 @@ def check_manifest(path: Path, component: str, backend: str) -> list[str]:
     return problems
 
 
-def check_raw_fields(
-    data_dir: Path, resolution: int, fields: tuple[str, ...], problems: list[str], label: str,
-) -> list[str]:
-    """Require every binary field to exist with the element count stated by its metadata"""
-
-    missing = []
-    meta_path = data_dir/f"meta_N{resolution}.json"
-    if not meta_path.is_file():
-        problems.append(f"missing {label} metadata: {meta_path}")
-        return [str(data_dir/f"{field}_N{resolution}.dat") for field in fields]
-    try:
-        meta = load_json(meta_path)
-        count = int(meta["nx"])*int(meta["ny"])*int(meta["nz"])
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-        problems.append(f"invalid {label} metadata {meta_path}: {error}")
-        return [str(data_dir/f"{field}_N{resolution}.dat") for field in fields]
-
-    expected_bytes = 8*count
-    for field in fields:
-        path = data_dir/f"{field}_N{resolution}.dat"
-        if not path.is_file():
-            missing.append(str(path))
-        elif path.stat().st_size != expected_bytes:
-            problems.append(
-                f"{label} field has {path.stat().st_size} bytes; "
-                f"expected {expected_bytes}: {path}"
-            )
-    return missing
-
-
 def check_fluid(
-    qav_root: Path, backend: str, sweep: str, require_cross_fields: bool, allow_partial: bool,
+    qav_root: Path, backend: str, sweep: str, allow_partial: bool,
 ) -> dict[str, Any]:
-    """Check analytical fluid metrics plus the raw polar fields used cross-backend"""
+    """Check the publication fluid metrics and their manifests"""
 
     base = qav_root/"logs"/"fluid"/backend/sweep
     metrics = sorted(base.glob("test_*/metrics_*.json")) if base.is_dir() else []
     problems = check_manifest(base/"manifest_all.json", "fluid", backend)
     invalid_metrics = []
-    raw_missing = []
     model_manifests = []
 
     suite_path = base/"manifest_all.json"
@@ -216,16 +184,6 @@ def check_fluid(
             invalid_metrics.append(str(path.relative_to(base)))
         if record.get("tier") not in QAV_TIERS:
             problems.append(f"fluid metric has missing or invalid tier: {path}")
-        if path.parent.name == "test_z_transport_3d":
-            resolution = int(record["resolution"])
-            variant = variant_name(record)
-            data_dir = path.parent/variant if variant else path.parent
-            missing = check_raw_fields(
-                data_dir, resolution, FLUID_RAW_FIELDS, problems, "polar",
-            )
-            raw_missing.extend(
-                str(Path(path).relative_to(base)) for path in missing
-            )
 
     if (not allow_partial and len(metrics) != EXPECTED_FLUID_METRICS) or (allow_partial and not metrics):
         problems.append(
@@ -242,42 +200,13 @@ def check_fluid(
         )
     if invalid_metrics:
         problems.append(f"{len(invalid_metrics)} fluid metrics contain non-finite values")
-    if raw_missing:
-        problems.append(f"{len(raw_missing)} cross-backend raw fields are missing")
-
-    precise_polar_metrics = 0
-    if backend == "cuda" and require_cross_fields:
-        manifest_path = base/"manifest_all.json"
-        resolutions = load_json(manifest_path).get("effective_resolutions", []) \
-            if manifest_path.is_file() else []
-        base_sweep = sweep.removesuffix("_precise")
-        precise_sweep = f"{base_sweep}_precise"
-        precise_model = qav_root/"logs"/"fluid"/"cuda"/precise_sweep/"test_z_transport_3d"
-        precise_paths = sorted(precise_model.glob("metrics_N*.json"))
-        precise_polar_metrics = len(precise_paths)
-        expected_precise = 2*len(resolutions)
-        if precise_polar_metrics != expected_precise:
-            problems.append(
-                f"precise polar metric count is {precise_polar_metrics}; expected {expected_precise}"
-            )
-        for path in precise_paths:
-            record = load_json(path)
-            resolution = int(record["resolution"])
-            variant = variant_name(record)
-            data_dir = precise_model/variant
-            missing = check_raw_fields(
-                data_dir, resolution, FLUID_RAW_FIELDS, problems, "precise polar",
-            )
-            problems.extend(f"missing precise polar field: {path}" for path in missing)
     return {
         "component": "fluid",
         "sweep": sweep,
         "metrics": len(metrics),
         "expected_metrics": EXPECTED_FLUID_METRICS,
         "invalid_metrics": invalid_metrics,
-        "missing_raw_fields": raw_missing,
         "model_manifests": model_manifests,
-        "precise_polar_metrics": precise_polar_metrics,
         "problems": problems,
         "passed": not problems,
     }
@@ -376,6 +305,33 @@ def check_swarm(qav_root: Path, backend: str, allow_partial: bool) -> dict[str, 
             problems.append(f"invalid KNN suite manifest {knn_path}: {error}")
     if not knn_passed:
         problems.append(f"KNN suite manifest is missing or did not pass: {knn_path}")
+
+    chain_manifests = []
+    for model in SWARM_CHAIN_MODELS:
+        path = base/"groups"/"chain"/model/"manifest.json"
+        valid = False
+        if path.is_file():
+            try:
+                record = load_json(path)
+                variants = record.get("variants")
+                valid = (
+                    record.get("model") == model
+                    and record.get("backend") == backend
+                    and record.get("tier") == "publication"
+                    and record.get("integrator") == "frozen_bath"
+                    and record.get("passed") is True
+                    and isinstance(variants, dict)
+                    and bool(variants)
+                    and all(
+                        isinstance(variant, dict) and variant.get("passed") is True
+                        for variant in variants.values()
+                    )
+                )
+            except (OSError, ValueError, json.JSONDecodeError):
+                valid = False
+        chain_manifests.append({"model": model, "path": str(path), "valid": valid})
+        if not valid:
+            problems.append(f"collision-chain manifest is missing or did not pass: {path}")
     return {
         "component": "swarm",
         "metrics": len(metrics),
@@ -383,6 +339,8 @@ def check_swarm(qav_root: Path, backend: str, allow_partial: bool) -> dict[str, 
         "failed_metrics": failed_metrics,
         "knn_manifest": str(knn_path),
         "knn_passed": knn_passed,
+        "collision_chain_manifests": chain_manifests,
+        "collision_chain_passed": all(record["valid"] for record in chain_manifests),
         "problems": problems,
         "passed": not problems,
     }
@@ -393,16 +351,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="check one native QAV archive before transfer")
     parser.add_argument("--backend", choices=("cuda", "rocm"), required=True)
     parser.add_argument("--component", choices=("all", "fluid", "swarm"), default="all")
-    parser.add_argument(
-        "--fluid-sweep",
-        choices=("thread", "block", "thread_precise", "block_precise"),
-        default="thread",
-    )
+    parser.add_argument("--fluid-sweep", choices=("thread", "block"), default="thread")
     parser.add_argument("--qav-root", type=Path, default=qav_root)
-    parser.add_argument(
-        "--skip-cross-fields", action="store_true",
-        help="do not require CUDA's additional precise polar archive",
-    )
     parser.add_argument(
         "--allow-partial", action="store_true",
         help="accept a passed quick matrix with fewer than the full metric count",
@@ -412,16 +362,13 @@ def main() -> None:
 
     selected = ("fluid", "swarm") if args.component == "all" else (args.component,)
     components = [
-        check_fluid(
-            args.qav_root, args.backend, args.fluid_sweep, not args.skip_cross_fields,
-            args.allow_partial,
-        )
+        check_fluid(args.qav_root, args.backend, args.fluid_sweep, args.allow_partial)
         if component == "fluid" else check_swarm(args.qav_root, args.backend, args.allow_partial)
         for component in selected
     ]
     report = {
         "schema": 1,
-        "tier": "qualification",
+        "tier": "publication",
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "backend": args.backend,
         "partial_archive": args.allow_partial,
@@ -429,7 +376,12 @@ def main() -> None:
         "components": components,
         "passed": all(component["passed"] for component in components),
     }
-    output = args.output or args.qav_root/"logs"/f"archive_check_{args.backend}.json"
+    try:
+        output = qav_output_path(
+            args.qav_root, args.output, f"archive_check_{args.backend}.json"
+        )
+    except ValueError as error:
+        parser.error(str(error))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 

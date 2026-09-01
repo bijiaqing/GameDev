@@ -177,9 +177,8 @@ targets NVIDIA Ampere GPUs such as the A100.
 The ROCm backend requires `hipcc`, HIP Runtime, hipRAND, rocThrust, hipCUB, and an AMD GPU supported
 by the selected `GPU_TARGET`; `gfx942` is the current MI300A target. ROCm correctness builds omit
 blanket `-ffast-math` because finite-only assumptions can invalidate the production NaN/Inf guards.
-The numerical guides document backend-dependent arithmetic and execution details, the test guides
-record native validation, and [`qav/rocm/bench/README.md`](qav/rocm/bench/README.md) defines the
-MI300A profiling and performance workflow.
+The numerical guides document backend-dependent arithmetic and execution details, and the test
+guides define the retained publication validation suite.
 
 There is no installation step. Each executable is written beside its model flags as
 `mod/MODEL/gamedev`.
@@ -509,7 +508,7 @@ evidence, and remaining coverage are maintained in
 ├── qav/
 │   ├── comm/                 # backend-neutral test definitions by representation
 │   ├── cuda/                 # CUDA test drivers and backend-specific cases
-│   ├── rocm/                 # ROCm test drivers, failure cases, and profiling
+│   ├── rocm/                 # ROCm test drivers and backend-specific sources
 │   ├── tool/                 # backend-neutral QA and comparison utilities
 │   └── logs/                 # generated, backend-separated QA records and fields
 ├── doc/                      # canonical numerical and development documentation

@@ -21,14 +21,7 @@ INC_COMM_DIR    = $(ROOT_DIR)/inc/comm
 INC_BACKEND_DIR = $(ROOT_DIR)/inc/$(GPU_BACKEND)
 SRC_COMM_DIR    = $(ROOT_DIR)/src/comm
 SRC_BACKEND_DIR = $(ROOT_DIR)/src/$(GPU_BACKEND)
-MODEL_EXEC_DIRS = \
-    $(dir $(wildcard $(MOD_ROOT)/*/flags.mk)) \
-    $(dir $(wildcard $(QAV_ROOT)/comm/fluid/*/flags.mk)) \
-    $(dir $(wildcard $(QAV_ROOT)/comm/swarm/*/flags.mk)) \
-    $(dir $(wildcard $(QAV_ROOT)/cuda/fluid/*/flags.mk)) \
-    $(dir $(wildcard $(QAV_ROOT)/cuda/swarm/*/flags.mk)) \
-    $(dir $(wildcard $(QAV_ROOT)/rocm/fluid/*/flags.mk)) \
-    $(dir $(wildcard $(QAV_ROOT)/rocm/swarm/*/flags.mk))
+MODEL_EXEC_DIRS = $(dir $(wildcard $(MOD_ROOT)/*/flags.mk))
 MODEL_EXECUTABLES = $(addsuffix gamedev,$(MODEL_EXEC_DIRS))
 
 ifeq ($(GPU_BACKEND),cuda)
@@ -174,7 +167,14 @@ MODEL_INCLUDE_FLAGS += -I $(MODEL_PARENT_DIR)
 endif
 
 MODEL_CONST := $(firstword $(foreach dir,$(MODEL_HEADER_DIRS),$(wildcard $(dir)/const_defs.cuh)))
+
+ifeq ($(IS_QAV),)
 EXEC = $(dir $(MODEL_FLAG_FILE))gamedev
+else
+# keep all generated QAV build products out of the source and production trees
+OBJ_ROOT = $(QAV_ROOT)/logs/build/obj
+EXEC = $(QAV_ROOT)/logs/build/bin/$(GPU_BACKEND)/$(DUST_REPR)/$(MODEL)/gamedev
+endif
 
 ifeq ($(IS_QAV),)
 OUT_DIR = $(OUT_ROOT)/$(MODEL)
@@ -362,6 +362,7 @@ ifdef MODEL
 else
 	@printf "%-12s %s\n" "Cleaning" "all object and model executable files"
 	@rm -rf $(OBJ_ROOT)/*
+	@rm -rf $(QAV_ROOT)/logs/build
 	@rm -f $(MODEL_EXECUTABLES)
 endif
 

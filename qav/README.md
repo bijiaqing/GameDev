@@ -1,29 +1,39 @@
-# GameDev quality assurance workflow
+# GameDev quality assurance
 
-The QAV tree separates backend-neutral test definitions in `comm/`, native drivers in `cuda/` and
-`rocm/`, shared archive utilities in `tool/`, and ignored generated evidence in `logs/`.
-`qav/tool/qav_config.py` is the authoritative common matrix used by both native runners and the
-cross-backend comparator.
+The QAV tree contains the compact test suite used to support scientific claims about GameDev. It is
+not a catalogue of every helper function or guard in the code. The retained cases test complete
+numerical operators against analytical solutions, statistically specified stochastic solutions, or
+an independent exact-neighbor reference.
 
-Each native build writes its transient `gamedev` executable beside the `flags.mk` selected for that
-test model. Common cases therefore use `qav/comm/REPRESENTATION/MODEL/gamedev`, while a backend-only
-qualification case uses its directory below `qav/BACKEND/`. These executables are ignored by Git;
-the backend-separated result archive below `qav/logs/` is the persistent comparison interface.
+Detailed mathematics, acceptance criteria, and coverage limits are documented in
+[`doc/fluid_testset.md`](../doc/fluid_testset.md) and
+[`doc/swarm_testset.md`](../doc/swarm_testset.md). This file describes only how to run, archive, and
+compare the tests.
 
-The mathematical cases, evidence tiers, tolerances, latest archived results, and coverage limits are
-documented in [`doc/fluid_testset.md`](../doc/fluid_testset.md) and
-[`doc/swarm_testset.md`](../doc/swarm_testset.md). This file contains only the cross-backend archive
-workflow and output contract.
+## Directory layout
 
-The all-in-one runner includes publication, release, and qualification records in both common
-matrices. It also launches the backend-specific swarm nonfinite-injection group after the common
-swarm matrix. Consequently, an already queued `run_all.py` command needs no new arguments after
-these test sources are synchronized to the cluster.
+```text
+qav/
+├── comm/                 backend-neutral model definitions and validators
+│   ├── fluid/
+│   └── swarm/
+├── cuda/                 CUDA drivers and backend-specific test code
+│   ├── fluid/
+│   └── swarm/
+├── rocm/                 ROCm drivers and backend-specific test code
+│   ├── fluid/
+│   └── swarm/
+├── tool/                 archive, comparison, and all-in-one runners
+└── logs/                 ignored generated builds and numerical evidence
+```
 
-## Transferable native campaign
+Every generated QAV artifact is written below `qav/logs/`, regardless of format. This includes
+executables, object and dependency files, compiler stamps, JSON manifests, terminal captures, and
+binary numerical fields. Test source directories therefore remain source-only after a build.
 
-An invocation without `--compare` creates and checks only the selected native archive. For example,
-run CUDA first with
+## Native publication campaign
+
+Run the full CUDA campaign with
 
 ```bash
 python3 qav/tool/run_all.py \
@@ -32,63 +42,94 @@ python3 qav/tool/run_all.py \
     --res 32 64 128 256
 ```
 
-Copy the complete project, including the ignored `qav/logs/` tree, to the ROCm system and run
+Run the matching ROCm campaign with
 
 ```bash
 python3 qav/tool/run_all.py \
     --backend rocm \
     --target gfx942 \
-    --res 32 64 128 256 \
-    --compare
+    --res 32 64 128 256
 ```
 
-The reverse order is equally valid: run ROCm without `--compare`, copy the complete archive, then
-run CUDA with `--compare`. The second native run writes only its backend-owned paths, verifies the
-copied archive, generates or reuses the precise CUDA polar fields, and executes both cross-backend
-comparators. Use `--quick` on both systems only for a partial workflow check.
+Without `--compare`, each command writes only its native backend archive. Add `--compare` on the
+second machine after copying the first machine's `qav/logs/` tree into the project. The order is
+irrelevant: CUDA can be copied to ROCm or ROCm to CUDA. The comparator itself requires Python but no
+GPU.
 
-Each campaign records a SHA-256 fingerprint of the Makefile and every QAV-relevant source file.
-Comparison rejects incomplete archives and different source fingerprints before interpreting a
-backend difference. The comparison programs require only Python; raw-field comparison additionally
-requires NumPy, so completed archives may also be compared on a CPU-only system.
+Use `--quick` only to check that the build and archive workflow functions. A quick run is not the
+publication convergence record.
 
-## Output contract
+## Focused groups
+
+The backend-specific suite runners accept physical groups. Examples are
+
+```bash
+python3 qav/cuda/fluid/test_common/run_suite.py \
+    --group diffusion \
+    --res 32 64 128 256 \
+    --target sm_80
+
+python3 qav/rocm/swarm/test_common/run_suite.py \
+    --group transport \
+    --res 32 64 128 256 \
+    --target gfx942
+
+python3 qav/cuda/swarm/test_common/run_suite.py \
+    --group chain \
+    --target sm_80
+```
+
+A focused group writes below `groups/GROUP/` and cannot overwrite the canonical `all` archive.
+Direct model invocations write below `groups/manual/` unless `QAV_SCOPE` is set explicitly.
+
+## Evidence contract
+
+The canonical archives are
 
 ```text
 qav/logs/
+├── build/
+│   ├── bin/BACKEND/REPRESENTATION/MODEL/
+│   ├── cuda/swarm/test_knn/
+│   ├── rocm/swarm/test_knn/
+│   └── obj/MODEL/REPRESENTATION/BACKEND/
 ├── fluid/
-│   ├── cuda/SWEEP/[groups/SCOPE/]MODEL[/VARIANT]/
-│   └── rocm/SWEEP/[groups/SCOPE/]MODEL[/VARIANT]/
+│   ├── cuda/SWEEP/MODEL/
+│   └── rocm/SWEEP/MODEL/
 ├── swarm/
-│   ├── cuda/[groups/SCOPE/]MODEL/
-│   └── rocm/[groups/SCOPE/]MODEL/
-├── bench/rocm/
-├── archive_check_BACKEND.json
-├── backend_field_comparison.json
+│   ├── cuda/MODEL/
+│   └── rocm/MODEL/
+├── archive_check_cuda.json
+├── archive_check_rocm.json
 ├── backend_comparison.json
 ├── run_all_cuda.json
 └── run_all_rocm.json
 ```
 
-The analytical suites write metrics, metadata, environment records, manifests, and compact binary
-fields. A focused group writes below `groups/GROUP/`, while a directly invoked model writes below
-`groups/manual/`; neither can replace the canonical `all` archive. Fluid variants remain separated
-by sweep and arithmetic mode. Generated evidence is ignored by Git and must be copied explicitly.
+The `build/` subtree is disposable and is not part of the scientific archive. Model result
+directories contain numerical metrics and, where required, compact binary fields. Suite
+manifests record the expected cases, resolutions, completion state, backend, target, and source
+fingerprint. `qav/tool/check_archive.py` rejects an incomplete native archive. The cross-backend
+comparator requires matching source fingerprints unless explicitly told otherwise.
 
-Validate completed native archives without rerunning them:
+When transferring evidence between machines, copy the result and campaign records but exclude
+`qav/logs/build/`; executables, objects, and compiler stamps are backend-local and reproducible.
+
+Validate archives without rerunning the simulations:
 
 ```bash
 python3 qav/tool/check_archive.py --backend cuda --component all
 python3 qav/tool/check_archive.py --backend rocm --component all
-```
-
-Compare archives already stored in the same project:
-
-```bash
-python3 qav/tool/compare_fluid_fields.py --expected-records 8
 python3 qav/tool/compare_backends.py --component all
 ```
 
-For separate archive trees, pass `--cuda-root` and `--rocm-root` to both scripts. The legacy
-`--cuda-qav` and `--rocm-qav` spellings remain aliases. These paths identify archive contents and
-do not depend on which GPU, if any, is present on the comparison host.
+When the two archives live in separate copied QAV roots, pass `--cuda-root` and `--rocm-root` to
+`compare_backends.py`. The older `--cuda-qav` and `--rocm-qav` spellings remain aliases.
+
+## Scope
+
+The suite intentionally excludes micro-tests that merely repeat a local formula, failure-injection
+checks, restart plumbing, implementation-to-implementation sweep comparisons, and performance
+benchmarks. Those can be developed outside the publication archive when a concrete defect or
+performance claim requires them. Their absence is not evidence that every configuration, flag
+combination, or hardware limit has been tested.

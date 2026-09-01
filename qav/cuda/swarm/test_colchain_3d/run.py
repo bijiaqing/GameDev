@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run the production full-three-dimensional collision-chain qualification"""
+"""Run the production full-three-dimensional collision-chain case"""
 
 from pathlib import Path
 import sys
