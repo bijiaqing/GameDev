@@ -19,7 +19,7 @@ from validate_case import analyze as default_analyze
 VAL_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(VAL_ROOT/"tool"))
 
-from val_config import model_analyzer, model_executable, swarm_model_tier, swarm_resolution_tiers
+from val_config import PUBLICATION_TIER, model_analyzer, model_executable, swarm_resolution_tiers
 
 
 def orders(errors: list[float]) -> list[float]:
@@ -167,7 +167,7 @@ def run(model: str) -> None:
         "case": records[0]["case"],
         "backend": "cuda",
         "gpu_target": target,
-        "tier": swarm_model_tier(model),
+        "tier": PUBLICATION_TIER,
         "resolution_tiers": resolution_tiers,
         "resolutions": [record["resolution"] for record in records],
         "files": [f"metrics_N{record['resolution']}.json" for record in records],

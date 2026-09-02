@@ -12,6 +12,7 @@ import sys
 
 sys.dont_write_bytecode = True
 
+import val_config
 from val_config import (
     EXPECTED_FLUID_METRICS,
     EXPECTED_PUBLICATION_FLUID_METRICS,
@@ -140,16 +141,38 @@ def check_numerical_defaults(errors: list[str]) -> None:
 
 
 def check_python(errors: list[str]) -> None:
-    """Parse every tracked Python source below val"""
+    """Parse every tracked Python source and resolve shared configuration imports"""
 
     for root in (PROJECT_ROOT/"val",):
         for path in root.rglob("*.py"):
             if any(part in {"logs", "temp", "__pycache__"} for part in path.parts):
                 continue
             try:
-                ast.parse(path.read_text(), filename=str(path))
+                tree = ast.parse(path.read_text(), filename=str(path))
             except SyntaxError as error:
                 errors.append(f"{path.relative_to(PROJECT_ROOT)}: Python syntax error: {error}")
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom) or node.module != "val_config":
+                    continue
+                for alias in node.names:
+                    if alias.name != "*" and not hasattr(val_config, alias.name):
+                        errors.append(
+                            f"{path.relative_to(PROJECT_ROOT)}: val_config does not define {alias.name}"
+                        )
+            if path.name == "run.py" and any(
+                parent.name.startswith("test_") for parent in path.parents
+            ):
+                text = path.read_text()
+                guard = text.find("sys.dont_write_bytecode = True")
+                shared_imports = [
+                    position for marker in ("from run_model import", "from run_chain import")
+                    if (position := text.find(marker)) >= 0
+                ]
+                if shared_imports and (guard < 0 or guard > min(shared_imports)):
+                    errors.append(
+                        f"{path.relative_to(PROJECT_ROOT)}: disable bytecode before importing the shared runner"
+                    )
 
 
 def check_rocm_sources(errors: list[str]) -> None:
