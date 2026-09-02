@@ -20,6 +20,7 @@
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
 
+// retain mass-weighted bath-start rate moments for one merged controller bin
 struct col_rate_bin
 {
     real mass;
@@ -137,7 +138,7 @@ void _col_atomic_max (real *address, real value)
     }
 }
 
-// evaluate one pair against the mutable owner size and frozen partner reservoir
+// evaluate one pair with the same synthetic or physical normalization as _get_col_rate_ij
 template <KernelType kernel> __device__ __forceinline__
 real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     const real *dev_size_old, const real *dev_numr_old,
@@ -300,6 +301,7 @@ void col_bath_rate (real *dev_col_rate, const swarm *dev_particle, const int *de
     }
 }
 
+// count occupied size bins before merging statistically undersampled tails
 __global__
 void col_count_bin (int *dev_col_count, const swarm *dev_particle,
     const int *dev_col_spatial, const unsigned char *dev_col_active)
@@ -310,6 +312,7 @@ void col_count_bin (int *dev_col_count, const swarm *dev_particle,
     atomicAdd(dev_col_count + idx_raw, 1);
 }
 
+// accumulate mass-weighted rates for the pre-bath duration bound
 __global__
 void col_rate_bins (col_rate_bin *dev_col_bin, const swarm *dev_particle,
     const real *dev_col_rate, const int *dev_col_spatial, const int *dev_col_binmap,
@@ -574,6 +577,7 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
     }
 }
 
+// aggregate predicted moments and realized changes for post-bath validation
 __global__
 void col_audit_bin (col_audit_accum *dev_col_bin, const swarm *dev_particle,
     const real *dev_size_old, const real *dev_numr_old, const real *dev_col_rate,
@@ -620,6 +624,7 @@ void col_audit_bin (col_audit_accum *dev_col_bin, const swarm *dev_particle,
     atomicAdd(&dev_col_bin[idx_end].end_mass, weight);
 }
 
+// count raw spatial and logarithmic-size controller bins
 inline
 int _get_col_raw_count ()
 {
@@ -628,6 +633,7 @@ int _get_col_raw_count ()
     return count_x*COL_BIN_Y*count_z*COL_BIN_S;
 }
 
+// merge adjacent sparse size bins independently inside every spatial bin
 inline
 int _build_col_binmap (const std::vector<int> &raw_count, std::vector<int> &raw_to_merged)
 {
@@ -673,6 +679,7 @@ int _build_col_binmap (const std::vector<int> &raw_count, std::vector<int> &raw_
     return merged_count;
 }
 
+// bound bath duration by the expected mass-weighted activity in every merged bin
 inline
 real _choose_col_bath (const std::vector<col_rate_bin> &bin, int bin_count,
     real remaining, real limit_scale)
@@ -692,6 +699,7 @@ real _choose_col_bath (const std::vector<col_rate_bin> &bin, int bin_count,
     return duration;
 }
 
+// compare realized bath changes with concentration bounds and adapt the next limit
 inline
 col_bath_result _finish_col_bath (const std::vector<col_audit_accum> &bin,
     int bin_count, col_bath_state &state)

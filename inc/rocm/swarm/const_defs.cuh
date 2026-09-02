@@ -52,6 +52,11 @@ const real  Z_MAX       = 0.5*M_PI;         // maximum Z boundary (colattitude)
 
 const int   N_G         = N_X*N_Y*N_Z;      // total number of grid cells
 
+#ifdef COLLISION
+const bool  X_WEDGE     = N_X > 1
+    && static_cast<float>(X_MAX) - static_cast<float>(X_MIN) < 6.28318530717958647692f - 1.0e-6f;
+#endif // COLLISION
+
 #ifndef DIFFUSION
 static_assert(N_Z == 1, "N_Z > 1 requires DIFFUSION");
 #endif // NO DIFFUSION
@@ -111,7 +116,7 @@ const real  SCHMIDT_Z   = 1.0;              // the Schmidt number for cylindrica
 #endif // DIFFUSION || COLLISION
 
 #ifdef COLLISION
-const int   COAG_KERNEL = 0;                // coagulation kernels: 0 = constant, 1 = linear, 2 = product, 3 = custom
+const int   COAG_KERNEL = 0;                // 0-2 = normalized synthetic kernels; 3 = physical kernel
 const int   N_K         = 200;              // number of candidate slots returned by each KNN query
 
 const real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
@@ -224,7 +229,7 @@ const int NB_X = N_Y*N_Z / TPB + 1;         // number of blocks for X-direction 
 const int NB_Y = N_X*N_Z / TPB + 1;         // number of blocks for Y-direction parallelization
 
 #ifdef COLLISION_KDTREE
-const int N_T  = (N_X > 1 && X_MAX - X_MIN < 2.0*M_PI - 1.0e-6) ? 3*N_P : N_P; // physical and periodic-image tree nodes
+const int N_T  = X_WEDGE ? 3*N_P : N_P;    // physical and periodic-image tree nodes
 const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level parallelization
 #endif // COLLISION_KDTREE
 

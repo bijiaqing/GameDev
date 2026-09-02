@@ -1,4 +1,0 @@
-DUST_REPR := swarm
-MODEL_INCLUDE_DIRS := $(QAV_ROOT)/rocm/swarm/test_common
-
-GPU_FLAGS += -DCOLLISION -DMULTISIZE -DCODE_UNIT

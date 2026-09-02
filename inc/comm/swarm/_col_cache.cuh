@@ -6,7 +6,6 @@
 #include <climits>  // INT_MAX
 #include <cstddef>  // std::size_t
 
-
 #include <_collision.cuh>
 #ifdef COLLISION_MORTON
 #include <morton/morton_query.cuh>

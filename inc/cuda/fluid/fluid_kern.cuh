@@ -14,6 +14,7 @@
 
 const int TPB_BLOCK = 32;
 
+// index the explicit full-grid planes shared by every block-owned advection sweep
 enum BlockAdvField
 {
     BLOCK_RHOD = 0,
@@ -122,7 +123,7 @@ __global__ void inf_cell_flag (
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
     #ifdef RADIATION
     const real *dev_optdepth,
-    #endif
+    #endif // RADIATION
     int *dev_bad_cell
 );
 
@@ -137,7 +138,7 @@ __global__ void init_vel_calc (
     real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     #ifdef DIFFUSION
     , const real *dev_dustdens
-    #endif
+    #endif // DIFFUSION
 );
 
 // =========================================================================================================================
@@ -159,7 +160,7 @@ __global__ void momentum_setv (
 // radial optical-depth construction
 __global__ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens);
 __global__ void optdepth_csum (real *dev_optdepth);
-#endif
+#endif // RADIATION
 
 // =========================================================================================================================
 // local drag and external-force update
@@ -169,10 +170,10 @@ __global__ void source_update (
     const real *dev_dustdens,
     #ifdef RADIATION
     const real *dev_optdepth, real beta_taper,
-    #endif
+    #endif // RADIATION
     real dt
 );
 
 // =========================================================================================================================
 
-#endif
+#endif // FLUID_KERN_CUH

@@ -25,22 +25,7 @@ real _get_gas_strat (real R, real Z, real h_g)
 { return exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g)); }
 
 // =========================================================================================================================
-// gas density and Epstein stopping-time profiles
-
-__device__ __forceinline__
-real _get_sigma_g (real R)
-{ return SIGMA_0*pow(R / R_0, IDX_P); }
-
-// reconstruct the exact vertically stratified gas density from its surface density
-__device__ __forceinline__
-real _get_rhog (real R, real Z, real h_g)
-{
-    real H_g = h_g*R;
-    real sigma_g = _get_sigma_g(R);
-    real rhog_mid = sigma_g / (sqrt(2.0*M_PI)*H_g);
-
-    return rhog_mid*_get_gas_strat(R, Z, h_g);
-}
+// Epstein stopping-time profile
 
 // scale the reference midplane Stokes number by inverse surface density and vertical stratification
 __device__ __forceinline__
@@ -123,11 +108,11 @@ real _get_hd (real R, real h_g)
     real alpha_z = _get_alpha(R, h_g) / SCHMIDT_Z;
     real stokes_mid = _get_stokes(R, 0.0, h_g);
     return H_g*sqrt(alpha_z / stokes_mid);
-    #else
+    #else  // !DIFFUSION
     return H_g;
-    #endif
+    #endif // DIFFUSION
 }
 
 // =========================================================================================================================
 
-#endif
+#endif // PARAM_PHYS_CUH

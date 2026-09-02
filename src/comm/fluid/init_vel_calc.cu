@@ -6,7 +6,7 @@ __global__
 void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     #ifdef DIFFUSION
     , const real *dev_dustdens
-    #endif
+    #endif // DIFFUSION
 )
 {
     int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
@@ -72,7 +72,7 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
 
         if (rhod > 0.0) vz_diff = diff_z*grad_rhod / (y*rhod);
     }
-    #endif
+    #endif // DIFFUSION
 
     // project cylindrical radial drift and add the spherical polar diffusion balance
     real vy = vR*sin(z);

@@ -53,14 +53,14 @@ const real  STOKES_0    = 1.0e-03;
 const real  BETA_0      = 1.0e+01;      // radiation-pressure-to-gravity ratio
 const real  KAPPA_0     = 5.0e+04;      // opacity coefficient
 const real  T_BETA      = 2.0*M_PI;     // smoothly turn radiation on over time
-#endif
+#endif // RADIATION
 
 #ifdef DIFFUSION
 const real  SCHMIDT_X   = 1.0e+20;      // azimuthal Schmidt number in spherical X
 const real  SCHMIDT_Y   = 1.0e+20;      // radial Schmidt number in spherical Y
 const real  SCHMIDT_Z   = 1.0;          // polar Schmidt number in spherical Z
 const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity limiter
-#endif
+#endif // DIFFUSION
 
 // =========================================================================================================================
 // time step and output
@@ -124,19 +124,19 @@ static_assert(
     N_Z == 1 || Z_MAX == 0.5*M_PI,
     "HALF_DISK requires its reflecting outer polar boundary at Z_MAX = pi/2"
 );
-#else
+#else  // !HALF_DISK
 static_assert(
     N_Z == 1 || (Z_MIN < 0.5*M_PI && Z_MAX > 0.5*M_PI),
     "an active polar domain without HALF_DISK must span the midplane pi/2"
 );
-#endif
+#endif // HALF_DISK
 
 #ifndef DIFFUSION
 static_assert(
     N_Z == 1,
     "N_Z > 1 requires the DIFFUSION flag for vertical dust support"
 );
-#endif
+#endif // DIFFUSION
 
 static_assert(
     CFL_DYN > 0.0 && CFL_DYN <= 0.5,
@@ -145,4 +145,4 @@ static_assert(
 
 // =========================================================================================================================
 
-#endif
+#endif // CONST_DEFS_CUH

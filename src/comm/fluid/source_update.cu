@@ -42,7 +42,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     #ifdef RADIATION
     const real *dev_optdepth,
     real beta_taper,
-    #endif
+    #endif // RADIATION
     real dt)
 {
     int idx_cell = threadIdx.x + blockDim.x*blockIdx.x;
@@ -99,9 +99,9 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     real optdepth_i = (iy > 0) ? dev_optdepth[idx_cell - N_X] : 0.0;
     real optdepth_o = dev_optdepth[idx_cell];
     real beta = beta_taper*BETA_0*exp(-_interp_optdepth(optdepth_i, optdepth_o));
-    #else
+    #else  // NO RADIATION
     real beta  = 0.0;
-    #endif
+    #endif // RADIATION
 
     // load dust primitives and construct the local gas equilibrium state
     real lx = dev_dustvelx[idx_cell];

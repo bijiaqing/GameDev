@@ -2,19 +2,19 @@
 
 ## 1. Purpose
 
-The swarm QAV suite validates the scientific behavior of the Lagrangian dust model: deterministic
+The swarm validation suite verifies the scientific behavior of the Lagrangian dust model: deterministic
 trajectories, stochastic diffusion, continuous finite-domain initialization, physical collision
 rates, nearest-neighbor geometry, and the production frozen-bath collision integrator. The retained
 tests compare complete algorithms with closed-form, statistical, or brute-force references.
 
-The common analytical matrix is defined in `qav/tool/qav_config.py`. For the standard resolutions
+The common analytical matrix is defined in `val/tool/val_config.py`. For the standard resolutions
 $N=32,64,128,256$, it contains 12 models and 33 metric records, plus the standalone KNN matrix.
 The all-in-one campaign also runs four native collision-chain models. CUDA and ROCm use the same
 backend-neutral definitions and validators wherever their runtime APIs permit.
 
 The production equations and numerical methods are documented in
 [swarm_numeric.md](swarm_numeric.md). Archive layout and commands are in
-[`qav/README.md`](../qav/README.md).
+[`val/README.md`](../val/README.md).
 
 ## 2. Publication criterion
 
@@ -243,7 +243,7 @@ fixed particle pair. The relative speed is assembled as
 
 $$
 \Delta v_{ij}=
-\sqrt{\Delta v_{\rm resolved}^2+Delta v_{\rm turb}^2+Delta v_{\rm Brown}^2},
+\sqrt{\Delta v_{\rm resolved}^2+\Delta v_{\rm turb}^2+\Delta v_{\rm Brown}^2},
 $$
 
 and the vertically integrated pair rate is
@@ -312,14 +312,19 @@ limits. These tests establish conservation, deterministic continuation, search-b
 and production-path integrity. They do not constitute a convergence proof for arbitrary physical
 coagulation histories. When a publication depends on such a history, its model-specific evidence
 must add bath-tolerance refinement and independent-seed comparisons at equal physical time; those
-campaign outputs are scientific results, not additional permanent QAV records.
+campaign outputs are scientific results, not additional permanent validation records.
 
 ## 11. Running and interpreting the suite
 
-The canonical common archive is below `qav/logs/swarm/BACKEND/`; disposable executables, objects,
-KNN binaries, and compiler stamps are isolated below `qav/logs/build/`. The collision-chain publication
+The canonical common archive is below `val/logs/swarm/BACKEND/`; disposable executables, objects,
+KNN binaries, and compiler stamps are isolated below `val/temp/`. The collision-chain publication
 records are below `groups/chain/`. A complete standard campaign reports 33 analytical metrics, a
 passing KNN suite manifest, and four passing collision-chain manifests.
+
+Source inspection, normalized CUDA/ROCm diffs, Makefile dry runs, and static checks establish code
+structure and routing but do not constitute native numerical qualification. Publication evidence
+requires a completed GPU campaign for the cited source snapshot. Cross-backend parity additionally
+requires matching campaign source fingerprints unless the comparison is explicitly exploratory.
 
 The strongest evidence is the combination of:
 

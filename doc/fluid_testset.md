@@ -2,18 +2,18 @@
 
 ## 1. Purpose
 
-The fluid QAV suite supplies the numerical evidence needed to publish and use the Eulerian dust
+The fluid validation suite supplies the numerical evidence needed to publish and use the Eulerian dust
 model. Every retained case tests a complete physical operator, a geometric boundary treatment, or a
 coupled evolution path against an independent reference. It deliberately omits micro-tests whose
 only claim is that one local expression returns the value written in the source.
 
-The canonical matrix is defined in `qav/tool/qav_config.py`. With resolutions
+The canonical matrix is defined in `val/tool/val_config.py`. With resolutions
 $N=32,64,128,256$, it contains 19 models and 73 metric records. CUDA and ROCm use the same
-backend-neutral model definitions and validators under `qav/comm/fluid/`.
+backend-neutral model definitions and validators under `val/comm/fluid/`.
 
 This document explains what the cases establish. The fluid equations and production algorithms are
 described in [fluid_numeric.md](fluid_numeric.md); archive commands are summarized in
-[`qav/README.md`](../qav/README.md).
+[`val/README.md`](../val/README.md).
 
 ## 2. What constitutes publication evidence
 
@@ -186,7 +186,7 @@ $$
 with constant $D$ and zero imposed bulk transport. Smooth eigenmodes decay as
 
 $$
-\rho_d(\boldsymbol{x},t)=\rho_0+epsilon q(\boldsymbol{x})e^{-D\lambda t},
+\rho_d(\boldsymbol{x},t)=\rho_0+\epsilon q(\boldsymbol{x})e^{-D\lambda t},
 \qquad -\nabla^2q=\lambda q.
 $$
 
@@ -273,10 +273,10 @@ solution.
 
 ## 10. Running and interpreting the suite
 
-Run a native backend through `qav/tool/run_all.py` as shown in [`qav/README.md`](../qav/README.md).
+Run a native backend through `val/tool/run_all.py` as shown in [`val/README.md`](../val/README.md).
 The canonical fluid archive is below
-`qav/logs/fluid/BACKEND/SWEEP/`. Disposable QAV executables and object files are isolated below
-`qav/logs/build/`, never in the source-model directories. A complete default campaign contains 73 records and a passing
+`val/logs/fluid/BACKEND/SWEEP/`. Disposable validation executables and object files are isolated below
+`val/temp/`, never in the source-model directories. A complete default campaign contains 73 records and a passing
 `manifest_all.json`.
 
 The most important evidence is the combination of:

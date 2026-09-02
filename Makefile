@@ -13,10 +13,10 @@ endif
 MOD_ROOT        = $(ROOT_DIR)/mod
 OBJ_ROOT        = $(ROOT_DIR)/obj
 OUT_ROOT        = $(ROOT_DIR)/out
-QAV_ROOT        = $(ROOT_DIR)/qav
-QAV_COMM_DIR    = $(QAV_ROOT)/comm
-QAV_FLUID_DIR   = $(QAV_COMM_DIR)/fluid
-QAV_SWARM_DIR   = $(QAV_COMM_DIR)/swarm
+VAL_ROOT        = $(ROOT_DIR)/val
+VAL_COMM_DIR    = $(VAL_ROOT)/comm
+VAL_FLUID_DIR   = $(VAL_COMM_DIR)/fluid
+VAL_SWARM_DIR   = $(VAL_COMM_DIR)/swarm
 INC_COMM_DIR    = $(ROOT_DIR)/inc/comm
 INC_BACKEND_DIR = $(ROOT_DIR)/inc/$(GPU_BACKEND)
 SRC_COMM_DIR    = $(ROOT_DIR)/src/comm
@@ -69,29 +69,29 @@ endif
 
 ifdef MODEL
 PROD_MODEL_MATCH := $(wildcard $(MOD_ROOT)/$(MODEL))
-QAV_FLUID_MATCH := $(wildcard $(QAV_FLUID_DIR)/$(MODEL))
-QAV_SWARM_MATCH := $(wildcard $(QAV_SWARM_DIR)/$(MODEL))
-QAV_COMM_MATCH := $(QAV_FLUID_MATCH) $(QAV_SWARM_MATCH)
-QAV_FLUID_OVERLAY := $(wildcard $(QAV_ROOT)/$(GPU_BACKEND)/fluid/$(MODEL))
-QAV_SWARM_OVERLAY := $(wildcard $(QAV_ROOT)/$(GPU_BACKEND)/swarm/$(MODEL))
-QAV_BACKEND_MATCH := $(QAV_FLUID_OVERLAY) $(QAV_SWARM_OVERLAY)
+VAL_FLUID_MATCH := $(wildcard $(VAL_FLUID_DIR)/$(MODEL))
+VAL_SWARM_MATCH := $(wildcard $(VAL_SWARM_DIR)/$(MODEL))
+VAL_COMM_MATCH := $(VAL_FLUID_MATCH) $(VAL_SWARM_MATCH)
+VAL_FLUID_OVERLAY := $(wildcard $(VAL_ROOT)/$(GPU_BACKEND)/fluid/$(MODEL))
+VAL_SWARM_OVERLAY := $(wildcard $(VAL_ROOT)/$(GPU_BACKEND)/swarm/$(MODEL))
+VAL_BACKEND_MATCH := $(VAL_FLUID_OVERLAY) $(VAL_SWARM_OVERLAY)
 
-ifneq ($(words $(PROD_MODEL_MATCH) $(QAV_COMM_MATCH)),1)
-ifneq ($(words $(PROD_MODEL_MATCH) $(QAV_COMM_MATCH)),0)
-$(error MODEL=$(MODEL) is ambiguous: $(PROD_MODEL_MATCH) $(QAV_COMM_MATCH))
+ifneq ($(words $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH)),1)
+ifneq ($(words $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH)),0)
+$(error MODEL=$(MODEL) is ambiguous: $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH))
 endif
 endif
-ifeq ($(strip $(PROD_MODEL_MATCH) $(QAV_COMM_MATCH) $(QAV_BACKEND_MATCH)),)
-$(error MODEL=$(MODEL) was not found under mod/, qav/comm/fluid/, qav/comm/swarm/, or qav/$(GPU_BACKEND)/)
+ifeq ($(strip $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH) $(VAL_BACKEND_MATCH)),)
+$(error MODEL=$(MODEL) was not found under mod/, val/comm/fluid/, val/comm/swarm/, or val/$(GPU_BACKEND)/)
 endif
-ifneq ($(words $(QAV_BACKEND_MATCH)),0)
-ifneq ($(words $(QAV_BACKEND_MATCH)),1)
-$(error MODEL=$(MODEL) has ambiguous backend overlays: $(QAV_BACKEND_MATCH))
+ifneq ($(words $(VAL_BACKEND_MATCH)),0)
+ifneq ($(words $(VAL_BACKEND_MATCH)),1)
+$(error MODEL=$(MODEL) has ambiguous backend overlays: $(VAL_BACKEND_MATCH))
 endif
 endif
 
-MODEL_DIR := $(firstword $(PROD_MODEL_MATCH) $(QAV_COMM_MATCH) $(QAV_BACKEND_MATCH))
-MODEL_BACKEND_DIR := $(firstword $(QAV_BACKEND_MATCH))
+MODEL_DIR := $(firstword $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH) $(VAL_BACKEND_MATCH))
+MODEL_BACKEND_DIR := $(firstword $(VAL_BACKEND_MATCH))
 MODEL_FLAG_FILE := $(firstword $(wildcard $(MODEL_DIR)/flags.mk) $(wildcard $(MODEL_BACKEND_DIR)/flags.mk))
 ifeq ($(strip $(MODEL_FLAG_FILE)),)
 $(error Model flag file for MODEL=$(MODEL) does not exist)
@@ -115,8 +115,8 @@ ifeq ($(filter fluid swarm,$(DUST_REPR)),)
 $(error DUST_REPR must be fluid or swarm)
 endif
 
-IS_QAV := $(strip $(QAV_COMM_MATCH) $(QAV_BACKEND_MATCH))
-ifneq ($(IS_QAV),)
+IS_VAL := $(strip $(VAL_COMM_MATCH) $(VAL_BACKEND_MATCH))
+ifneq ($(IS_VAL),)
 ifneq ($(strip $(RES)),)
 GPU_FLAGS += -DTEST_RES=$(RES)
 endif
@@ -143,15 +143,15 @@ GPU_FLAGS += -DPERF_PARTICLES=$(PARTICLES)
 endif
 endif
 
-QAV_BACKEND_COMMON_DIR = $(QAV_ROOT)/$(GPU_BACKEND)/$(DUST_REPR)/test_common
-QAV_REPR_COMMON_DIR = $(QAV_ROOT)/comm/$(DUST_REPR)/test_common
+VAL_BACKEND_COMMON_DIR = $(VAL_ROOT)/$(GPU_BACKEND)/$(DUST_REPR)/test_common
+VAL_REPR_COMMON_DIR = $(VAL_ROOT)/comm/$(DUST_REPR)/test_common
 
 MODEL_SOURCE_DIRS := $(strip $(MODEL_BACKEND_DIR) $(MODEL_DIR))
 MODEL_HEADER_DIRS := $(MODEL_SOURCE_DIRS)
-ifneq ($(IS_QAV),)
-# allow QAV to replace complete translation units and headers without adding test branches to production files
-MODEL_SOURCE_DIRS += $(QAV_BACKEND_COMMON_DIR) $(QAV_REPR_COMMON_DIR)
-MODEL_HEADER_DIRS += $(QAV_BACKEND_COMMON_DIR) $(QAV_REPR_COMMON_DIR)
+ifneq ($(IS_VAL),)
+# allow validation models to replace complete files without adding test branches to production files
+MODEL_SOURCE_DIRS += $(VAL_BACKEND_COMMON_DIR) $(VAL_REPR_COMMON_DIR)
+MODEL_HEADER_DIRS += $(VAL_BACKEND_COMMON_DIR) $(VAL_REPR_COMMON_DIR)
 endif
 MODEL_HEADER_DIRS += $(MODEL_INCLUDE_DIRS)
 MODEL_INCLUDE_FLAGS := $(addprefix -I ,$(MODEL_HEADER_DIRS))
@@ -168,25 +168,25 @@ endif
 
 MODEL_CONST := $(firstword $(foreach dir,$(MODEL_HEADER_DIRS),$(wildcard $(dir)/const_defs.cuh)))
 
-ifeq ($(IS_QAV),)
+ifeq ($(IS_VAL),)
 EXEC = $(dir $(MODEL_FLAG_FILE))gamedev
 else
-# keep all generated QAV build products out of the source and production trees
-OBJ_ROOT = $(QAV_ROOT)/logs/build/obj
-EXEC = $(QAV_ROOT)/logs/build/bin/$(GPU_BACKEND)/$(DUST_REPR)/$(MODEL)/gamedev
+# keep generated validation build products out of the source and production trees
+OBJ_ROOT = $(VAL_ROOT)/temp/obj
+EXEC = $(VAL_ROOT)/temp/bin/$(GPU_BACKEND)/$(DUST_REPR)/$(MODEL)/gamedev
 endif
 
-ifeq ($(IS_QAV),)
+ifeq ($(IS_VAL),)
 OUT_DIR = $(OUT_ROOT)/$(MODEL)
 else
 OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
-QAV_SCOPE ?= all
-QAV_SCOPE_DIR = $(if $(filter all,$(QAV_SCOPE)),,/groups/$(QAV_SCOPE))
+VAL_SCOPE ?= all
+VAL_SCOPE_DIR = $(if $(filter all,$(VAL_SCOPE)),,/groups/$(VAL_SCOPE))
 ifeq ($(DUST_REPR),fluid)
-QAV_SWEEP ?= $(FLUID_SWEEP)
-OUT_DIR = $(QAV_ROOT)/logs/fluid/$(GPU_BACKEND)/$(QAV_SWEEP)$(QAV_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
+VAL_SWEEP ?= $(FLUID_SWEEP)
+OUT_DIR = $(VAL_ROOT)/logs/fluid/$(GPU_BACKEND)/$(VAL_SWEEP)$(VAL_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
 else
-OUT_DIR = $(QAV_ROOT)/logs/swarm/$(GPU_BACKEND)$(QAV_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
+OUT_DIR = $(VAL_ROOT)/logs/swarm/$(GPU_BACKEND)$(VAL_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
 endif
 endif
 endif
@@ -292,6 +292,7 @@ _OBJ += $(_OBJ_MOD)
 OBJ = $(foreach file,$(strip $(_OBJ)),$(OBJ_DIR)/$(strip $(file)))
 SOURCE_SEARCH_DIRS = $(MODEL_SOURCE_DIRS) $(SRC_BACKEND_BRANCH_DIR) $(SRC_BRANCH_DIR)
 INC_SEARCH_FLAGS = $(MODEL_INCLUDE_FLAGS) -I $(INC_BACKEND_BRANCH_DIR) -I $(INC_BRANCH_DIR)
+BUILD_CONFIG = $(OBJ_DIR)/.build_config
 
 INC_HEADER_PATHS := $(shell find $(INC_BACKEND_BRANCH_DIR) $(INC_BRANCH_DIR) -type f \
     \( -name '*.cuh' -o -name '*.h' -o -name '*.hpp' \) 2>/dev/null)
@@ -337,7 +338,31 @@ $(EXEC): $(OBJ) $(MODEL_FLAG_FILE) $(MODEL_CONST) $(RELINK_TRIGGER) | $(OUT_DIR)
 
 FORCE:
 
-$(OBJ_DIR)/%.o: %.hip $(MODEL_FLAG_FILE) $(MODEL_CONST)
+# preserve an unchanged timestamp for identical builds and invalidate every object when any
+# effective compiler, include-search, source-selection, or output-path input changes
+$(BUILD_CONFIG): FORCE
+	@mkdir -p $(dir $@)
+	@{ \
+		printf '%s\n' \
+			'GPU_COMPILER=$(GPU_COMPILER)' \
+			'GPU_BASE_FLAGS=$(GPU_BASE_FLAGS)' \
+			'GPU_FLAGS=$(GPU_FLAGS)' \
+			'GPU_LANGUAGE_FLAG=$(GPU_LANGUAGE_FLAG)' \
+			'GPU_DEVICE_FLAG=$(GPU_DEVICE_FLAG)' \
+			'GPU_LINK_FLAGS=$(GPU_LINK_FLAGS)' \
+			'BACKEND_DEFINE=$(BACKEND_DEFINE)' \
+			'INC_SEARCH_FLAGS=$(INC_SEARCH_FLAGS)' \
+			'SOURCE_SEARCH_DIRS=$(SOURCE_SEARCH_DIRS)' \
+			'HEADER_OVERRIDE_PATHS=$(HEADER_OVERRIDE_PATHS)' \
+			'PATH_OUT=$(abspath $(OUT_DIR))'; \
+	} > "$@.tmp"
+	@if ! cmp -s "$@.tmp" "$@"; then \
+		mv "$@.tmp" "$@"; \
+	else \
+		rm -f "$@.tmp"; \
+	fi
+
+$(OBJ_DIR)/%.o: %.hip $(MODEL_FLAG_FILE) $(MODEL_CONST) $(BUILD_CONFIG)
 	@mkdir -p $(dir $@)
 	@printf "%-12s %60s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
 	@$(GPU_COMPILER) $(GPU_BASE_FLAGS) $(GPU_FLAGS) $(GPU_LANGUAGE_FLAG) $(GPU_DEVICE_FLAG) -o $@ $< \
@@ -345,7 +370,7 @@ $(OBJ_DIR)/%.o: %.hip $(MODEL_FLAG_FILE) $(MODEL_CONST)
 		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \
 		-MMD -MP -MF $(patsubst %.o,%.d,$@)
 
-$(OBJ_DIR)/%.o: %.cu $(MODEL_FLAG_FILE) $(MODEL_CONST)
+$(OBJ_DIR)/%.o: %.cu $(MODEL_FLAG_FILE) $(MODEL_CONST) $(BUILD_CONFIG)
 	@mkdir -p $(dir $@)
 	@printf "%-12s %60s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
 	@$(GPU_COMPILER) $(GPU_BASE_FLAGS) $(GPU_FLAGS) $(GPU_LANGUAGE_FLAG) $(GPU_DEVICE_FLAG) -o $@ $< \
@@ -362,7 +387,7 @@ ifdef MODEL
 else
 	@printf "%-12s %s\n" "Cleaning" "all object and model executable files"
 	@rm -rf $(OBJ_ROOT)/*
-	@rm -rf $(QAV_ROOT)/logs/build
+	@rm -rf $(VAL_ROOT)/temp
 	@rm -f $(MODEL_EXECUTABLES)
 endif
 

@@ -31,8 +31,8 @@ prevent an unsupported indefinitely settling dust layer.
 
 The active tree includes the corrected axisymmetric measure, well-mixed vertically integrated
 closures, imported-gas Stokes calibration, frozen collision snapshots, random-state restart
-semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The complete native CUDA
-and ROCm suites, including the radial analytical and KNN cases, are summarized in
+semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The CUDA and ROCm suite
+definitions and acceptance criteria, including the radial analytical and KNN cases, are documented in
 [`swarm_testset.md`](swarm_testset.md).
 
 ### 1.2 Physical assumptions and relation to the fluid branch
@@ -1626,7 +1626,7 @@ velocity units. Therefore `C_LIGHT = 10^4` is a code-unit velocity in the presen
 A future fully cgs dynamics branch must instead use
 $c=2.99792458\times10^{10}\ {\rm cm\,s^{-1}}$.
 
-Models enable this term with `NVCC += -DPR_EFFECT`. Compile-time validation rejects `PR_EFFECT`
+Models enable this term with `GPU_FLAGS += -DPR_EFFECT`. Compile-time validation rejects `PR_EFFECT`
 without `RADIATION`.
 
 ## 7. Stochastic density diffusion
@@ -1796,7 +1796,7 @@ $$
 
 ## 8. Representative-particle collisions
 
-### 8.1 Backend selection and physical collision rate
+### 8.1 Backend selection and collision-rate normalization
 
 The collision update uses the representative-particle Monte Carlo interpretation of
 [Zsom & Dullemond (2008)](https://arxiv.org/abs/0807.5052): a computational representative is
@@ -1889,6 +1889,33 @@ $$
 =\frac{N_jK_{ij}}
 {A_{K,i}\sqrt{2\pi(H_{g,i}^2+H_{g,j}^2)}}.
 $$
+
+This physical prescription is selected by `COAG_KERNEL = 3`. The other three values are
+normalized synthetic kernel shapes intended for controlled coagulation studies:
+
+```math
+\kappa_0(m_i,m_j)=1,
+\qquad
+\kappa_1(m_i,m_j)=m_i+m_j,
+\qquad
+\kappa_2(m_i,m_j)=m_im_j.
+```
+
+For `COAG_KERNEL = 0`, `1`, or `2`, the implemented pair propensity is
+
+```math
+\lambda_{ij}^{(q)}
+=\frac{\lambda_0N_j\kappa_q(m_i,m_j)}{V_{K,i}},
+\qquad
+\lambda_0=\frac{N_P}{(N_K-1)M_{\rm dust}},
+\qquad q\in\{0,1,2\},
+```
+
+where $V_{K,i}$ denotes the active KNN measure; in a vertically integrated calculation it is the
+KNN area. These synthetic choices do not use $\sigma_{ij}\Delta v_{ij}$ or the Gaussian vertical
+overlap factor and therefore must not be interpreted as the physical collision prescription. The
+shipped backend headers currently default to `COAG_KERNEL = 0`; a physical collision model must
+provide `COAG_KERNEL = 3` through its model-specific `const_defs.cuh`.
 
 The resolved relative speed is reconstructed from the complete Cartesian velocity difference.
 Brownian motion and the turbulent prescription of
@@ -2269,7 +2296,7 @@ reproducible within each backend, but an identical random target can therefore s
 partner after switching backends. Backend trajectories and RNG states need not remain byte-equal;
 mass conservation, rates, topology, and ensemble distributions are the cross-backend invariants.
 
-The KD-tree candidate heap uses `index_old` as its equal-distance tie breaker and expands its
+The KD-tree candidate heap uses `idx_old` as its equal-distance tie breaker and expands its
 squared culling distance by one floating-point unit,
 
 $$
@@ -2279,7 +2306,7 @@ $$
 
 Each heap slot stores only the encoded pair $(d^2,\mathrm{id})$; the shuffled tree slot is not
 retained because collision physics consumes
-`index_old` directly. This prevents mutable tree slots from changing which member of an
+`idx_old` directly. This prevents mutable tree slots from changing which member of an
 exact-distance tie is retained while minimizing thread-local storage. For partial wedges, the heap
 checks for repeated physical identifiers only when the minimum separation between adjacent
 periodic images is no larger than twice the current query radius. Wider wedges use the ordinary
@@ -2450,8 +2477,9 @@ owner also retains unsorted query coordinates, azimuths, per-particle cutoffs, a
 Consequently, full-disk total search storage can exceed the single-array KD-tree even when the
 Morton hierarchy is smaller; partial wedges benefit more strongly because the KD-tree stores three
 complete copies. The KD-tree remains an independent mature reference and a strong single-GPU
-option. Backend choice is a measured model configuration, not a change in collision physics;
-current timing, memory, and pass criteria belong in `swarm_testset.md`.
+option. Backend choice is a measured model configuration, not a change in collision physics. The
+correctness criteria and generated-evidence contract are documented in `swarm_testset.md`; timing
+and memory must be measured for the intended model, compiler, backend, and GPU.
 
 For broader context on cooperative GPU similarity search, see
 [Johnson, Douze & Jégou (2017)](https://arxiv.org/abs/1702.08734); the exact top-$K$ and periodic
@@ -2493,24 +2521,22 @@ is exact conditional on the frozen bath; convergence under halving $\tau_{\mathr
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
 chain lengths without truncating a stochastic path. The Bernoulli method remains available through
 `BERNOULLI` for controlled comparisons or configurations that explicitly require that older
-discretization; `KNN_CACHE` selects its cached-neighbor variant. The post-inversion CUDA chain
-campaign has qualified the frozen-bath, direct-Bernoulli, and cached-Bernoulli paths with both
-search backends, including geometry reuse and checkpoint-boundary restart. The matching ROCm
-`gfx942` campaign has qualified the same six models and all three collision-integrator selections.
-Together these campaigns establish native execution of frozen bath, direct Bernoulli, and cached
-Bernoulli with Morton and KD-tree search on both supported GPU backends.
+discretization; `KNN_CACHE` selects its cached-neighbor variant. The retained publication validation group
+contains four production frozen-bath cases covering coagulation, fragmentation, an azimuthal wedge,
+and three-dimensional geometry with both Morton and KD-tree search. CUDA and ROCm define the same
+group. Its generated native evidence is intentionally not tracked with the source and must be
+repopulated after relevant code changes. Direct and cached Bernoulli execution, geometry-reuse
+microbenchmarks, and collision-checkpoint campaigns used during development are not part of the
+retained publication suite and must not be cited as current qualification evidence.
 
-Finite-bath convergence is a separate scientific requirement. In compact CUDA populations, the
-finest tested coagulation refinement `COL_BATH_EPS = 0.0075 -> 0.00375` and fragmentation
-refinement `0.0015 -> 0.00075` change ensemble size CDFs and normalized moments by less than the
-provisional compact-case tolerances and less than ordinary cross-seed scatter. These results bound
-the bath-freezing error for those cases only. The production header value `COL_BATH_EPS = 0.06`
-remains a model parameter that must be calibrated together with `N_K`, `H_SEARCH`, and `N_P` before
-a scientific production campaign; current compact spatial refinements have not converged. A study
-that relies on the collisional size distribution should compare at least two successively smaller
-bath tolerances across independent seeds, using distributional observables at equal physical time.
-This qualification belongs to that physical model rather than to a permanent matrix of synthetic
-QAV cases.
+Finite-bath convergence is a separate scientific requirement. Exploratory compact-population
+refinements are not retained as publication qualification evidence and do not define a universal
+tolerance. The production header value `COL_BATH_EPS = 0.06` remains a model parameter that must be
+calibrated together with `N_K`, `H_SEARCH`, and `N_P` before a scientific production campaign. A
+study that relies on the collisional size distribution should compare at least two successively
+smaller bath tolerances across independent seeds, using distributional observables at equal physical
+time. This qualification belongs to that physical model rather than to a permanent matrix of
+synthetic validation cases.
 
 A binned or otherwise modified representative-particle collision scheme is not merely a faster
 implementation of the same stochastic process. It may change the estimator, population resolution,
@@ -2796,9 +2822,9 @@ M_{\rm particle}=N_P
 ```
 
 Diffusion or collisions additionally require one opaque backend RNG state per representative. KNN
-storage depends on the selected backend and wedge geometry; measured formulas and benchmark
-results are documented in [`swarm_testset.md`](swarm_testset.md), because compiler layout and
-periodic-ghost count determine the actual allocation.
+storage depends on the selected backend, compiler layout, and wedge-dependent periodic-ghost count.
+Actual allocations and timings must therefore be measured for the intended production build; the
+correctness and archive criteria are documented in [`swarm_testset.md`](swarm_testset.md).
 
 Initialization uses a fixed host random seed and stochastic evolution uses one persistent backend
 RNG stream per representative. Saving and restoring those states preserves an interrupted run for
@@ -2897,15 +2923,13 @@ model itself rather than current test coverage.
 
 - The current fluid and swarm diffusion-momentum closures differ and should not be compared as the
   same velocity equation.
-- A zero integrated dust mass, `N_K == 1`, or a polar domain reaching a coordinate singularity is
-  not a scientifically meaningful configuration and is not fully guarded.
-- Imported-gas position sampling currently assumes a strictly positive integrated
-  $\rho_g\epsilon$ mass; an all-zero imported profile reaches an undefined CDF normalization and
-  should be rejected by the caller until an explicit host guard is added.
+- `N_K == 1` and a polar domain reaching a coordinate singularity are not scientifically meaningful
+  configurations and are not fully guarded. Analytical and imported-gas initialization do reject
+  zero, negative, or non-finite integrated dust mass before normalizing their sampling CDFs.
 - The frozen-bath chain rejects invalid pair rates, clocks, states, and Morton traversal overflow,
-  and the complete post-inversion chain group is natively qualified on both GPU backends. Compact
-  bath-refinement cases bound finite-bath error at much smaller tolerances than the current
-  production default, while neighbor count, search radius, and representative count remain
+  and the retained four-model chain group is available for native qualification on both GPU
+  backends. Compact bath-refinement studies bound finite-bath error only for their tested models;
+  neighbor count, search radius, representative count, and the production bath tolerance remain
   unconverged model-dependent controls.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.

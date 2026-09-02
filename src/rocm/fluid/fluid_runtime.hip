@@ -76,7 +76,7 @@ int main (int argc, char **argv)
     real *optdepth, *dev_optdepth;
     HIP_CHECK(hipHostMalloc((void**)&optdepth, sizeof(real)*N_G));
     HIP_CHECK(hipMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
-    #endif
+    #endif // RADIATION
 
     // abort at the first cell containing a nonfinite evolved value
     auto validate_finite_state = [&]()
@@ -86,7 +86,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz,
             #ifdef RADIATION
             dev_optdepth,
-            #endif
+            #endif // RADIATION
             dev_bad_cell
         );
         HIP_KERNEL_CHECK("inf_cell_flag");
@@ -138,14 +138,14 @@ int main (int argc, char **argv)
         HIP_KERNEL_CHECK("optdepth_csum");
 
         HIP_CHECK(hipDeviceSynchronize());
-        #endif
+        #endif // RADIATION
 
         // initialize primitive velocities and build their conserved fields
         init_vel_calc <<< NB_G, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz
             #ifdef DIFFUSION
             , dev_dustdens
-            #endif
+            #endif // DIFFUSION
         );
         HIP_KERNEL_CHECK("init_vel_calc");
 
@@ -171,7 +171,7 @@ int main (int argc, char **argv)
         SAVE_DUST_VEL_TO_FILE(idx_from);
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from);
-        #endif
+        #endif // RADIATION
 
         msg_output(0);
     }
@@ -203,7 +203,7 @@ int main (int argc, char **argv)
         HIP_KERNEL_CHECK("optdepth_csum");
 
         HIP_CHECK(hipDeviceSynchronize());
-        #endif
+        #endif // RADIATION
 
         validate_finite_state();
 
@@ -245,9 +245,9 @@ int main (int argc, char **argv)
             real dt_sub = std::fmin(remaining, recalc_dt_cfl(
                 #ifdef HIP_SYNC_TRACE
                 true
-                #else
+                #else  // !HIP_SYNC_TRACE
                 false
-                #endif
+                #endif // HIP_SYNC_TRACE
             ));
 
             #ifdef FLUID_BLOCK_SWEEP
@@ -275,9 +275,9 @@ int main (int argc, char **argv)
             real dt_sub = std::fmin(remaining, recalc_dt_cfl(
                 #ifdef HIP_SYNC_TRACE
                 true
-                #else
+                #else  // !HIP_SYNC_TRACE
                 false
-                #endif
+                #endif // HIP_SYNC_TRACE
             ));
 
             #ifdef FLUID_BLOCK_SWEEP
@@ -305,9 +305,9 @@ int main (int argc, char **argv)
             real dt_sub = std::fmin(remaining, recalc_dt_cfl(
                 #ifdef HIP_SYNC_TRACE
                 true
-                #else
+                #else  // !HIP_SYNC_TRACE
                 false
-                #endif
+                #endif // HIP_SYNC_TRACE
             ));
 
             #ifdef FLUID_BLOCK_SWEEP
@@ -396,7 +396,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         HIP_KERNEL_CHECK("momentum_getv");
-        #endif
+        #endif // DIFFUSION
 
         // apply the opening half of the symmetric directional transport composition
         real dt_adv = 0.5*dt;
@@ -418,21 +418,21 @@ int main (int argc, char **argv)
         HIP_KERNEL_CHECK("optdepth_csum");
 
         validate_finite_state();
-        #endif
+        #endif // RADIATION
 
         // ramp radiation pressure smoothly during the configured startup interval
         #ifdef RADIATION
         real taper_raw = (T_BETA > 0.0) ? (clock_sim + 0.5*dt) / T_BETA : 1.0;
         taper_raw = std::fmin(std::fmax(taper_raw, 0.0), 1.0);
         real beta_taper = taper_raw*taper_raw*(3.0 - 2.0*taper_raw);
-        #endif
+        #endif // RADIATION
 
         // advance the centred source operator and synchronize conserved momentum
         source_update <<< NB_G, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
             #ifdef RADIATION
             dev_optdepth, beta_taper,
-            #endif
+            #endif // RADIATION
             dt
         );
         HIP_KERNEL_CHECK("source_update");
@@ -489,7 +489,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
         );
         HIP_KERNEL_CHECK("momentum_getv");
-        #endif
+        #endif // DIFFUSION
 
         validate_finite_state();
 
@@ -515,13 +515,13 @@ int main (int argc, char **argv)
             HIP_KERNEL_CHECK("optdepth_csum");
 
             validate_finite_state();
-            #endif
+            #endif // RADIATION
 
             SAVE_DUSTDENS_TO_FILE(idx_from);
             SAVE_DUST_VEL_TO_FILE(idx_from);
             #ifdef RADIATION
             SAVE_OPTDEPTH_TO_FILE(idx_from);
-            #endif
+            #endif // RADIATION
 
             msg_output(idx_from);
         }
@@ -550,7 +550,7 @@ int main (int argc, char **argv)
     #ifdef RADIATION
     HIP_CHECK(hipHostFree(optdepth));
     HIP_CHECK(hipFree(dev_optdepth));
-    #endif
+    #endif // RADIATION
 
     return 0;
 }

@@ -1,7 +1,7 @@
 #ifndef PARAM_GRID_CUH
 #define PARAM_GRID_CUH
 
-#include <cmath>  // cos, fmin, log, pow, sin
+#include <cmath>  // cos, fabsf, fmin, fminf, log, pow, sin, sinf
 
 #include <const_defs.cuh>
 
@@ -79,6 +79,13 @@ real _get_vol_z (int iz)
     real vol_z = cos(_get_zface(iz)) - cos(_get_zface(iz + 1));
 
     return (N_Z > 1) ? vol_z : 1.0;
+}
+
+// shortest Cartesian separation between the two periodic images of one physical point
+__host__ __device__ __forceinline__
+float _get_image_dist_min (float x_min, float x_max, float y_min, float z_min, float z_max)
+{
+    return 2.0f*y_min*fminf(sinf(z_min), sinf(z_max))*fabsf(sinf(0.5f*(x_max - x_min)));
 }
 
 // =========================================================================================================================

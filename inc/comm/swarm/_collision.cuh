@@ -373,7 +373,7 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old
 // pair collision propensity
 // =========================================================================================================================
 
-// calculate the pair propensity numerator N_j K_ij before division by the local KNN measure
+// calculate the pair-propensity numerator before division by the local KNN measure
 template <KernelType kernel> __device__ __forceinline__
 real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
     #ifdef IMPORTGAS
@@ -386,8 +386,9 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     // we assume that a limited number n representative particles represent all N physical particles
     // each representative particle i describes a swarm of N_i identical physical particles
     // as n << N, we only need to consider the collisions between representative and non-representative particles
-    // the probability of a collision between particles i and j is determined as 
-    // lambda_ij = N_j * K_ij / V, where K_ij is the coagulation kernel and V is the volume of the cell
+    // the probability of a physical collision between particles i and j is determined as
+    // lambda_ij = N_j * K_ij / V, where K_ij is the coagulation kernel and V is the local measure
+    // synthetic kernels instead multiply their normalized kernel shape by the supplied lambda_0
     
     real numr_j = dev_numr_old[idx_old_j];
 

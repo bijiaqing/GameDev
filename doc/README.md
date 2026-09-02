@@ -17,23 +17,24 @@ Physical equations and production algorithms belong in the numerical guides. Tes
 evidence rules belong in the test guides. The paired fluid/swarm derivations remain independent even
 where their gas-disk assumptions are physically identical.
 
-## Source and QAV layout
+## Source and validation layout
 
 - `inc/comm/fluid/`, `inc/comm/swarm/`, `src/comm/fluid/`, and `src/comm/swarm/` contain complete
   backend-neutral files.
 - `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files.
 - `mod/` contains the published production model configuration.
-- `qav/comm/` contains backend-neutral publication-test definitions and validators.
-- `qav/cuda/` and `qav/rocm/` contain native drivers and backend-owned test source.
-- `qav/tool/` contains archive and cross-backend utilities.
-- all ignored QAV build products and numerical evidence are written below `qav/logs/`.
+- `val/comm/` contains backend-neutral publication-test definitions and validators.
+- `val/cuda/` and `val/rocm/` contain native drivers and backend-owned test source.
+- `val/tool/` contains archive and cross-backend utilities.
+- ignored numerical evidence is written below `val/logs/`, while disposable validation builds are
+  written below `val/temp/`.
 
 The build shares a file only when the complete file is backend-neutral. It does not split partially
 portable translation units. Fluid and swarm files are also kept separate rather than creating a
 cross-representation shared layer.
 
 Production models select one GPU backend, one fluid sweep implementation where applicable, and one
-collision-search backend. Their executable is written beside the model flags. QAV archives retain
+collision-search backend. Their executable is written beside the model flags. Validation archives retain
 explicit CUDA/ROCm paths because completed native results must coexist for comparison. Checkpoints
 are not portable across backends.
 
@@ -48,7 +49,7 @@ The current source defines a deliberately compact publication suite:
 
 The former expanded archives and their micro-tests were retired. A fresh native CUDA and ROCm
 campaign is required to populate the new publication manifests after this reduction.
-The exact commands and archive contract are documented in [`qav/README.md`](../qav/README.md).
+The exact commands and archive contract are documented in [`val/README.md`](../val/README.md).
 
 ## Current cross-representation conventions
 
@@ -69,7 +70,7 @@ These are paired scientific conventions, not shared-code interfaces.
 When statements disagree, use this authority order:
 
 1. current production source, flags, and constants;
-2. freshly generated machine-readable evidence under `qav/logs/`;
+2. freshly generated machine-readable evidence under `val/logs/`;
 3. the canonical documents in this directory;
 4. historical results and development notes.
 

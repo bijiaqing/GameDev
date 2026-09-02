@@ -101,7 +101,7 @@ diffusivity; the code does not solve a gas viscous evolution equation.
 
 The remainder of this chapter defines the grid and evolved state, constructs the prescribed disk
 and initial condition, states the continuum equations, describes each numerical operator, and then
-documents their composition, CUDA implementations, output semantics, validation boundary, and
+documents their composition, GPU implementations, output semantics, validation boundary, and
 known limitations. Sections 1–7 intentionally parallel the corresponding physical topics in the
 swarm guide; the later organization differs only where the swarm requires a separate collision
 chapter.
@@ -327,7 +327,7 @@ The production fluid branch is specialized at compilation rather than switched a
 | `VISC_FLOW` | use the viscous gas target velocity; requires `DIFFUSION` |
 | `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required |
 | `HALF_DISK` | reflect the active polar boundary at the midplane |
-| `FLUID_SWEEP=thread` | assign one CUDA thread to each complete directional line |
+| `FLUID_SWEEP=thread` | assign one GPU thread to each complete directional line |
 | `FLUID_SWEEP=block` | assign one cooperative GPU block to each directional line |
 
 Transport and the local source update have no feature flag and are always compiled. The two sweep
@@ -1131,7 +1131,7 @@ F_{m_a}=F_\varrho u_a.
 At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero. Here “reflecting”
 means an impermeable finite-volume symmetry wall; the fluid operator does not move a parcel through
 the face and then reverse its polar momentum. Reflection-symmetric continuum states instead have
-zero normal velocity at the midplane, which is the interpretation exercised by QAV.
+zero normal velocity at the midplane, which is the interpretation exercised by the validation suite.
 
 PPM is formally high order on smooth fields, but the complete multidimensional solver should be
 described as second-order accurate: Strang composition, Crank–Nicolson diffusion, boundary fluxes,
@@ -1747,8 +1747,8 @@ validated gfx942 linker at `N_X = 1024`, making the block sweep the supported la
 These are hardware resource constraints, not changes to the numerical operator.
 
 Performance is grid dependent, so the intended production grid should be benchmarked before
-selecting a default; neither implementation is universally preferred. The matched comparison
-procedure and the status of its archived evidence are recorded in `fluid_testset.md`.
+selecting a default; neither implementation is universally preferred. Sweep-performance evidence is
+model- and machine-specific and is not part of the retained publication-verification suite.
 
 For directional sweeps, the independent line counts are
 
@@ -1845,10 +1845,10 @@ model itself rather than current test coverage.
   momentum exchange at zero net mass flux is omitted. It must not be described as a complete
   Reynolds-averaged momentum tensor. A future Reynolds option would be a different physical model,
   not a correction term that can be added independently to the present kernels.
-- The 3D initializer balances polar advection and density diffusion only to discretization error. The normalized instantaneous
-  mismatch and its polar-resolution convergence are measured by `test_startup_3d`; later momentum relaxation can still
-  produce a physical startup transient and is not assumed to vanish under mesh refinement. The focused CUDA sequence
-  converges at approximately second order through $N_Y=N_Z=256$.
+- The 3D initializer balances polar advection and density diffusion only to discretization error. The
+  normalized instantaneous mismatch and its polar-resolution convergence are measured by
+  `test_startup_3d`; later momentum relaxation can still produce a physical startup transient and is
+  not assumed to vanish under mesh refinement.
 - The block diffusion kernels still execute each Thomas or Sherman–Morrison recurrence serially
   within its line, and the block advection kernels retain a serial face-ordered correction pass.
   Further parallelization should use a conservation- and positivity-preserving face-budget limiter

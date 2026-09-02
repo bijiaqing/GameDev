@@ -339,20 +339,14 @@ int main (int argc, char **argv)
 
     #ifdef COLLISION
     bool col_geom_valid = false;
-
-
-
-    #ifdef COLLISION_KDTREE
     float image_dist_min = -1.0f;
-    if (N_T > N_P)
+    if (X_WEDGE)
     {
-        image_dist_min = static_cast<float>(
-            2.0*Y_MIN*std::fmin(std::sin(Z_MIN), std::sin(Z_MAX))
-            *std::fabs(std::sin(0.5*(X_MAX - X_MIN)))
+        image_dist_min = _get_image_dist_min(
+            static_cast<float>(X_MIN), static_cast<float>(X_MAX), static_cast<float>(Y_MIN),
+            static_cast<float>(Z_MIN), static_cast<float>(Z_MAX)
         );
     }
-    #endif // COLLISION_KDTREE
-
     #ifndef BERNOULLI
     col_bath_state bath_state;
     col_controller_summary col_summary;
@@ -425,12 +419,12 @@ int main (int argc, char **argv)
 
             thrust::device_ptr <const float> search_dist_ptr(dev_search_dist);
             float max_search_dist = *thrust::max_element(search_dist_ptr, search_dist_ptr + N_P);
+            bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*max_search_dist;
             morton_owner.build(
                 dev_morton_point, dev_morton_posx, N_P, max_search_dist,
                 static_cast<float>(X_MIN), static_cast<float>(X_MAX),
-                static_cast<float>(Y_MIN), static_cast<float>(Y_MAX),
-                static_cast<float>(Z_MIN), static_cast<float>(Z_MAX),
-                N_X > 1, (N_Z > 1) ? 3 : 2, MORTON_LEAF_TARGET, MORTON_MAX_LEVEL
+                static_cast<float>(Y_MAX), X_WEDGE, unique_ids,
+                (N_Z > 1) ? 3 : 2, MORTON_LEAF_TARGET, MORTON_MAX_LEVEL
             );
             #endif // COLLISION_KDTREE
 

@@ -18,13 +18,13 @@ void _block_z_lowflux (
     {
         #ifdef HALF_DISK
         flux_rhod = flux_mx = flux_my = flux_mz = 0.0;
-        #else
+        #else  // !HALF_DISK
         real speed_o = lz[iz] / y;
         flux_rhod = (speed_o > 0.0) ? speed_o*fmax(rhod[iz], 0.0) : 0.0;
         flux_mx = flux_rhod*lx[iz];
         flux_my = flux_rhod*vy[iz];
         flux_mz = flux_rhod*lz[iz];
-        #endif
+        #endif // HALF_DISK
         return;
     }
 

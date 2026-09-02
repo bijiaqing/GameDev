@@ -62,7 +62,7 @@ do {                                                                            
     { hip_fail(hip_status_, KERNEL_NAME " kernel execution", __FILE__, __LINE__); } \
     std::cout << "  [HIP] completed " << KERNEL_NAME << std::endl;                   \
 } while (0)
-#else
+#else  // !HIP_SYNC_TRACE
 #define HIP_KERNEL_CHECK(KERNEL_NAME)                                              \
 do {                                                                                \
     hipError_t hip_status_ = hipGetLastError();                                  \
@@ -605,13 +605,13 @@ bool save_variable (const std::string &file_name)
     file << "BETA_0      = " << std::scientific   << std::setprecision(8) << BETA_0    << "\n";
     file << "KAPPA_0     = " << std::scientific   << std::setprecision(8) << KAPPA_0   << "\n";
     file << "T_BETA      = " << std::scientific   << std::setprecision(8) << T_BETA    << "\n";
-    #endif
+    #endif // RADIATION
     #ifdef DIFFUSION
     file << "SCHMIDT_Y   = " << std::scientific   << std::setprecision(8) << SCHMIDT_Y << "\n";
     file << "SCHMIDT_X   = " << std::scientific   << std::setprecision(8) << SCHMIDT_X << "\n";
     file << "SCHMIDT_Z   = " << std::scientific   << std::setprecision(8) << SCHMIDT_Z << "\n";
     file << "POS_LIMIT   = " << std::scientific   << std::setprecision(8) << POS_LIMIT << "\n";
-    #endif
+    #endif // DIFFUSION
     file                                                                               << "\n";
 
     file << "N_X         = " << std::defaultfloat << std::setprecision(8) << N_X       << "\n";
@@ -638,4 +638,4 @@ bool save_variable (const std::string &file_name)
 
 // =========================================================================================================================
 
-#endif
+#endif // FLUID_HOST_CUH

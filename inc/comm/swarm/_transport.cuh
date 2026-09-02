@@ -41,7 +41,7 @@ bool _is_particle_active (real y, real z)
     if (y < Y_MIN || y >= Y_MAX) return false;
     #ifdef HALF_DISK
     if (N_Z > 1 && (z < Z_MIN || z > Z_MAX)) return false;
-    #else
+    #else  // !HALF_DISK
     if (N_Z > 1 && (z < Z_MIN || z >= Z_MAX)) return false;
     #endif // HALF_DISK
 
@@ -108,7 +108,7 @@ void _apply_transport_boundary (real &x, real &y, real &z, real &lx, real &vy, r
 
     #ifdef HALF_DISK
     bool polar_exit = N_Z > 1 && (z < Z_MIN || z > Z_MAX);
-    #else
+    #else  // !HALF_DISK
     bool polar_exit = N_Z > 1 && (z < Z_MIN || z >= Z_MAX);
     #endif // HALF_DISK
 

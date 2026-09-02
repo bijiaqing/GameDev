@@ -7,7 +7,7 @@ void inf_cell_flag (
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz,
     #ifdef RADIATION
     const real *dev_optdepth,
-    #endif
+    #endif // RADIATION
     int *dev_bad_cell
 )
 {
@@ -21,7 +21,7 @@ void inf_cell_flag (
 
     #ifdef RADIATION
     finite = finite && isfinite(dev_optdepth[idx_cell]);
-    #endif
+    #endif // RADIATION
 
     // record the first nonfinite cell with zero reserved for a clean state
     if (!finite) atomicCAS(dev_bad_cell, 0, idx_cell + 1);

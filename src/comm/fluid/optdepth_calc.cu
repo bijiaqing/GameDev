@@ -28,4 +28,4 @@ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens)
     dev_optdepth[idx_cell] = KAPPA_0*extinction_dens*dr;
 }
 
-#endif
+#endif // RADIATION

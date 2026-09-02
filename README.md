@@ -53,7 +53,7 @@ Read the relevant numerical and verification guides before using results for sci
 - exact top-$K$ collision-neighborhood searches through either a bundled KD tree or an adaptive
   Morton index with periodic ghost records
 - model-local constants and source overrides without modifying production implementation files
-- analytical, statistical, boundary, backend, and regression suites under `qav/`
+- analytical, statistical, boundary, backend, and regression suites under `val/`
 - restart files that store physical linear velocities in both representations
 
 ## Dust representations
@@ -130,7 +130,7 @@ directional splitting, and operator composition reduce the appropriate global sm
 to second order. Shocks, contacts, vacuum interfaces, and extrema are deliberately limited and need
 not retain that order.
 
-Two CUDA sweep implementations are available:
+Two GPU sweep implementations are available:
 
 - `FLUID_SWEEP := thread` uses one thread per directional line and line-sized local work arrays
 - `FLUID_SWEEP := block` uses one GPU block per line with explicit workspace and cooperative
@@ -220,7 +220,7 @@ mod/swarm_fiducial/gamedev
 Select the AMD backend from the same repository root:
 
 ```bash
-make MODEL=fluid_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
+make MODEL=fluid_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942 FLUID_SWEEP=block
 mod/fluid_fiducial/gamedev
 
 make MODEL=swarm_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
@@ -230,6 +230,8 @@ mod/swarm_fiducial/gamedev
 Each production model selects one backend, sweep implementation, and collision-search method for
 its build. Rebuilding that model replaces its single `gamedev` executable, while internal object
 directories retain enough configuration detail to prevent incompatible objects from being reused.
+The block sweep is explicit above because the production-scale fiducial azimuthal line exceeds the
+validated gfx942 linker limit of the thread sweep at `N_X = 1024`.
 
 The supplied fiducial models are production-scale examples, not lightweight demonstrations. In
 particular, the default fluid grid is large and the default swarm model contains many
@@ -251,7 +253,10 @@ make clean
 
 Build messages report the selected model, representation, constant header, overridden headers,
 fluid sweep, or collision-search backend as applicable. Each compiled line also reports which
-source file won the model-over-production search order.
+source file won the model-over-production search order. A per-object-directory configuration stamp
+automatically recompiles objects when command-line definitions, include/source selection, compiler
+flags, or the compile-time output path changes; manual parameter sweeps therefore cannot silently
+reuse objects from a different build configuration.
 
 ## Configuring a model
 
@@ -264,7 +269,7 @@ mod/
     └── const_defs.cuh    # optional
 ```
 
-The build searches `mod/`, `qav/comm/fluid/`, and `qav/comm/swarm/` for the requested `MODEL`.
+The build searches `mod/`, `val/comm/fluid/`, and `val/comm/swarm/` for the requested `MODEL`.
 The name must resolve to exactly one directory.
 
 ### Fluid model flags
@@ -276,11 +281,11 @@ DUST_REPR := fluid
 FLUID_SWEEP := thread
 ```
 
-Optional compile-time switches are added through `NVCC`:
+Optional compile-time switches are added through `GPU_FLAGS`:
 
 ```make
-NVCC += -DDIFFUSION
-NVCC += -DRADIATION
+GPU_FLAGS += -DDIFFUSION
+GPU_FLAGS += -DRADIATION
 ```
 
 | Setting | Meaning |
@@ -303,10 +308,10 @@ A basic transported swarm configuration is:
 ```make
 DUST_REPR := swarm
 
-NVCC += -DTRANSPORT
-NVCC += -DRADIATION
-NVCC += -DSAVE_DENS
-NVCC += -DCODE_UNIT
+GPU_FLAGS += -DTRANSPORT
+GPU_FLAGS += -DRADIATION
+GPU_FLAGS += -DSAVE_DENS
+GPU_FLAGS += -DCODE_UNIT
 ```
 
 | Flag or setting | Meaning |
@@ -333,10 +338,12 @@ NVCC += -DCODE_UNIT
 
 Collision-enabled builds must select exactly one search backend. The Makefile translates
 `COLLISION_SEARCH` into the corresponding internal backend macro.
+`COAG_KERNEL` is selected in `const_defs.cuh`: values `0`-`2` are normalized synthetic kernels,
+while value `3` enables the physical cross-section and relative-velocity prescription.
 
 ### Constants
 
-If a model needs different physical parameters, grid dimensions, particle count, cadence, or CUDA
+If a model needs different physical parameters, grid dimensions, particle count, cadence, or GPU
 launch settings, place a complete `const_defs.cuh` in the model directory. The build gives this file
 priority over the backend and representation default:
 
@@ -480,12 +487,12 @@ by the simulation.
 ## Verification
 
 Verification models, validators, generated metrics, and standalone numerical checks live under
-`qav/`, separate from production models in `mod/`.
+`val/`, separate from production models in `mod/`.
 
-Run the complete native campaign with `qav/tool/run_all.py`; use `--quick` for a short workflow
+Run the complete native campaign with `val/tool/run_all.py`; use `--quick` for a short workflow
 check. The backend-neutral archive-transfer and comparison procedure is documented in
-[`qav/README.md`](qav/README.md). Test equations, acceptance criteria, focused commands, current
-evidence, and remaining coverage are maintained in
+[`val/README.md`](val/README.md). Test equations, acceptance criteria, focused commands, evidence
+requirements, and remaining coverage are maintained in
 [`doc/fluid_testset.md`](doc/fluid_testset.md) and
 [`doc/swarm_testset.md`](doc/swarm_testset.md).
 
@@ -505,12 +512,13 @@ evidence, and remaining coverage are maintained in
 │   ├── cuda/                 # CUDA-owned translation units
 │   └── rocm/                 # ROCm-owned translation units
 ├── mod/                      # production model configurations
-├── qav/
+├── val/
 │   ├── comm/                 # backend-neutral test definitions by representation
 │   ├── cuda/                 # CUDA test drivers and backend-specific cases
 │   ├── rocm/                 # ROCm test drivers and backend-specific sources
-│   ├── tool/                 # backend-neutral QA and comparison utilities
-│   └── logs/                 # generated, backend-separated QA records and fields
+│   ├── tool/                 # backend-neutral validation and comparison utilities
+│   ├── logs/                 # generated, backend-separated validation records and fields
+│   └── temp/                 # generated validation executables, objects, and compiler stamps
 ├── doc/                      # canonical numerical and development documentation
 ├── obj/                      # generated model-specific object files
 └── out/                      # generated production outputs by model
@@ -526,8 +534,8 @@ verification interface.
 | [`doc/README.md`](doc/README.md) | canonical document map, repository conventions, and evidence status |
 | [`doc/fluid_numeric.md`](doc/fluid_numeric.md) | fluid equations, initialization, numerics, state semantics, references, and limitations |
 | [`doc/swarm_numeric.md`](doc/swarm_numeric.md) | swarm equations, mass weighting, transport, diffusion, collisions, KNN methods, and limitations |
-| [`doc/fluid_testset.md`](doc/fluid_testset.md) | fluid analytical cases, validators, commands, and retained results |
-| [`doc/swarm_testset.md`](doc/swarm_testset.md) | swarm analytical/statistical cases, KNN checks, commands, and retained results |
+| [`doc/fluid_testset.md`](doc/fluid_testset.md) | fluid analytical cases, validators, commands, archive contract, and coverage limits |
+| [`doc/swarm_testset.md`](doc/swarm_testset.md) | swarm analytical/statistical cases, KNN checks, commands, archive contract, and coverage limits |
 
 For numerical behavior, current production source and machine-readable test results take precedence
 over prose. The authority order and documentation maintenance policy are stated in
@@ -540,7 +548,7 @@ For every scientific run, retain at least:
 - the repository commit or an exact source archive
 - the complete model directory, including `flags.mk`, `const_defs.cuh`, and local overrides
 - the selected `FLUID_SWEEP` or `COLLISION_SEARCH` backend
-- the exact `nvcc` command options, CUDA toolkit, host compiler, driver, and GPU model
+- the exact GPU compiler options, backend toolkit, host compiler, driver, and GPU model
 - `variables.txt`, runtime logs, initial frame, restart frame if used, and validation metrics
 - random-state checkpoints for stochastic swarm calculations
 
@@ -555,9 +563,9 @@ relevant observables.
 | Symptom | Check |
 |---|---|
 | `MODEL is not defined` | run `make MODEL=<directory-name>` from the repository root |
-| model not found or ambiguous | ensure the name occurs exactly once under `mod/`, `qav/comm/fluid/`, or `qav/comm/swarm/` |
+| model not found or ambiguous | ensure the name occurs exactly once under `mod/`, `val/comm/fluid/`, or `val/comm/swarm/` |
 | missing `flags.mk` | every model requires a local `flags.mk` containing `DUST_REPR` |
-| unsupported GPU architecture | replace the Makefile's `-arch=sm_80` with the target CUDA architecture and rebuild |
+| unsupported GPU architecture | pass the correct `GPU_TARGET=<architecture>` for the selected backend and rebuild |
 | feature-dependency compile error | review the fluid or swarm flag constraints in [Configuring a model](#configuring-a-model) |
 | unexpected source file is compiled | read the `Compiling ...` line and check model-local files that shadow production names |
 | stale model behavior after changing flags | run `make MODEL=<name> clean` before rebuilding |
@@ -582,7 +590,7 @@ relevant observables.
 - Multi-GPU domain decomposition is not implemented
 - CUDA and ROCm are selected from one build tree, but checkpoints and vendor RNG-state files are
   intentionally not portable between them
-- `--use_fast_math`, backend choice, and CUDA architecture can change rounding and long-time
+- `--use_fast_math`, backend choice, and GPU target can change rounding and long-time
   trajectories; reproducibility claims must record the build environment
 - Some long-time, imported-gas, extreme-vacuum, and large-production collision regimes remain less
   thoroughly exercised than the analytical core
@@ -596,7 +604,7 @@ When changing a numerical method or physical prescription:
 
 1. keep the fluid and swarm implementations independently owned by their respective branches
 2. update the corresponding `doc/*_numeric.md` guide with the equation, assumptions, and reference
-3. add or update an analytical, statistical, boundary, or regression test under `qav/`
+3. add or update an analytical, statistical, boundary, or regression test under `val/`
 4. archive sufficient metrics and environment information to support the new claim
 5. update the relevant `doc/*_testset.md` evidence summary
 6. preserve the established names, comments, include order, formatting, and coordinate conventions
@@ -608,8 +616,8 @@ limitations, and regression requirements into the canonical guides.
 ## Citation and license
 
 A formal software citation is not yet provided. Until one is added, cite the repository version or
-commit used for a calculation and record the model constants, compile-time flags, CUDA toolkit,
-GPU architecture, and verification results relevant to the run.
+commit used for a calculation and record the model constants, compile-time flags, selected GPU
+backend, toolkit, compiler, target architecture, and verification results relevant to the run.
 
 GameDev's original code is distributed under the [MIT License](LICENSE). Copyright 2026 Jiaqing Bi.
 

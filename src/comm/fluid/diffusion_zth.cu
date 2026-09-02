@@ -238,4 +238,4 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
     }
 }
 
-#endif
+#endif // DIFFUSION

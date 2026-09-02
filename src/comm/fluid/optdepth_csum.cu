@@ -19,4 +19,4 @@ void optdepth_csum (real *dev_optdepth)
     }
 }
 
-#endif
+#endif // RADIATION

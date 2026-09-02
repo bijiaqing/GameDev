@@ -19,8 +19,9 @@ gamedev
 !/doc/*_testset.md
 !/doc/README.md
 
-# generated QAV artifacts
-/qav/logs/
+# generated validation artifacts
+/val/logs/
+/val/temp/
 
 # Python caches
 __pycache__/

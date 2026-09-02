@@ -71,14 +71,14 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 #ifdef HALF_DISK
                 // impose zero flux at the reflecting midplane boundary
                 flux_rhod[iz] = flux_mx[iz] = flux_my[iz] = flux_mz[iz] = 0.0;
-                #else
+                #else  // !HALF_DISK
                 // permit outward transport and suppress inflow at the outer polar boundary
                 real speed_o = lz[iz] / y;
                 flux_rhod[iz] = (speed_o > 0.0) ? speed_o*fmax(rhod[iz], 0.0) : 0.0;
                 flux_mx[iz] = flux_rhod[iz]*lx[iz];
                 flux_my[iz] = flux_rhod[iz]*vy[iz];
                 flux_mz[iz] = flux_rhod[iz]*lz[iz];
-                #endif
+                #endif // HALF_DISK
                 face_work_rhod[iz] = face_work_x[iz] = face_work_y[iz] = face_work_z[iz] = 0.0;
 
                 continue;

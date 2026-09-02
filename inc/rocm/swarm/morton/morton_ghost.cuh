@@ -83,13 +83,11 @@ public:
     morton_ghost_index &operator= (const morton_ghost_index &) = delete;
 
     void build (const float3 *dev_point, const float *dev_morton_posx, int point_count,
-        float search_dist, float x_min, float x_max, float y_min, float y_max,
-        float z_min, float z_max,
-        bool azimuth_active, int dim, int leaf_target, int max_level)
+        float search_dist, float x_min, float x_max, float y_max,
+        bool use_ghosts, bool unique_ids, int dim, int leaf_target, int max_level)
     {
         if (point_count <= 0) throw std::invalid_argument("Morton ghost point count must be positive");
 
-        bool use_ghosts = azimuth_active && x_max - x_min < 2.0f*MORTON_PI_F - 1.0e-6f;
         if (!use_ghosts)
         {
             // index physical records directly for full-period or inactive azimuth
@@ -149,10 +147,7 @@ public:
         _morton_hip_check(hipFree(dev_ghost_count), "release Morton ghost counts");
         _morton_hip_check(hipFree(dev_ghost_offset), "release Morton ghost offsets");
 
-        // flag whether one search ball can encounter multiple images of the same particle
-        float image_dist_min = 2.0f*y_min*fminf(sinf(z_min), sinf(z_max))
-            *fabsf(sinf(0.5f*(x_max - x_min)));
-        unique_ids_ = image_dist_min > 2.0f*search_dist;
+        unique_ids_ = unique_ids;
     }
 
     morton_view view () const { return morton_index_.view(); }
