@@ -115,6 +115,11 @@ record the expected cases, resolutions, completion state, backend, target, and s
 `val/tool/check_archive.py` rejects an incomplete native archive. The cross-backend comparator
 requires matching source fingerprints unless explicitly told otherwise.
 
+Cross-backend comparison excludes quantities that intentionally depend on native vendor random
+streams. In particular, `test_startup_3d` compares its normalized polar-balance residual and
+convergence, while its cuRAND- or hipRAND-dependent absolute initial mass remains a native
+positive-finite check.
+
 When transferring evidence between machines, copy the result and campaign records but exclude
 `val/temp/`; executables, objects, and compiler stamps are backend-local and reproducible.
 

@@ -149,6 +149,7 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
 {
     vrel = 0.0;
     real size_j = dev_size_old[idx_old_j];
+    // include the owner's own swarm when i == j, using the large-number approximation N_i - 1 ~= N_i
     real numr_j = dev_numr_old[idx_old_j];
     if constexpr (kernel == CONSTANT_KERNEL)
     {
@@ -274,7 +275,7 @@ void col_bath_rate (real *dev_col_rate, const swarm *dev_particle, const int *de
     {
         rate_work[idx_neighbor] = 0.0;
         int idx_old_j = dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)];
-        if (dev_col_active[idx_old_i] == 0 || idx_old_j < 0 || idx_old_j == idx_old_i
+        if (dev_col_active[idx_old_i] == 0 || idx_old_j < 0
             || !(dev_col_measure[idx_old_i] > 0.0)) continue;
 
         real size_i = dev_size_old[idx_old_i];
@@ -407,7 +408,7 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
             pair_jump1[idx_neighbor] = 0.0;
             pair_jump2[idx_neighbor] = 0.0;
             pair_jumpmax[idx_neighbor] = 0.0;
-            if (idx_old_j >= 0 && idx_old_j != idx_old_i)
+            if (idx_old_j >= 0)
             {
                 real size_j = dev_size_old[idx_old_j];
                 real vrel = 0.0;

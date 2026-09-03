@@ -73,7 +73,6 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     {
         int idx_old_j_try = near_result.returnIndex(idx_neighbor);
         if (idx_old_j_try < 0) continue;
-        if (idx_old_j_try == idx_old_i) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
@@ -196,7 +195,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     {
         pair_rate[idx_neighbor] = 0.0;
         int idx_old_j = work_idx_old[idx_neighbor];
-        if (idx_old_j < 0 || idx_old_j == INT_MAX || idx_old_j == idx_old_i) continue;
+        if (idx_old_j < 0 || idx_old_j == INT_MAX) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -222,7 +221,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         int idx_old_j_try = work_idx_old[idx_neighbor];
-        if (idx_old_j_try < 0 || idx_old_j_try == INT_MAX || idx_old_j_try == idx_old_i) continue;
+        if (idx_old_j_try < 0 || idx_old_j_try == INT_MAX) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
@@ -311,7 +310,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     {
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
         int idx_old_j_try = dev_col_neighbor[idx_cache];
-        if (idx_old_j_try < 0 || idx_old_j_try == idx_old_i) continue;
+        if (idx_old_j_try < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
@@ -397,7 +396,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
         pair_rate[idx_neighbor] = 0.0;
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
         int idx_old_j = dev_col_neighbor[idx_cache];
-        if (idx_old_j < 0 || idx_old_j == idx_old_i) continue;
+        if (idx_old_j < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -424,7 +423,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     {
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
         int idx_old_j_try = dev_col_neighbor[idx_cache];
-        if (idx_old_j_try < 0 || idx_old_j_try == idx_old_i) continue;
+        if (idx_old_j_try < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;

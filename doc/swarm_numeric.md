@@ -1907,12 +1907,14 @@ For `COAG_KERNEL = 0`, `1`, or `2`, the implemented pair propensity is
 \lambda_{ij}^{(q)}
 =\frac{\lambda_0N_j\kappa_q(m_i,m_j)}{V_{K,i}},
 \qquad
-\lambda_0=\frac{N_P}{(N_K-1)M_{\rm dust}},
+\lambda_0=\frac{N_P}{N_KM_{\rm dust}},
 \qquad q\in\{0,1,2\},
 ```
 
 where $V_{K,i}$ denotes the active KNN measure; in a vertically integrated calculation it is the
-KNN area. These synthetic choices do not use $\sigma_{ij}\Delta v_{ij}$ or the Gaussian vertical
+KNN area. The retained set includes the owner's own swarm, using $N_i-1\simeq N_i$ under the
+large-represented-number approximation. These synthetic choices do not use
+$\sigma_{ij}\Delta v_{ij}$ or the Gaussian vertical
 overlap factor and therefore must not be interpreted as the physical collision prescription. The
 shipped backend headers currently default to `COAG_KERNEL = 0`; a physical collision model must
 provide `COAG_KERNEL = 3` through its model-specific `const_defs.cuh`.

@@ -1056,7 +1056,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
 
     #ifdef COLLISION
     file << "LAMBDA_0    = " << std::scientific     << std::setprecision(8)
-         << N_P / (N_K - 1.0) / total_dust_mass << std::endl;
+         << N_P / static_cast<real>(N_K) / total_dust_mass << std::endl;
     file << "V_FRAG      = " << std::scientific     << std::setprecision(8) << V_FRAG       << std::endl;
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;

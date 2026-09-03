@@ -390,6 +390,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     // lambda_ij = N_j * K_ij / V, where K_ij is the coagulation kernel and V is the local measure
     // synthetic kernels instead multiply their normalized kernel shape by the supplied lambda_0
     
+    // include the owner's own swarm when i == j, using the large-number approximation N_i - 1 ~= N_i
     real numr_j = dev_numr_old[idx_old_j];
 
     if constexpr (kernel == CONSTANT_KERNEL)

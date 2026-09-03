@@ -121,7 +121,9 @@ const int   N_K         = 200;              // number of candidate slots returne
 
 const real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
 const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
+#ifdef BERNOULLI
 const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
+#endif // BERNOULLI
 
 #ifndef BERNOULLI
 const int   COL_BATH_TPB  = 256;            // cooperative threads assigned to one frozen-bath owner

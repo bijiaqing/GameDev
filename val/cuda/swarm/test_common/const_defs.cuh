@@ -201,11 +201,13 @@ constexpr real V_FRAG = 0.0;
 #else
 constexpr real V_FRAG = 1.0;
 #endif
+#ifdef BERNOULLI
 #ifdef TEST_CFL_COL
 constexpr real CFL_COL = TEST_CFL_COL;
 #else
 constexpr real CFL_COL = 0.01;
 #endif
+#endif // BERNOULLI
 
 #ifndef BERNOULLI
 constexpr int COL_BATH_TPB = 256;

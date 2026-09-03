@@ -484,7 +484,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / total_dust_mass
+                N_P / static_cast<real>(N_K) / total_dust_mass
             );
             HIP_KERNEL_CHECK("col_bath_rate");
 
@@ -550,7 +550,7 @@ int main (int argc, char **argv)
                     #ifdef IMPORTGAS
                     dev_gas_dens,
                     #endif // IMPORTGAS
-                    N_P / (N_K - 1.0) / total_dust_mass, dt_col
+                    N_P / static_cast<real>(N_K) / total_dust_mass, dt_col
                 );
                 HIP_KERNEL_CHECK("col_chain_run");
                 HIP_CHECK(hipMemcpy(
@@ -629,7 +629,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / total_dust_mass
+                N_P / static_cast<real>(N_K) / total_dust_mass
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
@@ -639,7 +639,7 @@ int main (int argc, char **argv)
                 dev_gas_dens,
                 #endif // IMPORTGAS
                 image_dist_min,
-                N_P / (N_K - 1.0) / total_dust_mass
+                N_P / static_cast<real>(N_K) / total_dust_mass
             );
             #else  // COLLISION_MORTON
             col_rate_calc <<< N_P, MORTON_TPB >>> (
@@ -649,7 +649,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / total_dust_mass
+                N_P / static_cast<real>(N_K) / total_dust_mass
             );
             #endif // COLLISION_KDTREE
             #endif // KNN_CACHE
@@ -709,7 +709,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / total_dust_mass,
+                N_P / static_cast<real>(N_K) / total_dust_mass,
                 dt_col
             );
             #else  // DIRECT_BERNOULLI
@@ -720,7 +720,7 @@ int main (int argc, char **argv)
                 dev_gas_dens,
                 #endif // IMPORTGAS
                 image_dist_min,
-                N_P / (N_K - 1.0) / total_dust_mass,
+                N_P / static_cast<real>(N_K) / total_dust_mass,
                 dt_col
             );
             #else  // COLLISION_MORTON
@@ -731,7 +731,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 dev_gas_dens,
                 #endif // IMPORTGAS
-                N_P / (N_K - 1.0) / total_dust_mass,
+                N_P / static_cast<real>(N_K) / total_dust_mass,
                 dt_col
             );
             #endif // COLLISION_KDTREE

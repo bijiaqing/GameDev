@@ -79,7 +79,6 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     {
         int idx_old_j = near_result.returnIndex(idx_neighbor);
         if (idx_old_j < 0) continue;
-        if (idx_old_j == idx_old_i) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -165,7 +164,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
         pair_rate[idx_neighbor] = 0.0;
         pair_dist_sq[idx_neighbor] = 0.0f;
         int idx_old_j = work_idx_old[idx_neighbor];
-        if (idx_old_j < 0 || idx_old_j == INT_MAX || idx_old_j == idx_old_i) continue;
+        if (idx_old_j < 0 || idx_old_j == INT_MAX) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -236,7 +235,7 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
     {
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
         int idx_old_j = dev_col_neighbor[idx_cache];
-        if (idx_old_j < 0 || idx_old_j == idx_old_i) continue;
+        if (idx_old_j < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -283,7 +282,7 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
         pair_rate[idx_neighbor] = 0.0;
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
         int idx_old_j = dev_col_neighbor[idx_cache];
-        if (idx_old_j < 0 || idx_old_j == idx_old_i) continue;
+        if (idx_old_j < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;

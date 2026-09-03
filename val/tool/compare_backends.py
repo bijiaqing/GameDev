@@ -27,6 +27,13 @@ STOCHASTIC_SWARM_CASES = {
     "diffusion_3d",
 }
 
+# The production fluid initializer uses cuRAND or hipRAND for its azimuthal
+# perturbation.  Its absolute mass therefore differs between vendors even
+# though the normalized startup-balance diagnostic is backend-independent.
+BACKEND_DEPENDENT_FLUID_FIELDS = {
+    "startup_3d": {"initial_mass"},
+}
+
 
 def load_json(path: Path) -> dict[str, Any]:
     """Read one JSON object and reject malformed archive entries"""
@@ -236,6 +243,11 @@ def compare_metrics(
                         "path": f"{name}.{key}", "cuda": cuda.get(key), "rocm": rocm.get(key),
                     })
             continue
+
+        if component == "fluid" and case in BACKEND_DEPENDENT_FLUID_FIELDS:
+            excluded = BACKEND_DEPENDENT_FLUID_FIELDS[case]
+            cuda = {key: value for key, value in cuda.items() if key not in excluded}
+            rocm = {key: value for key, value in rocm.items() if key not in excluded}
         compare_value(
             cuda, rocm, name, relative_tolerance, absolute_tolerance, mismatches,
         )

@@ -86,16 +86,18 @@ CFL $0.05$ for radial and polar transport, and power-law index $-1$ for both rad
 
 ### `test_startup_3d`
 
-This case initializes the full three-dimensional dust density and momentum, applies one complete
-production operator composition, and measures the residual
+This case initializes the full three-dimensional dust density and momentum. Starting from two
+identical copies of that state, it applies the production polar-advection operator to one copy and
+the production polar-diffusion operator to the other. It then measures their summed finite-
+difference tendency,
 
 $$
 \mathcal{R}=\frac{U^{n+1}-U^n}{\Delta t}.
 $$
 
-Each residual norm is divided by the combined magnitude of the contributing operator increments, so
-the test measures cancellation of transport, diffusion, and source terms rather than merely the
-smallness of an unevolved state. It also checks the volume-integrated residual mass rate,
+Each residual norm is divided by the combined magnitude of the two operator increments, so the test
+measures cancellation of polar transport and diffusion rather than merely the smallness of an
+unevolved state. It also checks the volume-integrated residual mass rate,
 
 $$
 \epsilon_M=
@@ -105,6 +107,11 @@ $$
 
 and requires $\epsilon_M<10^{-6}$. Resolution convergence distinguishes a genuinely balanced
 discretization from an accidentally small coarse-grid residual.
+
+The production initializer adds an azimuthal density perturbation drawn from the native vendor RNG.
+cuRAND and hipRAND do not generate the same realization, so the absolute initialized mass is used
+only as a positive-finite native check. Cross-backend validation compares the normalized residual,
+mass-balance error, and convergence order; it does not require equal absolute initial mass.
 
 ## 6. Transport
 
