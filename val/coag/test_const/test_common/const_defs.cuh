@@ -37,7 +37,7 @@ const real  S_0         = 1.0;              // reference grain diameter, indepen
 // =========================================================================================================================
 
 #ifndef SWEEP_N_P
-#define SWEEP_N_P 100000
+#define SWEEP_N_P 1000000
 #endif // SWEEP_N_P
 const int   N_P         = SWEEP_N_P;        // total number of representative particles
 

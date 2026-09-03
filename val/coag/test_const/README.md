@@ -28,7 +28,7 @@ The shared `test_common/const_defs.cuh` changes the following production values:
 
 | Parameter | CUDA production | Reference value | Purpose |
 | --- | ---: | ---: | --- |
-| `N_P` | `1e7` | `1e5` | first particle-count case |
+| `N_P` | `1e7` | `1e6` | fixed particle count for the parameter campaign |
 | `N_X` | `100` | `2` | activate a two-dimensional collision geometry without a useful mesh |
 | `N_K` | `200` | `10` | first neighbor-count case |
 | `H_SEARCH` | `1` | `128` | make the search cutoff non-limiting for the prescribed positions |
@@ -62,24 +62,18 @@ The unchanged parameters important to all cases are `COAG_KERNEL = 0`,
 
 ## Parameter-search models
 
-The candidate Cartesian grid contains 75 parameter combinations:
+The campaign fixes the representative-particle count and evaluates the complete
+`N_K`--`COL_BATH_EPS` Cartesian grid:
 
 ```text
-N_P          = 1e5, 1e6, 1e7
+N_P          = 1e6
 N_K          = 10, 20, 50, 100, 200
 COL_BATH_EPS = 5e-3, 1e-2, 2e-2, 4e-2, 8e-2
 ```
 
-The retained design contains 19 models: every sampled point on the three
-coordinate axes through the body center, plus the eight vertices of the
-parameter cube. The body center is
-`(N_P, N_K, COL_BATH_EPS) = (1e6, 50, 2e-2)`. Therefore the center axes
-contain `3 + 5 + 5 - 2 = 11` unique models, and the vertices add eight more.
-
-The three axes provide complete one-parameter sweeps while holding the other
-two parameters at their central values. The vertices use every combination of
-`N_P = {1e5, 1e7}`, `N_K = {10, 200}`, and
-`COL_BATH_EPS = {5e-3, 8e-2}`.
+The resulting 25 models provide every `N_K` sweep at fixed bath tolerance,
+every bath-tolerance sweep at fixed `N_K`, and the full interaction surface
+at `N_P = 1e6`.
 
 The shared `const_defs.cuh` accepts `SWEEP_N_P`, `SWEEP_N_K`, and
 `SWEEP_COL_BATH_EPS` compile definitions. Every case directory contains only a
@@ -88,7 +82,7 @@ flags, and supplies the three parameter values. This prevents the CUDA overrides
 from drifting between otherwise identical cases.
 
 The model name uses `n`, `k`, and `b` suffixes. For example,
-`1e+7n_2e+2k_8e-2b` means `N_P = 1e7`, `N_K = 200`, and
+`1e+6n_2e+2k_8e-2b` means `N_P = 1e6`, `N_K = 200`, and
 `COL_BATH_EPS = 0.08`.
 
 ## Source overrides
@@ -158,8 +152,9 @@ lambda_0 = N_P / (N_K * total_dust_mass).
 
 Each cached slot, including the representative's own swarm, initially contributes
 `lambda_0*par_numr = 1/N_K`. Thus every case starts with total collision rate one,
-independently of `N_P` and `N_K`. For the reference case, `par_numr = 1e25`,
-`lambda_0 = 1e-26`, and each of the ten slots contributes `0.1`.
+independently of `N_P` and `N_K`. At `N_P = 1e6`, `par_numr = 1e24`;
+for the `N_K = 10` reference, `lambda_0 = 1e-25`, and each slot contributes
+`0.1`.
 
 For the three synthetic kernels, relative velocity remains zero. With
 `COAG_KERNEL = 0` and `V_FRAG = 1`, all accepted events take the coagulation branch;
@@ -192,10 +187,11 @@ The complete run therefore writes:
 | `particle_00008.dat` | `10000000` |
 | `particle_00009.dat` | `100000000` |
 
-Only particle snapshots are saved. CUDA RNG states are intentionally omitted
-to reduce the complete 19-model output by about 28.56 GB. Consequently, these
-outputs are analysis snapshots rather than complete restart checkpoints; a
-collision run cannot resume from one without the corresponding RNG-state file.
+All ten particle snapshots from `particle_00000.dat` through
+`particle_00009.dat` are retained for every model. CUDA RNG states are
+intentionally omitted, so the 25-model particle output is approximately 16 GB.
+These outputs are analysis snapshots rather than complete restart checkpoints;
+a collision run cannot resume from one without the corresponding RNG-state file.
 
 The collision-only path applies one full collision operator over each output
 interval. There is no transport operator requiring two Strang-split half steps.
@@ -204,14 +200,15 @@ interval. There is no transport operator requiring two Strang-split half steps.
 
 The validation family is intentionally CUDA-specific because its runtime and supporting
 headers were copied from the CUDA production branch. A dry run resolves all seven
-shared source/header overrides, and repository static checks pass. A native
-CUDA build and smoke run through `particle_00004.dat` at time `1000` completed on
-Vera on 2026-09-03. The extended run through time `1e8` remains to be completed.
+shared source/header overrides, and repository static checks pass. Native CUDA
+runs through `particle_00009.dat` already exist for the nine `N_P = 1e6` cases
+in the former center-axis campaign. The sixteen newly added cross-combinations
+remain to be run on Vera.
 
 An example build for an Ampere target is:
 
 ```sh
-make -C val/coag/test_const MODEL=1e+5n_1e+1k_1e-2b GPU_TARGET=sm_80
+make -C val/coag/test_const MODEL=1e+6n_1e+1k_1e-2b GPU_TARGET=sm_80
 ```
 
 Use the wrapper's `run` target to build and launch one case. Executables and object
@@ -223,7 +220,7 @@ written under `val/logs/coagulation/test_const/<case>/`; the generated
 `val/logs` tree is ignored by Git. This validation family is not registered
 with `val/tool/run_all.py`.
 
-Run all 19 retained models and measure the wall time of each executable with:
+Run all 25 models and measure the wall time of each executable with:
 
 ```sh
 python3 val/coag/test_const/run_models.py
