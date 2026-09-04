@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run and reduce the independent 15-seed constant-kernel campaign."""
+"""Run and reduce the independent 15-seed product-kernel campaign."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from score_model import score_model, scoring_metadata
 
 GROUP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = GROUP_DIR.parents[2]
-TEMP_DIR = PROJECT_ROOT/"val"/"temp"/"coag"/"test_const"
-OUTPUT_ROOT = PROJECT_ROOT/"val"/"logs"/"coagulation"/"test_const"
+TEMP_DIR = PROJECT_ROOT/"val"/"temp"/"coag"/"test_product"
+OUTPUT_ROOT = PROJECT_ROOT/"val"/"logs"/"coagulation"/"test_product"
 RESULT_ROOT = OUTPUT_ROOT/"multiseed"
 SEED_COUNT = 15
 
@@ -52,7 +52,7 @@ def atomic_json(path: Path, value: dict[str, object]) -> None:
 
 def seed_streams(replicate: int) -> dict[str, int]:
     seed = 2*replicate + 1
-    return {"position": seed, "collision": seed}
+    return {"position": seed, "collision": seed, "partner_permutation": seed + 1}
 
 
 def source_hashes() -> dict[str, str]:
@@ -120,7 +120,7 @@ def write_aggregate(models: list[str]) -> None:
 
     atomic_json(RESULT_ROOT/"summary.json", {
         "schema": 1,
-        "suite": "coag/test_const",
+        "suite": "coag/test_product",
         "replicates": SEED_COUNT,
         "primary_score": "mean final-snapshot total-variation distance; report seed scatter",
         "models": aggregate_models,
@@ -139,7 +139,7 @@ def main() -> None:
             raise RuntimeError(f"refusing to mix changed campaign sources with {seed_path}")
     manifest: dict[str, object] = {
         "schema": 1,
-        "suite": "coag/test_const",
+        "suite": "coag/test_product",
         "status": "building",
         "started_utc": utc_now(),
         "finished_utc": None,
@@ -150,8 +150,8 @@ def main() -> None:
         "models": models,
         "seed_policy": {
             "master_replicates": list(range(SEED_COUNT)),
-            "mapping": "position = collision = 2*replicate + 1",
-            "replicate_zero_matches_previous_position_and_collision_seed_1": True,
+            "mapping": "position = collision = 2*replicate + 1; partner permutation = 2*replicate + 2",
+            "replicate_zero_matches_previous_position_1_collision_1_partner_2": True,
         },
         "output_policy": (
             "particle and collision-chain files are deleted only after the model score is "
@@ -181,7 +181,7 @@ def main() -> None:
         else:
             seed_result = {
                 "schema": 1,
-                "suite": "coag/test_const",
+                "suite": "coag/test_product",
                 "replicate": replicate,
                 "seeds": streams,
                 "campaign_fingerprint": fingerprint,
@@ -218,6 +218,7 @@ def main() -> None:
             environment = os.environ.copy()
             environment["COAG_POSITION_SEED"] = str(streams["position"])
             environment["COAG_COLLISION_SEED"] = str(streams["collision"])
+            environment["COAG_PARTNER_SEED"] = str(streams["partner_permutation"])
             start_ns = time.perf_counter_ns()
             result = subprocess.run([str(executable)], cwd=PROJECT_ROOT, env=environment, check=False)
             record["wall_seconds"] = (time.perf_counter_ns() - start_ns)/1.0e9

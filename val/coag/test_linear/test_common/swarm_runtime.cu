@@ -32,12 +32,6 @@ std::mt19937 rand_generator;
 
 const std::string PATH = PATH_OUT; // convert the Makefile string literal to the output-path string used below
 
-inline unsigned int runtime_seed (const char *name, unsigned int fallback)
-{
-    const char *value = std::getenv(name);
-    return value == nullptr ? fallback : static_cast<unsigned int>(std::stoul(value));
-}
-
 // =========================================================================================================================
 // main program
 // initialize or resume a swarm and advance enabled operators between successive output frames
@@ -52,9 +46,6 @@ inline unsigned int runtime_seed (const char *name, unsigned int fallback)
 
 int main (int argc, char **argv)
 {
-    const unsigned int position_seed = runtime_seed("COAG_POSITION_SEED", 1);
-    const unsigned int collision_seed = runtime_seed("COAG_COLLISION_SEED", 1);
-
     #ifdef HALF_DISK
     if (N_Z > 1 && std::fabs(Z_MAX - 0.5*M_PI) > 16.0*std::numeric_limits<real>::epsilon())
         throw std::runtime_error("HALF_DISK requires Z_MAX = pi/2");
@@ -227,15 +218,11 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaMemcpy(dev_mass_bank, mass_bank.data(), sizeof(real)*mass_bank.size(), cudaMemcpyHostToDevice));
         #endif // MULTISIZE
 
-        rand_generator.seed(position_seed);
+        rand_generator.seed(0); // keep initialization reproducible across runs
 
         #ifdef MULTISIZE
-        // sample grain properties before positions so settled spatial distributions can depend on size
-        real power_idx = -0.5;  // full-column equal-mass sampling proposal
-        #ifdef RADIATION
-        power_idx = -1.5;       // full-column equal-area sampling proposal, see _get_grain_number
-        #endif // RADIATION
-        rand_powerlaw(randsize, N_P, INIT_SMIN, INIT_SMAX, power_idx);
+        // sample the mass-weighted linear-kernel initial condition; the sampler returns size for m = size^3
+        rand_linear_size(randsize, N_P);
 
         // correct size sampling and finite-domain containment so represented masses sum exactly to total_dust_mass
         real mass_norm = get_mass_norm(randsize, mass_bank, total_dust_mass);
@@ -258,7 +245,7 @@ int main (int argc, char **argv)
         
         CUDA_CHECK(cudaFreeHost(epsilon));
         #else  // NO IMPORTGAS
-        rand_collision_test_pos(randposx, randposy, randposz, N_P, position_seed);
+        rand_collision_test_pos(randposx, randposy, randposz, N_P);
         #endif // IMPORTGAS
 
         CUDA_CHECK(cudaMemcpy(dev_randposx, randposx, sizeof(real)*N_P, cudaMemcpyHostToDevice));
@@ -294,13 +281,13 @@ int main (int argc, char **argv)
         #endif // MULTISIZE
         
         #if defined(COLLISION) || defined(DIFFUSION)
-        rngstate_init <<< NB_P, TPB >>> (dev_rngstate, static_cast<int>(collision_seed));
+        rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
         CUDA_KERNEL_CHECK("rngstate_init");
         #endif // COLLISION || DIFFUSION
         
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
-        save_variable(PATH + "variables.txt", total_dust_mass, position_seed, collision_seed);
+        save_variable(PATH + "variables.txt", total_dust_mass);
 
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from, false);

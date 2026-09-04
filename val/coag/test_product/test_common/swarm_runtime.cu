@@ -1,8 +1,11 @@
+#include <algorithm>        // std::shuffle
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
 #include <iostream>         // std::cout, std::endl
 #include <limits>           // std::numeric_limits
+#include <numeric>          // std::iota
+#include <random>           // std::mt19937
 #include <sstream>          // std::stringstream
 #include <stdexcept>        // std::runtime_error
 #include <string>           // std::string, std::to_string
@@ -38,6 +41,21 @@ inline unsigned int runtime_seed (const char *name, unsigned int fallback)
     return value == nullptr ? fallback : static_cast<unsigned int>(std::stoul(value));
 }
 
+#if defined(COLLISION) && !defined(BERNOULLI)
+// relabel cached bath slots without changing particle state or the cached spatial topology
+__global__
+void col_partner_mix (int *dev_col_neighbor, const int *dev_col_permutation,
+    std::size_t neighbor_count)
+{
+    std::size_t idx = static_cast<std::size_t>(threadIdx.x)
+        + static_cast<std::size_t>(blockDim.x)*blockIdx.x;
+    if (idx >= neighbor_count) return;
+
+    int idx_old = dev_col_neighbor[idx];
+    if (idx_old >= 0) dev_col_neighbor[idx] = dev_col_permutation[idx_old];
+}
+#endif // COLLISION && !BERNOULLI
+
 // =========================================================================================================================
 // main program
 // initialize or resume a swarm and advance enabled operators between successive output frames
@@ -54,6 +72,7 @@ int main (int argc, char **argv)
 {
     const unsigned int position_seed = runtime_seed("COAG_POSITION_SEED", 1);
     const unsigned int collision_seed = runtime_seed("COAG_COLLISION_SEED", 1);
+    const unsigned int partner_seed = runtime_seed("COAG_PARTNER_SEED", COL_PARTNER_SEED);
 
     #ifdef HALF_DISK
     if (N_Z > 1 && std::fabs(Z_MAX - 0.5*M_PI) > 16.0*std::numeric_limits<real>::epsilon())
@@ -188,6 +207,11 @@ int main (int argc, char **argv)
     CUDA_CHECK(cudaMalloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
     CUDA_CHECK(cudaMalloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
     CUDA_CHECK(cudaMemset(dev_col_error, 0, sizeof(int)*N_P));
+
+    std::vector<int> col_partner_permutation(N_P);
+    std::mt19937 col_partner_generator(partner_seed);
+    int *dev_col_permutation;
+    CUDA_CHECK(cudaMalloc((void**)&dev_col_permutation, sizeof(int)*N_P));
     #elif !defined(KNN_CACHE)  // DIRECT_BERNOULLI
     real *dev_col_dist;
     CUDA_CHECK(cudaMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
@@ -300,7 +324,10 @@ int main (int argc, char **argv)
         
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
-        save_variable(PATH + "variables.txt", total_dust_mass, position_seed, collision_seed);
+        save_variable(
+            PATH + "variables.txt", total_dust_mass,
+            position_seed, collision_seed, partner_seed
+        );
 
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from, false);
@@ -475,6 +502,23 @@ int main (int argc, char **argv)
         real elapsed = 0.0;
         while (elapsed < duration)
         {
+
+            std::iota(col_partner_permutation.begin(), col_partner_permutation.end(), 0);
+            std::shuffle(
+                col_partner_permutation.begin(), col_partner_permutation.end(),
+                col_partner_generator
+            );
+            CUDA_CHECK(cudaMemcpy(
+                dev_col_permutation, col_partner_permutation.data(), sizeof(int)*N_P,
+                cudaMemcpyHostToDevice
+            ));
+            int col_partner_blocks = static_cast<int>(
+                (col_neighbor_count + TPB - 1) / TPB
+            );
+            col_partner_mix <<< col_partner_blocks, TPB >>> (
+                dev_col_neighbor, dev_col_permutation, col_neighbor_count
+            );
+            CUDA_KERNEL_CHECK("col_partner_mix");
 
             col_bath_init <<< NB_P, TPB >>> (
                 dev_size_old, dev_numr_old, dev_col_time, dev_col_events,

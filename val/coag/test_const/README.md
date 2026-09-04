@@ -100,11 +100,13 @@ Changes the compact-grain mass from
 
 ### `swarm_host.cuh`
 
-Adds `rand_collision_test_pos`, which places particles on a deterministic,
+Adds `rand_collision_test_pos`, which places particles on a reproducibly
 jittered two-dimensional annular grid. It chooses radial and azimuthal counts
-from the domain aspect ratio, distributes incomplete rows evenly, and uses a
-separate position RNG seeded with one. The quarter-cell jitter avoids systematic
-equal-distance KNN ties while keeping every particle inside its cell.
+from the domain aspect ratio and distributes incomplete rows evenly. The
+quarter-cell jitter avoids systematic equal-distance KNN ties while keeping
+every particle inside its cell. The runtime reads the position and collision
+seeds from `COAG_POSITION_SEED` and `COAG_COLLISION_SEED`, both defaulting to
+one, and records them in `variables.txt`.
 
 The saved configuration metadata reports the bath cap as `rate_adaptive` and
 records the two controller size-range factors instead of fixed size limits.
@@ -187,11 +189,12 @@ The complete run therefore writes:
 | `particle_00008.dat` | `10000000` |
 | `particle_00009.dat` | `100000000` |
 
-All ten particle snapshots from `particle_00000.dat` through
-`particle_00009.dat` are retained for every model. CUDA RNG states are
-intentionally omitted, so the 25-model particle output is approximately 16 GB.
-These outputs are analysis snapshots rather than complete restart checkpoints;
-a collision run cannot resume from one without the corresponding RNG-state file.
+Manual runs write all ten particle snapshots from `particle_00000.dat` through
+`particle_00009.dat`. CUDA RNG states are intentionally omitted, so these are
+analysis snapshots rather than complete restart checkpoints; a collision run
+cannot resume from one without the corresponding RNG-state file. The multiseed
+runner scores the final snapshot and then deletes these bulk files as described
+below.
 
 The collision-only path applies one full collision operator over each output
 interval. There is no transport operator requiring two Strang-split half steps.
@@ -220,14 +223,32 @@ written under `val/logs/coagulation/test_const/<case>/`; the generated
 `val/logs` tree is ignored by Git. This validation family is not registered
 with `val/tool/run_all.py`.
 
-Run all 25 models and measure the wall time of each executable with:
+Run the independent 15-seed campaign with:
 
 ```sh
 python3 val/coag/test_const/run_models.py
 ```
 
-The script builds each model before starting its timer, so compilation is not
-included. It atomically updates
-`val/logs/coagulation/test_const/wall_time_summary.json` after each completed model. The
-JSON records the process wall time, UTC start and finish times, return code, and
-executable path for every model, together with the summed execution time.
+The script builds all 25 models once and then runs 15 deterministic replicates
+of the full grid. Replicate zero uses the previous baseline position and
+collision seeds `(1, 1)`; replicate `r` uses `(2r+1, 2r+1)`. Compilation is
+excluded from the process wall times.
+
+Each completed model is scored at `particle_00009.dat` against the exact
+constant-kernel mass distribution. The atomically written seed JSON contains
+TV, Jensen--Shannon, log-mass Wasserstein and CDF errors; mass, number and
+second-moment checks; fixed-bin mass histograms; controller summaries; wall
+time; and the actual saved seeds. Only after that record is durable does the
+runner delete `particle_*.dat` and `collision_chain_*.json`. Failed-model raw
+output is retained. An interrupted campaign resumes already recorded models
+and refuses to combine seed files with changed campaign sources.
+
+Download the compact result directory:
+
+```text
+val/logs/coagulation/test_const/multiseed/
+```
+
+It contains `manifest.json`, `seed_000.json` through `seed_014.json`, and the
+final across-seed `summary.json`. The per-model `variables.txt` files are also
+left on the cluster.

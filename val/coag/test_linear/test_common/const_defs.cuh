@@ -1,0 +1,248 @@
+#ifndef CONST_DEFS_CUH
+#define CONST_DEFS_CUH
+
+#include <cmath>                            // M_PI
+#include <string>                           // std::string
+
+#if defined(COLLISION) || defined(DIFFUSION)
+#include <curand_kernel.h>                  // curandState
+#endif // COLLISION || DIFFUSION
+
+#ifdef COLLISION_KDTREE
+#include <kdtree/builder.h>                 // kdtree::get_coord, kdtree::box_t
+#endif // COLLISION_KDTREE
+
+#if defined(COLLISION) || defined(DIFFUSION)
+using curs = curandState;
+#endif // COLLISION || DIFFUSION
+
+#ifdef COLLISION_KDTREE
+using kdtree_boxf = kdtree::box_t<float3>;  // axis-aligned float bounding box type for KD-tree
+#endif // COLLISION_KDTREE
+
+using real  = double;                       // code real type
+using real3 = double3;                      // double3 is a built-in CUDA type
+
+// =========================================================================================================================
+// code units
+// =========================================================================================================================
+
+const real  G           = 1.0;              // gravitational constant
+const real  M_S         = 1.0;              // mass of the central star
+const real  R_0         = 1.0;              // reference radius of the disk
+const real  S_0         = 1.0;              // reference grain diameter, independent of the disk reference radius
+
+// =========================================================================================================================
+// mesh domain size and resolution
+// =========================================================================================================================
+
+#ifndef SWEEP_N_P
+#define SWEEP_N_P 1000000
+#endif // SWEEP_N_P
+const int   N_P         = SWEEP_N_P;        // total number of representative particles
+
+const int   N_X         = 2;                // number of grid cells in X direction (azimuth)
+const real  X_MIN       = -M_PI;            // minimum X boundary (azimuth)
+const real  X_MAX       = +M_PI;            // maximum X boundary (azimuth)
+
+const int   N_Y         = 100;              // number of grid cells in Y direction (radius)
+const real  Y_MIN       = 0.5;              // minimum Y boundary (radius)
+const real  Y_MAX       = 1.5;              // maximum Y boundary (radius)
+
+const int   N_Z         = 1;                // number of grid cells in Z direction (colattitude)
+const real  Z_MIN       = 0.5*M_PI;         // minimum Z boundary (colattitude)
+const real  Z_MAX       = 0.5*M_PI;         // maximum Z boundary (colattitude)
+
+const int   N_G         = N_X*N_Y*N_Z;      // total number of grid cells
+
+#ifdef COLLISION
+const bool  X_WEDGE     = N_X > 1
+    && static_cast<float>(X_MAX) - static_cast<float>(X_MIN) < 6.28318530717958647692f - 1.0e-6f;
+#endif // COLLISION
+
+#ifndef DIFFUSION
+static_assert(N_Z == 1, "N_Z > 1 requires DIFFUSION");
+#endif // NO DIFFUSION
+
+// =========================================================================================================================
+// gas parameters
+// =========================================================================================================================
+
+const real  SIGMA_0     = 1.0e-02;          // reference gas surface density at R_0
+const real  METAL_Z     = 1.0e-02;          // total dust-to-gas surface-density ratio for initialization
+const real  ASPR_0      = 0.05;             // the reference aspect ratio of the gas disk
+const real  IDX_P       = -1.0;             // the radial power-law index of the gas surface density profile
+const real  IDX_Q       = -0.4;             // the radial power-law index of the gas temperature profile (vertically isothermal)
+
+#if defined(COLLISION) || defined(DIFFUSION)
+#ifdef CONST_NU
+const real  NU          = 1.0e-05;          // the kinematic viscosity parameter of the gas
+#else  // CONST_ALPHA
+const real  ALPHA       = 1.0e-04;          // the Shakura-Sunayev viscosity parameter of the gas
+#endif // CONST_NU
+#endif // COLLISION || DIFFUSION
+
+#ifdef COLLISION
+#ifdef CODE_UNIT
+const real  REYNOLDS_0  = 1.0e+08;          // reference Reynolds number at R_0
+#else  // PHYSICAL_UNIT
+const real  M_MOL       = 2.3*1.66054e-24;  // mean molecular weight of the gas in grams
+const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm^2
+#endif // CODE_UNIT
+#endif // COLLISION
+
+// =========================================================================================================================
+// dust parameters for dynamics
+// =========================================================================================================================
+
+const real  STOKES_0    = 1.0e-03;          // midplane Stokes number at R_0 for dust with the reference size
+
+const real  RHO_0       = 1.0;              // compact-grain internal density
+
+#ifdef RADIATION
+const real  BETA_0      = 1.0e+01;          // the reference ratio between the radiation pressure and the gravity
+const real  KAPPA_0     = 1.0;              // the reference gray opacity of the dust
+const real  T_BETA      = 2.0*M_PI;         // duration of the smooth radiation startup
+
+#ifdef PR_EFFECT
+const real  C_LIGHT     = 1.0e+04;          // speed of light in orbital code velocity units
+#endif // PR_EFFECT
+#endif // RADIATION
+
+#ifdef DIFFUSION
+const real  SCHMIDT_X   = 1.0;              // the Schmidt number for cylindrical azimuthal diffusion
+const real  SCHMIDT_R   = 1.0;              // the Schmidt number for cylindrical radial diffusion
+#endif // DIFFUSION
+
+#if defined(DIFFUSION) || defined(COLLISION)
+const real  SCHMIDT_Z   = 1.0;              // the Schmidt number for cylindrical vertical diffusion
+#endif // DIFFUSION || COLLISION
+
+#ifdef COLLISION
+const int   COAG_KERNEL = 1;                // 0-2 = normalized synthetic kernels; 3 = physical kernel
+#ifndef SWEEP_N_K
+#define SWEEP_N_K 10
+#endif // SWEEP_N_K
+const int   N_K         = SWEEP_N_K;        // number of candidate slots returned by each KNN query
+
+const real  H_SEARCH    = 128.0;            // non-limiting KNN search radius in units of the local gas scale height
+const real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
+#ifdef BERNOULLI
+const real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
+#endif // BERNOULLI
+
+#ifndef BERNOULLI
+const int   COL_BATH_TPB  = 256;            // cooperative threads assigned to one frozen-bath owner
+const int   COL_EVENT_CAP = 32;              // accepted events permitted per representative and continuation launch
+const int   COL_BIN_X     = 8;               // azimuthal controller bins before reduced-dimension collapse
+const int   COL_BIN_Y     = 4;               // radial controller bins
+const int   COL_BIN_Z     = 2;               // polar controller bins before reduced-dimension collapse
+const int   COL_BIN_S     = 64;              // raw logarithmic grain-size controller bins before sparse merging
+const int   COL_BIN_MIN   = 64;              // target minimum representatives after adjacent size-bin merging
+#ifndef SWEEP_COL_BATH_EPS
+#define SWEEP_COL_BATH_EPS 1.0e-2
+#endif // SWEEP_COL_BATH_EPS
+constexpr real COL_BATH_EPS   = SWEEP_COL_BATH_EPS; // common activity and distribution-change tolerance
+constexpr real COL_BATH_ALPHA = 1.0e-3;      // family-wise confidence-tail probability for realized audits
+#endif // FROZEN_BATH
+#endif // COLLISION
+
+#ifdef COLLISION_MORTON
+const int   MORTON_TPB         = 256;       // cooperative threads assigned to one Morton query
+const int   MORTON_LEAF_TARGET = 128;       // target records per adaptive leaf
+const int   MORTON_MAX_LEVEL   = 20;        // maximum adaptive subdivision depth
+const int   MORTON_WORK_SIZE   = 1024;      // shared slots for duplicate-safe top-K selection
+
+static_assert(3*N_K + MORTON_TPB <= MORTON_WORK_SIZE,
+    "Morton work storage must hold three periodic images of every KNN slot");
+#endif // COLLISION_MORTON
+
+// =========================================================================================================================
+// dust initialization parameters
+// =========================================================================================================================
+
+#ifdef MULTISIZE
+const real INIT_SMIN    = 1.0e+00;          // reference lower bound bypassed by rand_linear_size
+const real INIT_SMAX    = 1.0e+00;          // equal bound keeps the unused disk mass bank one-dimensional
+#endif // MULTISIZE
+
+#if defined(COLLISION) && !defined(BERNOULLI)
+constexpr real COL_SIZE_MIN_FACTOR = 0.5;   // lower controller edge relative to the bath-start minimum size
+constexpr real COL_SIZE_MAX_FACTOR = 8.0;   // upper controller edge relative to the bath-start maximum size
+#endif // COLLISION && !BERNOULLI
+
+// =========================================================================================================================
+// time step and output parameters
+// =========================================================================================================================
+
+const int  SAVE_MAX     = 4;                // final output-frame index
+
+const real DT_OUT       = 1.0;
+
+#ifdef TRANSPORT
+const real DT_MAX       = 0.1;
+const real CFL_DYN      = 0.45;             // maximum fraction of a local mesh scale crossed in one dynamics step
+#endif // TRANSPORT
+
+#if defined(LOGTIMING) || defined(LOGOUTPUT)
+const int  LOG_BASE     = 10;               // logarithmic base for time stepping (LOGTIMING) or particle output (LOGOUTPUT)
+#else  // LINEAR
+const int  LIN_BASE     = 1;                // save particle data every LIN_BASE iterations
+#endif // LOGTIMING || LOGOUTPUT
+
+// =========================================================================================================================
+// structures
+// =========================================================================================================================
+
+struct swarm                                // representative-particle state
+{
+    real3   position;                       // x = azimuth, y = spherical radius, z = polar angle
+    real3   velocity;                       // x = l_phi, y = v_r, z = l_theta
+    
+    #ifdef MULTISIZE
+    real    par_size;                       // diameter of one physical grain in the represented species
+    real    par_numr;                       // number of physical grains represented by this particle
+    #endif // MULTISIZE
+};
+
+#ifdef COLLISION_KDTREE
+struct kdtree_node                          // KD-tree node consumed by kdtree::builder
+{
+    float3  cartesian;                      // Cartesian position of the physical particle or periodic image
+    int     idx_old;                        // stable particle-array index before KD-tree reordering
+    int     split_dim;                      // splitting dimension of the tree node
+    int     image;                          // zero for a physical node and nonzero for a periodic image
+};
+
+struct kdtree_traits                        // traits for kdtree::builder
+{
+    using point_t = float3;
+    enum { has_explicit_dim = true };
+    
+    // expose point coordinates and split dimensions through the KD-tree traits interface
+    static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
+    static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
+};
+#endif // COLLISION_KDTREE
+
+// =========================================================================================================================
+// cuda numerical parameters
+// =========================================================================================================================
+
+const int TPB = 64; // number of threads per block
+
+const int NB_P = N_P     / TPB + 1;         // number of blocks for swarm-level parallelization
+const int NB_G = N_G     / TPB + 1;         // number of blocks for grid-level  parallelization
+const int NB_X = N_Y*N_Z / TPB + 1;         // number of blocks for X-direction parallelization
+const int NB_Y = N_X*N_Z / TPB + 1;         // number of blocks for Y-direction parallelization
+
+#ifdef COLLISION_KDTREE
+const int N_T  = X_WEDGE ? 3*N_P : N_P;    // physical and periodic-image tree nodes
+const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level parallelization
+#endif // COLLISION_KDTREE
+
+// =========================================================================================================================
+
+#endif // CONST_DEFS_CUH

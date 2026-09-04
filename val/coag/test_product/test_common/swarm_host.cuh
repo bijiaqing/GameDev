@@ -1036,7 +1036,7 @@ bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real 
 inline __host__
 bool save_variable (
     const std::string &file_name, real total_dust_mass,
-    unsigned int position_seed, unsigned int collision_seed
+    unsigned int position_seed, unsigned int collision_seed, unsigned int partner_seed
 )
 {
     std::ofstream file(file_name);
@@ -1102,6 +1102,8 @@ bool save_variable (
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
     #ifndef BERNOULLI
     file << "COLLISION_INTEGRATOR = frozen_bath"                                         << std::endl;
+    file << "COLLISION_PARTNER_MIXING = random_permutation_each_bath"                    << std::endl;
+    file << "COLLISION_PARTNER_SEED = " << partner_seed                                  << std::endl;
     file << "COL_BATH_TPB  = " << COL_BATH_TPB                                            << std::endl;
     file << "COL_EVENT_CAP  = " << COL_EVENT_CAP                                          << std::endl;
     file << "COL_BATH_MAX   = rate_adaptive"                                           << std::endl;
