@@ -144,9 +144,14 @@ def check_python(errors: list[str]) -> None:
     """Parse every tracked Python source and resolve shared configuration imports"""
 
     for root in (PROJECT_ROOT/"val",):
-        for path in root.rglob("*.py"):
-            if any(part in {"logs", "temp", "__pycache__"} for part in path.parts):
-                continue
+        paths = [
+            path for path in root.rglob("*.py")
+            if not any(part in {"logs", "temp", "__pycache__"} for part in path.parts)
+        ]
+        for cache in sorted({path.parent/"__pycache__" for path in paths}):
+            if cache.exists():
+                errors.append(f"{cache.relative_to(PROJECT_ROOT)}: Python bytecode cache in source tree")
+        for path in paths:
             try:
                 tree = ast.parse(path.read_text(), filename=str(path))
             except SyntaxError as error:
@@ -160,19 +165,18 @@ def check_python(errors: list[str]) -> None:
                         errors.append(
                             f"{path.relative_to(PROJECT_ROOT)}: val_config does not define {alias.name}"
                         )
-            if path.name == "run.py" and any(
-                parent.name.startswith("test_") for parent in path.parents
-            ):
-                text = path.read_text()
-                guard = text.find("sys.dont_write_bytecode = True")
-                shared_imports = [
-                    position for marker in ("from run_model import", "from run_chain import")
-                    if (position := text.find(marker)) >= 0
-                ]
-                if shared_imports and (guard < 0 or guard > min(shared_imports)):
-                    errors.append(
-                        f"{path.relative_to(PROJECT_ROOT)}: disable bytecode before importing the shared runner"
-                    )
+            text = path.read_text()
+            guard = text.find("sys.dont_write_bytecode = True")
+            shared_imports = [
+                position for marker in (
+                    "from run_model import", "from run_chain import", "from score_model import",
+                )
+                if (position := text.find(marker)) >= 0
+            ]
+            if shared_imports and (guard < 0 or guard > min(shared_imports)):
+                errors.append(
+                    f"{path.relative_to(PROJECT_ROOT)}: disable bytecode before importing shared code"
+                )
 
 
 def check_rocm_sources(errors: list[str]) -> None:
