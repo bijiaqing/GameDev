@@ -28,8 +28,9 @@ gamedev
 __pycache__/
 *.py[cod]
 
-# Jupyter Notebook
-*.ipynb*
+# Jupyter Notebooks
+*.ipynb
+*.ipynb_checkpoints
 
 # OS metadata
 .DS_Store
