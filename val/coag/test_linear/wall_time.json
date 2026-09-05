@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "suite": "coag/test_linear",
+  "timing_scope": "wall time of each gamedev process; compilation excluded",
+  "models_expected": 25,
+  "models_completed": 25,
+  "status": "passed",
+  "started_utc": "2026-09-03T22:48:09.935755+00:00",
+  "finished_utc": "2026-09-05T02:01:11.217263+00:00",
+  "total_wall_seconds": 106040.70353716497,
+  "models": [
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+1k_1e-2b/gamedev",
+      "finished_utc": "2026-09-04T01:38:02.303946+00:00",
+      "model": "1e+6n_1e+1k_1e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-03T22:49:28.713281+00:00",
+      "status": "passed",
+      "wall_seconds": 10113.589299846
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+1k_2e-2b/gamedev",
+      "finished_utc": "2026-09-05T00:13:00.525943+00:00",
+      "model": "1e+6n_1e+1k_2e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T23:34:37.058270+00:00",
+      "status": "passed",
+      "wall_seconds": 2303.466215978
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+1k_4e-2b/gamedev",
+      "finished_utc": "2026-09-05T00:31:46.364075+00:00",
+      "model": "1e+6n_1e+1k_4e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-05T00:14:19.735112+00:00",
+      "status": "passed",
+      "wall_seconds": 1046.627458812
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+1k_5e-3b/gamedev",
+      "finished_utc": "2026-09-05T00:38:21.601990+00:00",
+      "model": "1e+6n_1e+1k_5e-3b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T20:31:44.727407+00:00",
+      "status": "passed",
+      "wall_seconds": 14796.872303597
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+1k_8e-2b/gamedev",
+      "finished_utc": "2026-09-05T01:50:19.678027+00:00",
+      "model": "1e+6n_1e+1k_8e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-05T01:14:09.787491+00:00",
+      "status": "passed",
+      "wall_seconds": 2169.888079934
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+2k_1e-2b/gamedev",
+      "finished_utc": "2026-09-04T02:41:54.199064+00:00",
+      "model": "1e+6n_1e+2k_1e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T01:39:21.710267+00:00",
+      "status": "passed",
+      "wall_seconds": 3752.48745927
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+2k_2e-2b/gamedev",
+      "finished_utc": "2026-09-05T01:12:47.193513+00:00",
+      "model": "1e+6n_1e+2k_2e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-05T00:39:41.461536+00:00",
+      "status": "passed",
+      "wall_seconds": 1985.730478303
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+2k_4e-2b/gamedev",
+      "finished_utc": "2026-09-04T23:49:41.290140+00:00",
+      "model": "1e+6n_1e+2k_4e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T23:35:41.414314+00:00",
+      "status": "passed",
+      "wall_seconds": 839.873954998
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+2k_5e-3b/gamedev",
+      "finished_utc": "2026-09-04T22:56:34.723005+00:00",
+      "model": "1e+6n_1e+2k_5e-3b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T20:31:45.177984+00:00",
+      "status": "passed",
+      "wall_seconds": 8689.543223747
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_1e+2k_8e-2b/gamedev",
+      "finished_utc": "2026-09-05T02:01:11.215208+00:00",
+      "model": "1e+6n_1e+2k_8e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-05T01:51:43.331253+00:00",
+      "status": "passed",
+      "wall_seconds": 567.882224451
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+1k_1e-2b/gamedev",
+      "finished_utc": "2026-09-04T06:10:00.422234+00:00",
+      "model": "1e+6n_2e+1k_1e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T02:43:13.433694+00:00",
+      "status": "passed",
+      "wall_seconds": 12406.987120628
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+1k_2e-2b/gamedev",
+      "finished_utc": "2026-09-04T23:33:19.146007+00:00",
+      "model": "1e+6n_2e+1k_2e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T22:57:52.749991+00:00",
+      "status": "passed",
+      "wall_seconds": 2126.394468475
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+1k_4e-2b/gamedev",
+      "finished_utc": "2026-09-04T23:15:27.350442+00:00",
+      "model": "1e+6n_2e+1k_4e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T22:58:18.833978+00:00",
+      "status": "passed",
+      "wall_seconds": 1028.515227789
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+1k_5e-3b/gamedev",
+      "finished_utc": "2026-09-04T22:38:25.244641+00:00",
+      "model": "1e+6n_2e+1k_5e-3b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T20:31:44.783986+00:00",
+      "status": "passed",
+      "wall_seconds": 7600.458333047
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+1k_8e-2b/gamedev",
+      "finished_utc": "2026-09-04T23:34:21.995121+00:00",
+      "model": "1e+6n_2e+1k_8e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T23:16:46.541005+00:00",
+      "status": "passed",
+      "wall_seconds": 1055.453221533
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+2k_1e-2b/gamedev",
+      "finished_utc": "2026-09-04T07:31:16.288586+00:00",
+      "model": "1e+6n_2e+2k_1e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T06:11:20.917809+00:00",
+      "status": "passed",
+      "wall_seconds": 4795.369439367
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+2k_2e-2b/gamedev",
+      "finished_utc": "2026-09-04T08:13:38.762169+00:00",
+      "model": "1e+6n_2e+2k_2e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T07:32:36.739918+00:00",
+      "status": "passed",
+      "wall_seconds": 2462.020883065
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+2k_4e-2b/gamedev",
+      "finished_utc": "2026-09-04T08:40:20.377716+00:00",
+      "model": "1e+6n_2e+2k_4e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T08:14:59.036350+00:00",
+      "status": "passed",
+      "wall_seconds": 1521.340033372
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+2k_5e-3b/gamedev",
+      "finished_utc": "2026-09-04T11:50:59.275560+00:00",
+      "model": "1e+6n_2e+2k_5e-3b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T08:41:40.548374+00:00",
+      "status": "passed",
+      "wall_seconds": 11358.725684556
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_2e+2k_8e-2b/gamedev",
+      "finished_utc": "2026-09-04T12:02:57.156701+00:00",
+      "model": "1e+6n_2e+2k_8e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T11:52:19.667907+00:00",
+      "status": "passed",
+      "wall_seconds": 637.487731104
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_5e+1k_1e-2b/gamedev",
+      "finished_utc": "2026-09-04T13:25:22.496561+00:00",
+      "model": "1e+6n_5e+1k_1e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T12:04:16.535379+00:00",
+      "status": "passed",
+      "wall_seconds": 4865.959860719
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_5e+1k_2e-2b/gamedev",
+      "finished_utc": "2026-09-04T22:56:59.563599+00:00",
+      "model": "1e+6n_5e+1k_2e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T22:27:59.578379+00:00",
+      "status": "passed",
+      "wall_seconds": 1739.984015725
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_5e+1k_4e-2b/gamedev",
+      "finished_utc": "2026-09-05T00:47:17.888368+00:00",
+      "model": "1e+6n_5e+1k_4e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-05T00:33:05.683453+00:00",
+      "status": "passed",
+      "wall_seconds": 852.203101484
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_5e+1k_5e-3b/gamedev",
+      "finished_utc": "2026-09-04T22:26:41.530484+00:00",
+      "model": "1e+6n_5e+1k_5e-3b",
+      "return_code": 0,
+      "started_utc": "2026-09-04T20:31:45.131132+00:00",
+      "status": "passed",
+      "wall_seconds": 6896.390401421
+    },
+    {
+      "executable": "/vera/u/jibi/gamedev/val/temp/coag/test_linear/bin/1e+6n_5e+1k_8e-2b/gamedev",
+      "finished_utc": "2026-09-05T00:55:45.230335+00:00",
+      "model": "1e+6n_5e+1k_8e-2b",
+      "return_code": 0,
+      "started_utc": "2026-09-05T00:48:37.775445+00:00",
+      "status": "passed",
+      "wall_seconds": 427.453315944
+    }
+  ]
+}
+

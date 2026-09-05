@@ -162,7 +162,8 @@ The campaign writes its active scientific output under
 then runs 15 deterministic replicates of the full grid. Replicate zero
 uses the previous baseline streams `(position, collision, partner) = (1, 1,
 2)`; replicate `r` uses `(2r+1, 2r+1, 2r+2)`. Compilation is excluded from
-the process wall times.
+the process wall times. The completed standalone seed-0 process times are
+retained in `wall_time.json`.
 
 Each completed model is scored at the final pre-gelation snapshot against the
 exact Borel mass distribution. The atomically written seed JSON contains TV,

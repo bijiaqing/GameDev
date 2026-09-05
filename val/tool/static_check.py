@@ -402,7 +402,10 @@ def check_metadata(errors: list[str]) -> None:
             and len(relative.parts) >= 4
             and relative.parts[:2] == ("val", "coag")
             and relative.parts[2] in {"test_const", "test_product", "test_linear"}
-            and relative.parts[3] == "multiseed"
+            and (
+                relative.parts[3] == "multiseed"
+                or relative.parts[3:] == ("wall_time.json",)
+            )
         ):
             continue
         if path.is_file() and (

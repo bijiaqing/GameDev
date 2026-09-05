@@ -233,7 +233,8 @@ python3 val/coag/test_const/run_models.py
 The script builds all 25 models once and then runs 15 deterministic replicates
 of the full grid. Replicate zero uses the previous baseline position and
 collision seeds `(1, 1)`; replicate `r` uses `(2r+1, 2r+1)`. Compilation is
-excluded from the process wall times.
+excluded from the process wall times. The completed standalone seed-0 process
+times are retained in `wall_time.json`.
 
 The campaign writes its active model output under
 `out/test_const/multiseed/<case>/`. Each completed model is scored at

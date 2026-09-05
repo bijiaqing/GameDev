@@ -168,7 +168,8 @@ python3 val/coag/test_linear/run_models.py
 The script builds all 25 models once and runs five deterministic replicates of
 the full grid sequentially. Replicate `r` uses initialization seed `r` and
 position and collision seeds `(2r+1, 2r+1)`. Compilation is excluded from the
-process wall times.
+process wall times. The completed standalone seed-0 process times are retained
+in `wall_time.json`.
 
 Executables and objects are written under `val/temp/coag/test_linear/`. The
 campaign writes its active model output under
