@@ -22,11 +22,14 @@ gamedev
 # generated validation artifacts
 /val/logs/
 /val/temp/
-/val/coag/test_*/multiseed/**/seed_*.json
+/val/coag/**/seed_*.json
 
 # Python caches
 __pycache__/
 *.py[cod]
+
+# Jupyter Notebook
+*.ipynb*
 
 # OS metadata
 .DS_Store
