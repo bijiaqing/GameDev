@@ -139,6 +139,7 @@ def run(model: str) -> None:
     tier_by_resolution = {
         int(record["resolution"]): str(record["tier"]) for record in resolution_tiers
     }
+    cleaned_output_dirs = {out_dir} if not args.build_only else set()
     records = []
     target = os.environ.get("CUDA_ARCH", "sm_80")
     for resolution in args.res:
@@ -149,7 +150,9 @@ def run(model: str) -> None:
             run_out_dir = out_dir if search is None else out_dir/search
             if not args.build_only:
                 run_out_dir.mkdir(parents=True, exist_ok=True)
-                clean_results(run_out_dir)
+                if run_out_dir not in cleaned_output_dirs:
+                    clean_results(run_out_dir)
+                    cleaned_output_dirs.add(run_out_dir)
 
             make_options = [
                 f"MODEL={model}", "GPU_BACKEND=cuda", f"GPU_TARGET={target}",

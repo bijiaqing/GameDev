@@ -190,3 +190,46 @@ its timing JSON after each model; compilation time is excluded from the
 recorded process wall time.
 
 This validation family is not registered with `val/tool/run_all.py`.
+
+The measured single-seed accuracy--cost result and proposed smaller multiseed
+follow-up are documented in `balance_assessment.md`.
+
+## Four-seed remote follow-up
+
+`run_multiseed.py` runs and summarizes only replicate labels 1--4. It requires
+no seed-0 particle files, collision-chain files, variables, or timing summaries
+on the remote cluster. The seed streams are
+
+```text
+initialization seed = replicate
+position seed       = 2*replicate + 1
+collision seed      = 2*replicate + 1
+```
+
+The stream triples are `(1,3,3)`, `(2,5,5)`, `(3,7,7)`, and `(4,9,9)`.
+
+The 25 models are partitioned by their measured seed-0 process times. Each of
+eight array tasks exclusively owns its model subset and runs all four new
+replicates sequentially. This prevents concurrent tasks from writing the same
+model output directory. Per-task result shards are written below
+`multiseed/jobs/job_<job>/`; a separate finalization step merges them into
+`seed_001.json` through `seed_004.json` and a four-replicate `summary.json`.
+
+Submit the eight GPU tasks with:
+
+```sh
+sbatch val/coag/test_linear/job_submit_multiseed.sh
+```
+
+After all eight tasks pass, merge and summarize the shards with:
+
+```sh
+module load python-waterboa/2025.06
+python3 val/coag/test_linear/run_multiseed.py --finalize
+```
+
+Each raw particle and collision-chain output is deleted only after its score
+has been atomically saved; `variables.txt` and failed-run output are retained.
+The partition was designed from the earlier seed-0 timings and predicts
+approximately 14.3--16.4 hours per GPU before filesystem contention and
+seed-to-seed runtime variation.

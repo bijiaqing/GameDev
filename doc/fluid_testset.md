@@ -252,6 +252,9 @@ closed form, including the small-argument series used to avoid cancellation. Eig
 range of $\Delta t/t_s$, so the test covers both weak and stiff drag without treating spatial
 resolution as a convergence parameter.
 
+This case replaces `source_update` with a test-local implementation of the coefficient algebra.
+It validates that stiff response, not the complete production source integration.
+
 ### 8.2 Optical depth
 
 `test_optdepth` verifies the radial accumulation
@@ -294,6 +297,9 @@ operator tests cannot expose.
 It is a short controlled coupled test, not a claim that an arbitrary nonlinear disk has a closed-form
 solution.
 
+The verification driver reproduces the operator composition while replacing the production runtime;
+its native pass does not qualify every production-runtime branch or output/restart path.
+
 ## 10. Running and interpreting the suite
 
 Run a native backend through `val/tool/run_all.py` as shown in [`val/README.md`](../val/README.md).
@@ -309,6 +315,24 @@ The most important evidence is the combination of:
 - conservation or exact escaped-mass accounting appropriate to the boundary;
 - agreement of density and momentum, not density alone;
 - matching CUDA and ROCm publication archives from one source fingerprint.
+
+### Native archive assessment, 2026-09-05
+
+The downloaded CUDA `sm_80` and ROCm `gfx942` archives each pass all 22 cases and 76 metric
+records for both `thread` and `block`. Fresh archive checks and CUDA/ROCm metric comparisons
+pass for each sweep, with zero fluid mismatches. The x/y/z limiter cases activate on all four
+configurations; their largest normalized conservation residual is `5.150797131870754e-16`, with
+zero primitive-range excess and zero quadratic growth.
+
+Evidence is saved under `val/logs/qualification_20260905/` in `archive_{cuda,rocm}_{thread,block}.json`,
+`comparison_{thread,block}.json`, and `assessment.json`. The thread comparison's fluid component
+passes, although its overall result fails on swarm diagnostics described in `swarm_testset.md`.
+Both saved thread campaigns have matching initial/final source SHA-256
+`cf5db5ba782419cc09b3a92eeaaf812114f25a78be329c06d86b0b1b7ae3beca`.
+The standalone block suites did not record a source fingerprint. Their native numerical passes
+therefore do not establish matching-source provenance; the comparator's reported fingerprint comes
+from earlier top-level campaign files, not the block runs. No GPU execution was performed during
+this local archive assessment.
 
 ## 11. Deliberate limits
 

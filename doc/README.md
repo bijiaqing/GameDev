@@ -47,9 +47,37 @@ The current source defines a deliberately compact publication suite:
 - one standalone KNN correctness matrix at $10^5$ particles;
 - four production frozen-bath collision-chain models.
 
-The former expanded archives and their micro-tests were retired. A fresh native CUDA and ROCm
-campaign is required to populate the new publication manifests after this reduction.
-The exact commands and archive contract are documented in [`val/README.md`](../val/README.md).
+The former expanded archives and their micro-tests were retired. The current retained matrices
+have passing native CUDA and ROCm records; the dated assessments in the test guides distinguish
+those numerical passes from unresolved comparison and source-provenance checks. Results apply to
+their recorded source snapshot. Commands, archive rules, and separate production-build checks are
+documented in [`val/README.md`](../val/README.md).
+
+### Repair qualification, 2026-09-05
+
+Commit `9cdb96a` contains the six source repairs below. Numerical methods and acceptance criteria
+are maintained in the linked guides; native results apply to the source snapshots recorded there.
+
+| Repaired defect | Current behavior and evidence |
+|---|---|
+| Unbounded old-donor diffusion transfer | All six fluid directional sweeps limit outgoing mass before transporting momentum; native limiter and smooth-diffusion cases pass on both backends and sweeps ([method](fluid_numeric.md#73-conservative-donor-momentum-closure), [tests](fluid_testset.md#native-archive-assessment-2026-09-05)) |
+| Wrong collision-partner image orientation | Queries and caches retain the selected image for physical rates; native cache-rate, KNN, and collision-chain cases pass ([method](swarm_numeric.md#85-periodic-boundary-ghosts), [tests](swarm_testset.md#8-physical-collision-rates)) |
+| Diffusion velocity projected at the wrapped wedge angle | Velocity uses the unwrapped stochastic endpoint; native planar and 3D seam cases pass ([method](swarm_numeric.md#72-boundaries-and-velocity-reprojection), [tests](swarm_testset.md#6-stochastic-diffusion)) |
+| Model override bypassed by ROCm extension preference | Directory-first source selection and source-identity sidecars handle override changes; native override/amplitude evidence remains outstanding |
+| Stale executable after returning to cached objects | Every configured build relinks the selected objects; native cached A → B → A evidence remains outstanding |
+| Collision bookkeeping compiled without collisions | Controller declarations, reset, and output require `COLLISION && !BERNOULLI`; native non-collision production-runtime evidence remains outstanding |
+
+The build contract is in the root [README](../README.md#source-and-header-overrides), and the
+remaining native build gates are in the [validation guide](../val/README.md#production-build-qualification).
+Full qualification also remains open on the swarm comparator's 60 diagnostic mismatches and the
+missing block-run source fingerprints, as detailed in the dated testset assessments. Completed
+numerical campaigns need not be rerun solely because older aggregate files report static failures.
+
+The underlying source review examined fluid/swarm operators, helpers, runtimes, build routing,
+model overrides, and validation references, with CUDA/ROCm differences inspected separately.
+Vendored KD-tree support received dependency/difference inspection rather than an exhaustive
+independent proof. Host algebra and mock-build reproductions established specific defects and
+build-graph behavior; the later downloaded GPU archives provide the distinct native evidence.
 
 ## Current cross-representation conventions
 
@@ -66,6 +94,11 @@ They intentionally differ in:
 These are paired scientific conventions, not shared-code interfaces.
 
 ## Maintenance rule
+
+Inspect live Git status, the relevant source, and `doc/MEMORY.md` before editing. Preserve existing
+dirty changes, including separate coagulation campaigns; an old checkout snapshot is not authority
+to reset files. If current native archives are missing locally, request the cluster outputs before
+updating qualification claims.
 
 When statements disagree, use this authority order:
 

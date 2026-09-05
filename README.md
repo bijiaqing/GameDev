@@ -125,10 +125,11 @@ The fluid solver evolves pressureless dust mass and momentum with:
   conservative donor-momentum fluxes
 - a palindromic Strang-style composition of diffusion, transport, and source operators
 
-PPM is nominally third-order in smooth one-dimensional reconstruction, but boundaries, limiting,
-directional splitting, and operator composition reduce the appropriate global smooth-solution claim
-to second order. Shocks, contacts, vacuum interfaces, and extrema are deliberately limited and need
-not retain that order.
+PPM is nominally third-order in smooth one-dimensional reconstruction; directional splitting and
+operator composition limit the smooth transport claim to second order. Unlimited CN density
+diffusion is second order, but its old-donor momentum closure has no established general
+second-order claim for spatially varying primitives. Shocks, contacts, vacuum interfaces, and
+limiter activation can reduce the local order further.
 
 Two GPU sweep implementations are available:
 
@@ -367,6 +368,16 @@ physics should remain in the branch source when it is intended for every model.
 
 A model may also set `MODEL_PARENT := parent_name` to inherit model files from another directory
 under `mod/`; files in the child model keep priority.
+
+Source selection follows directory priority before extension preference: a model-local `.cu` wins
+over a lower-priority backend `.hip`. Within one directory, ROCm prefers `.hip` to `.cu`.
+Each successful object build records its selected source in a `.source` sidecar. Cached `.d`
+dependencies are reused only while that source identity matches, so adding or removing an override
+rebuilds the affected object without retaining a dependency on the removed source.
+
+Every configured build relinks the model executable from the requested configuration's objects.
+Unchanged objects remain cached; returning from configuration A to B and back to A does not require
+cleaning. The extra link step ensures that a successful `make` leaves the requested executable.
 
 ## Restarting a simulation
 

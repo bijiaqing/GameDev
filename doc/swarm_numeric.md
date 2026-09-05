@@ -2300,32 +2300,36 @@ Candidate $a$ precedes candidate $b$ exactly when
 $$
 d_a^2<d_b^2
 \quad\text{or}\quad
-\left(d_a^2=d_b^2\ \text{and}\ \mathrm{id}_a<\mathrm{id}_b\right).
+\left(d_a^2=d_b^2\ \text{and}\ c_a<c_b\right).
 $$
 
-The identifier is the stable original representative index, including for periodic images.
+For production collision queries, $c=3i+a$ packs the stable physical index $i$ and selected image
+$a$ as defined in Section 8.5. Equal-distance ties therefore order by physical index, then image.
+Duplicate-image removal compares decoded physical indices and retains the nearest code. Generic
+Morton queries use ordinary identifiers; their active filtering uses the explicit identifier stride.
 
-The contract fixes the selected set, not the physical order in which a backend stores it. Morton
-returns a sorted list, whereas the KD-tree retains the same set in heap order. Ordered rate sums are
-reproducible within each backend, but an identical random target can therefore select a different
+For equivalent candidate geometries, the contract fixes the selected set, not its storage order.
+Morton returns a sorted list, whereas the KD-tree retains that set in heap order. Ordered rate sums
+are reproducible within each backend, but an identical random target can therefore select a different
 partner after switching backends. Backend trajectories and RNG states need not remain byte-equal;
-mass conservation, rates, topology, and ensemble distributions are the cross-backend invariants.
+mass conservation and analytical/statistical acceptance are the cross-backend invariants. Neighbor
+sets and rates should agree where the admitted candidate geometries are equivalent.
 
-The KD-tree candidate heap uses `idx_old` as its equal-distance tie breaker and expands its
-squared culling distance by one floating-point unit,
+The KD-tree candidate heap uses the packed neighbor code as its equal-distance tie breaker and
+expands its squared culling distance by one floating-point unit,
 
 $$
 d_{\rm cull}^2
 \leftarrow\mathtt{nextafterf}(d_K^2,+\infty).
 $$
 
-Each heap slot stores only the encoded pair $(d^2,\mathrm{id})$; the shuffled tree slot is not
-retained because collision physics consumes
-`idx_old` directly. This prevents mutable tree slots from changing which member of an
-exact-distance tie is retained while minimizing thread-local storage. For partial wedges, the heap
+Each heap slot stores only $(d^2,c)$; the shuffled tree slot is not retained. Collision physics
+decodes the physical index for state access and keeps the image for velocity reconstruction.
+This prevents mutable tree slots from changing which member of an exact-distance tie is retained
+while minimizing thread-local storage. For partial wedges, the heap
 checks for repeated physical identifiers only when the minimum separation between adjacent
-periodic images is no larger than twice the current query radius. Wider wedges use the ordinary
-$O(\log N_K)$ heap insertion without an $O(N_K)$ duplicate scan.
+periodic images is no larger than twice the current query radius. Disjoint-image queries use
+ordinary $O(\log N_K)$ heap insertion without an $O(N_K)$ duplicate scan.
 
 At the beginning of each fixed-position collision interval, the code records one active byte per
 physical representative. Absorbed representatives may remain in the immutable search hierarchy,
@@ -2491,9 +2495,16 @@ an order-one false relative velocity at the seam. Direct Bernoulli queries, cach
 queries, and frozen-bath chains all consume the retained image. Full-period and axisymmetric
 searches use $a=0$.
 
+The two search representations need not admit identical image sets. KD-tree stores both adjacent
+images for every particle, while Morton stores only ghosts admitted by its seam cutoff. In a
+nearly full-period wedge, unrestricted minimization over $0,\pm\Delta\phi_w$ can select an image
+that Morton never searched. Relative-velocity evaluation must therefore use the retained image,
+not reconstruct the nearest image from positions. Each search is validated against its own
+candidate set; cross-search equality is required only where those sets are equivalent.
+
 The global maximum is conservative for position-dependent cutoffs: a query still uses its own
-$q_i$, while the larger construction halo guarantees that no eligible source was omitted. If a
-wedge is narrow enough for multiple images of one representative to enter the same query ball, the
+$q_i$, while the larger construction halo guarantees that no eligible source was omitted. When
+multiple images of one representative can enter the same query ball, the
 query temporarily retains up to $3N_K$ records, deduplicates by original particle index, and then
 selects the exact nearest $N_K$ physical particles. Ordinary disk wedges use the cheaper
 disjoint-image path.
@@ -2525,8 +2536,9 @@ owner also retains unsorted query coordinates, azimuths, per-particle cutoffs, a
 Consequently, full-disk total search storage can exceed the single-array KD-tree even when the
 Morton hierarchy is smaller; partial wedges benefit more strongly because the KD-tree stores three
 complete copies. The KD-tree remains an independent mature reference and a strong single-GPU
-option. Backend choice is a measured model configuration, not a change in collision physics. The
-correctness criteria and generated-evidence contract are documented in `swarm_testset.md`; timing
+option. Search selection preserves the physical pair-rate formula, but the candidate-set distinction
+above can change the retained neighborhood in a wide wedge. The correctness criteria and
+generated-evidence contract are documented in `swarm_testset.md`; timing
 and memory must be measured for the intended model, compiler, backend, and GPU.
 
 For broader context on cooperative GPU similarity search, see

@@ -35,6 +35,9 @@ therefore remain source-only after a build.
 
 ## Native publication campaign
 
+`run_all.py` runs the native numerical suites and archive checks. The standalone
+`val/tool/static_check.py` is manual-only and is not a campaign stage.
+
 Run the full CUDA campaign with
 
 ```bash
@@ -60,6 +63,31 @@ GPU.
 
 Use `--quick` only to check that the build and archive workflow functions. A quick run is not the
 publication convergence record.
+
+### Block fluid only
+
+Thread/block selects a fluid implementation; swarm does not have this sweep choice. After the
+complete thread campaigns, run just the block fluid matrix in each backend's GPU allocation:
+
+```bash
+FLUID_SWEEP=block python3 val/cuda/fluid/test_common/run_suite.py \
+    --group all --target sm_80 --res 32 64 128 256 &&
+python3 val/tool/check_archive.py \
+    --backend cuda --component fluid --fluid-sweep block \
+    --output archive_check_cuda_block.json
+```
+
+```bash
+FLUID_SWEEP=block python3 val/rocm/fluid/test_common/run_suite.py \
+    --group all --target gfx942 --res 32 64 128 256 &&
+python3 val/tool/check_archive.py \
+    --backend rocm --component fluid --fluid-sweep block \
+    --output archive_check_rocm_block.json
+```
+
+These commands preserve thread and swarm records and write the block fluid manifests below
+`val/logs/fluid/BACKEND/block/`. They do not create a `run_all` aggregate or record a source
+fingerprint; retain the source snapshot separately as required by the evidence contract below.
 
 ## Focused groups
 
@@ -111,14 +139,33 @@ val/temp/
 
 The `temp/` subtree is disposable and is not part of the scientific archive. Model result
 directories contain numerical metrics and, where required, compact binary fields. Suite manifests
-record the expected cases, resolutions, completion state, backend, target, and source fingerprint.
-`val/tool/check_archive.py` rejects an incomplete native archive. The cross-backend comparator
-requires matching source fingerprints unless explicitly told otherwise.
+record the expected cases, resolutions, completion state, backend, and target. The top-level
+`run_all.py` campaign records the initial and final source fingerprints; standalone suite manifests
+do not. `val/tool/check_archive.py` rejects an incomplete native archive.
+
+Keep a successful campaign record for each tested backend/sweep before a later run overwrites the
+canonical `run_all_BACKEND.json`, for example by copying it immediately to
+`run_all_cuda_thread.json` or `run_all_rocm_thread.json` after the respective thread pass. A second
+full `run_all.py` campaign also reruns swarm and overwrites its backend-specific records.
+Matching hashes in a failed or different-sweep campaign do not
+establish the provenance of a standalone run. The comparator's hash check alone does not verify
+campaign success or sweep identity. Associate each result with its actual source snapshot and
+review later source changes before carrying its qualification forward. Model-local overrides must
+be preserved separately: the campaign fingerprint covers Makefile and source files under `inc/`,
+`src/`, and `val/`, not production model directories under `mod/`.
 
 Cross-backend comparison excludes quantities that intentionally depend on native vendor random
 streams. In particular, `test_startup_3d` compares its normalized polar-balance residual and
 convergence, while its cuRAND- or hipRAND-dependent absolute initial mass remains a native
 positive-finite check.
+
+Use the same statistical distinction for wedge diffusion: crossing counts and sample errors depend
+on vendor RNG streams, while each run's analytical acceptance and deterministic velocity mapping
+remain required. Physical-collision formula errors and float-search geometry errors also have
+separate native limits; generic comparison of absolute residuals is not equivalent to comparing
+physical accuracy. The current comparator does not yet handle these new diagnostics appropriately;
+the dated swarm assessment records its outstanding failures. Resolve such cases individually,
+retaining native tolerances and failed reports rather than loosening the global comparison limits.
 
 When transferring evidence between machines, copy the result and campaign records but exclude
 `val/temp/`; executables, objects, and compiler stamps are backend-local and reproducible.
@@ -133,6 +180,30 @@ python3 val/tool/compare_backends.py --component all
 
 When the two archives live in separate copied validation roots, pass `--cuda-root` and `--rocm-root` to
 `compare_backends.py`.
+
+## Production build qualification
+
+Analytical models may override the production runtime or initialization. Their native passes
+therefore do not establish every production build path. When changing build routing, executable
+selection, or feature guards, retain these focused checks on CUDA and ROCm:
+
+- Add and remove a model-local override with populated object/dependency caches; verify the selected
+  source and the model's prescribed initialization amplitude, allowing different vendor RNG samples.
+- Build configuration A → B → A without cleaning, such as fluid thread → block → thread; verify
+  that the final executable is A while unchanged A objects remain cached.
+- Compile the non-collision production swarm runtime and retain a collision-enabled frozen-bath
+  runtime check. Controller declarations, reset, and output must require
+  `COLLISION && !BERNOULLI`.
+
+Save selected source paths, build commands/results, configuration evidence, and numerical checks
+as named JSON records. These are targeted build regressions, not additional permanent scientific
+models. A host mock compiler establishes Make dependency behavior only; native builds establish
+compiler/API compatibility and the selected physical initialization.
+
+The 2026-09-05 numerical archives do not contain the separate native override-amplitude, cached
+configuration-return, or non-collision production-runtime evidence. Use an existing production
+model and its configured amplitude for those checks; the repaired parameterized initializers use
+`1e-10`. Verification-runtime builds do not close these production-build requirements.
 
 ## Scope
 

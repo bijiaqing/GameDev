@@ -313,7 +313,7 @@ geometry evolves: $\Sigma_d$ in a vertically integrated model and $\rho_d$ in 3D
 | `BETA_0`, `KAPPA_0`, `T_BETA` | radiation ratio $\beta_0$, opacity $\kappa_0$, and ramp time $T_\beta$ |
 | `CFL_DYN`, `DT_MAX` | explicit Courant factor and global timestep ceiling |
 | `DT_OUT`, `SAVE_MAX` | interval between saved frames and final saved-frame index |
-| `POS_LIMIT` | upper bound controlling the Crank–Nicolson explicit-side coefficient sum |
+| `POS_LIMIT` | upper bound on the CN explicit-side coefficient sum and the fraction of old donor mass exported per diffusion substep |
 | `RHO_VAC` | density below which primitive velocity uses the regularized vacuum state |
 
 ### 2.5 Compile-time feature selection
@@ -1133,10 +1133,10 @@ means an impermeable finite-volume symmetry wall; the fluid operator does not mo
 the face and then reverse its polar momentum. Reflection-symmetric continuum states instead have
 zero normal velocity at the midplane, which is the interpretation exercised by the validation suite.
 
-PPM is formally high order on smooth fields, but the complete multidimensional solver should be
-described as second-order accurate: Strang composition, Crank–Nicolson diffusion, boundary fluxes,
-and limiter activation set the global claim. SSPRK(3,3) should not be used to claim that the full
-scheme is third-order in time.
+PPM is formally high order on smooth fields, but Strang composition limits the multidimensional
+transport claim to second order. SSPRK(3,3) does not make the full scheme third order in time.
+The complete solver's accuracy also depends on boundary fluxes, limiter activation, and the
+old-donor diffusion-momentum closure described in Section 7.3.
 
 ## 6. Drag, gravity, geometry, and radiation
 
@@ -1493,8 +1493,11 @@ Each face is scaled exactly once by the cell that supplies its mass:
 \end{cases}
 ```
 
-All donor factors are evaluated from the unchanged raw-flux array before any face is scaled. The
-accepted density is then reconstructed conservatively,
+All donor factors are evaluated from the unchanged raw-flux array before any face is scaled.
+Thread and block kernels preserve old density until all three momentum components have consumed
+it; block kernels synchronize factor construction, face scaling, and workspace reuse. Existing
+workspace holds the factors, without additional grid storage or dynamic shared memory.
+The accepted density is then reconstructed conservatively,
 
 $$
 M_i^{n+1}=M_i^n-\delta t
@@ -1514,6 +1517,10 @@ suppressed. Internal faces remain conservative because the same accepted face va
 adjacent cells with opposite signs. When every $\theta_i=1$, the accepted density is the original
 Crank--Nicolson solution. Where the limiter activates, the update is a nonlinear conservative
 correction and is not exactly time-centered CN locally.
+
+Reducing the timestep alone cannot guarantee termination of a strict old-donor check: an empty
+cell can receive and pass an implicit CN transfer at every finite trial step. The face limiter
+enforces the bound directly, including zero old mass.
 
 For each stored primitive $u_a\in\{\ell_\phi,v_r,\ell_\theta\}$, the associated momentum flux is
 
@@ -1557,6 +1564,11 @@ $$
 $$
 
 under periodic or zero-flux boundaries.
+
+These invariants do not establish second-order momentum accuracy for spatially varying primitives.
+The mass flux is time-centered when unlimited, but the transported primitive is the old upwind
+value. Constant-primitive eigenmode tests exercise CN density accuracy and consistent momentum
+scaling; the nonuniform-front tests establish bounds and conservation, not general momentum order.
 
 ### 7.4 Physical meaning and the rejected Reynolds alternative
 
@@ -1749,22 +1761,24 @@ $$
 
 ### 8.4 Formal accuracy and error sources
 
-For a smooth solution, a mesh scale $h$, and timestep $\Delta t$, the intended deterministic
-truncation form is
+For a smooth transport/source problem whose component updates are second order, a mesh scale $h$,
+and timestep $\Delta t$, the intended deterministic truncation form is
 
 $$
 \|e\|\lesssim C_xh^p+C_t\Delta t^2+C_{\rm split}\Delta t^2,
 $$
 
-where PPM is nominally third order in smooth one-dimensional regions but the complete split solver
-is conservatively described as second order. The principal operator properties are
+where PPM is nominally third order in smooth one-dimensional regions and Strang splitting limits
+the composed time order to second order. This estimate is not established for general
+variable-primitive momentum diffusion. The principal operator properties are
 
 | Operator | Smooth-region property | Important reduction |
 |---|---|---|
 | azimuthal FARGO–PPM | exact integer shift plus high-order residual reconstruction | PPM limiting reduces order near extrema or sharp fronts |
 | radial/polar PPM + SSPRK(3,3) | third-order method-of-lines time integrator for an isolated sweep | multidimensional Strang composition limits the global claim to second order |
 | drag/source response | exact frozen linear drag and second-order endpoint force weighting | coefficient freezing and sequential nonlinear force evaluation supply the remaining error |
-| Crank–Nicolson diffusion | second order in time and centered finite-volume space where the donor limiter is inactive | positivity subcycling preserves the CN operator; an activated donor limiter is a nonlinear, locally lower-order conservative correction |
+| Crank–Nicolson density diffusion | second order in time and centered finite-volume space where the donor limiter is inactive | positivity subcycling preserves the CN operator; donor limiting changes it locally |
+| diffusive momentum transport | conservative old-donor mixing with primitive bounds and convex-quadratic nonincrease | constant-primitive tests do not establish general second-order accuracy |
 | optical-depth quadrature | exact cell integral for cellwise constant extinction and linear face interpolation | density discretization and radial interpolation set the error |
 
 At a limiter activation, vacuum reset, or outflow boundary, the local order can fall to first order.

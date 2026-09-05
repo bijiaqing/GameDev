@@ -97,7 +97,6 @@ def main() -> None:
         "--fluid-sweep", choices=("thread", "block"), default="thread",
         help="fluid line solver used consistently by the native and cross-backend stages",
     )
-    parser.add_argument("--skip-static", action="store_true")
     comparison = parser.add_mutually_exclusive_group()
     comparison.add_argument(
         "--compare", action="store_true",
@@ -170,8 +169,6 @@ def main() -> None:
     backend_root = val_root/args.backend
 
     stages: list[tuple[str, list[str]]] = []
-    if not args.skip_static:
-        stages.append(("static", [sys.executable, str(val_root/"tool"/"static_check.py")]))
     if args.compare:
         stages.append((
             f"copied {counterpart.upper()} archive completeness",

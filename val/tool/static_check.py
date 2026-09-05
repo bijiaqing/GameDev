@@ -546,7 +546,7 @@ def check_make_resolution(errors: list[str]) -> None:
         (
             [
                 "make", "-n", "MODEL=test_x_transport_2d", "GPU_BACKEND=cuda",
-                "GPU_TARGET=sm_80", "RES=32", "VAL_SCOPE=transport",
+                "GPU_TARGET=sm_80", "RES=32", "VAL_SCOPE=transport", "FLUID_SWEEP=thread",
             ],
             (
                 "val/logs/fluid/cuda/thread/groups/transport/test_x_transport_2d",
@@ -578,10 +578,11 @@ def check_make_resolution(errors: list[str]) -> None:
                 f"validation scope resolution failed for {' '.join(command[2:])}:\n{result.stdout}"
             )
 
+    # print the build paths even when cached KNN targets are already current
     knn_commands = (
-        ["make", "-n", "-C", str(PROJECT_ROOT/"val"/"cuda"/"swarm"/"test_knn"), "suite", "ARCH=sm_80", "K=200"],
+        ["make", "-n", "-B", "-C", str(PROJECT_ROOT/"val"/"cuda"/"swarm"/"test_knn"), "suite", "ARCH=sm_80", "K=200"],
         [
-            "make", "-n", "-C", str(PROJECT_ROOT/"val"/"rocm"/"swarm"/"test_knn"),
+            "make", "-n", "-B", "-C", str(PROJECT_ROOT/"val"/"rocm"/"swarm"/"test_knn"),
             "suite", "AMDGPU_TARGET=gfx942", "K=200",
         ],
     )

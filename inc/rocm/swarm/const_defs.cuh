@@ -134,7 +134,7 @@ const int   COL_BIN_Z     = 2;               // polar controller bins before red
 const int   COL_BIN_S     = 8;               // logarithmic grain-size controller bins
 const int   COL_BIN_MIN   = 64;              // target minimum representatives after adjacent size-bin merging
 const real  COL_BATH_MAX  = 0.05;            // maximum frozen-reservoir bath duration
-const real  COL_BATH_EPS  = 0.06;            // common activity and distribution-change tolerance
+const real  COL_BATH_EPS  = 0.02;            // common activity and distribution-change tolerance
 const real  COL_BATH_ALPHA = 1.0e-3;         // family-wise confidence-tail probability for realized audits
 #endif // FROZEN_BATH
 #endif // COLLISION

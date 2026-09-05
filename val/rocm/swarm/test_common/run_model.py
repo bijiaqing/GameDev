@@ -151,6 +151,7 @@ def run(model: str) -> None:
     tier_by_resolution = {
         int(record["resolution"]): str(record["tier"]) for record in resolution_tiers
     }
+    cleaned_output_dirs = {out_dir} if not args.build_only else set()
     records = []
     for resolution in args.res:
         # every test constant is compiled into HIP code; cleaning prevents an
@@ -161,7 +162,9 @@ def run(model: str) -> None:
             run_out_dir = out_dir if search is None else out_dir/search
             if not args.build_only:
                 run_out_dir.mkdir(parents=True, exist_ok=True)
-                clean_results(run_out_dir)
+                if run_out_dir not in cleaned_output_dirs:
+                    clean_results(run_out_dir)
+                    cleaned_output_dirs.add(run_out_dir)
 
             target = os.environ.get("AMDGPU_TARGET", "gfx942")
             make_options = [

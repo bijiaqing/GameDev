@@ -365,8 +365,9 @@ diagnostic and is not an acceptance criterion.
 
 ## 10. Production frozen-bath collision chain
 
-The four `test_colchain_*` cases run the production collision runtime rather than an isolated event
-formula. They cover coagulation in a planar disk, fragmentation, a periodic wedge, and full 3D.
+The four `test_colchain_*` cases use a validation runtime copy that retains the production
+frozen-bath algorithm and adds deterministic seeds and diagnostics. They exercise complete event
+histories, covering coagulation in a planar disk, fragmentation, a periodic wedge, and full 3D.
 Each case runs both KD-tree and Morton searches. The planar coagulation case also compares event caps
 1 and 32, forcing the continuation path.
 
@@ -412,6 +413,38 @@ The strongest evidence is the combination of:
 - brute-force KNN identity in geometrically difficult domains;
 - conserved, deterministic end-to-end collision histories;
 - matching CUDA and ROCm publication manifests from the same source fingerprint.
+
+### Native archive assessment, 2026-09-05
+
+The downloaded CUDA `sm_80` and ROCm `gfx942` campaigns each pass 42 analytical/statistical
+records, 48 KNN cases (7 ordinary, 15 edge, 14 periodic, 12 wedge), and all four collision-chain
+models. Physical-collision cases pass with both KD-tree and Morton. Swarm has no fluid
+`thread`/`block` sweep distinction. Both saved `run_all_BACKEND_thread.json` campaigns have matching
+initial/final source SHA-256 `cf5db5ba782419cc09b3a92eeaaf812114f25a78be329c06d86b0b1b7ae3beca`.
+
+The largest physical relative error is `4.2556241850646705e-14`, below `2e-11`; the largest
+KNN-measure relative error is `1.5479644551308843e-4`, below the existing float-geometry limit
+`2e-4`. Wedge diffusion has maximum velocity residual `2.220446049250313e-16`; mean and variance
+errors use at most 0.207 and 0.256 of their respective statistical limits. Wide-wedge 2D/3D
+disagreements number 911/801 on CUDA and 908/803 on ROCm. Every disagreement is checked, with zero
+candidate-reference or image-geometry mismatches.
+
+The unmodified backend comparator nevertheless reports 60 swarm mismatches: 31 compare
+vendor-dependent wedge crossing counts and stochastic sample errors, and 29 compare
+physical-collision absolute residuals or float-geometry measure errors. The wedge cases are absent
+from `STOCHASTIC_SWARM_CASES`; collision diagnostics are compared recursively with generic
+cross-backend tolerances despite passing their distinct native reference limits. These results do
+not establish a production numerical defect, but the formal comparator remains failed. No tolerance
+or comparator code was changed during this assessment.
+
+Fresh evidence is in `val/logs/qualification_20260905/{archive_cuda_thread,archive_rocm_thread,comparison_thread,assessment}.json`.
+The top-level `run_all_BACKEND.json` files remain the failed static-only block attempts; they do
+not supersede the saved successful thread campaigns. This assessment reads native GPU archives;
+it is not a new local GPU run or proof of the separate production-runtime/build-routing gates.
+
+In particular, the wedge-diffusion wrappers compile the verification driver instead of the
+non-collision production runtime. Their passes establish the diffusion mapping, not compilation
+of the production controller guards; see [production build qualification](../val/README.md#production-build-qualification).
 
 ## 12. Deliberate limits
 

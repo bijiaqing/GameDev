@@ -32,6 +32,12 @@ std::mt19937 rand_generator;
 
 const std::string PATH = PATH_OUT; // convert the Makefile string literal to the output-path string used below
 
+inline unsigned int runtime_seed (const char *name, unsigned int fallback)
+{
+    const char *value = std::getenv(name);
+    return value == nullptr ? fallback : static_cast<unsigned int>(std::stoul(value));
+}
+
 // =========================================================================================================================
 // main program
 // initialize or resume a swarm and advance enabled operators between successive output frames
@@ -46,6 +52,10 @@ const std::string PATH = PATH_OUT; // convert the Makefile string literal to the
 
 int main (int argc, char **argv)
 {
+    const unsigned int initialization_seed = runtime_seed("COAG_INITIALIZATION_SEED", 0);
+    const unsigned int position_seed = runtime_seed("COAG_POSITION_SEED", 1);
+    const unsigned int collision_seed = runtime_seed("COAG_COLLISION_SEED", 1);
+
     #ifdef HALF_DISK
     if (N_Z > 1 && std::fabs(Z_MAX - 0.5*M_PI) > 16.0*std::numeric_limits<real>::epsilon())
         throw std::runtime_error("HALF_DISK requires Z_MAX = pi/2");
@@ -218,7 +228,7 @@ int main (int argc, char **argv)
         CUDA_CHECK(cudaMemcpy(dev_mass_bank, mass_bank.data(), sizeof(real)*mass_bank.size(), cudaMemcpyHostToDevice));
         #endif // MULTISIZE
 
-        rand_generator.seed(0); // keep initialization reproducible across runs
+        rand_generator.seed(initialization_seed);
 
         #ifdef MULTISIZE
         // sample the mass-weighted linear-kernel initial condition; the sampler returns size for m = size^3
@@ -245,7 +255,7 @@ int main (int argc, char **argv)
         
         CUDA_CHECK(cudaFreeHost(epsilon));
         #else  // NO IMPORTGAS
-        rand_collision_test_pos(randposx, randposy, randposz, N_P);
+        rand_collision_test_pos(randposx, randposy, randposz, N_P, position_seed);
         #endif // IMPORTGAS
 
         CUDA_CHECK(cudaMemcpy(dev_randposx, randposx, sizeof(real)*N_P, cudaMemcpyHostToDevice));
@@ -281,13 +291,13 @@ int main (int argc, char **argv)
         #endif // MULTISIZE
         
         #if defined(COLLISION) || defined(DIFFUSION)
-        rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
+        rngstate_init <<< NB_P, TPB >>> (dev_rngstate, static_cast<int>(collision_seed));
         CUDA_KERNEL_CHECK("rngstate_init");
         #endif // COLLISION || DIFFUSION
         
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
-        save_variable(PATH + "variables.txt", total_dust_mass);
+        save_variable(PATH + "variables.txt", total_dust_mass, initialization_seed, position_seed, collision_seed);
 
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_from, false);

@@ -505,7 +505,9 @@ real get_total_dust_mass (const std::vector <real> &mass_bank)
 
 // place collision-test particles on a reproducibly jittered two-dimensional annular grid
 inline __host__
-void rand_collision_test_pos (real *randposx, real *randposy, real *randposz, int count)
+void rand_collision_test_pos (
+    real *randposx, real *randposy, real *randposz, int count, unsigned int seed
+)
 {
     const real radial_span = Y_MAX - Y_MIN;
     const real azimuth_span = X_MAX - X_MIN;
@@ -515,7 +517,7 @@ void rand_collision_test_pos (real *randposx, real *randposy, real *randposz, in
 
     int azimuth_base = count / radial_count;
     int azimuth_extra = count % radial_count;
-    std::mt19937 position_generator(1);
+    std::mt19937 position_generator(seed);
     std::uniform_real_distribution <real> jitter(-0.25, 0.25);
 
     int idx = 0;
@@ -1045,7 +1047,10 @@ bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real 
 
 // write the active physical, numerical, grid, and binary-layout configuration
 inline __host__
-bool save_variable (const std::string &file_name, real total_dust_mass)
+bool save_variable (
+    const std::string &file_name, real total_dust_mass,
+    unsigned int initialization_seed, unsigned int position_seed, unsigned int collision_seed
+)
 {
     std::ofstream file(file_name);
     if (!file) return false;
@@ -1082,6 +1087,9 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     // dust parameters
     file << "STOKES_0    = " << std::scientific     << std::setprecision(8) << STOKES_0     << std::endl;
     file << "TOTAL_DUST_MASS = " << std::scientific << std::setprecision(8) << total_dust_mass << std::endl;
+    file << "INITIALIZATION_SEED = " << initialization_seed                                       << std::endl;
+    file << "POSITION_SEED       = " << position_seed                                             << std::endl;
+    file << "COLLISION_SEED      = " << collision_seed                                            << std::endl;
     file << "RHO_0       = " << std::scientific     << std::setprecision(8) << RHO_0        << std::endl;
     #ifdef RADIATION
     file << "BETA_0      = " << std::scientific     << std::setprecision(8) << BETA_0       << std::endl;
