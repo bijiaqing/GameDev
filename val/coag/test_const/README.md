@@ -3,12 +3,13 @@
 This is a standalone CUDA swarm validation family for an accuracy and stability check of the
 frozen-bath collision routine against the constant-kernel Smoluchowski solution.
 It evolves fixed representative particles by coagulation only. Each case-directory
-name records `N_P`, `N_K`, and `COL_BATH_EPS`; all cases inherit the implementation
-in `test_common` through `MODEL_PARENT`.
+name records `N_P`, `N_K`, and `COL_BATH_EPS`; all cases under `models/`
+inherit the implementation in `models/models_common` through
+`MODEL_PARENT := models_common`.
 
 ## Active build configuration
 
-`test_common/common_flags.mk` selects:
+`models/models_common/common_flags.mk` selects:
 
 - `DUST_REPR := swarm`
 - the KD-tree collision search
@@ -24,7 +25,7 @@ without defining `KNN_CACHE`; that flag is only legal with the Bernoulli method.
 
 ## Parameter differences from CUDA production defaults
 
-The shared `test_common/const_defs.cuh` changes the following production values:
+The shared `models/models_common/const_defs.cuh` changes the following production values:
 
 | Parameter | CUDA production | Reference value | Purpose |
 | --- | ---: | ---: | --- |
@@ -42,7 +43,7 @@ is instead limited by the remaining operator interval and the rate-based
 `COL_BATH_EPS` controller.
 
 `COL_BATH_EPS`, `COL_BATH_ALPHA`, and the two size-range factors are declared
-`constexpr` in the shared constants so the `test_common` compile-time validity checks can
+`constexpr` in the shared constants so the `models_common` compile-time validity checks can
 use these floating-point values in `static_assert` expressions.
 
 The fixed controller range `COL_SIZE_MIN = 0.5*INIT_SMIN` through
@@ -77,7 +78,7 @@ at `N_P = 1e6`.
 
 The shared `const_defs.cuh` accepts `SWEEP_N_P`, `SWEEP_N_K`, and
 `SWEEP_COL_BATH_EPS` compile definitions. Every case directory contains only a
-`flags.mk` that names `test_common` as its `MODEL_PARENT`, includes the shared
+`flags.mk` that names `models_common` as its `MODEL_PARENT`, includes the shared
 flags, and supplies the three parameter values. This prevents the CUDA overrides
 from drifting between otherwise identical cases.
 
@@ -218,10 +219,10 @@ Use the wrapper's `run` target to build and launch one case. Executables and obj
 files are written under `val/temp/coag/test_const/`. More specifically, a model's
 objects are stored under
 `val/temp/coag/test_const/obj/<case>/swarm/cuda/kdtree/fast/<GPU_TARGET>/`, and
-its executable is `val/temp/coag/test_const/bin/<case>/gamedev`. Scientific output is
-written under `val/logs/coagulation/test_const/<case>/`; the generated
-`val/logs` tree is ignored by Git. This validation family is not registered
-with `val/tool/run_all.py`.
+its executable is `val/temp/coag/test_const/bin/<case>/gamedev`. A manual run
+writes scientific output under `out/test_const/seed_000/<case>/`; `out/` is
+ignored by Git. This validation family is not registered with
+`val/tool/run_all.py`.
 
 Run the independent 15-seed campaign with:
 
@@ -234,21 +235,25 @@ of the full grid. Replicate zero uses the previous baseline position and
 collision seeds `(1, 1)`; replicate `r` uses `(2r+1, 2r+1)`. Compilation is
 excluded from the process wall times.
 
-Each completed model is scored at `particle_00009.dat` against the exact
+The campaign writes its active model output under
+`out/test_const/multiseed/<case>/`. Each completed model is scored at
+`particle_00009.dat` against the exact
 constant-kernel mass distribution. The atomically written seed JSON contains
 TV, Jensen--Shannon, log-mass Wasserstein and CDF errors; mass, number and
 second-moment checks; fixed-bin mass histograms; controller summaries; wall
-time; and the actual saved seeds. Only after that record is durable does the
-runner delete `particle_*.dat` and `collision_chain_*.json`. Failed-model raw
-output is retained. An interrupted campaign resumes already recorded models
-and refuses to combine seed files with changed campaign sources.
+time; and the actual saved seeds. After replicate zero is scored, its complete
+model directory is moved to `out/test_const/seed_000/<case>/` before the record
+is marked passed. For later replicates, the runner deletes `particle_*.dat` and
+`collision_chain_*.json` only after the score record is durable. Failed-model
+raw output is retained. An interrupted campaign resumes already recorded
+models and refuses to combine seed files with changed campaign sources.
 
 Download the compact result directory:
 
 ```text
-val/logs/coagulation/test_const/multiseed/
+val/coag/test_const/multiseed/
 ```
 
 It contains `manifest.json`, `seed_000.json` through `seed_014.json`, and the
-final across-seed `summary.json`. The per-model `variables.txt` files are also
-left on the cluster.
+final across-seed `summary.json`. Seed JSON files are retained locally but
+ignored by Git; the manifest and summary remain trackable.

@@ -377,7 +377,7 @@ def check_naming(errors: list[str]) -> None:
 
 
 def check_metadata(errors: list[str]) -> None:
-    """Check vendored licenses and keep validation data below val/logs or val/temp"""
+    """Check licenses and keep generated data in approved validation result roots"""
 
     for backend in ("cuda", "rocm"):
         license_path = PROJECT_ROOT/"inc"/backend/"swarm"/"kdtree"/"Apache-2.0.txt"
@@ -396,15 +396,24 @@ def check_metadata(errors: list[str]) -> None:
     for path in (PROJECT_ROOT/"val").rglob("*"):
         if any(part in {"logs", "temp", "__pycache__"} for part in path.parts):
             continue
+        relative = path.relative_to(PROJECT_ROOT)
+        if (
+            path.suffix == ".json"
+            and len(relative.parts) >= 4
+            and relative.parts[:2] == ("val", "coag")
+            and relative.parts[2] in {"test_const", "test_product", "test_linear"}
+            and relative.parts[3] == "multiseed"
+        ):
+            continue
         if path.is_file() and (
             path.suffix in generated_suffixes
             or path.name in generated_names
             or path.name.startswith((".arch_", ".target_"))
         ):
-            generated.append(path.relative_to(PROJECT_ROOT))
+            generated.append(relative)
     if generated:
         errors.append(
-            "generated validation artifacts outside val/logs and val/temp: "
+            "generated validation artifacts outside approved result roots: "
             + ", ".join(str(path) for path in generated[:10])
         )
 

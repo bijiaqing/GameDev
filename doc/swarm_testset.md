@@ -437,6 +437,16 @@ cross-backend tolerances despite passing their distinct native reference limits.
 not establish a production numerical defect, but the formal comparator remains failed. No tolerance
 or comparator code was changed during this assessment.
 
+Local regeneration reproduces exactly 15 crossing-count, 16 sample-error, six absolute
+physical-residual, and 23 float-search-geometry differences. The last two groups include nested
+search records and aggregate diagnostics, so 29 differences do not mean 29 independent failed
+experiments. Rechecking the archived diagnostics uses at most 0.002128 of the physical relative
+limit and 0.773983 of the geometry limit. A future scoped comparator correction must retain
+wedge velocity/unwrap/crossing activation checks and both searches' native relative-error and
+image-activation checks; adding entire wedge records to the stochastic skip set would also skip
+their deterministic diagnostics. `assessment.json` records every mismatch category and the
+per-record margins; its adjacent `assess.py` reruns these local checks without modifying archives.
+
 Fresh evidence is in `val/logs/qualification_20260905/{archive_cuda_thread,archive_rocm_thread,comparison_thread,assessment}.json`.
 The top-level `run_all_BACKEND.json` files remain the failed static-only block attempts; they do
 not supersede the saved successful thread campaigns. This assessment reads native GPU archives;

@@ -1,7 +1,8 @@
 GROUP_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT_DIR  := $(abspath $(GROUP_DIR)/../../..)
 TEMP_DIR  := $(ROOT_DIR)/val/temp/coag/test_product
-LOG_DIR   := $(ROOT_DIR)/val/logs/coagulation/test_product
+MODEL_DIR := $(GROUP_DIR)/models
+OUTPUT_ROOT ?= $(ROOT_DIR)/out/test_product/seed_000
 
 GPU_BACKEND ?= cuda
 GPU_TARGET  ?= sm_80
@@ -22,8 +23,8 @@ ROOT_MAKE_ARGS = \
 	GPU_BACKEND=$(GPU_BACKEND) \
 	GPU_TARGET=$(GPU_TARGET) \
 	CUDA_MATH=$(CUDA_MATH) \
-	MOD_ROOT=$(GROUP_DIR) \
-	OUT_ROOT=$(LOG_DIR) \
+	MOD_ROOT=$(MODEL_DIR) \
+	OUT_ROOT=$(OUTPUT_ROOT) \
 	OBJ_ROOT=$(TEMP_DIR)/obj \
 	EXEC=$(EXEC)
 

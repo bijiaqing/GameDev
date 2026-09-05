@@ -8,9 +8,9 @@ K(m_i, m_j) = Lambda_0 * m_i * m_j.
 ```
 
 Representative-particle positions are fixed and the only evolution process is
-coagulation. Each case-directory name records `N_P`, `N_K`, and
-`COL_BATH_EPS`; all cases inherit the implementation in `test_common` through
-`MODEL_PARENT`.
+coagulation. Each case-directory under `models/` records `N_P`, `N_K`, and
+`COL_BATH_EPS`; all cases inherit the implementation in
+`models/models_common` through `MODEL_PARENT := models_common`.
 
 ## Campaign grid
 
@@ -31,7 +31,7 @@ For example, `1e+6n_2e+2k_8e-2b` means `N_P = 1e6`, `N_K = 200`, and
 
 ## Active configuration
 
-`test_common/common_flags.mk` selects:
+`models/models_common/common_flags.mk` selects:
 
 - the CUDA swarm representation and KD-tree collision search;
 - the default frozen-bath collision integrator;
@@ -157,9 +157,9 @@ python3 val/coag/test_product/run_models.py
 ```
 
 Executables and objects are written under `val/temp/coag/test_product/`.
-Scientific output is written under
-`val/logs/coagulation/test_product/<case>/`. The runner builds all 25 models
-once, then runs 15 deterministic replicates of the full grid. Replicate zero
+The campaign writes its active scientific output under
+`out/test_product/multiseed/<case>/`. The runner builds all 25 models once,
+then runs 15 deterministic replicates of the full grid. Replicate zero
 uses the previous baseline streams `(position, collision, partner) = (1, 1,
 2)`; replicate `r` uses `(2r+1, 2r+1, 2r+2)`. Compilation is excluded from
 the process wall times.
@@ -168,19 +168,22 @@ Each completed model is scored at the final pre-gelation snapshot against the
 exact Borel mass distribution. The atomically written seed JSON contains TV,
 Jensen--Shannon, log-mass Wasserstein and CDF errors; mass, number and
 second-moment checks; fixed-bin mass histograms; controller summaries; wall
-time; and the actual saved seeds. Only after that record is durable does the
-runner delete `particle_*.dat` and `collision_chain_*.json`. Failed-model raw
-output is retained. An interrupted campaign resumes already recorded models
-and refuses to combine seed files with changed campaign sources.
+time; and the actual saved seeds. After replicate zero is scored, its complete
+model directory is moved to `out/test_product/seed_000/<case>/` before the
+record is marked passed. For later replicates, the runner deletes
+`particle_*.dat` and `collision_chain_*.json` only after the score record is
+durable. Failed-model raw output is retained. An interrupted campaign resumes
+already recorded models and refuses to combine seed files with changed
+campaign sources.
 
 Download the compact result directory:
 
 ```text
-val/logs/coagulation/test_product/multiseed/
+val/coag/test_product/multiseed/
 ```
 
 It contains `manifest.json`, `seed_000.json` through `seed_014.json`, and the
-final across-seed `summary.json`. The per-model `variables.txt` files are also
-left on the cluster.
+final across-seed `summary.json`. Seed JSON files are retained locally but
+ignored by Git; the manifest and summary remain trackable.
 
 This validation family is not registered with `val/tool/run_all.py`.

@@ -19,9 +19,11 @@ from score_model import score_model, scoring_metadata
 
 GROUP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = GROUP_DIR.parents[2]
+MODELS_DIR = GROUP_DIR/"models"
 TEMP_DIR = PROJECT_ROOT/"val"/"temp"/"coag"/"test_product"
-OUTPUT_ROOT = PROJECT_ROOT/"val"/"logs"/"coagulation"/"test_product"
-RESULT_ROOT = OUTPUT_ROOT/"multiseed"
+OUTPUT_ROOT = PROJECT_ROOT/"out"/"test_product"/"multiseed"
+ARCHIVE_ROOT = PROJECT_ROOT/"out"/"test_product"/"seed_000"
+RESULT_ROOT = GROUP_DIR/"multiseed"
 SEED_COUNT = 15
 
 SCORE_FIELDS = (
@@ -58,8 +60,8 @@ def seed_streams(replicate: int) -> dict[str, int]:
 def source_hashes() -> dict[str, str]:
     paths = [
         Path(__file__), GROUP_DIR/"score_model.py", GROUP_DIR/"Makefile", PROJECT_ROOT/"Makefile",
-        *sorted((GROUP_DIR/"test_common").glob("*")),
-        *sorted(GROUP_DIR.glob("*/flags.mk")),
+        *sorted((MODELS_DIR/"models_common").glob("*")),
+        *sorted(MODELS_DIR.glob("*/flags.mk")),
         *sorted((PROJECT_ROOT/"src").rglob("*")),
         *sorted((PROJECT_ROOT/"inc").rglob("*")),
     ]
@@ -77,6 +79,13 @@ def remove_raw_output(output_dir: Path, remove_variables: bool = False) -> None:
         variable_path = output_dir/"variables.txt"
         if variable_path.exists():
             variable_path.unlink()
+
+
+def archive_seed_zero(output_dir: Path, archive_dir: Path) -> None:
+    archive_dir.parent.mkdir(parents=True, exist_ok=True)
+    if archive_dir.exists():
+        raise RuntimeError(f"refusing to overwrite seed-0 output in {archive_dir}")
+    output_dir.replace(archive_dir)
 
 
 def statistics(values: list[float]) -> dict[str, float]:
@@ -128,7 +137,7 @@ def write_aggregate(models: list[str]) -> None:
 
 
 def main() -> None:
-    models = sorted(path.parent.name for path in GROUP_DIR.glob("*/flags.mk"))
+    models = sorted(path.parent.name for path in MODELS_DIR.glob("*/flags.mk"))
     manifest_path = RESULT_ROOT/"manifest.json"
     hashes = source_hashes()
     fingerprint = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
@@ -154,8 +163,9 @@ def main() -> None:
             "replicate_zero_matches_previous_position_1_collision_1_partner_2": True,
         },
         "output_policy": (
-            "particle and collision-chain files are deleted only after the model score is "
-            "atomically recorded; variables.txt is retained; failed-model output is retained"
+            "replicate-zero output is moved intact to out/test_product/seed_000 only after "
+            "scoring; later particle and collision-chain files are deleted only after the "
+            "model score is atomically recorded; failed-model output is retained"
         ),
         "scoring": scoring_metadata(),
     }
@@ -163,7 +173,9 @@ def main() -> None:
 
     for model in models:
         print(f"\n=== build {model} ===", flush=True)
-        build = subprocess.run(["make", "-C", str(GROUP_DIR), f"MODEL={model}"], check=False)
+        build = subprocess.run([
+            "make", "-C", str(GROUP_DIR), f"MODEL={model}", f"OUTPUT_ROOT={OUTPUT_ROOT}",
+        ], check=False)
         if build.returncode != 0:
             manifest.update(status="build_failed", failed_model=model, finished_utc=utc_now())
             atomic_json(manifest_path, manifest)
@@ -195,7 +207,19 @@ def main() -> None:
 
         for model in models:
             if records.get(model, {}).get("status") == "passed":
-                remove_raw_output(OUTPUT_ROOT/model)
+                if replicate > 0:
+                    remove_raw_output(OUTPUT_ROOT/model)
+                continue
+
+            if replicate == 0 and records.get(model, {}).get("status") == "scored":
+                output_dir = OUTPUT_ROOT/model
+                archive_dir = ARCHIVE_ROOT/model
+                if archive_dir.exists() and output_dir.exists():
+                    raise RuntimeError(f"both rolling and archived seed-0 output exist for {model}")
+                if not archive_dir.exists():
+                    archive_seed_zero(output_dir, archive_dir)
+                records[model]["status"] = "passed"
+                atomic_json(seed_path, seed_result)
                 continue
 
             executable = TEMP_DIR/"bin"/model/"gamedev"
@@ -246,9 +270,14 @@ def main() -> None:
                 atomic_json(manifest_path, manifest)
                 raise
 
-            record["status"] = "passed"
+            record["status"] = "scored" if replicate == 0 else "passed"
             atomic_json(seed_path, seed_result)
-            remove_raw_output(output_dir)
+            if replicate == 0:
+                archive_seed_zero(output_dir, ARCHIVE_ROOT/model)
+                record["status"] = "passed"
+                atomic_json(seed_path, seed_result)
+            else:
+                remove_raw_output(output_dir)
 
         seed_result.update(status="passed", finished_utc=utc_now())
         atomic_json(seed_path, seed_result)

@@ -9,8 +9,9 @@ K(m_i, m_j) = Lambda_0 * (m_i + m_j).
 ```
 
 It uses fixed representative-particle positions and coagulation-only evolution.
-Each case-directory name records `N_P`, `N_K`, and `COL_BATH_EPS`; all cases
-inherit the implementation in `test_common` through `MODEL_PARENT`.
+Each case-directory under `models/` records `N_P`, `N_K`, and
+`COL_BATH_EPS`; all cases inherit the implementation in
+`models/models_common` through `MODEL_PARENT := models_common`.
 
 ## Campaign grid
 
@@ -24,10 +25,8 @@ N_K = 10, 20, 50, 100, 200
 COL_BATH_EPS = 5e-3, 1e-2, 2e-2, 4e-2, 8e-2
 ```
 
-The 25 case directories contain only a `flags.mk`. The first nine runs covered
-the two center lines, `COL_BATH_EPS = 1e-2` and `N_K = 200`. The remaining 16
-off-axis cases are divided among four approximately equal-runtime batches.
-The shared constants accept `SWEEP_N_P`, `SWEEP_N_K`, and
+The 25 case directories contain only a `flags.mk`. The shared constants accept
+`SWEEP_N_P`, `SWEEP_N_K`, and
 `SWEEP_COL_BATH_EPS` compile definitions.
 
 For example, `1e+6n_2e+2k_8e-2b` means `N_P = 1e6`, `N_K = 200`, and
@@ -35,7 +34,7 @@ For example, `1e+6n_2e+2k_8e-2b` means `N_P = 1e6`, `N_K = 200`, and
 
 ## Active configuration
 
-`test_common/common_flags.mk` selects:
+`models/models_common/common_flags.mk` selects:
 
 - the CUDA swarm representation and KD-tree collision search;
 - the default frozen-bath collision integrator;
@@ -160,76 +159,38 @@ Build one Ampere case with:
 make -C val/coag/test_linear MODEL=1e+6n_1e+1k_1e-2b GPU_TARGET=sm_80
 ```
 
-Build and run all 25 models sequentially with:
+Run the independent five-seed campaign with:
 
 ```sh
 python3 val/coag/test_linear/run_models.py
 ```
 
-Run one of the four off-axis batches with:
+The script builds all 25 models once and runs five deterministic replicates of
+the full grid sequentially. Replicate `r` uses initialization seed `r` and
+position and collision seeds `(2r+1, 2r+1)`. Compilation is excluded from the
+process wall times.
 
-```sh
-python3 val/coag/test_linear/run_models.py --batch 1
+Executables and objects are written under `val/temp/coag/test_linear/`. The
+campaign writes its active model output under
+`out/test_linear/multiseed/<case>/`. After replicate zero is scored, its
+complete model directory is moved to `out/test_linear/seed_000/<case>/` before
+the record is marked passed. For later replicates, `particle_*.dat` and
+`collision_chain_*.json` are deleted only after the score record is durable.
+Failed-model raw output is retained. An interrupted campaign resumes already
+recorded models and refuses to combine seed files with changed campaign
+sources.
+
+Compact results are written under:
+
+```text
+val/coag/test_linear/multiseed/
 ```
 
-Each batch writes a separate `wall_time_batch_<batch>.json`, so the four
-runners can operate concurrently without modifying the same timing summary.
-Submit all four as a Slurm array from the project root with:
-
-```sh
-sbatch val/coag/test_linear/job_submit_batches.sh
-```
-
-Each array task requests one A100 for 24 hours and runs its assigned models
-sequentially. Estimated batch runtimes are 6.89, 6.62, 6.65, and 6.68 hours.
-
-Executables and objects are written under `val/temp/coag/test_linear/`.
-Scientific output is written under
-`val/logs/coagulation/test_linear/<case>/`. The runner atomically updates
-its timing JSON after each model; compilation time is excluded from the
-recorded process wall time.
+This directory contains `manifest.json`, `seed_000.json` through
+`seed_004.json`, and the final across-seed `summary.json`. Seed JSON files are
+retained locally but ignored by Git; the manifest and summary remain
+trackable.
 
 This validation family is not registered with `val/tool/run_all.py`.
 
-The measured single-seed accuracy--cost result and proposed smaller multiseed
-follow-up are documented in `balance_assessment.md`.
-
-## Four-seed remote follow-up
-
-`run_multiseed.py` runs and summarizes only replicate labels 1--4. It requires
-no seed-0 particle files, collision-chain files, variables, or timing summaries
-on the remote cluster. The seed streams are
-
-```text
-initialization seed = replicate
-position seed       = 2*replicate + 1
-collision seed      = 2*replicate + 1
-```
-
-The stream triples are `(1,3,3)`, `(2,5,5)`, `(3,7,7)`, and `(4,9,9)`.
-
-The 25 models are partitioned by their measured seed-0 process times. Each of
-eight array tasks exclusively owns its model subset and runs all four new
-replicates sequentially. This prevents concurrent tasks from writing the same
-model output directory. Per-task result shards are written below
-`multiseed/jobs/job_<job>/`; a separate finalization step merges them into
-`seed_001.json` through `seed_004.json` and a four-replicate `summary.json`.
-
-Submit the eight GPU tasks with:
-
-```sh
-sbatch val/coag/test_linear/job_submit_multiseed.sh
-```
-
-After all eight tasks pass, merge and summarize the shards with:
-
-```sh
-module load python-waterboa/2025.06
-python3 val/coag/test_linear/run_multiseed.py --finalize
-```
-
-Each raw particle and collision-chain output is deleted only after its score
-has been atomically saved; `variables.txt` and failed-run output are retained.
-The partition was designed from the earlier seed-0 timings and predicts
-approximately 14.3--16.4 hours per GPU before filesystem contention and
-seed-to-seed runtime variation.
+The measured accuracy--cost result is documented in `balance.md`.
