@@ -42,13 +42,14 @@ constexpr int N_P = 2048;
 constexpr int N_P = 4;
 #elif defined(TEST_DRAG_PATH_1D)
 constexpr int N_P = 3;
-#elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)
+#elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D) \
+    || defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
 constexpr int N_P = 16*VERIFY_RES*VERIFY_RES;
 #elif defined(TEST_INITIAL_3D)
 constexpr int N_P = 65536;
 #elif defined(TEST_PRDRAG_2D)
 constexpr int N_P = 8;
-#elif defined(TEST_COLPHYS_CODE) || defined(TEST_COLPHYS_CGS)
+#elif defined(TEST_COLPHYS_CODE) || defined(TEST_COLPHYS_CGS) || defined(TEST_COLPHYS_3D)
 constexpr int N_P = 2;
 #else
 constexpr int N_P = 64;
@@ -72,7 +73,8 @@ constexpr int N_Z = VERIFY_RES;
 constexpr int N_X = 32;
 constexpr int N_Y = 16;
 constexpr int N_Z = 16;
-#elif defined(TEST_DIFFUSION_3D)
+#elif defined(TEST_DIFFUSION_3D) || defined(TEST_DIFFUSION_WEDGE_3D) \
+    || defined(TEST_COLPHYS_3D)
 constexpr int N_X = 8;
 constexpr int N_Y = 16;
 constexpr int N_Z = 16;
@@ -90,9 +92,13 @@ constexpr int N_Y = 16;
 constexpr int N_Z = 1;
 #endif
 
-#ifdef TEST_COLCHAIN_WEDGE_2D
+#if defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_2D) \
+    || defined(TEST_DIFFUSION_WEDGE_3D)
 constexpr real X_MIN = -0.1;
 constexpr real X_MAX = 0.1;
+#elif defined(TEST_COLPHYS_CODE) || defined(TEST_COLPHYS_CGS) || defined(TEST_COLPHYS_3D)
+constexpr real X_MIN = -0.5;
+constexpr real X_MAX = 0.5;
 #else
 constexpr real X_MIN = -M_PI;
 constexpr real X_MAX = M_PI;
@@ -103,7 +109,9 @@ constexpr real Y_MAX = 1.5;
 #ifdef TEST_INITIAL_3D
 constexpr real Z_MIN = 0.5*M_PI - 0.01;
 constexpr real Z_MAX = 0.5*M_PI + 0.01;
-#elif defined(TEST_ORBIT_INC_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_COLCHAIN_3D)
+#elif defined(TEST_ORBIT_INC_3D) || defined(TEST_DIFFUSION_3D) \
+    || defined(TEST_DIFFUSION_WEDGE_3D) || defined(TEST_COLCHAIN_3D) \
+    || defined(TEST_COLPHYS_3D)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
 #else
@@ -142,7 +150,8 @@ constexpr real ALPHA = 1.0e-4;
 #ifdef TEST_DIFFUSION_1D
 constexpr real SCHMIDT_X = 1.0e300;
 constexpr real SCHMIDT_R = 1.0;
-#elif defined(TEST_DIFFUSION_2D)
+#elif defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_WEDGE_2D) \
+    || defined(TEST_DIFFUSION_WEDGE_3D)
 constexpr real SCHMIDT_X = 1.0;
 constexpr real SCHMIDT_R = 1.0e300;
 #elif defined(TEST_DIFFUSION_3D)
@@ -184,7 +193,9 @@ constexpr real REYNOLDS_0 = 1.0e8;
 constexpr real M_MOL = 2.3*1.66054e-24;
 constexpr real X_SEC = 2.0e-15;
 #endif
-#if defined(TEST_COLCHAIN_FRAG_2D) || defined(TEST_COLPHYS_CODE) || defined(TEST_COLPHYS_CGS)
+#if defined(TEST_COLCHAIN_FRAG_2D) || defined(TEST_COLCHAIN_WEDGE_2D) \
+    || defined(TEST_COLPHYS_CODE) \
+    || defined(TEST_COLPHYS_CGS) || defined(TEST_COLPHYS_3D)
 constexpr int COAG_KERNEL = 3;
 #else
 constexpr int COAG_KERNEL = 0;

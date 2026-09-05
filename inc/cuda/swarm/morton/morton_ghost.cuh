@@ -10,7 +10,16 @@
 #include <thrust/execution_policy.h>     // thrust::device
 #include <thrust/scan.h>                 // thrust::exclusive_scan
 
+#include <_collision.cuh>
 #include <morton/morton_index.cuh>
+
+// encode physical records even when no ghost records are required
+static __global__
+void morton_idcode (int *dev_idx_old, int point_count)
+{
+    int idx_point = threadIdx.x + blockDim.x*blockIdx.x;
+    if (idx_point < point_count) dev_idx_old[idx_point] = _encode_col_neighbor(idx_point, 0);
+}
 
 // calculate Cartesian distance to one radial plane bounding the azimuthal wedge
 static __device__ __forceinline__
@@ -44,7 +53,7 @@ void morton_gwrite (float3 *dev_record, int *dev_idx_old, const float3 *dev_poin
     if (idx_point >= point_count) return;
 
     dev_record[idx_point] = dev_point[idx_point];
-    dev_idx_old[idx_point] = idx_point;
+    dev_idx_old[idx_point] = _encode_col_neighbor(idx_point, 0);
 
     float width = x_max - x_min;
     float sin_width;
@@ -59,7 +68,7 @@ void morton_gwrite (float3 *dev_record, int *dev_idx_old, const float3 *dev_poin
             sin_width*dev_point[idx_point].x + cos_width*dev_point[idx_point].y,
             dev_point[idx_point].z
         );
-        dev_idx_old[idx_ghost++] = idx_point;
+        dev_idx_old[idx_ghost++] = _encode_col_neighbor(idx_point, 2);
     }
     if (_get_morton_seam_dist(dev_point[idx_point], x_max - dev_morton_posx[idx_point]) <= search_dist)
     {
@@ -68,7 +77,7 @@ void morton_gwrite (float3 *dev_record, int *dev_idx_old, const float3 *dev_poin
             -sin_width*dev_point[idx_point].x + cos_width*dev_point[idx_point].y,
             dev_point[idx_point].z
         );
-        dev_idx_old[idx_ghost] = idx_point;
+        dev_idx_old[idx_ghost] = _encode_col_neighbor(idx_point, 1);
     }
 }
 
@@ -88,10 +97,18 @@ public:
 
         if (!use_ghosts)
         {
-            // index physical records directly for full-period or inactive azimuth
+            // retain the same packed identifier contract without allocating ghost records
             record_count_ = point_count;
             unique_ids_ = true;
-            build_index(dev_point, nullptr, point_count, y_max, dim, leaf_target, max_level);
+            int *dev_idx_old = nullptr;
+            _morton_cuda_check(cudaMalloc((void**)&dev_idx_old, sizeof(int)*point_count),
+                "allocate Morton physical identifiers");
+            constexpr int thread_count = 256;
+            int block_count = (point_count + thread_count - 1) / thread_count;
+            morton_idcode <<< block_count, thread_count >>> (dev_idx_old, point_count);
+            _morton_cuda_check(cudaGetLastError(), "launch morton_idcode");
+            build_index(dev_point, dev_idx_old, point_count, y_max, dim, leaf_target, max_level);
+            _morton_cuda_check(cudaFree(dev_idx_old), "release Morton physical identifiers");
             return;
         }
 

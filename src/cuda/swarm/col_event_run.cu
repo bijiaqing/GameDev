@@ -69,21 +69,24 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     dev_rngstate[idx_old_i] = rngstate;
     real cumulative = 0.0;
     int idx_old_j = -1;
+    int image_j = 0;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         int idx_old_j_try = near_result.returnIndex(idx_neighbor);
+        int image_j_try = near_result.returnImage(idx_neighbor);
         if (idx_old_j_try < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
 
         idx_old_j = idx_old_j_try;
+        image_j = image_j_try;
         cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j_try, lambda_0
+            idx_old_i, idx_old_j_try, image_j_try, lambda_0
         ) / measure;
         if (cumulative >= target) break;
     }
@@ -94,7 +97,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
-        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS
@@ -194,8 +197,10 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {
         pair_rate[idx_neighbor] = 0.0;
-        int idx_old_j = work_idx_old[idx_neighbor];
-        if (idx_old_j < 0 || idx_old_j == INT_MAX) continue;
+        int neighbor = work_idx_old[idx_neighbor];
+        if (neighbor < 0 || neighbor == INT_MAX) continue;
+        int idx_old_j = _get_col_idx_old(neighbor);
+        int image_j = _get_col_image(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -205,7 +210,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0
+            idx_old_i, idx_old_j, image_j, lambda_0
         );
     }
     __syncthreads();
@@ -218,15 +223,18 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     dev_rngstate[idx_old_i] = rngstate;
     real cumulative = 0.0;
     int idx_old_j = -1;
+    int image_j = 0;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
-        int idx_old_j_try = work_idx_old[idx_neighbor];
-        if (idx_old_j_try < 0 || idx_old_j_try == INT_MAX) continue;
+        int neighbor = work_idx_old[idx_neighbor];
+        if (neighbor < 0 || neighbor == INT_MAX) continue;
+        int idx_old_j_try = _get_col_idx_old(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
 
         idx_old_j = idx_old_j_try;
+        image_j = _get_col_image(neighbor);
         cumulative += pair_rate[idx_neighbor] / measure;
         if (cumulative >= target) break;
     }
@@ -237,7 +245,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
-        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS
@@ -306,22 +314,25 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     dev_rngstate[idx_old_i] = rngstate;
     real cumulative = 0.0;
     int idx_old_j = -1;
+    int image_j = 0;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
-        int idx_old_j_try = dev_col_neighbor[idx_cache];
-        if (idx_old_j_try < 0) continue;
+        int neighbor = dev_col_neighbor[idx_cache];
+        if (neighbor < 0) continue;
+        int idx_old_j_try = _get_col_idx_old(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
 
         idx_old_j = idx_old_j_try;
+        image_j = _get_col_image(neighbor);
         cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j_try, lambda_0
+            idx_old_i, idx_old_j_try, _get_col_image(neighbor), lambda_0
         ) / measure;
         if (cumulative >= target) break;
     }
@@ -331,7 +342,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
-        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS
@@ -395,8 +406,10 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     {
         pair_rate[idx_neighbor] = 0.0;
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
-        int idx_old_j = dev_col_neighbor[idx_cache];
-        if (idx_old_j < 0) continue;
+        int neighbor = dev_col_neighbor[idx_cache];
+        if (neighbor < 0) continue;
+        int idx_old_j = _get_col_idx_old(neighbor);
+        int image_j = _get_col_image(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -406,7 +419,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0
+            idx_old_i, idx_old_j, image_j, lambda_0
         );
     }
     __syncthreads();
@@ -419,16 +432,19 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     dev_rngstate[idx_old_i] = rngstate;
     real cumulative = 0.0;
     int idx_old_j = -1;
+    int image_j = 0;
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
-        int idx_old_j_try = dev_col_neighbor[idx_cache];
-        if (idx_old_j_try < 0) continue;
+        int neighbor = dev_col_neighbor[idx_cache];
+        if (neighbor < 0) continue;
+        int idx_old_j_try = _get_col_idx_old(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j_try].position.y, dev_particle[idx_old_j_try].position.z
         )) continue;
 
         idx_old_j = idx_old_j_try;
+        image_j = _get_col_image(neighbor);
         cumulative += pair_rate[idx_neighbor] / measure;
         if (cumulative >= target) break;
     }
@@ -438,7 +454,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     real vrel = 0.0;
     if (COAG_KERNEL == CUSTOM_KERNEL)
     {
-        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        vrel = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS

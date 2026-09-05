@@ -124,6 +124,30 @@ void diffusion_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 mass_flux[ix] = -0.5*diff_x*((rhod[ixp1] - rhod[ix]) + (rhod_work[ixp1] - rhod_work[ix])) / dx_len;
             }
 
+            // bound the complete outgoing transfer from each old donor before changing any face
+            for (int ix = 0; ix < N_X; ix++)
+            {
+                int ixm1 = (ix - 1 + N_X) % N_X;
+                real out_rate = fmax(mass_flux[ix], 0.0) + fmax(-mass_flux[ixm1], 0.0);
+                rhod_work[ix] = (out_rate > 0.0)
+                    ? fmin(1.0, POS_LIMIT*fmax(rhod[ix], 0.0)*dx_len / (dt_sub*out_rate)) : 1.0;
+            }
+
+            // scale each face once with the factor belonging to its raw-flux donor
+            for (int ix = 0; ix < N_X; ix++)
+            {
+                int ixp1 = (ix + 1) % N_X;
+                int ix_up = (mass_flux[ix] >= 0.0) ? ix : ixp1;
+                mass_flux[ix] *= rhod_work[ix_up];
+            }
+
+            // reconstruct accepted density from the same limited flux used by momentum
+            for (int ix = 0; ix < N_X; ix++)
+            {
+                int ixm1 = (ix - 1 + N_X) % N_X;
+                rhod_work[ix] = rhod[ix] - dt_sub*(mass_flux[ix] - mass_flux[ixm1]) / dx_len;
+            }
+
             // combine each face mass flux with the donor azimuthal primitive quantity
             for (int ix = 0; ix < N_X; ix++)
             {

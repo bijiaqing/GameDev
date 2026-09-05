@@ -160,6 +160,65 @@ def analyze_diffusion(out_dir: Path, resolution: int, meta: dict[str, str]) -> d
     }
 
 
+def analyze_wedge_diffusion(out_dir: Path, resolution: int, meta: dict[str, str]) -> dict:
+    """Check seam crossing and velocity reprojection at the unique unwrapped endpoint"""
+
+    nparticle = int(meta["np"])
+    dt = float(meta["dt"])
+    initial = read_array(out_dir, "state_initial", resolution, 6*nparticle).reshape(6, nparticle)
+    final = load_state(out_dir, resolution, nparticle)
+    width = float(meta["x_max"]) - float(meta["x_min"])
+    delta_x = (final[0] - initial[0] + 0.5*width) % width - 0.5*width
+    x_unwrapped = initial[0] + delta_x
+
+    radius_initial = initial[1]*np.sin(initial[2])
+    vx_initial = initial[3]/radius_initial
+    vz_initial = initial[5]/initial[1]
+    vR_initial = initial[4]*np.sin(initial[2]) + vz_initial*np.cos(initial[2])
+    vZ_initial = initial[4]*np.cos(initial[2]) - vz_initial*np.sin(initial[2])
+    vx_cart = vR_initial*np.cos(initial[0]) - vx_initial*np.sin(initial[0])
+    vy_cart = vR_initial*np.sin(initial[0]) + vx_initial*np.cos(initial[0])
+
+    radius_final = final[1]*np.sin(final[2])
+    vR_final = vx_cart*np.cos(x_unwrapped) + vy_cart*np.sin(x_unwrapped)
+    vx_final = vy_cart*np.cos(x_unwrapped) - vx_cart*np.sin(x_unwrapped)
+    expected_lx = radius_final*vx_final
+    expected_vy = vR_final*np.sin(final[2]) + vZ_initial*np.cos(final[2])
+    expected_lz = (vR_final*np.cos(final[2]) - vZ_initial*np.sin(final[2]))*final[1]
+    velocity_error = np.concatenate((
+        final[3] - expected_lx,
+        final[4] - expected_vy,
+        final[5] - expected_lz,
+    ))
+
+    lower = initial[0] < 0.0
+    upper = ~lower
+    crossed_lower = int(np.count_nonzero(lower & (final[0] > 0.0)))
+    crossed_upper = int(np.count_nonzero(upper & (final[0] < 0.0)))
+    unique_unwrap = bool(np.max(np.abs(delta_x)) < 0.5*width)
+    expected_variance = float(np.mean(2.0*NU*dt/(radius_initial*radius_initial)))
+    mean_error = float(np.mean(delta_x))
+    variance_error = float(np.var(delta_x) - expected_variance)
+    mean_limit = 6.0*math.sqrt(expected_variance/nparticle)
+    variance_limit = 6.0*expected_variance*math.sqrt(2.0/(nparticle - 1))
+    passed = bool(
+        unique_unwrap and crossed_lower > 0 and crossed_upper > 0
+        and np.max(np.abs(velocity_error)) < 2.0e-12
+        and abs(mean_error) <= mean_limit and abs(variance_error) <= variance_limit
+    )
+    return {
+        "case": meta["case"], "resolution": resolution,
+        "crossed_lower": crossed_lower, "crossed_upper": crossed_upper,
+        "unique_unwrap": unique_unwrap,
+        "statistics": {"x": {
+            "mean_error": mean_error, "mean_limit": mean_limit,
+            "variance_error": variance_error, "variance_limit": variance_limit,
+        }},
+        "errors": {"velocity": norms(velocity_error)},
+        "passed": passed,
+    }
+
+
 def initialization_spans(radius: float, meta: dict[str, str]) -> list[tuple[float, float]]:
     """Intersect a cylindrical line with the independently reconstructed spherical domain"""
 
@@ -412,6 +471,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     case = meta["case"]
     if case == "prdrag_2d":
         result = analyze_relaxation(out_dir, resolution, meta)
+    elif isinstance(case, str) and case.startswith("diffusion_wedge_"):
+        result = analyze_wedge_diffusion(out_dir, resolution, meta)
     elif isinstance(case, str) and case.startswith("diffusion_"):
         result = analyze_diffusion(out_dir, resolution, meta)
     elif case == "initial_3d":

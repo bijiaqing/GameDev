@@ -7,9 +7,10 @@ trajectories, stochastic diffusion, continuous finite-domain initialization, phy
 rates, nearest-neighbor geometry, and the production frozen-bath collision integrator. The retained
 tests compare complete algorithms with closed-form, statistical, or brute-force references.
 
-The common analytical matrix is defined in `val/tool/val_config.py`. For the standard resolutions
-$N=32,64,128,256$, it contains 12 models and 33 metric records, plus the standalone KNN matrix.
-The all-in-one campaign also runs four native collision-chain models. CUDA and ROCm use the same
+The common matrix is defined in `val/tool/val_config.py`. For the standard resolutions
+$N=32,64,128,256$, it contains 15 named entries: 14 analytical or statistical models producing
+42 metric records, plus the standalone KNN matrix. The all-in-one campaign also runs four native
+collision-chain models. CUDA and ROCm use the same
 backend-neutral definitions and validators wherever their runtime APIs permit.
 
 The production equations and numerical methods are documented in
@@ -65,9 +66,9 @@ The constant material-density factor cancels in relative conservation errors.
 | Group | Models | Main claim |
 |---|---|---|
 | transport | `test_orbit_ecc_2d`, `test_orbit_beta_2d`, `test_orbit_inc_3d`, `test_drag_path_1d`, `test_prdrag_2d` | deterministic gravity, radiation, drag, and Poynting--Robertson trajectories |
-| diffusion | `test_diffusion_1d`, `test_diffusion_2d`, `test_diffusion_3d` | drift-diffusion statistics and inactive velocity constraints |
+| diffusion | `test_diffusion_1d`, `test_diffusion_2d`, `test_diffusion_3d`, `test_diffusion_wedge_2d`, `test_diffusion_wedge_3d` | drift-diffusion statistics, inactive velocity constraints, and wedge-vector identification |
 | initialization | `test_initial_3d` | exact continuous finite-domain sampling and polydisperse mass weights |
-| collision physics | `test_colphys_code`, `test_colphys_cgs` | turbulent, Brownian, resolved, and vertically integrated collision rates |
+| collision physics | `test_colphys_code`, `test_colphys_cgs`, `test_colphys_3d` | turbulent, Brownian, resolved, vertically integrated, and periodic-image collision rates |
 | neighbor search | `test_knn` | exact K-nearest-neighbor results for KD-tree and Morton backends |
 | collision chain | `test_colchain_2d`, `test_colchain_frag_2d`, `test_colchain_wedge_2d`, `test_colchain_3d` | production frozen-bath evolution and controller behavior |
 
@@ -196,6 +197,21 @@ cases, the expected geometric mean drift is included rather than assuming a Cart
 These are distributional tests: differing random-number streams across GPU backends are acceptable
 when both ensembles satisfy the same law.
 
+`test_diffusion_wedge_2d` and `test_diffusion_wedge_3d` place matched populations next to both
+faces of a narrow periodic wedge. For each realized displacement, the validator reconstructs the
+unique unwrapped endpoint $x_u$ satisfying
+
+$$
+|x_u-x_0|<\frac{\Delta\phi_w}{2}
+$$
+
+and independently projects the unchanged initial Cartesian velocity at $x_u$. It requires both
+crossing directions to occur and compares every stored velocity component with that deterministic
+reference to $2\times10^{-12}$. The displacement bound is an activation requirement: if any
+particle moves far enough to make the wrap count ambiguous, the test setup fails rather than
+guessing an image. The 3D specialization uses nonzero polar motion and therefore exercises the full
+spherical basis transformation.
+
 ## 7. Continuous polydisperse initialization
 
 `test_initial_3d` validates the exact-containment initialization used when a vertically settled dust
@@ -238,28 +254,74 @@ initialization result because the algorithm no longer integrates over polar cell
 
 ## 8. Physical collision rates
 
-`test_colphys_code` and `test_colphys_cgs` evaluate the production physical collision helpers for a
-fixed particle pair. The relative speed is assembled as
+`test_colphys_code`, `test_colphys_cgs`, and `test_colphys_3d` evaluate the production physical
+collision helpers for fixed particle pairs. The relative speed is assembled as
 
 $$
 \Delta v_{ij}=
 \sqrt{\Delta v_{\rm resolved}^2+\Delta v_{\rm turb}^2+\Delta v_{\rm Brown}^2},
 $$
 
-and the vertically integrated pair rate is
+For the vertically integrated planar model, the pair numerator is
 
 $$
-\Gamma_{ij}
+q_{ij}^{2D}
 =N_j\,\sigma_{ij}\,\Delta v_{ij}
 \left[2\pi(H_i^2+H_j^2)\right]^{-1/2},
 \qquad
 \sigma_{ij}=\frac{\pi}{4}(s_i+s_j)^2.
 $$
 
+For the volumetric 3D model, the Gaussian overlap-depth factor is absent,
+
+$$
+q_{ij}^{3D}=N_j\,\sigma_{ij}\,\Delta v_{ij}.
+$$
+
+The total propensity of owner $i$ divides the retained pair numerators by its KNN measure,
+
+$$
+\Gamma_i^{2D}=\frac{1}{A_i}\sum_{j\in\mathcal N_i}q_{ij}^{2D},
+\qquad A_i=\pi h_i^2,
+$$
+
+$$
+\Gamma_i^{3D}=\frac{1}{V_i}\sum_{j\in\mathcal N_i}q_{ij}^{3D},
+\qquad
+V_i=\frac{4\pi}{3}h_i^3.
+$$
+
+The 3D reference evaluates gas stratification, Stokes numbers, turbulent velocity, and the
+Brownian cap at the actual off-midplane cylindrical position; it does not reuse the midplane
+specialization.
+
 An independent Python implementation evaluates all six Ormel--Cuzzi turbulent-velocity regimes and
 straddles all five branch boundaries. The physical-unit case additionally checks Brownian motion and
 its sound-speed cap. Both branches check the resolved Cartesian relative speed and the assembled
 custom-kernel rate. The maximum relative discrepancy must remain below $2\times10^{-11}$.
+
+The code-unit planar and 3D paths additionally represent the same local pair once in the wedge
+interior and once across its rotational seam. The partner image code
+
+$$
+c=3j+a
+$$
+
+is decoded back to physical index $j$ and image $a$. The resolved speed and complete physical rate
+must equal the interior reference, while deliberately ignoring the image must produce a relative
+speed at least ten times larger. The 3D case uses nonzero radial and polar velocity so this is not a
+planar identity compiled on a three-dimensional grid.
+
+The cache regression does not insert this code manually. It launches the production site
+initialization, builds the selected KD-tree or Morton/ghost index, launches the production KNN cache
+query, and then launches the cached production rate kernel. Each of the three physical-collision
+models is compiled and validated with both searches while retaining one aggregate metric record per
+resolution. The validator requires the expected
+physical-index/image sets for both owners, compares the cached physical rates with independent
+pair-rate numerators to $2\times10^{-11}$, and checks the returned KNN area or volume against an
+independent float-geometry reconstruction to relative tolerance $2\times10^{-4}$. The latter
+tolerance reflects that search coordinates and tree nodes are single precision; it is not applied
+to the physical collision formulas.
 
 These fixed-input cases are retained because the piecewise published prescription is scientifically
 material and difficult to infer from an end-to-end stochastic size distribution.
@@ -276,13 +338,27 @@ d_{ij}^2=|\boldsymbol{x}_i-\boldsymbol{x}_j|^2,
 $$
 
 after applying periodic minimum-image or wedge-ghost geometry as appropriate. Neighbor identity and
-the $K$th radius are compared with brute force. The retained cases cover:
+the $K$th radius are compared with brute force. In a restricted wedge, each backend is compared
+with the exact candidate set admitted by its own representation: the KD tree stores both adjacent
+periodic images, whereas Morton creates a ghost only when the source particle's search ball reaches
+that seam. The retained cases cover:
 
 - smooth, ring, and clumped distributions in two and three dimensions;
 - duplicate distances, inactive particles, sparse leaves, and domain-edge queries;
 - full $2\pi$ periodic seams;
-- restricted periodic wedges, including seam-centered clumps;
+- restricted periodic wedges, including narrow and nearly full-period seam-centered clumps;
 - KD-tree and adaptive Morton/ghost representations.
+
+For every selected wedge neighbor, the test also retains the packed image code returned by the
+actual search. It independently rotates the decoded physical particle by that image and requires
+the resulting squared distance to reproduce the stored search distance. The nearly-full-period
+case must activate at least one legitimate KD-tree/Morton difference while each result still agrees
+with its backend-specific oracle. The benchmark evaluates the fixed brute-force prefix and every
+additional query on which the two searches disagree; a disagreement beyond the prefix therefore
+cannot evade its two representation-specific references. Its first query is a deterministic,
+radially isolated version of the wide-wedge eligibility counterexample, so activation does not
+depend on the random sample. The physical-collision cases above then verify the complete
+query $\rightarrow$ cache $\rightarrow$ physical-rate handoff.
 
 All labeled adversarial checks and every matrix record must pass. Timing is recorded only as a
 diagnostic and is not an acceptance criterion.
@@ -308,8 +384,9 @@ For every realization, the validator requires:
 The controller divides a collision operator interval into frozen baths. Within each bath the
 positions and KNN geometry are fixed, while the event chain updates particle properties. A bath is
 accepted only when its measured activity and distribution changes remain within the controller
-limits. These tests establish conservation, deterministic continuation, search-backend coverage,
-and production-path integrity. They do not constitute a convergence proof for arbitrary physical
+limits. The wedge chain must report `COAG_KERNEL=3`, ensuring that it exercises the physical
+collision kernel rather than a synthetic rate. These tests establish conservation, deterministic
+continuation, search-backend coverage, and production-path integrity. They do not constitute a convergence proof for arbitrary physical
 coagulation histories. When a publication depends on such a history, its model-specific evidence
 must add bath-tolerance refinement and independent-seed comparisons at equal physical time; those
 campaign outputs are scientific results, not additional permanent validation records.
@@ -318,7 +395,7 @@ campaign outputs are scientific results, not additional permanent validation rec
 
 The canonical common archive is below `val/logs/swarm/BACKEND/`; disposable executables, objects,
 KNN binaries, and compiler stamps are isolated below `val/temp/`. The collision-chain publication
-records are below `groups/chain/`. A complete standard campaign reports 33 analytical metrics, a
+records are below `groups/chain/`. A complete standard campaign reports 42 analytical/statistical metrics, a
 passing KNN suite manifest, and four passing collision-chain manifests.
 
 Source inspection, normalized CUDA/ROCm diffs, Makefile dry runs, and static checks establish code

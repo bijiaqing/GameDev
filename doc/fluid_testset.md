@@ -8,7 +8,7 @@ coupled evolution path against an independent reference. It deliberately omits m
 only claim is that one local expression returns the value written in the source.
 
 The canonical matrix is defined in `val/tool/val_config.py`. With resolutions
-$N=32,64,128,256$, it contains 19 models and 73 metric records. CUDA and ROCm use the same
+$N=32,64,128,256$, it contains 19 models and 76 metric records. CUDA and ROCm use the same
 backend-neutral model definitions and validators under `val/comm/fluid/`.
 
 This document explains what the cases establish. The fluid equations and production algorithms are
@@ -209,7 +209,7 @@ so passing density alone cannot hide an inconsistent diffusive momentum update.
 
 ### `test_diffusion_poslimit`
 
-This case starts from a high-contrast mode that activates positivity subcycling. Its exact
+The standard-resolution branch starts from a high-contrast mode that activates positivity subcycling. Its exact
 same-grid reference uses the eigenvalue of the discrete second-difference operator,
 
 $$
@@ -219,6 +219,22 @@ $$
 while a continuum reference is retained to measure spatial convergence. It demonstrates that the
 positivity controller does not change the intended Crank--Nicolson solution or create negative
 density.
+
+Three fixed eight-cell directional variants additionally exercise the donor-outflow limiter in the
+azimuthal, radial, and polar production kernels. Each starts from a $20{:}1$ density front and
+nonuniform values of all three stored primitives. The timestep is chosen from the largest CN
+coefficient, and the validator independently reconstructs the unlimited CN face flux and requires
+at least one donor to export more old mass than is allowed by `POS_LIMIT`. The validator requires:
+
+- finite, nonnegative accepted density and verified limiter activation;
+- geometry-weighted conservation of mass and all three stored momenta;
+- every recovered primitive to remain in the convex hull of the old donor values;
+- nonincrease of the geometry-weighted convex quadratic $\sum_iM_iq_i^2$ for each primitive.
+
+The three line geometries use $V_i\propto\Delta x$, $V_i\propto\Delta V_{y,i}$, and
+$V_i\propto y\Delta V_{z,i}$ respectively. These variants test the nonlinear correction that the
+smooth eigenmodes normally leave inactive; the smooth branches continue to establish the
+unlimited scheme's convergence.
 
 ## 8. Drag and radiation
 
@@ -283,7 +299,7 @@ solution.
 Run a native backend through `val/tool/run_all.py` as shown in [`val/README.md`](../val/README.md).
 The canonical fluid archive is below
 `val/logs/fluid/BACKEND/SWEEP/`. Disposable validation executables and object files are isolated below
-`val/temp/`, never in the source-model directories. A complete default campaign contains 73 records and a passing
+`val/temp/`, never in the source-model directories. A complete default campaign contains 76 records and a passing
 `manifest_all.json`.
 
 The most important evidence is the combination of:

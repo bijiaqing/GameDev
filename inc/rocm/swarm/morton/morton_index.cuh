@@ -293,7 +293,8 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
     float *near_dist_sq, int *near_idx_old, int *idx_node_stack,
     int &stack_count, int &idx_node, int &batch_count,
     unsigned int &leaf_visit_count, unsigned int &candidate_count,
-    unsigned int &stack_overflow, const unsigned char *dev_active = nullptr)
+    unsigned int &stack_overflow, const unsigned char *dev_active = nullptr,
+    int idx_stride = 1)
 {
     static_assert(K + BLOCK_SIZE <= SORT_SIZE, "top-K merge array is too small");
     static_assert((SORT_SIZE & (SORT_SIZE - 1)) == 0, "top-K merge array must be a power of two");
@@ -350,8 +351,9 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                     int idx_slot = K + batch_offset + idx_local;
                     near_dist_sq[idx_slot] = MORTON_INF_F;
                     near_idx_old[idx_slot] = INT_MAX;
+                    int idx_old = candidate.idx_old / idx_stride;
                     if (candidate_dist_sq <= search_dist_sq
-                        && (!dev_active || dev_active[candidate.idx_old] != 0))
+                        && (!dev_active || dev_active[idx_old] != 0))
                     {
                         near_dist_sq[idx_slot] = candidate_dist_sq;
                         near_idx_old[idx_slot] = candidate.idx_old;

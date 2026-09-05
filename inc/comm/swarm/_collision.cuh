@@ -1,11 +1,30 @@
 #ifndef SWARM_COLLISION_CUH
 #define SWARM_COLLISION_CUH
 
+#include <climits>      // INT_MAX
+#include <const_defs.cuh>
+
+constexpr int COL_IMAGE_COUNT = 3;
+static_assert(N_P <= INT_MAX / COL_IMAGE_COUNT,
+    "N_P is too large for packed collision-neighbor identifiers");
+
+// retain a physical particle index and its selected periodic image in one cached integer
+__host__ __device__ __forceinline__
+int _encode_col_neighbor (int idx_old, int image) { return COL_IMAGE_COUNT*idx_old + image; }
+
+__host__ __device__ __forceinline__
+int _get_col_idx_old (int neighbor) { return neighbor / COL_IMAGE_COUNT; }
+
+__host__ __device__ __forceinline__
+int _get_col_image (int neighbor) { return neighbor % COL_IMAGE_COUNT; }
+
+__host__ __device__ __forceinline__
+int _get_col_image_shift (int image) { return (image == 1) ? -1 : ((image == 2) ? 1 : 0); }
+
 #ifdef COLLISION
 
 #include <cassert>      // assert
 
-#include <const_defs.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_grid.cuh>
@@ -30,9 +49,10 @@ enum KernelType {
 
 // reconstruct one particle's physical Cartesian velocity from its spherical stored variables
 __device__ __forceinline__
-real3 _get_cart_vel (const swarm &particle)
+real3 _get_cart_vel (const swarm &particle, int image = 0)
 {
     real x = particle.position.x;
+    if constexpr (X_WEDGE) x += _get_col_image_shift(image)*(X_MAX - X_MIN);
     real y = particle.position.y;
     real z = particle.position.z;
 
@@ -270,7 +290,7 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g, real sigma_g)
 // combine resolved Cartesian motion with unresolved Brownian and turbulent speeds for explicit grain sizes
 __device__ __forceinline__
 real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
-    int idx_old_i, int idx_old_j
+    int idx_old_i, int idx_old_j, int image_j
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
     #endif // IMPORTGAS
@@ -332,7 +352,7 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     #endif // IMPORTGAS
 
     real3 v_i = _get_cart_vel(dev_particle[idx_old_i]);
-    real3 v_j = _get_cart_vel(dev_particle[idx_old_j]);
+    real3 v_j = _get_cart_vel(dev_particle[idx_old_j], image_j);
 
     real dvx = v_i.x - v_j.x;
     real dvy = v_i.y - v_j.y;
@@ -355,14 +375,15 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
 
 // combine resolved and unresolved relative speeds for two frozen grain sizes
 __device__ __forceinline__
-real _get_vrel (const swarm *dev_particle, const real *dev_size_old, int idx_old_i, int idx_old_j
+real _get_vrel (const swarm *dev_particle, const real *dev_size_old,
+    int idx_old_i, int idx_old_j, int image_j
     #ifdef IMPORTGAS
     , const real *dev_gas_dens
     #endif // IMPORTGAS
 )
 {
     return _get_vrel_pair(
-        dev_particle, dev_size_old[idx_old_i], dev_size_old[idx_old_j], idx_old_i, idx_old_j
+        dev_particle, dev_size_old[idx_old_i], dev_size_old[idx_old_j], idx_old_i, idx_old_j, image_j
         #ifdef IMPORTGAS
         , dev_gas_dens
         #endif // IMPORTGAS
@@ -379,7 +400,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
-    int idx_old_i, int idx_old_j, real lambda_0
+    int idx_old_i, int idx_old_j, int image_j, real lambda_0
 )
 {
     // text mainly from Drazkowska et al. 2013:
@@ -420,7 +441,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         real size_i = dev_size_old[idx_old_i];
         real size_j = dev_size_old[idx_old_j];
         
-        real vrel_ij = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j
+        real vrel_ij = _get_vrel(dev_particle, dev_size_old, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS

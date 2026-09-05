@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>                  // CUDA device qualifiers
 #include <math_constants.h>                // CUDART_INF_F
 
+#include <_collision.cuh>
 #include <morton/morton_index.cuh>
 
 // sort candidates by original identifier before removing periodic duplicates
@@ -22,12 +23,20 @@ void _morton_id_sort (float *dist_sq, int *idx_old)
                 int idx_partner = idx_slot ^ stride;
                 if (idx_partner <= idx_slot) continue;
                 bool ascending = (idx_slot & width) == 0;
-                bool partner_less = idx_old[idx_partner] < idx_old[idx_slot]
-                    || (idx_old[idx_partner] == idx_old[idx_slot]
-                        && dist_sq[idx_partner] < dist_sq[idx_slot]);
-                bool slot_less = idx_old[idx_slot] < idx_old[idx_partner]
-                    || (idx_old[idx_slot] == idx_old[idx_partner]
-                        && dist_sq[idx_slot] < dist_sq[idx_partner]);
+                int idx_physical = (idx_old[idx_slot] == INT_MAX)
+                    ? INT_MAX : _get_col_idx_old(idx_old[idx_slot]);
+                int idx_partner_physical = (idx_old[idx_partner] == INT_MAX)
+                    ? INT_MAX : _get_col_idx_old(idx_old[idx_partner]);
+                bool partner_less = idx_partner_physical < idx_physical
+                    || (idx_partner_physical == idx_physical
+                        && (dist_sq[idx_partner] < dist_sq[idx_slot]
+                            || (dist_sq[idx_partner] == dist_sq[idx_slot]
+                                && idx_old[idx_partner] < idx_old[idx_slot])));
+                bool slot_less = idx_physical < idx_partner_physical
+                    || (idx_physical == idx_partner_physical
+                        && (dist_sq[idx_slot] < dist_sq[idx_partner]
+                            || (dist_sq[idx_slot] == dist_sq[idx_partner]
+                                && idx_old[idx_slot] < idx_old[idx_partner])));
                 bool swap_pair = ascending ? partner_less : slot_less;
                 if (swap_pair)
                 {
@@ -65,7 +74,7 @@ void _morton_ghost_topk (
         _morton_topk<K, BLOCK_SIZE, 512, STACK_SIZE>(
             morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
             stack_count, idx_node, batch_count,
-            leaf_visit_count, candidate_count, stack_overflow, dev_active
+            leaf_visit_count, candidate_count, stack_overflow, dev_active, COL_IMAGE_COUNT
         );
         return;
     }
@@ -74,7 +83,7 @@ void _morton_ghost_topk (
     _morton_topk<3*K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
         morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack,
         stack_count, idx_node, batch_count,
-        leaf_visit_count, candidate_count, stack_overflow, dev_active
+        leaf_visit_count, candidate_count, stack_overflow, dev_active, COL_IMAGE_COUNT
     );
 
     for (int idx_slot = 3*K + threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
@@ -89,8 +98,9 @@ void _morton_ghost_topk (
     bool duplicate[slots_per_thread];
     int idx_local = 0;
     for (int idx_slot = threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
-        duplicate[idx_local++] =
-            idx_slot > 0 && work_idx_old[idx_slot] == work_idx_old[idx_slot - 1];
+        duplicate[idx_local++] = idx_slot > 0 && work_idx_old[idx_slot] != INT_MAX
+            && _get_col_idx_old(work_idx_old[idx_slot])
+                == _get_col_idx_old(work_idx_old[idx_slot - 1]);
     __syncthreads();
 
     idx_local = 0;

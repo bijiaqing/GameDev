@@ -51,8 +51,13 @@ void col_partner_mix (int *dev_col_neighbor, const int *dev_col_permutation,
         + static_cast<std::size_t>(blockDim.x)*blockIdx.x;
     if (idx >= neighbor_count) return;
 
-    int idx_old = dev_col_neighbor[idx];
-    if (idx_old >= 0) dev_col_neighbor[idx] = dev_col_permutation[idx_old];
+    int neighbor = dev_col_neighbor[idx];
+    if (neighbor >= 0)
+    {
+        int idx_old = _get_col_idx_old(neighbor);
+        int image = _get_col_image(neighbor);
+        dev_col_neighbor[idx] = _encode_col_neighbor(dev_col_permutation[idx_old], image);
+    }
 }
 #endif // COLLISION && !BERNOULLI
 

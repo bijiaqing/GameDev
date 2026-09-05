@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -51,13 +52,13 @@ def main() -> None:
         check=True,
     )
 
-    cases = [(distribution, None) for distribution in distributions]
-    cases.append(("seam_clump", 0.2))
+    cases = [(distribution, None, "") for distribution in distributions]
+    cases.append(("seam_clump", 0.2, "narrow_"))
+    cases.append(("seam_clump", 2.0*math.pi - 0.1, "wide_"))
     completed = []
     for dimension in args.dim:
-        for distribution, wedge_width in cases:
+        for distribution, wedge_width, prefix in cases:
             for particles in args.particles:
-                prefix = "narrow_" if wedge_width is not None else ""
                 name = f"{prefix}{distribution}_{dimension}d_N{particles}"
                 output = result_root / f"{name}.json"
                 command = [
@@ -102,12 +103,8 @@ def main() -> None:
                 if result.returncode != 0:
                     print(
                         "failure counters: "
-                        f"KD/brute={record['kd_brute_mismatches']}  "
-                        f"Morton/brute={record['morton_brute_mismatches']}  "
-                        f"KD/disagreements={record['kd_disagreement_brute_mismatches']}  "
-                        f"Morton/disagreements={record['morton_disagreement_brute_mismatches']}  "
-                        f"Morton/records={record['morton_record_mismatches']}  "
-                        f"records/geometry={record['record_geometry_mismatches']}  "
+                        f"KD/reference={record['kd_reference_mismatches']}  "
+                        f"Morton/reference={record['morton_reference_mismatches']}  "
                         f"overflows={record['stack_overflows']}  "
                         f"max-error={record['maximum_distance_error']:.3e}  "
                         f"ties: KD={record['kd_tie_equivalent_neighbors']} "

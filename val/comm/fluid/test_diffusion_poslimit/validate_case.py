@@ -30,10 +30,216 @@ def read_values(out_dir: Path, name: str, resolution: int, count: int) -> np.nda
     return values
 
 
+def front_geometry(meta: dict) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray]]:
+    """Return cell measures and the lower/upper unit-time CN coefficients"""
+
+    nx, ny, nz = (int(meta[key]) for key in ("nx", "ny", "nz"))
+    direction = str(meta["direction"])
+    diffusivity = float(meta["diffusivity"])
+    y_min, y_max = float(meta["y_min"]), float(meta["y_max"])
+    z_min, z_max = float(meta["z_min"]), float(meta["z_max"])
+    dy = (y_max/y_min)**(1.0/ny)
+    y_face = y_min*dy**np.arange(ny + 1)
+    y_cent = y_min*dy**(np.arange(ny) + 0.5)
+    dz = (z_max - z_min)/nz
+    z_face = z_min + dz*np.arange(nz + 1)
+    z_cent = z_min + dz*(np.arange(nz) + 0.5)
+
+    measures = np.empty(nx*ny*nz)
+    lowers: list[np.ndarray] = []
+    uppers: list[np.ndarray] = []
+    if direction == "x":
+        dx = (float(meta["x_max"]) - float(meta["x_min"]))/nx
+        for iz in range(nz):
+            for iy in range(ny):
+                dx_len = y_cent[iy]*math.sin(z_cent[iz])*dx
+                measures[iy*nx + iz*nx*ny:(iy + 1)*nx + iz*nx*ny] = dx_len
+                coefficient = 0.5*diffusivity/(dx_len*dx_len)
+                lowers.append(np.full(nx, coefficient))
+                uppers.append(np.full(nx, coefficient))
+    elif direction == "y":
+        mesh_dim = 2.0 + float(nz > 1)
+        vol_y = (y_face[:-1]**mesh_dim)*(dy**mesh_dim - 1.0)/mesh_dim
+        area_y = y_face**(mesh_dim - 1.0)
+        dr_i = y_cent*(dy - 1.0)/dy
+        dr_o = y_cent*(dy - 1.0)
+        lower = 0.5*area_y[:-1]*diffusivity/(dr_i*vol_y)
+        upper = 0.5*area_y[1:]*diffusivity/(dr_o*vol_y)
+        lower[0] = 0.0
+        upper[-1] = 0.0
+        for iz in range(nz):
+            for ix in range(nx):
+                measures[ix + np.arange(ny)*nx + iz*nx*ny] = vol_y
+                lowers.append(lower.copy())
+                uppers.append(upper.copy())
+    else:
+        vol_z = np.cos(z_face[:-1]) - np.cos(z_face[1:])
+        for iy in range(ny):
+            measure = y_cent[iy]*vol_z
+            lower = 0.5*np.sin(z_face[:-1])*diffusivity/(y_cent[iy]**2*dz*vol_z)
+            upper = 0.5*np.sin(z_face[1:])*diffusivity/(y_cent[iy]**2*dz*vol_z)
+            lower[0] = 0.0
+            upper[-1] = 0.0
+            for ix in range(nx):
+                measures[ix + iy*nx + np.arange(nz)*nx*ny] = measure
+                lowers.append(lower.copy())
+                uppers.append(upper.copy())
+    return measures, lowers, uppers
+
+
+def line_indices(meta: dict) -> list[np.ndarray]:
+    """Return flattened indices for every independent directional line"""
+
+    nx, ny, nz = (int(meta[key]) for key in ("nx", "ny", "nz"))
+    if meta["direction"] == "x":
+        return [np.arange(nx) + iy*nx + iz*nx*ny for iz in range(nz) for iy in range(ny)]
+    if meta["direction"] == "y":
+        return [ix + np.arange(ny)*nx + iz*nx*ny for iz in range(nz) for ix in range(nx)]
+    return [ix + iy*nx + np.arange(nz)*nx*ny for iy in range(ny) for ix in range(nx)]
+
+
+def unlimited_trial(
+    density: np.ndarray, meta: dict, lowers: list[np.ndarray], uppers: list[np.ndarray],
+) -> tuple[np.ndarray, float]:
+    """Reproduce the unlimited CN density trial and its largest donor-outflow fraction"""
+
+    dt = float(meta["dt"])
+    diffusivity = float(meta["diffusivity"])
+    direction = str(meta["direction"])
+    trial = np.empty_like(density)
+    maximum_outflow = 0.0
+    measures, _, _ = front_geometry(meta)
+    for indices, lower_unit, upper_unit in zip(line_indices(meta), lowers, uppers):
+        old = density[indices]
+        lower = dt*lower_unit
+        upper = dt*upper_unit
+        count = old.size
+        matrix = np.zeros((count, count))
+        rhs = np.empty(count)
+        if direction == "x":
+            coefficient = upper[0]
+            for index in range(count):
+                before = (index - 1) % count
+                after = (index + 1) % count
+                matrix[index, index] = 1.0 + 2.0*coefficient
+                matrix[index, before] = -coefficient
+                matrix[index, after] = -coefficient
+                rhs[index] = (
+                    coefficient*old[before] + (1.0 - 2.0*coefficient)*old[index]
+                    + coefficient*old[after]
+                )
+        else:
+            for index in range(count):
+                matrix[index, index] = 1.0 + lower[index] + upper[index]
+                if index > 0:
+                    matrix[index, index - 1] = -lower[index]
+                if index < count - 1:
+                    matrix[index, index + 1] = -upper[index]
+                previous = old[index - 1] if index > 0 else old[index]
+                following = old[index + 1] if index < count - 1 else old[index]
+                rhs[index] = (
+                    lower[index]*previous + (1.0 - lower[index] - upper[index])*old[index]
+                    + upper[index]*following
+                )
+        new = np.linalg.solve(matrix, rhs)
+        trial[indices] = new
+
+        if direction == "x":
+            dx_len = measures[indices][0]
+            flux = -0.5*diffusivity*((np.roll(old, -1) - old) + (np.roll(new, -1) - new))/dx_len
+            incoming_face = np.roll(flux, 1)
+        else:
+            flux = np.zeros(count)
+            flux[:-1] = -(upper[:-1]*measures[indices][:-1]/dt)*(
+                (old[1:] - old[:-1]) + (new[1:] - new[:-1])
+            )
+            incoming_face = np.concatenate(([0.0], flux[:-1]))
+        out_rate = np.maximum(flux, 0.0) + np.maximum(-incoming_face, 0.0)
+        maximum_outflow = max(
+            maximum_outflow,
+            float(np.max(dt*out_rate/(old*measures[indices]))),
+        )
+    return trial, maximum_outflow
+
+
+def analyze_front(out_dir: Path, resolution: int, meta: dict) -> dict:
+    """Check conservative and convex properties of the activated donor limiter"""
+
+    count = int(meta["nx"])*int(meta["ny"])*int(meta["nz"])
+    density_initial = read_values(out_dir, "density_initial", resolution, count)
+    density_final = read_values(out_dir, "density_final", resolution, count)
+    momentum_initial = [
+        read_values(out_dir, f"momentum_{axis}_initial", resolution, count)
+        for axis in "xyz"
+    ]
+    momentum_final = [
+        read_values(out_dir, f"momentum_{axis}_final", resolution, count)
+        for axis in "xyz"
+    ]
+    measures, lowers, uppers = front_geometry(meta)
+    unlimited, maximum_outflow = unlimited_trial(density_initial, meta, lowers, uppers)
+
+    conserved = [density_initial, *momentum_initial]
+    advanced = [density_final, *momentum_final]
+    conservation = np.array([
+        abs(np.sum(after*measures) - np.sum(before*measures))
+        / max(abs(np.sum(before*measures)), np.sum(np.abs(before)*measures), 1.0)
+        for before, after in zip(conserved, advanced)
+    ])
+
+    range_excess = []
+    energy_growth = []
+    for before, after in zip(momentum_initial, momentum_final):
+        q_initial = before/density_initial
+        q_final = after/density_final
+        range_excess.append(max(
+            float(np.min(q_initial) - np.min(q_final)),
+            float(np.max(q_final) - np.max(q_initial)),
+            0.0,
+        ))
+        energy_initial = 0.5*np.sum(density_initial*q_initial*q_initial*measures)
+        energy_final = 0.5*np.sum(density_final*q_final*q_final*measures)
+        energy_growth.append(max(float((energy_final - energy_initial)/energy_initial), 0.0))
+
+    limiter_change = float(np.max(np.abs(density_final - unlimited)))
+    activation = maximum_outflow > 0.9 and limiter_change > 1.0e-10
+    finite = all(np.all(np.isfinite(values)) for values in advanced)
+    passed = bool(
+        finite
+        and np.min(density_final) >= -5.0e-13
+        and np.max(conservation) < 5.0e-12
+        and max(range_excess) < 5.0e-12
+        and max(energy_growth) < 5.0e-12
+        and activation
+    )
+    return {
+        "case": "diffusion_poslimit",
+        "variant": meta["direction"],
+        "resolution": resolution,
+        "primary_field": "conservation",
+        "terminal_mode": "checks",
+        "reference_class": "invariant-domain",
+        "activation": activation,
+        "maximum_raw_outflow_fraction": maximum_outflow,
+        "limiter_density_change": limiter_change,
+        "minimum_density": float(np.min(density_final)),
+        "maximum_primitive_range_excess": max(range_excess),
+        "maximum_quadratic_growth": max(energy_growth),
+        "errors": {
+            "conservation": norm_set(conservation),
+            "primitive_range": norm_set(np.asarray(range_excess)),
+            "quadratic_growth": norm_set(np.asarray(energy_growth)),
+        },
+        "passed": passed,
+    }
+
+
 def analyze(out_dir: Path, resolution: int) -> dict:
     """Compare automatic subcycling with discrete CN and an equivalent manual sequence"""
 
     meta = json.loads((out_dir/f"meta_N{resolution}.json").read_text())
+    if meta.get("mode") == "donor_front":
+        return analyze_front(out_dir, resolution, meta)
     nx = int(meta["nx"])
     dt = float(meta["dt"])
     radius = float(meta["radius"])

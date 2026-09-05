@@ -21,6 +21,8 @@ sys.path.insert(0, str(VAL_ROOT/"tool"))
 
 from val_config import PUBLICATION_TIER, model_analyzer, model_executable, swarm_resolution_tiers
 
+COLPHYS_MODELS = {"test_colphys_code", "test_colphys_cgs", "test_colphys_3d"}
+
 
 def orders(errors: list[float]) -> list[float]:
     """Calculate pairwise orders while tolerating an exactly zero error"""
@@ -73,6 +75,31 @@ def print_record(record: dict) -> None:
     print(f"N={record['resolution']:4d}  " + ", ".join(labels))
 
 
+def combine_search_records(search_records: dict[str, dict]) -> dict:
+    """Retain one metric record while requiring both physical search paths to pass"""
+
+    record = dict(search_records["morton"])
+    record["collision_search"] = "both"
+    record["searches"] = search_records
+    record["passed"] = all(item["passed"] for item in search_records.values())
+    record["maximum_relative_error"] = max(
+        item["maximum_relative_error"] for item in search_records.values()
+    )
+    record["maximum_measure_relative_error"] = max(
+        item["maximum_measure_relative_error"] for item in search_records.values()
+    )
+    record["activation"] = dict(record["activation"])
+    record["activation"]["both_searches_passed"] = record["passed"]
+    record["errors"] = {
+        name: {
+            norm: max(item["errors"][name][norm] for item in search_records.values())
+            for norm in ("l1", "l2", "linf")
+        }
+        for name in record["errors"]
+    }
+    return record
+
+
 def run(model: str) -> None:
     """Compile every requested resolution, validate it, and write one model manifest"""
 
@@ -115,31 +142,55 @@ def run(model: str) -> None:
     records = []
     target = os.environ.get("CUDA_ARCH", "sm_80")
     for resolution in args.res:
-        # every test constant is compiled into CUDA code; cleaning prevents an
-        # object built for a previous TEST_RES value from being reused
-        subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda",
-            f"GPU_TARGET={target}", f"VAL_SCOPE={scope}", "clean",
-        ], check=True)
-        subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", "GPU_BACKEND=cuda",
-            f"GPU_TARGET={target}", f"VAL_SCOPE={scope}", f"RES={resolution}",
-        ], check=True)
+        searches = ("kdtree", "morton") if model in COLPHYS_MODELS else (None,)
+        search_records = {}
+        record = None
+        for search in searches:
+            run_out_dir = out_dir if search is None else out_dir/search
+            if not args.build_only:
+                run_out_dir.mkdir(parents=True, exist_ok=True)
+                clean_results(run_out_dir)
+
+            make_options = [
+                f"MODEL={model}", "GPU_BACKEND=cuda", f"GPU_TARGET={target}",
+                f"VAL_SCOPE={scope}",
+            ]
+            if search is not None:
+                make_options.extend((f"COLLISION_SEARCH={search}", f"OUT_TAG={search}"))
+
+            # every test constant is compiled into CUDA code; cleaning prevents an
+            # object built for a previous TEST_RES value from being reused
+            subprocess.run([
+                "make", "-C", str(project_root), *make_options, "clean",
+            ], check=True)
+            subprocess.run([
+                "make", "-C", str(project_root), *make_options, f"RES={resolution}",
+            ], check=True)
+            if args.build_only:
+                continue
+            executable = model_executable(project_root, model, "cuda", "swarm")
+            subprocess.run([str(executable)], cwd=project_root, check=True)
+
+            # the CUDA driver writes raw values only; all expected values and pass
+            # thresholds are constructed independently by validate_case.py
+            current = analyze(run_out_dir, resolution)
+            expected_case = model.removeprefix("test_")
+            if current["case"] != expected_case or current["resolution"] != resolution:
+                raise RuntimeError(
+                    f"{model} produced case={current['case']} resolution={current['resolution']}; "
+                    f"expected case={expected_case} resolution={resolution}"
+                )
+            if search is None:
+                record = current
+            else:
+                current["collision_search"] = search
+                search_records[search] = current
+
         if args.build_only:
             continue
-        executable = model_executable(project_root, model, "cuda", "swarm")
-        subprocess.run([str(executable)], cwd=project_root, check=True)
-
-        # the CUDA driver writes raw values only; all expected values and pass
-        # thresholds are constructed independently by validate_case.py
-        record = analyze(out_dir, resolution)
+        if search_records:
+            record = combine_search_records(search_records)
         record["tier"] = tier_by_resolution[resolution]
-        expected_case = model.removeprefix("test_")
-        if record["case"] != expected_case or record["resolution"] != resolution:
-            raise RuntimeError(
-                f"{model} produced case={record['case']} resolution={record['resolution']}; "
-                f"expected case={expected_case} resolution={resolution}"
-            )
         (out_dir/f"metrics_N{resolution}.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
         records.append(record)
 

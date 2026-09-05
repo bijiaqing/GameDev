@@ -377,7 +377,7 @@ def check_naming(errors: list[str]) -> None:
 
 
 def check_metadata(errors: list[str]) -> None:
-    """Check vendored licenses and keep generated artifacts below val/logs or val/temp"""
+    """Check vendored licenses and keep validation data below val/logs or val/temp"""
 
     for backend in ("cuda", "rocm"):
         license_path = PROJECT_ROOT/"inc"/backend/"swarm"/"kdtree"/"Apache-2.0.txt"
@@ -387,14 +387,14 @@ def check_metadata(errors: list[str]) -> None:
     generated = []
     generated_suffixes = {
         ".bin", ".csv", ".d", ".dat", ".json", ".log", ".npy", ".npz",
-        ".o", ".out", ".pyc", ".txt",
+        ".o", ".out", ".txt",
     }
     generated_names = {
         "gamedev", "knn_benchmark", "knn_edge_tests", "knn_periodic_tests",
         "knn_wedge_benchmark",
     }
     for path in (PROJECT_ROOT/"val").rglob("*"):
-        if any(part in {"logs", "temp"} for part in path.parts):
+        if any(part in {"logs", "temp", "__pycache__"} for part in path.parts):
             continue
         if path.is_file() and (
             path.suffix in generated_suffixes
@@ -489,7 +489,22 @@ def check_val_contract(errors: list[str]) -> None:
 
 
 def check_make_resolution(errors: list[str]) -> None:
-    """Ask Make to resolve representative backend and QA dependency graphs"""
+    """Ask Make to resolve representative backend and validation dependency graphs"""
+
+    makefile = (PROJECT_ROOT/"Makefile").read_text()
+    required_routing = (
+        ".DEFAULT_GOAL := all",
+        "RELINK_TRIGGER := FORCE",
+        "define resolve_source",
+        "RESOLVED_SOURCE_PATHS :=",
+        "VALID_DEP_FILES :=",
+        "$(SOURCE_MISMATCH_OBJ): FORCE",
+    )
+    for token in required_routing:
+        if token not in makefile:
+            errors.append(f"Make source-routing contract is missing {token!r}")
+    if "vpath %.cu" in makefile or "vpath %.hip" in makefile:
+        errors.append("Make source routing must resolve directories before extensions")
 
     commands = (
         [

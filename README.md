@@ -358,10 +358,12 @@ solely to configure one model.
 
 ### Source and header overrides
 
-A model-local `.cu` file replaces a same-named production translation unit. A model-local header
-with the same relative name similarly wins compiler include lookup. This is useful for controlled
-experiments and analytical verification cases, but production physics should remain in the branch
-source when it is intended for every model.
+A model-local `.cu` file replaces a same-named production translation unit. CUDA compiles it
+normally; ROCm uses it as HIP only when the source is backend-neutral or selects its CUDA/HIP API
+with `GAMEDEV_CUDA` and `GAMEDEV_ROCM`. A model-local `.hip` file may instead provide a ROCm-only
+implementation. A model-local header with the same relative name similarly wins compiler include
+lookup. This is useful for controlled experiments and analytical verification cases, but production
+physics should remain in the branch source when it is intended for every model.
 
 A model may also set `MODEL_PARENT := parent_name` to inherit model files from another directory
 under `mod/`; files in the child model keep priority.

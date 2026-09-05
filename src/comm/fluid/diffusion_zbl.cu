@@ -134,6 +134,33 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
+        // compute donor factors from all raw polar face transfers before scaling any face
+        for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
+        {
+            real flux_i = (iz > 0) ? temp_work[iz - 1] : 0.0;
+            real out_rate = fmax(temp_work[iz], 0.0) + fmax(-flux_i, 0.0);
+            real mass = fmax(rhod[iz], 0.0)*y*_get_vol_z(iz);
+            rhod_work[iz] = (out_rate > 0.0)
+                ? fmin(1.0, POS_LIMIT*mass / (dt_sub*out_rate)) : 1.0;
+        }
+        __syncthreads();
+
+        for (int iz = threadIdx.x; iz < N_Z - 1; iz += blockDim.x)
+        {
+            int iz_up = (temp_work[iz] >= 0.0) ? iz : iz + 1;
+            temp_work[iz] *= rhod_work[iz_up];
+        }
+        __syncthreads();
+
+        // accept density from the limited conservative divergence
+        for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
+        {
+            real flux_i = (iz > 0) ? temp_work[iz - 1] : 0.0;
+            rhod_work[iz] = rhod[iz]
+                - dt_sub*(temp_work[iz] - flux_i) / (y*_get_vol_z(iz));
+        }
+        __syncthreads();
+
         // transport every momentum component with the same mass flux and its donor primitive
         for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
         {

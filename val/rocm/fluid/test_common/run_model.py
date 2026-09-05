@@ -64,7 +64,7 @@ def environment_record(project_root: Path) -> dict[str, str]:
     }
 
 
-def output_tag(model: str, cfl: float, power: float, shift: float) -> str:
+def output_tag(model: str, cfl: float, power: float, shift: float, direction: str) -> str:
     """Name parameter variants that would otherwise overwrite one another"""
 
     # only parameters varied by run_suite.py enter directory and metric names
@@ -73,6 +73,8 @@ def output_tag(model: str, cfl: float, power: float, shift: float) -> str:
         return f"p{power:+g}"
     if model == "test_x_transport_2d":
         return f"shift{shift:g}"
+    if model == "test_diffusion_poslimit" and direction:
+        return direction
     if model in {"test_y_transport_cyl", "test_y_transport_sph", "test_z_transport_3d"}:
         return f"cfl{cfl:g}"
     return ""
@@ -234,6 +236,7 @@ def run(model: str) -> None:
     parser.add_argument("--cfl", type=float, default=0.5)
     parser.add_argument("--power", type=float, default=-1.0)
     parser.add_argument("--shift", type=float, default=3.25)
+    parser.add_argument("--direction", choices=("x", "y", "z"), default="")
     parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args()
 
@@ -254,7 +257,7 @@ def run(model: str) -> None:
     # parameter variants receive separate data directories, for example
     # out/thread/test_x_transport_2d/shift3.25, while their metrics JSON files
     # remain in the model's top-level output directory with the same tag in the name
-    variant = output_tag(model, args.cfl, args.power, args.shift)
+    variant = output_tag(model, args.cfl, args.power, args.shift, args.direction)
     tier_arguments: tuple[str, ...] = ()
     if model == "test_x_transport_2d":
         tier_arguments = ("--shift", str(args.shift))
@@ -292,6 +295,7 @@ def run(model: str) -> None:
             f"FLUID_SWEEP={sweep}", f"VAL_SCOPE={scope}",
             f"RES={resolution}",
             f"CFL={args.cfl:.17g}", f"POWER={args.power:.17g}", f"SHIFT={args.shift:.17g}",
+            f"DIRECTION={args.direction}",
             f"OUT_TAG={variant}",
         ], check=True)
         if args.build_only:

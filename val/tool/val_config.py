@@ -74,6 +74,9 @@ FLUID_GROUPS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("test_y_diffusion_sph", ()),
         ("test_z_diffusion_3d", ()),
         ("test_diffusion_poslimit", ()),
+        ("test_diffusion_poslimit", ("--direction", "x", "--res", "8")),
+        ("test_diffusion_poslimit", ("--direction", "y", "--res", "8")),
+        ("test_diffusion_poslimit", ("--direction", "z", "--res", "8")),
     ],
     "source": [("test_source_drag", ("--res", "8"))],
     "radiation": [
@@ -88,9 +91,12 @@ SWARM_GROUPS: dict[str, list[str]] = {
         "test_orbit_ecc_2d", "test_orbit_beta_2d", "test_orbit_inc_3d",
         "test_drag_path_1d", "test_prdrag_2d",
     ],
-    "diffusion": ["test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d"],
+    "diffusion": [
+        "test_diffusion_1d", "test_diffusion_2d", "test_diffusion_3d",
+        "test_diffusion_wedge_2d", "test_diffusion_wedge_3d",
+    ],
     "initialization": ["test_initial_3d"],
-    "collision": ["test_colphys_code", "test_colphys_cgs"],
+    "collision": ["test_colphys_code", "test_colphys_cgs", "test_colphys_3d"],
     "knn": ["test_knn"],
 }
 
@@ -102,13 +108,13 @@ SWARM_CHAIN_MODELS = [
 ]
 
 SWARM_FIXED_RESOLUTION = {
-    "test_prdrag_2d", "test_colphys_code", "test_colphys_cgs", "test_knn",
+    "test_prdrag_2d", "test_colphys_code", "test_colphys_cgs", "test_colphys_3d", "test_knn",
 }
 
 SWARM_ENDPOINT_RESOLUTION = {"test_initial_3d"}
 
-EXPECTED_FLUID_METRICS = 73
-EXPECTED_SWARM_METRICS = 33
+EXPECTED_FLUID_METRICS = 76
+EXPECTED_SWARM_METRICS = 42
 EXPECTED_PUBLICATION_FLUID_METRICS = EXPECTED_FLUID_METRICS
 EXPECTED_PUBLICATION_SWARM_METRICS = EXPECTED_SWARM_METRICS
 

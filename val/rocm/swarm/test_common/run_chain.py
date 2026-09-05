@@ -152,6 +152,7 @@ def run_once(
     search: str,
     event_cap: int,
     fragmentation: bool,
+    expected_kernel: int,
 ) -> dict:
     """Run one fresh realization and return physical and controller diagnostics"""
 
@@ -200,6 +201,7 @@ def run_once(
     provenance = "COLLISION_INTEGRATOR = frozen_bath" in variables \
         and f"COLLISION_SEARCH = {search}" in variables \
         and f"COL_EVENT_CAP  = {event_cap}" in variables \
+        and f"COAG_KERNEL = {expected_kernel}" in variables \
         and "COL_CONTROLLER_AUDIT = path_integrated" in variables
     controller = validate_controller(controller_path, event_cap == 1)
     return {
@@ -245,6 +247,7 @@ def run(model: str) -> None:
     searches = ("morton", "kdtree") if args.search == "both" else (args.search,)
     event_caps = (1, 32) if model == "test_colchain_2d" else (32,)
     fragmentation = model == "test_colchain_frag_2d"
+    expected_kernel = 3 if fragmentation or model == "test_colchain_wedge_2d" else 0
     executable = model_executable(project_root, model, "rocm", "swarm")
     variants = {}
     for search in searches:
@@ -262,10 +265,12 @@ def run(model: str) -> None:
                 continue
 
             first = run_once(
-                executable, project_root, variant_dir, search, event_cap, fragmentation
+                executable, project_root, variant_dir, search, event_cap,
+                fragmentation, expected_kernel,
             )
             second = run_once(
-                executable, project_root, variant_dir, search, event_cap, fragmentation
+                executable, project_root, variant_dir, search, event_cap,
+                fragmentation, expected_kernel,
             )
             path_deterministic = first["particle_sha256"] == second["particle_sha256"] \
                 and first["rng_sha256"] == second["rng_sha256"]

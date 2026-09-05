@@ -22,7 +22,8 @@ std::mt19937 rand_generator;
 #endif // TEST_INITIAL_3D
 
 #if !defined(TEST_DIFFUSION_1D) && !defined(TEST_DIFFUSION_2D) \
-    && !defined(TEST_DIFFUSION_3D) && !defined(TEST_INITIAL_3D) \
+    && !defined(TEST_DIFFUSION_3D) && !defined(TEST_DIFFUSION_WEDGE_2D) \
+    && !defined(TEST_DIFFUSION_WEDGE_3D) && !defined(TEST_INITIAL_3D) \
     && !defined(TEST_PRDRAG_2D)
 #error "shared swarm driver received an unsupported publication case"
 #endif
@@ -67,6 +68,10 @@ const char *case_name ()
     return "diffusion_2d";
 #elif defined(TEST_DIFFUSION_3D)
     return "diffusion_3d";
+#elif defined(TEST_DIFFUSION_WEDGE_2D)
+    return "diffusion_wedge_2d";
+#elif defined(TEST_DIFFUSION_WEDGE_3D)
+    return "diffusion_wedge_3d";
 #elif defined(TEST_INITIAL_3D)
     return "initial_3d";
 #else
@@ -84,7 +89,7 @@ void write_binary (const std::string &name, const std::vector<real> &values)
     if (!file) throw std::runtime_error("cannot write output file: " + path);
 }
 
-void write_state (const std::vector<swarm> &particle)
+void write_state (const std::vector<swarm> &particle, const std::string &name = "state")
 {
     std::vector<real> state(6*N_P);
     for (int idx = 0; idx < N_P; idx++)
@@ -96,7 +101,7 @@ void write_state (const std::vector<swarm> &particle)
         state[4*N_P + idx] = particle[idx].velocity.y;
         state[5*N_P + idx] = particle[idx].velocity.z;
     }
-    write_binary("state", state);
+    write_binary(name, state);
 
 #ifdef MULTISIZE
     std::vector<real> species(2*N_P);
@@ -228,14 +233,35 @@ int main ()
     // apply one reproducible production SDE displacement for pathwise analytical reconstruction
     for (int idx = 0; idx < N_P; idx++)
     {
+#if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+        real seam_offset = 0.005;
+        real x = (idx % 2 == 0) ? X_MIN + seam_offset : X_MAX - seam_offset;
+#ifdef TEST_DIFFUSION_WEDGE_3D
+        real z = 1.1;
+        real lz = 0.12;
+#else
+        real z = 0.5*M_PI;
+        real lz = 0.0;
+#endif
+        particle[idx].position = make_double3(x, 1.0, z);
+        particle[idx].velocity = make_double3(0.7, 0.2, lz);
+#else
         particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
         particle[idx].velocity = make_double3(0.7, 0.2, 0.0);
+#endif
     }
+#if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+    write_state(particle, "state_initial");
+#endif // TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D
     hip_check(hipMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, hipMemcpyHostToDevice), "upload particles");
     curs *dev_rngstate = nullptr;
     hip_check(hipMalloc(reinterpret_cast<void **>(&dev_rngstate), sizeof(curs)*N_P), "allocate random states");
     rngstate_init <<< NB_P, TPB >>> (dev_rngstate, 17);
+#if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+    real dt = 0.002;
+#else
     real dt = 0.02;
+#endif
     diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, dt);
     kernel_check("diffusion_pos");
     hip_check(hipFree(dev_rngstate), "free random states");

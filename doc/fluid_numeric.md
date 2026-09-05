@@ -1456,11 +1456,70 @@ $$
 +(\rho_{i+1}^{n+1}-\rho_i^{n+1})\right].
 $$
 
+Crank--Nicolson positivity of the trial density does not by itself guarantee that the old-state
+donor rule below forms a nonnegative mixture: opposing face transfers can each exceed the donor's
+old mass while leaving a positive net density. The code therefore limits the reconstructed face
+transfers before either density or momentum is accepted. Let
+
+$$
+M_i^n=V_i\rho_i^n,
+\qquad
+O_i=\delta t\left[
+\max(\mathcal F_{\rho,i+1/2},0)
++\max(-\mathcal F_{\rho,i-1/2},0)
+\right]
+$$
+
+be the old cell mass and its total raw outward transfer. The donor factor is
+
+```math
+\theta_i=
+\begin{cases}
+1, & O_i=0,\\[3pt]
+\min\!\left(1,
+\dfrac{\texttt{POS_LIMIT}\,M_i^n}{O_i}\right), & O_i>0.
+\end{cases}
+```
+
+Each face is scaled exactly once by the cell that supplies its mass:
+
+```math
+\widehat{\mathcal F}_{\rho,i+1/2}=
+\begin{cases}
+\theta_i\mathcal F_{\rho,i+1/2},
+&\mathcal F_{\rho,i+1/2}\ge0,\\[3pt]
+\theta_{i+1}\mathcal F_{\rho,i+1/2},
+&\mathcal F_{\rho,i+1/2}<0.
+\end{cases}
+```
+
+All donor factors are evaluated from the unchanged raw-flux array before any face is scaled. The
+accepted density is then reconstructed conservatively,
+
+$$
+M_i^{n+1}=M_i^n-\delta t
+\left(\widehat{\mathcal F}_{\rho,i+1/2}
+-\widehat{\mathcal F}_{\rho,i-1/2}\right).
+$$
+
+Because at most `POS_LIMIT` of each donor's old mass can leave during one substep,
+
+$$
+M_i^n-\theta_iO_i
+\ge (1-\texttt{POS_LIMIT})M_i^n\ge0.
+$$
+
+The statement includes an exactly empty cell: every outward transfer from a zero-mass donor is
+suppressed. Internal faces remain conservative because the same accepted face value enters its two
+adjacent cells with opposite signs. When every $\theta_i=1$, the accepted density is the original
+Crank--Nicolson solution. Where the limiter activates, the update is a nonlinear conservative
+correction and is not exactly time-centered CN locally.
+
 For each stored primitive $u_a\in\{\ell_\phi,v_r,\ell_\theta\}$, the associated momentum flux is
 
 ```math
 \mathcal F_{m_a,i+1/2}
-=\mathcal F_{\rho,i+1/2}u_{a,\rm donor},
+=\widehat{\mathcal F}_{\rho,i+1/2}u_{a,\rm donor},
 \qquad
 u_{a,\rm donor}=
 \left\{\begin{array}{ll}
@@ -1477,8 +1536,27 @@ m_{a,i}^{n+1}=m_{a,i}^n
 \left(\mathcal F_{m_a,i+1/2}-\mathcal F_{m_a,i-1/2}\right).
 $$
 
-The same face flux enters its two cells with opposite signs, so internal diffusive transfers
-conserve both mass and every stored momentum exactly up to roundoff.
+The donor primitive is taken from the old state. The same accepted face flux enters its two cells
+with opposite signs, so internal diffusive transfers conserve both mass and every stored momentum
+exactly up to roundoff. More strongly, the update can be written as
+
+$$
+(M q)_i^{n+1}
+=(M_i^n-\theta_iO_i)q_i^n
++\sum_j\widehat I_{ji}q_j^n,
+$$
+
+where every retained and incoming mass weight is nonnegative and their sum is $M_i^{n+1}$. Hence a
+nonempty cell's new primitive lies in the convex hull of its old primitive and the old primitives
+of its face donors. For any convex function $\eta(q)$, in particular $q^2$, this mixture also obeys
+the global discrete inequality
+
+$$
+\sum_iM_i^{n+1}\eta(q_i^{n+1})
+\le\sum_iM_i^n\eta(q_i^n)
+$$
+
+under periodic or zero-flux boundaries.
 
 ### 7.4 Physical meaning and the rejected Reynolds alternative
 
@@ -1686,7 +1764,7 @@ is conservatively described as second order. The principal operator properties a
 | azimuthal FARGO–PPM | exact integer shift plus high-order residual reconstruction | PPM limiting reduces order near extrema or sharp fronts |
 | radial/polar PPM + SSPRK(3,3) | third-order method-of-lines time integrator for an isolated sweep | multidimensional Strang composition limits the global claim to second order |
 | drag/source response | exact frozen linear drag and second-order endpoint force weighting | coefficient freezing and sequential nonlinear force evaluation supply the remaining error |
-| Crank–Nicolson diffusion | second order in time and centered finite-volume space | positivity subcycling changes step partition but not the solved operator |
+| Crank–Nicolson diffusion | second order in time and centered finite-volume space where the donor limiter is inactive | positivity subcycling preserves the CN operator; an activated donor limiter is a nonlinear, locally lower-order conservative correction |
 | optical-depth quadrature | exact cell integral for cellwise constant extinction and linear face interpolation | density discretization and radial interpolation set the error |
 
 At a limiter activation, vacuum reset, or outflow boundary, the local order can fall to first order.

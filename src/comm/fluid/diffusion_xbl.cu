@@ -125,6 +125,32 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
+        // compute every donor factor from the complete unchanged raw-flux ring
+        for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
+        {
+            int ixm1 = (ix - 1 + N_X) % N_X;
+            real out_rate = fmax(cycle_work[ix], 0.0) + fmax(-cycle_work[ixm1], 0.0);
+            rhod_work[ix] = (out_rate > 0.0)
+                ? fmin(1.0, POS_LIMIT*fmax(rhod[ix], 0.0)*dx_len / (dt_sub*out_rate)) : 1.0;
+        }
+        __syncthreads();
+
+        for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
+        {
+            int ixp1 = (ix + 1) % N_X;
+            int ix_up = (cycle_work[ix] >= 0.0) ? ix : ixp1;
+            cycle_work[ix] *= rhod_work[ix_up];
+        }
+        __syncthreads();
+
+        // accept the conservative density divergence before reusing the trial array
+        for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
+        {
+            int ixm1 = (ix - 1 + N_X) % N_X;
+            rhod_work[ix] = rhod[ix] - dt_sub*(cycle_work[ix] - cycle_work[ixm1]) / dx_len;
+        }
+        __syncthreads();
+
         // transport every momentum component with the same mass flux and its donor primitive
         for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
         {

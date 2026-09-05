@@ -14,23 +14,21 @@ inherit the implementation in `test_common` through `MODEL_PARENT`.
 
 ## Campaign grid
 
-The campaign fixes the representative-particle count and evaluates two
-one-dimensional sweeps through a shared baseline case:
+The campaign fixes the representative-particle count and evaluates the full
+`N_K` by `COL_BATH_EPS` grid:
 
 ```text
 N_P = 1e6
 
-N_K sweep at COL_BATH_EPS = 1e-2:
 N_K = 10, 20, 50, 100, 200
-
-COL_BATH_EPS sweep at N_K = 200:
 COL_BATH_EPS = 5e-3, 1e-2, 2e-2, 4e-2, 8e-2
 ```
 
-The nine case directories contain only a `flags.mk`. The baseline case
-`1e+6n_2e+2k_1e-2b` belongs to both sweeps; the stricter
-`1e+6n_2e+2k_5e-3b` case is retained only in the tolerance sweep. The shared constants accept
-`SWEEP_N_P`, `SWEEP_N_K`, and `SWEEP_COL_BATH_EPS` compile definitions.
+The 25 case directories contain only a `flags.mk`. The first nine runs covered
+the two center lines, `COL_BATH_EPS = 1e-2` and `N_K = 200`. The remaining 16
+off-axis cases are divided among four approximately equal-runtime batches.
+The shared constants accept `SWEEP_N_P`, `SWEEP_N_K`, and
+`SWEEP_COL_BATH_EPS` compile definitions.
 
 For example, `1e+6n_2e+2k_8e-2b` means `N_P = 1e6`, `N_K = 200`, and
 `COL_BATH_EPS = 0.08`.
@@ -162,16 +160,33 @@ Build one Ampere case with:
 make -C val/coag/test_linear MODEL=1e+6n_1e+1k_1e-2b GPU_TARGET=sm_80
 ```
 
-Build and run all nine models with:
+Build and run all 25 models sequentially with:
 
 ```sh
 python3 val/coag/test_linear/run_models.py
 ```
 
+Run one of the four off-axis batches with:
+
+```sh
+python3 val/coag/test_linear/run_models.py --batch 1
+```
+
+Each batch writes a separate `wall_time_batch_<batch>.json`, so the four
+runners can operate concurrently without modifying the same timing summary.
+Submit all four as a Slurm array from the project root with:
+
+```sh
+sbatch val/coag/test_linear/job_submit_batches.sh
+```
+
+Each array task requests one A100 for 24 hours and runs its assigned models
+sequentially. Estimated batch runtimes are 6.89, 6.62, 6.65, and 6.68 hours.
+
 Executables and objects are written under `val/temp/coag/test_linear/`.
 Scientific output is written under
 `val/logs/coagulation/test_linear/<case>/`. The runner atomically updates
-`val/logs/coagulation/test_linear/wall_time_summary.json` after each model;
-compilation time is excluded from the recorded process wall time.
+its timing JSON after each model; compilation time is excluded from the
+recorded process wall time.
 
 This validation family is not registered with `val/tool/run_all.py`.

@@ -44,6 +44,8 @@ def variant_from_arguments(model: str, arguments: list[str]) -> str:
         return f"p{float(values['--power']):+g}"
     if model == "test_x_transport_2d":
         return f"shift{float(values['--shift']):g}"
+    if model == "test_diffusion_poslimit" and "--direction" in values:
+        return values["--direction"]
     if model in {"test_y_transport_cyl", "test_y_transport_sph", "test_z_transport_3d"}:
         return f"cfl{float(values['--cfl']):g}"
     return "default"

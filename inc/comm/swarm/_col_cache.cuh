@@ -57,7 +57,8 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         int idx_old_j = near_result.returnIndex(idx_neighbor);
-        dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)] = idx_old_j;
+        dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)]
+            = near_result.returnNeighbor(idx_neighbor);
         if (idx_old_j >= 0)
             max_dist_sq = fmaxf(max_dist_sq, near_result.returnDist2(idx_neighbor));
     }
@@ -113,9 +114,9 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
 
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {
-        int idx_old_j = work_idx_old[idx_neighbor];
+        int neighbor = work_idx_old[idx_neighbor];
         dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)]
-            = (idx_old_j == INT_MAX) ? -1 : idx_old_j;
+            = (neighbor == INT_MAX) ? -1 : neighbor;
     }
     if (threadIdx.x == 0)
     {

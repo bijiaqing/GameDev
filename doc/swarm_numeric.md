@@ -1746,7 +1746,20 @@ not a radial-boundary condition.
 
 A random displacement is a spatial redistribution, not an impulse. The kernel reconstructs the
 particle's Cartesian velocity before moving it and projects that unchanged velocity into the new
-local spherical basis afterward. This is internally consistent, but it is not the same momentum
+local spherical basis afterward. For an azimuthal wedge crossing, let $x_u$ be the unwrapped
+post-diffusion angle and let the stored angle be
+
+$$
+x_w=x_u-m\Delta\phi_w,
+\qquad m\in\mathbb Z.
+$$
+
+The velocity projection is evaluated at $x_u$, before the position is wrapped to $x_w$. This is
+equivalent to rotating both the position and the Cartesian vector by the wedge identification
+$-m\Delta\phi_w$; projecting the unchanged vector at $x_w$ would instead introduce an artificial
+seam-local velocity kick. The same ordering is used after cylindrical-axis continuation in 3D.
+
+This velocity treatment is internally consistent, but it is not the same momentum
 closure as the fluid's donor-angular-momentum diffusion; density-only fluid–swarm diffusion
 comparisons are valid until a common momentum equation is derived.
 
@@ -2444,6 +2457,39 @@ Z'=Z.
 ```
 
 The sign is chosen so a source adjacent to one seam is copied across the opposite seam.
+
+The selected periodic image is part of the collision neighbor, not merely a search-side copy of
+its position. A packed 32-bit code stores
+
+$$
+c=3i+a,
+\qquad
+a=0,1,2,
+$$
+
+where $i$ is the physical representative and $a$ denotes the original, $-\Delta\phi_w$, or
+$+\Delta\phi_w$ image. Decoding uses $i=\lfloor c/3\rfloor$ and $a=c\bmod3$. The invalid sentinel
+remains negative. KD-tree heap entries and Morton record identifiers retain this code through
+top-$K$ selection; duplicate removal compares physical indices while keeping the nearest selected
+image. The persistent collision cache stores the same code in its existing four-byte neighbor
+entry, so retaining image orientation adds no cache array or per-neighbor memory.
+
+For a collision between owner $i$ and partner code $(j,a)$, the partner's physical Cartesian
+velocity is reconstructed in the selected image basis,
+
+$$
+\boldsymbol v_j^{(a)}
+=\mathcal B\!\left(x_j+s_a\Delta\phi_w,y_j,z_j\right)
+\begin{pmatrix}\ell_{\phi,j}/R_j\\v_{r,j}\\\ell_{\theta,j}/y_j\end{pmatrix},
+\qquad
+s_a\in\{0,-1,+1\},
+$$
+
+and the resolved rate uses $|\boldsymbol v_i-\boldsymbol v_j^{(a)}|$. Rotating only the partner
+position but reconstructing its vector at $x_j$ would violate the rotational quotient and can give
+an order-one false relative velocity at the seam. Direct Bernoulli queries, cached Bernoulli
+queries, and frozen-bath chains all consume the retained image. Full-period and axisymmetric
+searches use $a=0$.
 
 The global maximum is conservative for position-dependent cutoffs: a query still uses its own
 $q_i$, while the larger construction halo guarantees that no eligible source was omitted. If a

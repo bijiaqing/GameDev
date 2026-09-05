@@ -150,6 +150,30 @@ void diffusion_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 mass_flux[iy] *= (rhod[iy + 1] - rhod[iy]) + (rhod_work[iy + 1] - rhod_work[iy]);
             }
 
+            // bound total outward mass from each old radial donor using its finite-volume measure
+            for (int iy = 0; iy < N_Y; iy++)
+            {
+                real flux_i = (iy > 0) ? mass_flux[iy - 1] : 0.0;
+                real out_rate = fmax(mass_flux[iy], 0.0) + fmax(-flux_i, 0.0);
+                real mass = fmax(rhod[iy], 0.0)*_get_vol_y(iy);
+                rhod_work[iy] = (out_rate > 0.0)
+                    ? fmin(1.0, POS_LIMIT*mass / (dt_sub*out_rate)) : 1.0;
+            }
+
+            for (int iy = 0; iy < N_Y - 1; iy++)
+            {
+                int iy_up = (mass_flux[iy] >= 0.0) ? iy : iy + 1;
+                mass_flux[iy] *= rhod_work[iy_up];
+            }
+
+            // reconstruct accepted density from the limited zero-flux face transfers
+            for (int iy = 0; iy < N_Y; iy++)
+            {
+                real flux_i = (iy > 0) ? mass_flux[iy - 1] : 0.0;
+                rhod_work[iy] = rhod[iy]
+                    - dt_sub*(mass_flux[iy] - flux_i) / _get_vol_y(iy);
+            }
+
             // combine each face mass flux with the donor azimuthal primitive quantity
             for (int iy = 0; iy < N_Y; iy++)
             {

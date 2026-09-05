@@ -2,6 +2,8 @@ ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 empty :=
 space := $(empty) $(empty)
 
+.DEFAULT_GOAL := all
+
 GPU_BACKEND ?= cuda
 ifneq ($(words $(GPU_BACKEND)),1)
 $(error GPU_BACKEND must be cuda or rocm)
@@ -141,6 +143,12 @@ endif
 ifneq ($(strip $(PARTICLES)),)
 GPU_FLAGS += -DPERF_PARTICLES=$(PARTICLES)
 endif
+ifneq ($(strip $(DIRECTION)),)
+ifeq ($(filter x y z,$(DIRECTION)),)
+$(error DIRECTION must be x, y, or z)
+endif
+GPU_FLAGS += $(if $(filter x,$(DIRECTION)),-DTEST_DIRECTION_X,$(if $(filter y,$(DIRECTION)),-DTEST_DIRECTION_Y,-DTEST_DIRECTION_Z))
+endif
 endif
 
 VAL_BACKEND_COMMON_DIR = $(VAL_ROOT)/$(GPU_BACKEND)/$(DUST_REPR)/test_common
@@ -243,7 +251,7 @@ _OBJ_SWARM = \
     swarm_runtime.o
 
 ifdef MODEL
-RELINK_TRIGGER :=
+RELINK_TRIGGER := FORCE
 INC_BRANCH_DIR = $(INC_COMM_DIR)/$(DUST_REPR)
 INC_BACKEND_BRANCH_DIR = $(INC_BACKEND_DIR)/$(DUST_REPR)
 SRC_BRANCH_DIR = $(SRC_COMM_DIR)/$(DUST_REPR)
@@ -268,7 +276,6 @@ OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/fluid/$(GPU_BACKEND)/$(FLUID_SWEEP)$(MATH_PATH)/$
 _OBJ = $(_OBJ_FLUID)
 else
 ifneq ($(filter -DCOLLISION,$(GPU_FLAGS)),)
-RELINK_TRIGGER := FORCE
 COLLISION_SEARCH ?= $(if $(filter rocm,$(GPU_BACKEND)),morton,kdtree)
 ifneq ($(words $(COLLISION_SEARCH)),1)
 $(error COLLISION_SEARCH must be kdtree or morton)
@@ -300,8 +307,36 @@ INC_HEADER_NAMES := $(sort $(notdir $(INC_HEADER_PATHS)))
 HEADER_OVERRIDE_PATHS := $(sort $(foreach header,$(INC_HEADER_NAMES),\
     $(firstword $(foreach directory,$(MODEL_HEADER_DIRS),$(wildcard $(directory)/$(header))))))
 
-vpath %.hip $(subst $(space),:,$(SOURCE_SEARCH_DIRS))
-vpath %.cu $(subst $(space),:,$(SOURCE_SEARCH_DIRS))
+# choose the highest-priority directory before applying the backend's extension preference
+define resolve_source
+$(firstword $(foreach directory,$(SOURCE_SEARCH_DIRS),\
+    $(if $(filter cuda,$(GPU_BACKEND)),\
+        $(wildcard $(directory)/$(1).cu),\
+        $(firstword $(wildcard $(directory)/$(1).hip) $(wildcard $(directory)/$(1).cu))\
+    )\
+))
+endef
+
+OBJ_NAMES := $(basename $(notdir $(OBJ)))
+$(foreach name,$(OBJ_NAMES),$(eval SOURCE_$(name) := $(call resolve_source,$(name))))
+MISSING_SOURCES := $(foreach name,$(OBJ_NAMES),$(if $(SOURCE_$(name)),,$(name)))
+ifneq ($(strip $(MISSING_SOURCES)),)
+$(error No source was found for objects: $(MISSING_SOURCES))
+endif
+RESOLVED_SOURCE_PATHS := $(foreach name,$(OBJ_NAMES),$(SOURCE_$(name)))
+
+# import dependencies only when they belong to the source selected for this object
+define source_identity_matches
+$(and $(wildcard $(patsubst %.o,%.d,$(1))),\
+    $(wildcard $(patsubst %.o,%.source,$(1))),\
+    $(filter $(SOURCE_$(2)),$(strip $(shell sed -n '1p' $(patsubst %.o,%.source,$(1))))))
+endef
+
+VALID_DEP_FILES := $(foreach object,$(OBJ),\
+    $(if $(call source_identity_matches,$(object),$(basename $(notdir $(object)))),\
+        $(patsubst %.o,%.d,$(object))))
+SOURCE_MISMATCH_OBJ := $(foreach object,$(OBJ),\
+    $(if $(call source_identity_matches,$(object),$(basename $(notdir $(object)))),,$(object)))
 
 $(info Using GPU backend: $(GPU_BACKEND))
 $(info Using GPU target: $(GPU_TARGET))
@@ -353,6 +388,7 @@ $(BUILD_CONFIG): FORCE
 			'BACKEND_DEFINE=$(BACKEND_DEFINE)' \
 			'INC_SEARCH_FLAGS=$(INC_SEARCH_FLAGS)' \
 			'SOURCE_SEARCH_DIRS=$(SOURCE_SEARCH_DIRS)' \
+			'RESOLVED_SOURCE_PATHS=$(RESOLVED_SOURCE_PATHS)' \
 			'HEADER_OVERRIDE_PATHS=$(HEADER_OVERRIDE_PATHS)' \
 			'PATH_OUT=$(abspath $(OUT_DIR))'; \
 	} > "$@.tmp"
@@ -361,22 +397,23 @@ $(BUILD_CONFIG): FORCE
 	else \
 		rm -f "$@.tmp"; \
 	fi
+define object_rule
+$(1): $(SOURCE_$(2)) $(MODEL_FLAG_FILE) $(MODEL_CONST) $(BUILD_CONFIG)
+	@mkdir -p $$(dir $$@)
+	@printf "%-12s %60s -> %s\n" "Compiling" "$$(patsubst $(ROOT_DIR)/%,%,$$<)" "$$(notdir $$@)"
+	@$$(GPU_COMPILER) $$(GPU_BASE_FLAGS) $$(GPU_FLAGS) $$(GPU_LANGUAGE_FLAG) $$(GPU_DEVICE_FLAG) -o $$@ $$< \
+		$$(INC_SEARCH_FLAGS) $$(BACKEND_DEFINE) \
+		-DPATH_OUT=\"$$(abspath $$(OUT_DIR))/\" \
+		-MMD -MP -MF $$(patsubst %.o,%.d,$$@)
+	@printf '%s\n' '$(SOURCE_$(2))' > $$(patsubst %.o,%.source,$$@).tmp
+	@mv $$(patsubst %.o,%.source,$$@).tmp $$(patsubst %.o,%.source,$$@)
+endef
 
-$(OBJ_DIR)/%.o: %.hip $(MODEL_FLAG_FILE) $(MODEL_CONST) $(BUILD_CONFIG)
-	@mkdir -p $(dir $@)
-	@printf "%-12s %60s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
-	@$(GPU_COMPILER) $(GPU_BASE_FLAGS) $(GPU_FLAGS) $(GPU_LANGUAGE_FLAG) $(GPU_DEVICE_FLAG) -o $@ $< \
-		$(INC_SEARCH_FLAGS) $(BACKEND_DEFINE) \
-		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \
-		-MMD -MP -MF $(patsubst %.o,%.d,$@)
+$(foreach object,$(OBJ),\
+    $(eval $(call object_rule,$(object),$(basename $(notdir $(object))))))
 
-$(OBJ_DIR)/%.o: %.cu $(MODEL_FLAG_FILE) $(MODEL_CONST) $(BUILD_CONFIG)
-	@mkdir -p $(dir $@)
-	@printf "%-12s %60s -> %s\n" "Compiling" "$(patsubst $(ROOT_DIR)/%,%,$<)" "$(notdir $@)"
-	@$(GPU_COMPILER) $(GPU_BASE_FLAGS) $(GPU_FLAGS) $(GPU_LANGUAGE_FLAG) $(GPU_DEVICE_FLAG) -o $@ $< \
-		$(INC_SEARCH_FLAGS) $(BACKEND_DEFINE) \
-		-DPATH_OUT=\"$(abspath $(OUT_DIR))/\" \
-		-MMD -MP -MF $(patsubst %.o,%.d,$@)
+# rebuild an object instead of importing dependencies recorded for a different primary source
+$(SOURCE_MISMATCH_OBJ): FORCE
 
 clean:
 ifdef MODEL
@@ -391,4 +428,4 @@ else
 	@rm -f $(MODEL_EXECUTABLES)
 endif
 
--include $(OBJ:.o=.d)
+-include $(VALID_DEP_FILES)

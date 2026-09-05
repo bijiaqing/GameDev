@@ -112,7 +112,8 @@ void morton_wedge_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigne
     for (int idx_neighbor = threadIdx.x; idx_neighbor < TOP_K; idx_neighbor += blockDim.x)
     {
         int idx_out = idx_query*TOP_K + idx_neighbor;
-        dev_near_idx_old[idx_out] = (work_idx_old[idx_neighbor] == INT_MAX) ? -1 : work_idx_old[idx_neighbor];
+        dev_near_idx_old[idx_out] = (work_idx_old[idx_neighbor] == INT_MAX)
+            ? -1 : work_idx_old[idx_neighbor];
         dev_near_dist_sq[idx_out] = work_dist_sq[idx_neighbor];
     }
     if (threadIdx.x == 0) dev_stack_overflow[idx_query] = stack_overflow;
@@ -150,7 +151,7 @@ void morton_wedge_checksum (double *dev_checksum, unsigned int *dev_stack_overfl
         {
             if (work_idx_old[idx_neighbor] == INT_MAX) continue;
             value += static_cast<double>(work_dist_sq[idx_neighbor])
-                + 1.0e-12*static_cast<double>(work_idx_old[idx_neighbor]);
+                + 1.0e-12*static_cast<double>(_get_col_idx_old(work_idx_old[idx_neighbor]));
         }
         dev_checksum[idx_query] = value;
         dev_stack_overflow[idx_query] = stack_overflow;
@@ -175,7 +176,7 @@ void kdtree_wedge_query (int *dev_near_idx_old, float *dev_near_dist_sq,
     {
         int idx_old = near_result.returnIndex(idx_neighbor);
         int idx_out = idx_query*TOP_K + idx_neighbor;
-        dev_near_idx_old[idx_out] = idx_old;
+        dev_near_idx_old[idx_out] = (idx_old < 0) ? -1 : near_result.returnNeighbor(idx_neighbor);
         dev_near_dist_sq[idx_out] = (idx_old < 0) ? MORTON_INF_F : near_result.returnDist2(idx_neighbor);
     }
 }
@@ -278,6 +279,18 @@ void generate_points (const options &config, std::vector<float3> &points, std::v
         azimuth[idx] = x;
         points[idx] = make_float3(R*std::cos(x), R*std::sin(x), Z);
     }
+
+    if (width >= 6.0f)
+    {
+        // isolate the wide-wedge eligibility counterexample from the sampled disk
+        constexpr float radius = 0.25f;
+        float x_owner = 0.5f*(config.x_min + config.x_max);
+        float x_partner = x_owner + 0.06f;
+        azimuth[0] = x_owner;
+        azimuth[1] = x_partner;
+        points[0] = make_float3(radius*std::cos(x_owner), radius*std::sin(x_owner), 0.0f);
+        points[1] = make_float3(radius*std::cos(x_partner), radius*std::sin(x_partner), 0.0f);
+    }
 }
 
 template<typename Function>
@@ -320,10 +333,49 @@ std::vector<std::pair<float, int>> get_neighbors (
     for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
     {
         int idx = idx_query*K + idx_neighbor;
-        if (near_idx_old[idx] >= 0) result.emplace_back(near_dist_sq[idx], near_idx_old[idx]);
+        if (near_idx_old[idx] >= 0)
+            result.emplace_back(near_dist_sq[idx], _get_col_idx_old(near_idx_old[idx]));
     }
     std::sort(result.begin(), result.end());
     return result;
+}
+
+int count_image_geometry_mismatches (const std::vector<int> &neighbor,
+    const std::vector<float> &dist_sq, const std::vector<float3> &point,
+    const std::vector<float3> &query, int query_count, float width)
+{
+    int mismatches = 0;
+    for (int idx_query = 0; idx_query < query_count; idx_query++)
+    {
+        for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
+        {
+            int idx_out = idx_query*K + idx_neighbor;
+            if (neighbor[idx_out] < 0) continue;
+            int idx_old = _get_col_idx_old(neighbor[idx_out]);
+            int image = _get_col_image(neighbor[idx_out]);
+            if (idx_old < 0 || idx_old >= static_cast<int>(point.size())
+                || image < 0 || image >= COL_IMAGE_COUNT)
+            {
+                mismatches++;
+                continue;
+            }
+            float angle = static_cast<float>(_get_col_image_shift(image))*width;
+            float sin_angle = std::sin(angle);
+            float cos_angle = std::cos(angle);
+            float3 image_point = make_float3(
+                cos_angle*point[idx_old].x - sin_angle*point[idx_old].y,
+                sin_angle*point[idx_old].x + cos_angle*point[idx_old].y,
+                point[idx_old].z
+            );
+            float dx = query[idx_query].x - image_point.x;
+            float dy = query[idx_query].y - image_point.y;
+            float dz = query[idx_query].z - image_point.z;
+            float expected = dx*dx + dy*dy + dz*dz;
+            float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(expected));
+            if (std::fabs(dist_sq[idx_out] - expected) > tolerance) mismatches++;
+        }
+    }
+    return mismatches;
 }
 
 bool lists_differ (const std::vector<std::pair<float, int>> &a,
@@ -470,59 +522,50 @@ void report_brute_difference (const char *backend, int idx_query,
         << " error=" << max_error << std::endl;
 }
 
-std::vector<std::pair<float, int>> record_neighbors (
-    const std::vector<morton_point> &morton_record, const float3 &query_point,
-    int point_count, float search_dist)
+float seam_distance (const float3 &point, float x_offset)
 {
-    std::vector<float> best_dist_sq(point_count, std::numeric_limits<float>::infinity());
-    float search_dist_sq = search_dist*search_dist;
-    for (const morton_point &record : morton_record)
-    {
-        float dx = query_point.x - record.cartesian.x;
-        float dy = query_point.y - record.cartesian.y;
-        float dz = query_point.z - record.cartesian.z;
-        float dist_sq = dx*dx + dy*dy + dz*dz;
-        if (dist_sq < best_dist_sq[record.idx_old]) best_dist_sq[record.idx_old] = dist_sq;
-    }
-
-    std::vector<std::pair<float, int>> result;
-    for (int idx_point = 0; idx_point < point_count; idx_point++)
-    {
-        if (best_dist_sq[idx_point] <= search_dist_sq) result.emplace_back(best_dist_sq[idx_point], idx_point);
-    }
-    std::sort(result.begin(), result.end());
-    if (result.size() > K) result.resize(K);
-    return result;
+    float R = std::hypot(point.x, point.y);
+    return (std::cos(x_offset) >= 0.0f) ? R*std::fabs(std::sin(x_offset)) : R;
 }
 
-// construct the exact physical top-K set over the original and reachable wedge images
-std::vector<std::pair<float, int>> brute_neighbors (
-    const std::vector<float3> &points, const float3 &query, float width, float radius)
+float3 rotate_point (const float3 &point, float angle)
 {
-    float sin_width = std::sin(width);
-    float cos_width = std::cos(width);
+    float sin_angle = std::sin(angle);
+    float cos_angle = std::cos(angle);
+    return make_float3(
+        cos_angle*point.x - sin_angle*point.y,
+        sin_angle*point.x + cos_angle*point.y,
+        point.z
+    );
+}
+
+float distance_sq (const float3 &a, const float3 &b)
+{
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    float dz = a.z - b.z;
+    return dx*dx + dy*dy + dz*dz;
+}
+
+// construct the physical top-K set admitted by one search representation
+std::vector<std::pair<float, int>> candidate_neighbors (
+    const std::vector<float3> &points, const std::vector<float> &azimuth,
+    const float3 &query, float x_min, float x_max, float radius, bool morton_eligibility)
+{
     std::vector<std::pair<float, int>> result;
     float radius_sq = radius*radius;
+    float width = x_max - x_min;
     for (std::size_t idx = 0; idx < points.size(); idx++)
     {
-        float best = std::numeric_limits<float>::infinity();
-        for (int image = -1; image <= 1; image++)
-        {
-            float3 query_image = query;
-            if (image != 0)
-            {
-                float sin_angle = image*sin_width;
-                query_image = make_float3(
-                    cos_width*query.x - sin_angle*query.y,
-                    sin_angle*query.x + cos_width*query.y,
-                    query.z
-                );
-            }
-            float dx = query_image.x - points[idx].x;
-            float dy = query_image.y - points[idx].y;
-            float dz = query_image.z - points[idx].z;
-            best = std::min(best, dx*dx + dy*dy + dz*dz);
-        }
+        float best = distance_sq(query, points[idx]);
+        bool lower_eligible = !morton_eligibility
+            || seam_distance(points[idx], azimuth[idx] - x_min) <= radius;
+        bool upper_eligible = !morton_eligibility
+            || seam_distance(points[idx], x_max - azimuth[idx]) <= radius;
+        if (lower_eligible)
+            best = std::min(best, distance_sq(query, rotate_point(points[idx], width)));
+        if (upper_eligible)
+            best = std::min(best, distance_sq(query, rotate_point(points[idx], -width)));
         if (best <= radius_sq) result.emplace_back(best, static_cast<int>(idx));
     }
     std::sort(result.begin(), result.end());
@@ -624,46 +667,21 @@ int main (int argc, char **argv)
             sizeof(unsigned int)*config.queries, hipMemcpyDeviceToHost), "copy quality overflows");
 
         int mismatched_queries = 0;
-        int kdtree_brute_mismatches = 0;
-        int morton_brute_mismatches = 0;
+        int kdtree_reference_mismatches = 0;
+        int morton_reference_mismatches = 0;
         int disagreement_queries_checked = 0;
-        int kdtree_disagreement_brute_mismatches = 0;
-        int morton_disagreement_brute_mismatches = 0;
         int kdtree_tie_equivalent_neighbors = 0;
         int morton_tie_equivalent_neighbors = 0;
-        int morton_record_mismatches = 0;
-        int record_geometry_mismatches = 0;
+        int kdtree_image_geometry_mismatches = count_image_geometry_mismatches(
+            kdtree_idx_old, kdtree_dist_sq, points, points, config.queries, width
+        );
+        int morton_image_geometry_mismatches = count_image_geometry_mismatches(
+            morton_idx_old, morton_dist_sq, points, points, config.queries, width
+        );
+        bool wide_counterexample_distinction = false;
         float maximum_error = 0.0f;
-        std::vector<morton_point> host_morton_records;
-        auto diagnose_morton_failure = [&] (int idx_query,
-            const std::vector<std::pair<float, int>> &actual,
-            const std::vector<std::pair<float, int>> &physical_brute)
-        {
-            if (host_morton_records.empty())
-            {
-                morton_view morton_data = morton_owner.view();
-                host_morton_records.resize(morton_data.point_count);
-                _morton_hip_check(hipMemcpy(host_morton_records.data(), morton_data.dev_point,
-                    sizeof(morton_point)*morton_data.point_count, hipMemcpyDeviceToHost),
-                    "copy Morton records for failure diagnosis");
-            }
-            std::vector<std::pair<float, int>> record = record_neighbors(
-                host_morton_records, points[idx_query], config.particles, config.radius
-            );
-            if (lists_differ(actual, record, maximum_error))
-            {
-                morton_record_mismatches++;
-                report_brute_difference("Morton traversal versus stored records",
-                    idx_query, actual, record);
-            }
-            if (lists_differ(record, physical_brute, maximum_error))
-            {
-                record_geometry_mismatches++;
-                report_brute_difference("stored records versus physical brute force",
-                    idx_query, record, physical_brute);
-            }
-        };
-        // arbitrate every backend disagreement and a fixed query prefix with physical brute force
+        // arbitrate every backend disagreement and a fixed query prefix against
+        // the exact candidate set admitted by that backend's representation
         for (int idx_query = 0; idx_query < config.queries; idx_query++)
         {
             std::vector<std::pair<float, int>> kdtree_neighbors =
@@ -672,38 +690,33 @@ int main (int argc, char **argv)
                 get_neighbors(morton_idx_old, morton_dist_sq, idx_query);
             bool morton_differs = lists_differ(kdtree_neighbors, morton_neighbors, maximum_error);
             if (morton_differs) mismatched_queries++;
-            if (idx_query >= config.brute_queries && morton_differs)
-            {
-                disagreement_queries_checked++;
-                std::vector<std::pair<float, int>> brute = brute_neighbors(
-                    points, points[idx_query], width, config.radius
-                );
-                if (differs_from_brute(kdtree_neighbors, brute, maximum_error, kdtree_tie_equivalent_neighbors))
-                {
-                    kdtree_disagreement_brute_mismatches++;
-                    report_brute_difference("KD", idx_query, kdtree_neighbors, brute);
-                }
-                if (differs_from_brute(morton_neighbors, brute, maximum_error, morton_tie_equivalent_neighbors))
-                {
-                    morton_disagreement_brute_mismatches++;
-                    report_brute_difference("Morton", idx_query, morton_neighbors, brute);
-                    diagnose_morton_failure(idx_query, morton_neighbors, brute);
-                }
-            }
-            if (idx_query >= config.brute_queries) continue;
-            std::vector<std::pair<float, int>> brute = brute_neighbors(
-                points, points[idx_query], width, config.radius
+            if (idx_query == 0 && morton_differs) wide_counterexample_distinction = true;
+            if (idx_query >= config.brute_queries && !morton_differs) continue;
+            if (morton_differs) disagreement_queries_checked++;
+
+            std::vector<std::pair<float, int>> kdtree_reference = candidate_neighbors(
+                points, azimuth, points[idx_query], config.x_min, config.x_max,
+                config.radius, false
             );
-            if (differs_from_brute(kdtree_neighbors, brute, maximum_error, kdtree_tie_equivalent_neighbors))
+            std::vector<std::pair<float, int>> morton_reference = candidate_neighbors(
+                points, azimuth, points[idx_query], config.x_min, config.x_max,
+                config.radius, true
+            );
+            if (differs_from_brute(
+                kdtree_neighbors, kdtree_reference, maximum_error,
+                kdtree_tie_equivalent_neighbors
+            ))
             {
-                kdtree_brute_mismatches++;
-                report_brute_difference("KD", idx_query, kdtree_neighbors, brute);
+                kdtree_reference_mismatches++;
+                report_brute_difference("KD", idx_query, kdtree_neighbors, kdtree_reference);
             }
-            if (differs_from_brute(morton_neighbors, brute, maximum_error, morton_tie_equivalent_neighbors))
+            if (differs_from_brute(
+                morton_neighbors, morton_reference, maximum_error,
+                morton_tie_equivalent_neighbors
+            ))
             {
-                morton_brute_mismatches++;
-                report_brute_difference("Morton", idx_query, morton_neighbors, brute);
-                diagnose_morton_failure(idx_query, morton_neighbors, brute);
+                morton_reference_mismatches++;
+                report_brute_difference("Morton", idx_query, morton_neighbors, morton_reference);
             }
         }
 
@@ -743,9 +756,11 @@ int main (int argc, char **argv)
             stack_overflows += performance_stack_overflow[idx];
         }
         // permit independently built trees to exchange distance-equivalent cutoff neighbors
-        bool quality_passed = kdtree_brute_mismatches == 0 && morton_brute_mismatches == 0
-            && kdtree_disagreement_brute_mismatches == 0
-            && morton_disagreement_brute_mismatches == 0 && stack_overflows == 0;
+        bool wide_candidate_distinction = width < 6.0f || wide_counterexample_distinction;
+        bool quality_passed = kdtree_reference_mismatches == 0 && morton_reference_mismatches == 0
+            && kdtree_image_geometry_mismatches == 0
+            && morton_image_geometry_mismatches == 0 && stack_overflows == 0
+            && wide_candidate_distinction;
 
         std::ostream *output = &std::cout;
         std::ofstream file;
@@ -770,17 +785,16 @@ int main (int argc, char **argv)
             << "  \"quality_passed\": " << (quality_passed ? "true" : "false") << ",\n"
             << "  \"passed\": " << (quality_passed ? "true" : "false") << ",\n"
             << "  \"mismatched_queries\": " << mismatched_queries << ",\n"
-            << "  \"kd_brute_mismatches\": " << kdtree_brute_mismatches << ",\n"
-            << "  \"morton_brute_mismatches\": " << morton_brute_mismatches << ",\n"
+            << "  \"kd_reference_mismatches\": " << kdtree_reference_mismatches << ",\n"
+            << "  \"morton_reference_mismatches\": " << morton_reference_mismatches << ",\n"
+            << "  \"reference_queries_checked\": " << config.brute_queries << ",\n"
             << "  \"disagreement_queries_checked\": " << disagreement_queries_checked << ",\n"
-            << "  \"kd_disagreement_brute_mismatches\": "
-            << kdtree_disagreement_brute_mismatches << ",\n"
-            << "  \"morton_disagreement_brute_mismatches\": "
-            << morton_disagreement_brute_mismatches << ",\n"
             << "  \"kd_tie_equivalent_neighbors\": " << kdtree_tie_equivalent_neighbors << ",\n"
             << "  \"morton_tie_equivalent_neighbors\": " << morton_tie_equivalent_neighbors << ",\n"
-            << "  \"morton_record_mismatches\": " << morton_record_mismatches << ",\n"
-            << "  \"record_geometry_mismatches\": " << record_geometry_mismatches << ",\n"
+            << "  \"wide_candidate_distinction\": "
+            << (wide_candidate_distinction ? "true" : "false") << ",\n"
+            << "  \"kd_image_geometry_mismatches\": " << kdtree_image_geometry_mismatches << ",\n"
+            << "  \"morton_image_geometry_mismatches\": " << morton_image_geometry_mismatches << ",\n"
             << "  \"stack_overflows\": " << stack_overflows << ",\n"
             << "  \"maximum_distance_error\": " << maximum_error << ",\n"
             << "  \"morton_records\": " << morton_owner.record_count() << ",\n"

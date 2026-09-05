@@ -66,10 +66,11 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
         real x_new = x + delta_x;
         real R_new = R + avg_R + std_R*curand_normal_double(&rngstate);
         real z_new = 0.5*M_PI;
+        real x_basis = x_new;
         _apply_diffusion_boundary(x_new, R_new, z_new);
 
-        real vR_new = vx_cart*cos(x_new) + vy_cart*sin(x_new);
-        real vx_new = vy_cart*cos(x_new) - vx_cart*sin(x_new);
+        real vR_new = vx_cart*cos(x_basis) + vy_cart*sin(x_basis);
+        real vx_new = vy_cart*cos(x_basis) - vx_cart*sin(x_basis);
 
         dev_particle[idx].position.x = x_new;
         dev_particle[idx].position.y = R_new;
@@ -149,6 +150,8 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     real y_new = sqrt(R_new*R_new + Z_new*Z_new);
     real z_new = atan2(R_new, Z_new);
 
+    // periodic storage wrapping must not rotate the physical Cartesian velocity basis
+    real x_basis = x_new;
     _apply_diffusion_boundary(x_new, y_new, z_new);
     R_new = _get_cyl_R(y_new, z_new);
     Z_new = _get_cyl_Z(y_new, z_new);
@@ -156,8 +159,8 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt)
     // project the unchanged Cartesian velocity into the new local spherical basis
     real sinz_new = R_new / y_new;
     real cosz_new = Z_new / y_new;
-    real vR_new = vx_cart*cos(x_new) + vy_cart*sin(x_new);
-    real vx_new = vy_cart*cos(x_new) - vx_cart*sin(x_new);
+    real vR_new = vx_cart*cos(x_basis) + vy_cart*sin(x_basis);
+    real vx_new = vy_cart*cos(x_basis) - vx_cart*sin(x_basis);
 
     lx = vx_new*R_new;
     vy = vR_new*sinz_new + vZ*cosz_new;

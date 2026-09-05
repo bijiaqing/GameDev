@@ -42,8 +42,8 @@ are not portable across backends.
 
 The current source defines a deliberately compact publication suite:
 
-- fluid: 19 models and 73 analytical metric records;
-- swarm: 12 common models and 33 analytical/statistical records;
+- fluid: 19 models and 76 analytical or invariant-based metric records;
+- swarm: 15 common entries, including 14 analytical/statistical models with 42 records and the KNN matrix;
 - one standalone KNN correctness matrix at $10^5$ particles;
 - four production frozen-bath collision-chain models.
 

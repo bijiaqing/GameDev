@@ -347,10 +347,10 @@ int main (int argc, char **argv)
             static_cast<float>(Z_MIN), static_cast<float>(Z_MAX)
         );
     }
-    #ifndef BERNOULLI
+    #if defined(COLLISION) && !defined(BERNOULLI)
     col_bath_state bath_state;
     col_controller_summary col_summary;
-    #endif // FROZEN_BATH
+    #endif // COLLISION && !BERNOULLI
 
     // invalidate the search package only when a position update ends its current geometry epoch
     auto invalidate_col_geometry = [&] ()
@@ -776,11 +776,11 @@ int main (int argc, char **argv)
         count_dyn = 0;
         #endif // TRANSPORT
 
-        #ifndef BERNOULLI
+        #if defined(COLLISION) && !defined(BERNOULLI)
         // restart controller memory at checkpoint boundaries while retaining it across split operators
         bath_state = col_bath_state{};
         col_summary = col_controller_summary{};
-        #endif // FROZEN_BATH
+        #endif // COLLISION && !BERNOULLI
 
         PRINT_TITLE_TO_SCREEN();
         
@@ -942,14 +942,14 @@ int main (int argc, char **argv)
         if (idx_file % LIN_BASE == 0) SAVE_PARTICLE_TO_FILE(idx_file);
         #endif // LOGTIMING / LOGOUTPUT / LINEAR_OUTPUT
 
-        #ifndef BERNOULLI
+        #if defined(COLLISION) && !defined(BERNOULLI)
         std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
         if (!save_col_controller(controller_file, col_summary))
         {
             std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
             return 1;
         }
-        #endif // FROZEN_BATH
+        #endif // COLLISION && !BERNOULLI
 
 
 

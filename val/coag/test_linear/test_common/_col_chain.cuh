@@ -147,7 +147,7 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
-    int idx_old_i, int idx_old_j, real lambda_0, real &vrel)
+    int idx_old_i, int idx_old_j, int image_j, real lambda_0, real &vrel)
 {
     vrel = 0.0;
     real size_j = dev_size_old[idx_old_j];
@@ -167,7 +167,7 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     }
     else if constexpr (kernel == CUSTOM_KERNEL)
     {
-        vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j
+        vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
             #endif // IMPORTGAS
@@ -276,9 +276,11 @@ void col_bath_rate (real *dev_col_rate, const swarm *dev_particle, const int *de
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {
         rate_work[idx_neighbor] = 0.0;
-        int idx_old_j = dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)];
-        if (dev_col_active[idx_old_i] == 0 || idx_old_j < 0
+        int neighbor = dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)];
+        if (dev_col_active[idx_old_i] == 0 || neighbor < 0
             || !(dev_col_measure[idx_old_i] > 0.0)) continue;
+        int idx_old_j = _get_col_idx_old(neighbor);
+        int image_j = _get_col_image(neighbor);
 
         real size_i = dev_size_old[idx_old_i];
         real size_j = dev_size_old[idx_old_j];
@@ -288,7 +290,7 @@ void col_bath_rate (real *dev_col_rate, const swarm *dev_particle, const int *de
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0, vrel
+            idx_old_i, idx_old_j, image_j, lambda_0, vrel
         ) / dev_col_measure[idx_old_i];
         (void)vrel;
         rate_work[idx_neighbor] = pair_rate;
@@ -408,13 +410,15 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
 
         for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
         {
-            int idx_old_j = dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)];
+            int neighbor = dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)];
             pair_rate[idx_neighbor] = 0.0;
             pair_jump1[idx_neighbor] = 0.0;
             pair_jump2[idx_neighbor] = 0.0;
             pair_jumpmax[idx_neighbor] = 0.0;
-            if (idx_old_j >= 0)
+            if (neighbor >= 0)
             {
+                int idx_old_j = _get_col_idx_old(neighbor);
+                int image_j = _get_col_image(neighbor);
                 real size_j = dev_size_old[idx_old_j];
                 real vrel = 0.0;
                 real pair_value = _get_col_chain_rate <static_cast<KernelType>(COAG_KERNEL)> (
@@ -422,7 +426,7 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
                     #ifdef IMPORTGAS
                     dev_gas_dens,
                     #endif // IMPORTGAS
-                    idx_old_i, idx_old_j, lambda_0, vrel
+                    idx_old_i, idx_old_j, image_j, lambda_0, vrel
                 ) / dev_col_measure[idx_old_i];
                 bool fragmentation = vrel > V_FRAG;
                 real mean = 0.0, second = 0.0, maximum = 0.0;
@@ -526,13 +530,15 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
                         }
                         else
                         {
-                            int idx_old_j = dev_col_neighbor[_get_col_offset(idx_old_i, idx_slot)];
+                            int neighbor = dev_col_neighbor[_get_col_offset(idx_old_i, idx_slot)];
+                            int idx_old_j = _get_col_idx_old(neighbor);
+                            int image_j = _get_col_image(neighbor);
                             real size_j = dev_size_old[idx_old_j];
                             real vrel = 0.0;
                             if constexpr (COAG_KERNEL == CUSTOM_KERNEL)
                             {
                                 vrel = _get_vrel_pair(
-                                    dev_particle, size_i, size_j, idx_old_i, idx_old_j
+                                    dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
                                     #ifdef IMPORTGAS
                                     , dev_gas_dens
                                     #endif // IMPORTGAS

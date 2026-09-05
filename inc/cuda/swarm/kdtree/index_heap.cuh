@@ -24,10 +24,10 @@ struct idx_old_heap
     }
 
     __device__ __forceinline__
-    unsigned long long encode (float dist_sq, unsigned int idx_old) const
+    unsigned long long encode (float dist_sq, unsigned int neighbor) const
     {
-        // order packed keys first by nonnegative float distance and then by original identifier
-        return (static_cast<unsigned long long>(__float_as_uint(dist_sq)) << 32) | idx_old;
+        // order packed keys by distance, physical identifier, and selected image
+        return (static_cast<unsigned long long>(__float_as_uint(dist_sq)) << 32) | neighbor;
     }
 
     __device__ __forceinline__
@@ -37,7 +37,7 @@ struct idx_old_heap
     }
 
     __device__ __forceinline__
-    unsigned int decode_idx (unsigned long long value) const
+    unsigned int decode_neighbor (unsigned long long value) const
     {
         return static_cast<unsigned int>(value);
     }
@@ -49,8 +49,18 @@ struct idx_old_heap
     }
     __device__ __forceinline__ int returnIndex (int idx_neighbor) const
     {
-        unsigned int idx_old = decode_idx(near_key[idx_neighbor]);
-        return (idx_old == 0xffffffffU) ? -1 : static_cast<int>(idx_old);
+        unsigned int neighbor = decode_neighbor(near_key[idx_neighbor]);
+        return (neighbor == 0xffffffffU) ? -1 : _get_col_idx_old(static_cast<int>(neighbor));
+    }
+    __device__ __forceinline__ int returnImage (int idx_neighbor) const
+    {
+        unsigned int neighbor = decode_neighbor(near_key[idx_neighbor]);
+        return (neighbor == 0xffffffffU) ? 0 : _get_col_image(static_cast<int>(neighbor));
+    }
+    __device__ __forceinline__ int returnNeighbor (int idx_neighbor) const
+    {
+        unsigned int neighbor = decode_neighbor(near_key[idx_neighbor]);
+        return (neighbor == 0xffffffffU) ? -1 : static_cast<int>(neighbor);
     }
     __device__ __forceinline__ float initialCullDist2 () const { return expandedCullDist2(); }
     __device__ __forceinline__ float maxRadius2 () const { return decode_dist(near_key[0]); }
@@ -67,7 +77,10 @@ struct idx_old_heap
         unsigned int idx_old = static_cast<unsigned int>(kdtree_node[idx_candidate].idx_old);
         if (dev_active && dev_active[idx_old] == 0) return expandedCullDist2();
 
-        unsigned long long candidate = encode(dist_sq, idx_old);
+        unsigned int neighbor = static_cast<unsigned int>(_encode_col_neighbor(
+            static_cast<int>(idx_old), kdtree_node[idx_candidate].image
+        ));
+        unsigned long long candidate = encode(dist_sq, neighbor);
 
         // replace an existing periodic image only when the new image is closer
         int idx_slot = -1;
@@ -75,7 +88,10 @@ struct idx_old_heap
         {
             for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
             {
-                if (decode_idx(near_key[idx_neighbor]) != idx_old) continue;
+                unsigned int neighbor_old = decode_neighbor(near_key[idx_neighbor]);
+                if (neighbor_old == 0xffffffffU
+                    || static_cast<unsigned int>(_get_col_idx_old(static_cast<int>(neighbor_old))) != idx_old)
+                    continue;
                 idx_slot = idx_neighbor;
                 break;
             }

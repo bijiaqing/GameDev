@@ -18,6 +18,7 @@ REYNOLDS_0 = 1.0e8
 RHO_0 = 1.0
 SIGMA_0 = 1.0
 STOKES_0 = 0.2
+V_FRAG = 1.0
 X_SEC = 2.0e-15
 
 
@@ -29,10 +30,13 @@ def norms(error: np.ndarray) -> dict[str, float]:
     }
 
 
-def turbulent_velocity(stokes_large: float, stokes_small: float, re_inv: float) -> float:
+def turbulent_velocity(
+    stokes_large: float, stokes_small: float, re_inv: float, radius: float = 1.0,
+) -> float:
     """Evaluate the six published Ormel-Cuzzi branches without calling GameDev code."""
 
-    sound_speed = ASPR_0
+    h_g = ASPR_0*radius**(0.5*(-1.0 + 1.0))
+    sound_speed = h_g/math.sqrt(radius)
     gas_velocity_sq = 1.5*ALPHA*sound_speed*sound_speed
     epsilon = stokes_small/stokes_large
     y_a = 1.6
@@ -70,22 +74,84 @@ def turbulent_velocity(stokes_large: float, stokes_small: float, re_inv: float) 
     return math.sqrt(value)
 
 
-def brownian_velocity(size_i: float, size_j: float) -> float:
+def brownian_velocity(size_i: float, size_j: float, radius: float = 1.0) -> float:
     mass_i = math.pi*RHO_0*size_i**3/6.0
     mass_j = math.pi*RHO_0*size_j**3/6.0
     value = math.sqrt(
-        8.0*ASPR_0**2*M_MOL*(mass_i + mass_j)/(math.pi*mass_i*mass_j)
+        8.0*(ASPR_0/math.sqrt(radius))**2*M_MOL
+        * (mass_i + mass_j)/(math.pi*mass_i*mass_j)
     )
-    return min(value, ASPR_0)
+    return min(value, ASPR_0/math.sqrt(radius))
 
 
-def cartesian_velocity(x: float, angular_momentum: float, radial_velocity: float) -> np.ndarray:
-    azimuthal_velocity = angular_momentum
+def local_pair_velocity(
+    velocity_i: np.ndarray, velocity_j: np.ndarray,
+    size_i: float, size_j: float, radius: float, height: float,
+    code_unit: bool,
+) -> tuple[float, float]:
+    """Reconstruct one production relative speed at the pair's cylindrical location."""
+
+    h_g = ASPR_0
+    sigma_g = SIGMA_0*radius**2
+    gas_strat = math.exp(
+        (radius/math.sqrt(radius*radius + height*height) - 1.0)/(h_g*h_g)
+    )
+    stokes_i = STOKES_0*size_i/(radius**2*gas_strat)
+    stokes_j = STOKES_0*size_j/(radius**2*gas_strat)
+    re_inv = 1.0/math.sqrt(
+        REYNOLDS_0*sigma_g/SIGMA_0 if code_unit
+        else 0.5*ALPHA*sigma_g*X_SEC/M_MOL
+    )
+    resolved = float(np.linalg.norm(velocity_i - velocity_j))
+    turbulent = turbulent_velocity(
+        max(stokes_i, stokes_j), min(stokes_i, stokes_j), re_inv, radius
+    )
+    brownian = 0.0 if code_unit else brownian_velocity(size_i, size_j, radius)
+    return resolved, math.sqrt(resolved**2 + turbulent**2 + brownian**2)
+
+
+def cartesian_velocity(
+    x: float, lx: float, vy: float,
+    z: float = 0.5*math.pi, lz: float = 0.0, y: float = 1.0,
+) -> np.ndarray:
+    sinz = math.sin(z)
+    cosz = math.cos(z)
+    vx = lx/(y*sinz)
+    vz = lz/y
+    vR = vy*sinz + vz*cosz
+    vZ = vy*cosz - vz*sinz
     return np.array([
-        radial_velocity*math.cos(x) - azimuthal_velocity*math.sin(x),
-        radial_velocity*math.sin(x) + azimuthal_velocity*math.cos(x),
-        0.0,
+        vR*math.cos(x) - vx*math.sin(x),
+        vR*math.sin(x) + vx*math.cos(x),
+        vZ,
     ])
+
+
+def cache_radius_reference(meta: dict) -> float:
+    """Reconstruct the seam distance from the float coordinates searched on the GPU."""
+
+    z = float(meta["seam_z"])
+    radius = np.float32(math.sin(z))
+    x_owner = float(meta["x_min"]) + float(meta["seam_offset"])
+    x_partner = float(meta["x_max"]) - float(meta["seam_offset"])
+    owner = np.asarray([
+        np.float32(radius*np.float32(math.cos(x_owner))),
+        np.float32(radius*np.float32(math.sin(x_owner))),
+    ], dtype=np.float32)
+    partner = np.asarray([
+        np.float32(radius*np.float32(math.cos(x_partner))),
+        np.float32(radius*np.float32(math.sin(x_partner))),
+    ], dtype=np.float32)
+    width = np.float32(float(meta["x_max"]) - float(meta["x_min"]))
+    sin_width = np.float32(math.sin(float(width)))
+    cos_width = np.float32(math.cos(float(width)))
+    image = np.asarray([
+        np.float32(cos_width*partner[0] + sin_width*partner[1]),
+        np.float32(-sin_width*partner[0] + cos_width*partner[1]),
+    ], dtype=np.float32)
+    delta = owner - image
+    distance_sq = np.float32(delta[0]*delta[0] + delta[1]*delta[1])
+    return math.sqrt(float(distance_sq))
 
 
 def analyze(out_dir: Path, resolution: int) -> dict:
@@ -115,20 +181,84 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         brownian_velocity(float(size[0]), float(size[1])),
         brownian_velocity(1.0e-12, 1.0e-12),
     ]
+    dimension = int(meta["dimension"])
     velocity_i = cartesian_velocity(
         float(meta["position_x"][0]), float(meta["velocity_lx"][0]), float(meta["velocity_y"][0])
     )
     velocity_j = cartesian_velocity(
         float(meta["position_x"][1]), float(meta["velocity_lx"][1]), float(meta["velocity_y"][1])
     )
-    resolved = float(np.linalg.norm(velocity_i - velocity_j))
-    stokes_i, stokes_j = STOKES_0*size
-    turbulent_pair = turbulent_velocity(max(stokes_i, stokes_j), min(stokes_i, stokes_j), re_inv)
-    brownian_pair = 0.0 if code_unit else brownian_velocity(float(size[0]), float(size[1]))
-    pair_velocity = math.sqrt(resolved**2 + turbulent_pair**2 + brownian_pair**2)
+    resolved, pair_velocity = local_pair_velocity(
+        velocity_i, velocity_j, float(size[0]), float(size[1]), 1.0, 0.0, code_unit
+    )
     cross_section = math.pi*(size[0] + size[1])**2/4.0
     overlap_depth = math.sqrt(2.0*math.pi*(ASPR_0**2 + ASPR_0**2))
-    custom_rate = number[1]*pair_velocity*cross_section/overlap_depth
+    rate_scale = 1.0/overlap_depth if dimension == 2 else 1.0
+    custom_rate = number[1]*pair_velocity*cross_section*rate_scale
+
+    seam_offset = float(meta["seam_offset"])
+    width = float(meta["x_max"]) - float(meta["x_min"])
+    seam_z = float(meta["seam_z"])
+    seam_velocity = [float(value) for value in meta["seam_velocity"]]
+    seam_owner = cartesian_velocity(
+        float(meta["x_min"]) + seam_offset, *seam_velocity[:2], seam_z, seam_velocity[2]
+    )
+    seam_partner = cartesian_velocity(
+        float(meta["x_max"]) - seam_offset - width,
+        *seam_velocity[:2], seam_z, seam_velocity[2],
+    )
+    seam_partner_wrong = cartesian_velocity(
+        float(meta["x_max"]) - seam_offset,
+        *seam_velocity[:2], seam_z, seam_velocity[2],
+    )
+    interior_owner = cartesian_velocity(
+        +seam_offset, *seam_velocity[:2], seam_z, seam_velocity[2]
+    )
+    interior_partner = cartesian_velocity(
+        -seam_offset, *seam_velocity[:2], seam_z, seam_velocity[2]
+    )
+    seam_radius = math.sin(seam_z)
+    seam_height = math.cos(seam_z)
+    _, image_velocity = local_pair_velocity(
+        seam_owner, seam_partner, float(size[0]), float(size[1]),
+        seam_radius, seam_height, code_unit,
+    )
+    _, image_velocity_wrong = local_pair_velocity(
+        seam_owner, seam_partner_wrong, float(size[0]), float(size[1]),
+        seam_radius, seam_height, code_unit,
+    )
+    _, interior_velocity = local_pair_velocity(
+        interior_owner, interior_partner, float(size[0]), float(size[1]),
+        seam_radius, seam_height, code_unit,
+    )
+    image_rate = number[1]*image_velocity*cross_section*rate_scale
+    interior_rate = number[1]*interior_velocity*cross_section*rate_scale
+    neighbor = 3*1 + 1
+
+    cache_radius = cache_radius_reference(meta)
+    cache_measure = math.pi*cache_radius**2 if dimension == 2 \
+        else 4.0*math.pi*cache_radius**3/3.0
+    _, self_velocity_0 = local_pair_velocity(
+        seam_owner, seam_owner, float(size[0]), float(size[0]),
+        seam_radius, seam_height, code_unit,
+    )
+    _, self_velocity_1 = local_pair_velocity(
+        seam_partner_wrong, seam_partner_wrong, float(size[1]), float(size[1]),
+        seam_radius, seam_height, code_unit,
+    )
+    self_section_0 = math.pi*size[0]**2
+    self_section_1 = math.pi*size[1]**2
+    cache_numerator_0 = number[0]*self_velocity_0*self_section_0*rate_scale + image_rate
+    reverse_image_rate = number[0]*image_velocity*cross_section*rate_scale
+    cache_numerator_1 = (
+        number[1]*self_velocity_1*self_section_1*rate_scale + reverse_image_rate
+    )
+
+    # use the measured float-geometry volume in the rate oracle, then check that
+    # volume separately against the exact double-precision seam geometry
+    measured_measure = values[36:38]
+    cache_rate_0 = cache_numerator_0/measured_measure[0]
+    cache_rate_1 = cache_numerator_1/measured_measure[1]
 
     expected = np.asarray([
         re_inv,
@@ -137,9 +267,28 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         pair_velocity,
         custom_rate,
         resolved,
+        image_velocity,
+        interior_velocity,
+        image_velocity_wrong,
+        image_rate,
+        interior_rate,
+        neighbor,
+        1,
+        1,
+        cache_rate_0,
+        cache_rate_1,
     ])
-    error = values - expected
+    error = values[:32] - expected
     relative = np.abs(error)/np.maximum(np.abs(expected), 1.0e-300)
+    expected_measure = np.asarray([cache_measure, cache_measure])
+    measure_error = measured_measure - expected_measure
+    measure_relative = np.abs(measure_error)/expected_measure
+    cache_codes = [
+        {int(value) for value in values[32:34]},
+        {int(value) for value in values[34:36]},
+    ]
+    expected_codes = [{0, 4}, {2, 3}]
+    cache_images = cache_codes == expected_codes
 
     # the six interior points and five lower/upper pairs must exercise all production branch choices
     branch_ids = []
@@ -164,10 +313,16 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         branch_ids[:6] == [1, 2, 3, 4, 5, 6]
         and boundary_coverage
         and (code_unit or math.isclose(brownian[1], ASPR_0, rel_tol=0.0, abs_tol=0.0))
+        and values[24]/values[22] > 10.0
+        and values[22] < V_FRAG < values[24]
+        and np.array_equal(values[27:30], expected[27:30])
+        and cache_images
+        and np.all(measured_measure > 0.0)
     )
     passed = bool(
         activation and np.all(np.isfinite(values))
         and float(np.max(relative)) < 2.0e-11
+        and float(np.max(measure_relative)) < 2.0e-4
     )
     return {
         "case": str(meta["case"]),
@@ -179,9 +334,20 @@ def analyze(out_dir: Path, resolution: int) -> dict:
             "brownian_branch": not code_unit,
             "brownian_sound_speed_cap": None if code_unit else brownian[1] == ASPR_0,
             "custom_kernel": True,
-            "vertically_integrated_overlap": True,
+            "vertically_integrated_overlap": dimension == 2,
+            "periodic_image_velocity": bool(values[24]/values[22] > 10.0),
+            "fragmentation_branch_separated": bool(values[22] < V_FRAG < values[24]),
+            "periodic_image_code": bool(np.array_equal(values[27:30], expected[27:30])),
+            "search_cache_images": bool(cache_images),
+            "cached_periodic_image_rate": bool(
+                relative[30] < 2.0e-11 and relative[31] < 2.0e-11
+            ),
         },
         "maximum_relative_error": float(np.max(relative)),
-        "errors": {"physical_collision": norms(error)},
+        "maximum_measure_relative_error": float(np.max(measure_relative)),
+        "errors": {
+            "physical_collision": norms(error),
+            "knn_measure": norms(measure_error),
+        },
         "passed": passed,
     }

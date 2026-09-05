@@ -3,6 +3,7 @@
 
 #include <cuda_runtime.h> // float3 and host-device qualifiers
 
+#include <_collision.cuh>
 #include <kdtree/builder.h>
 #include <kdtree/index_heap.cuh>
 

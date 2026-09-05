@@ -152,6 +152,30 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 mass_flux[iz] *= (rhod[iz + 1] - rhod[iz]) + (rhod_work[iz + 1] - rhod_work[iz]);
             }
 
+            // bound total outward mass from each old polar donor using its spherical line measure
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                real flux_i = (iz > 0) ? mass_flux[iz - 1] : 0.0;
+                real out_rate = fmax(mass_flux[iz], 0.0) + fmax(-flux_i, 0.0);
+                real mass = fmax(rhod[iz], 0.0)*y*_get_vol_z(iz);
+                rhod_work[iz] = (out_rate > 0.0)
+                    ? fmin(1.0, POS_LIMIT*mass / (dt_sub*out_rate)) : 1.0;
+            }
+
+            for (int iz = 0; iz < N_Z - 1; iz++)
+            {
+                int iz_up = (mass_flux[iz] >= 0.0) ? iz : iz + 1;
+                mass_flux[iz] *= rhod_work[iz_up];
+            }
+
+            // reconstruct accepted density from the limited zero-flux face transfers
+            for (int iz = 0; iz < N_Z; iz++)
+            {
+                real flux_i = (iz > 0) ? mass_flux[iz - 1] : 0.0;
+                rhod_work[iz] = rhod[iz]
+                    - dt_sub*(mass_flux[iz] - flux_i) / (y*_get_vol_z(iz));
+            }
+
             // combine each face mass flux with the donor azimuthal primitive quantity
             for (int iz = 0; iz < N_Z; iz++)
             {

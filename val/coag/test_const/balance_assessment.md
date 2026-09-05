@@ -11,6 +11,12 @@ COL_BATH_EPS = 0.02
 
 This corresponds to model `1e+6n_2e+2k_2e-2b`.
 
+The completed 15-seed campaign confirms this recommendation. The selected
+model is on the wall-time--Wasserstein Pareto frontier and is the practical
+knee before the cost of tighter bath tolerances rises much faster than the
+accuracy improves. This is a judgment based on the measured trade-off, not a
+unique knee independent of the chosen accuracy metric or axis scaling.
+
 For a cheaper production-oriented setting, `N_K = 100` and
 `COL_BATH_EPS = 0.02` is a reasonable alternative. The constant-kernel result
 alone is not sufficient to establish defaults for the linear or physical
@@ -18,9 +24,11 @@ kernels.
 
 ## Data and scoring
 
-This assessment used the 25 completed models downloaded to
-`/Users/jiaqingbi/Scratch/gamedev/test_const`. All models used `N_P = 1e6`.
-Process wall times came from `wall_time_summary.json` and exclude compilation.
+The updated assessment uses
+`val/logs/coagulation/test_const/multiseed/summary.json`, containing 15
+independent seeds for each of the 25 models: 375 completed model runs in total.
+All models used `N_P = 1e6`. Reported scores and wall times are across-seed
+means with sample standard deviations. Process wall times exclude compilation.
 
 Only the final `particle_00009.dat` snapshot at dimensionless coagulation time
 `tau_coag = 1e8` was scored. Grain mass was calculated as
@@ -40,10 +48,11 @@ g   = 1 / (1 + tau_coag/2).
 
 The numerical and analytical probabilities were integrated over identical
 fixed bins in `log10(m/m0)`, with 200 ordinary bins spanning `[-0.5, 9.5]`
-and explicit underflow and overflow bins. The primary shape measures were
-total-variation distance and the one-dimensional Wasserstein distance in
-`log10(m/m0)`. Total particle-number error and mass conservation were evaluated
-separately.
+and explicit underflow and overflow bins. The campaign's declared primary
+score was mean final-snapshot total-variation distance. The one-dimensional
+Wasserstein distance in `log10(m/m0)` was retained as the scale-aware shape
+measure used for the trade-off plot. Total particle-number error and mass
+conservation were evaluated separately.
 
 ## Log-mass Wasserstein derivation
 
@@ -116,59 +125,64 @@ probabilities. Using the exact analytical CDF also prevents the score from
 depending on the plotting histogram width or on numerical quadrature of the
 displayed analytical curve.
 
-## Relevant comparison
+## Multiseed comparison
 
-| `N_K` | `COL_BATH_EPS` | Wall time | TV distance | W1 in log mass | Number error |
+| `N_K` | `COL_BATH_EPS` | Mean wall time | Mean TV distance | Mean W1 in log mass | Mean number error |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 50  | 0.02  | 43.6 s  | 0.00365 | 0.00224 dex | 3.55% |
-| 100 | 0.02  | 49.2 s  | 0.00285 | 0.00142 dex | 2.58% |
-| **200** | **0.02** | **72.3 s** | **0.00216** | **0.00098 dex** | **1.45%** |
-| 200 | 0.01  | 139.2 s | 0.00267 | 0.00092 dex | 1.20% |
-| 200 | 0.005 | 272.0 s | 0.00249 | 0.00066 dex | 1.28% |
-| 200 | 0.04  | 38.9 s  | 0.00334 | 0.00188 dex | 1.77% |
+| 50  | 0.02  | 43.6 +/- 0.1 s  | 0.003431 +/- 0.000536 | 0.002149 +/- 0.000229 dex | 3.305 +/- 0.119% |
+| 100 | 0.02  | 49.1 +/- 0.1 s  | 0.002932 +/- 0.000275 | 0.001522 +/- 0.000129 dex | 2.271 +/- 0.166% |
+| **200** | **0.02** | **72.4 +/- 0.1 s** | **0.002570 +/- 0.000209** | **0.001119 +/- 0.000134 dex** | **1.478 +/- 0.108%** |
+| 200 | 0.01  | 139.1 +/- 0.3 s | 0.002426 +/- 0.000286 | 0.000913 +/- 0.000166 dex | 1.387 +/- 0.168% |
+| 200 | 0.005 | 272.0 +/- 0.4 s | 0.002398 +/- 0.000356 | 0.000715 +/- 0.000197 dex | 1.255 +/- 0.180% |
+| 200 | 0.04  | 38.6 +/- 0.1 s  | 0.003283 +/- 0.000339 | 0.001738 +/- 0.000258 dex | 1.740 +/- 0.173% |
+| 200 | 0.08  | 21.4 +/- 0.1 s  | 0.004857 +/- 0.000425 | 0.002977 +/- 0.000214 dex | 2.268 +/- 0.123% |
 
 At `COL_BATH_EPS = 0.02`, increasing `N_K` from 100 to 200 costs 47% more
-wall time, improves the log-mass Wasserstein distance by 31%, and reduces the
-particle-number error by 44%. This remains a useful exchange for an
-accuracy-validation model.
+wall time, improves the mean log-mass Wasserstein distance by 27%, improves
+mean TV distance by 12%, and reduces the mean particle-number error by 35%.
+This remains a useful exchange for an accuracy-validation model.
 
 Tightening `COL_BATH_EPS` from 0.02 to 0.01 at `N_K = 200` increases wall time
-by 92%, while improving the Wasserstein distance by only 6%. The TV distance
-does not improve, and the particle-number error changes by only 0.25 percentage
-points. Tightening to 0.005 doubles the cost again without a reproducible
-overall improvement. In the other direction, relaxing from 0.02 to 0.04 nearly
-halves the runtime but approximately doubles the Wasserstein error.
+by 92%, while improving mean Wasserstein distance by 18%, mean TV distance by
+6%, and mean particle-number error by 6%. Tightening from 0.02 to 0.005 costs
+276% more for a 36% improvement in mean Wasserstein distance but only a 7%
+improvement in mean TV distance. The tighter tolerances therefore give a
+reproducible W1 improvement, but not enough to justify their cost as the
+default. In the other direction, relaxing from 0.02 to 0.04 saves 47% of the
+runtime while worsening mean Wasserstein distance by 55%, mean TV distance by
+28%, and mean particle-number error by 18%.
 
 The systematic particle-number error decreases with neighbor count:
 
-| `N_K` | Final number-error range across tolerances |
+| `N_K` | Range of mean final number error across tolerances |
 | ---: | ---: |
-| 10  | 8.6--9.0% |
-| 20  | 5.6--6.3% |
-| 50  | 3.2--3.8% |
-| 100 | 2.2--2.9% |
-| 200 | 1.2--2.2% |
+| 10  | 8.68--9.10% |
+| 20  | 5.72--6.26% |
+| 50  | 3.16--3.95% |
+| 100 | 2.02--2.94% |
+| 200 | 1.25--2.27% |
 
 The signed error is negative: the models retain fewer physical grains than the
 analytical solution and therefore coagulate slightly too quickly.
 
 ## Sampling floor and limits
 
-The lowest measured TV score occurred at `N_K = 100` and
-`COL_BATH_EPS = 0.005`, but this does not establish that model as the most
-accurate. A 10,000-draw multinomial calculation for `N_P = 1e6` samples from
-the exact final distribution gave an approximate TV sampling-floor median of
-0.00230 and a 5th--95th percentile range of 0.00185--0.00282. The best measured
-TV scores therefore cannot be reliably ranked using one random realization.
-This sampling-floor estimate assumes independent samples; correlations in the
-KNN representative-particle system can change it.
+The former single-seed assessment estimated an approximate TV sampling-floor
+median of 0.00230 and a 5th--95th percentile range of 0.00185--0.00282 using a
+10,000-draw multinomial calculation for `N_P = 1e6`. The 15-seed campaign now
+measures the combined seed scatter directly. It confirms that the smallest TV
+differences among the strictest cases are modest compared with their
+realization scatter, whereas the systematic W1 and particle-number trends with
+`N_K` remain clear. The multinomial floor still assumes independent samples;
+correlations in the KNN representative-particle system can change it.
 
-All 25 models conserved mass to approximately `7e-15` relative error. Across
-the 225 controller records there were no persistent controller overshoots.
+Across all 375 runs, the maximum reported relative mass error was
+`5.44e-15`, and no model reported a persistent controller overshoot.
 
 The resulting campaign conclusion is:
 
 - use `N_K = 200`, `COL_BATH_EPS = 0.02` for constant-kernel accuracy tests;
 - use `N_K = 100`, `COL_BATH_EPS = 0.02` when lower cost is more important;
-- do not use `COL_BATH_EPS < 0.02` by default based on this single-seed result;
+- use `COL_BATH_EPS < 0.02` only when its smaller W1 is worth the
+  disproportionate runtime increase;
 - reassess the balance independently for the linear and physical kernels.

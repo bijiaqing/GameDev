@@ -78,6 +78,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         int idx_old_j = near_result.returnIndex(idx_neighbor);
+        int image_j = near_result.returnImage(idx_neighbor);
         if (idx_old_j < 0) continue;
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
@@ -89,7 +90,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0
+            idx_old_i, idx_old_j, image_j, lambda_0
         );
     }
 
@@ -163,8 +164,10 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
     {
         pair_rate[idx_neighbor] = 0.0;
         pair_dist_sq[idx_neighbor] = 0.0f;
-        int idx_old_j = work_idx_old[idx_neighbor];
-        if (idx_old_j < 0 || idx_old_j == INT_MAX) continue;
+        int neighbor = work_idx_old[idx_neighbor];
+        if (neighbor < 0 || neighbor == INT_MAX) continue;
+        int idx_old_j = _get_col_idx_old(neighbor);
+        int image_j = _get_col_image(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -175,7 +178,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0
+            idx_old_i, idx_old_j, image_j, lambda_0
         );
     }
     __syncthreads();
@@ -234,8 +237,10 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
     for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
     {
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
-        int idx_old_j = dev_col_neighbor[idx_cache];
-        if (idx_old_j < 0) continue;
+        int neighbor = dev_col_neighbor[idx_cache];
+        if (neighbor < 0) continue;
+        int idx_old_j = _get_col_idx_old(neighbor);
+        int image_j = _get_col_image(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -245,7 +250,7 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0
+            idx_old_i, idx_old_j, image_j, lambda_0
         );
     }
     dev_col_rate[idx_old_i] = col_rate_i / measure;
@@ -281,8 +286,10 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
     {
         pair_rate[idx_neighbor] = 0.0;
         std::size_t idx_cache = static_cast<std::size_t>(idx_old_i)*N_K + idx_neighbor;
-        int idx_old_j = dev_col_neighbor[idx_cache];
-        if (idx_old_j < 0) continue;
+        int neighbor = dev_col_neighbor[idx_cache];
+        if (neighbor < 0) continue;
+        int idx_old_j = _get_col_idx_old(neighbor);
+        int image_j = _get_col_image(neighbor);
         if (!_is_particle_active(
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
@@ -292,7 +299,7 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, lambda_0
+            idx_old_i, idx_old_j, image_j, lambda_0
         );
     }
     __syncthreads();

@@ -130,6 +130,33 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
+        // compute donor factors from all raw radial face transfers before scaling any face
+        for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
+        {
+            real flux_i = (iy > 0) ? temp_work[iy - 1] : 0.0;
+            real out_rate = fmax(temp_work[iy], 0.0) + fmax(-flux_i, 0.0);
+            real mass = fmax(rhod[iy], 0.0)*_get_vol_y(iy);
+            rhod_work[iy] = (out_rate > 0.0)
+                ? fmin(1.0, POS_LIMIT*mass / (dt_sub*out_rate)) : 1.0;
+        }
+        __syncthreads();
+
+        for (int iy = threadIdx.x; iy < N_Y - 1; iy += blockDim.x)
+        {
+            int iy_up = (temp_work[iy] >= 0.0) ? iy : iy + 1;
+            temp_work[iy] *= rhod_work[iy_up];
+        }
+        __syncthreads();
+
+        // accept density from the limited conservative divergence
+        for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
+        {
+            real flux_i = (iy > 0) ? temp_work[iy - 1] : 0.0;
+            rhod_work[iy] = rhod[iy]
+                - dt_sub*(temp_work[iy] - flux_i) / _get_vol_y(iy);
+        }
+        __syncthreads();
+
         // transport every momentum component with the same mass flux and its donor primitive
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {

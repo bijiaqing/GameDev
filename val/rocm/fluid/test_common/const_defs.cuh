@@ -41,6 +41,14 @@ const real R_0 = 1.0;
 constexpr int N_X = 4;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = VERIFY_RES;
+#elif defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Y)
+constexpr int N_X = 4;
+constexpr int N_Y = VERIFY_RES;
+constexpr int N_Z = 1;
+#elif defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Z)
+constexpr int N_X = 4;
+constexpr int N_Y = 4;
+constexpr int N_Z = VERIFY_RES;
 #elif defined(VERIFY_DIFFUSION_POSLIMIT)
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = 1;
@@ -109,6 +117,7 @@ constexpr real Z_MAX = 0.5*M_PI + 0.4;
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = 0.5*M_PI;
 #elif defined(VERIFY_Z_TRANSPORT) || defined(VERIFY_Z_OUTFLOW) \
+    || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Z)) \
     || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_DIFFUSION_SPH)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
@@ -176,13 +185,14 @@ const real T_BETA = 1.0;
 // negligible in every other direction while preserving the same production kernel interface
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION) \
     || defined(VERIFY_RING_DIFFUSION) \
-    || defined(VERIFY_DIFFUSION_POSLIMIT)
+    || (defined(VERIFY_DIFFUSION_POSLIMIT) && !defined(TEST_DIRECTION_Y) && !defined(TEST_DIRECTION_Z))
 const real SCHMIDT_X = 1.0;
 #else
 const real SCHMIDT_X = 1.0e300;
 #endif
 
-#if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
+#if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH) \
+    || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Y))
 const real SCHMIDT_Y = 1.0;
 #else
 const real SCHMIDT_Y = 1.0e300;
@@ -190,7 +200,8 @@ const real SCHMIDT_Y = 1.0e300;
 
 #ifdef VERIFY_STARTUP_3D
 const real SCHMIDT_Z = 2.0;
-#elif defined(VERIFY_Z_DIFFUSION)
+#elif defined(VERIFY_Z_DIFFUSION) \
+    || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Z))
 const real SCHMIDT_Z = 1.0;
 #else
 const real SCHMIDT_Z = 1.0e300;
