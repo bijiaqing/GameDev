@@ -30,8 +30,8 @@
   ],
   "models_per_replicate": 25,
   "output_policy": "particle and collision-chain files are deleted only after the model score is atomically recorded; variables.txt is retained; failed-model output is retained",
-  "replicates_completed": 15,
-  "replicates_expected": 15,
+  "replicates_completed": 10,
+  "replicates_expected": 10,
   "schema": 1,
   "scoring": {
     "analytic_mass_probability": "p_k = exp(-k*t)*(k*t)**(k-1)/k!",
@@ -4358,12 +4358,7 @@
       6,
       7,
       8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14
+      9
     ],
     "replicate_zero_matches_previous_position_1_collision_1_partner_2": true
   },

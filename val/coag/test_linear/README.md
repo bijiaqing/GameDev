@@ -159,17 +159,34 @@ Build one Ampere case with:
 make -C val/coag/test_linear MODEL=1e+6n_1e+1k_1e-2b GPU_TARGET=sm_80
 ```
 
-Run the independent five-seed campaign with:
+Run the independent 10-seed campaign with:
 
 ```sh
 python3 val/coag/test_linear/run_models.py
 ```
 
-The script builds all 25 models once and runs five deterministic replicates of
+The script builds all 25 models once and runs 10 deterministic replicates of
 the full grid sequentially. Replicate `r` uses initialization seed `r` and
 position and collision seeds `(2r+1, 2r+1)`. Compilation is excluded from the
 process wall times. The completed standalone seed-0 process times are retained
 in `wall_time.json`.
+
+To add replicates 5--9 to the existing replicates 0--4 on eight GPUs, submit:
+
+```sh
+sbatch val/coag/test_linear/job_submit_multiseed.sh
+```
+
+The Slurm array preserves the previous eight-way model partition and runs all
+five new seeds assigned to each model sequentially on its card. Each task
+writes independent checkpoints under
+`multiseed/jobs_005_009/job_<task>/`, so tasks do not share a manifest. After
+all eight tasks pass and the compact `seed_000.json` through `seed_004.json`
+are present, merge and summarize the 10 seeds with:
+
+```sh
+python3 val/coag/test_linear/run_multiseed.py --finalize
+```
 
 Executables and objects are written under `val/temp/coag/test_linear/`. The
 campaign writes its active model output under
@@ -188,7 +205,7 @@ val/coag/test_linear/multiseed/
 ```
 
 This directory contains `manifest.json`, `seed_000.json` through
-`seed_004.json`, and the final across-seed `summary.json`. Seed JSON files are
+`seed_009.json`, and the final across-seed `summary.json`. Seed JSON files are
 retained locally but ignored by Git; the manifest and summary remain
 trackable.
 

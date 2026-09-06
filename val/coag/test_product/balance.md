@@ -18,8 +18,8 @@ must not be generalized to a fixed local-neighbor or physical-kernel model.
 ## Data and scoring
 
 This updated assessment uses
-`val/coag/test_product/multiseed/summary.json`, containing 15
-independent seeds for each of the 25 models: 375 completed model runs in total.
+`val/coag/test_product/multiseed/summary.json`, containing 10
+independent seeds for each of the 25 models: 250 completed model runs in total.
 All models used `N_P = 1e6`. Reported scores and wall times are across-seed
 means with sample standard deviations. Process wall times exclude compilation.
 
@@ -90,14 +90,14 @@ At the selected `COL_BATH_EPS = 0.02`:
 
 | `N_K` | Mean wall time | Mean TV distance | Mean W1 in log mass | Mean `M_2` error |
 | ---: | ---: | ---: | ---: | ---: |
-| 10  | 62.4 +/- 0.8 s  | 0.001870 +/- 0.000282 | 0.001302 +/- 0.000591 dex | 1.399 +/- 0.611% |
-| 20  | 64.1 +/- 0.8 s  | 0.001869 +/- 0.000413 | 0.001170 +/- 0.000723 dex | 1.233 +/- 0.798% |
-| 50  | 69.9 +/- 1.3 s  | 0.002014 +/- 0.000482 | 0.001474 +/- 0.000835 dex | 1.636 +/- 1.041% |
-| 100 | 81.5 +/- 1.4 s  | 0.001972 +/- 0.000298 | 0.001348 +/- 0.000859 dex | 1.413 +/- 1.013% |
-| 200 | 111.8 +/- 1.3 s | 0.001971 +/- 0.000482 | 0.001305 +/- 0.000832 dex | 1.372 +/- 0.956% |
+| 10  | 62.5 +/- 0.8 s  | 0.001779 +/- 0.000282 | 0.001252 +/- 0.000706 dex | 1.320 +/- 0.718% |
+| 20  | 64.0 +/- 1.0 s  | 0.001866 +/- 0.000390 | 0.001247 +/- 0.000822 dex | 1.341 +/- 0.899% |
+| 50  | 70.0 +/- 1.4 s  | 0.002028 +/- 0.000435 | 0.001540 +/- 0.000949 dex | 1.673 +/- 1.200% |
+| 100 | 81.7 +/- 1.3 s  | 0.002000 +/- 0.000307 | 0.001377 +/- 0.001007 dex | 1.354 +/- 1.045% |
+| 200 | 111.9 +/- 1.0 s | 0.002000 +/- 0.000540 | 0.001380 +/- 0.000984 dex | 1.367 +/- 1.036% |
 
-The mean TV scores for `N_K = 10` and 20 differ by only `1.14e-6`, or 0.06%,
-far less than their seed scatter. `N_K = 20` costs 2.8% more and has a 10%
+The mean TV scores for `N_K = 10` and 20 differ by `8.62e-5`, or 4.8%,
+far less than their seed scatter. `N_K = 20` costs 2.5% more and has a 0.4%
 lower mean W1, but the paired difference is not statistically resolved.
 Increasing `N_K` to 100 or 200 adds cost without a systematic improvement in
 TV, W1, or the second moment.
@@ -108,19 +108,19 @@ Using `N_K = 20` as a representative low-cost row:
 
 | `COL_BATH_EPS` | Mean wall time | Mean TV distance | Mean W1 in log mass | Mean `M_2` error |
 | ---: | ---: | ---: | ---: | ---: |
-| 0.005 | 258.5 +/- 3.9 s | 0.001775 +/- 0.000403 | 0.000807 +/- 0.000410 dex | 0.593 +/- 0.437% |
-| 0.01  | 129.3 +/- 2.0 s | 0.001823 +/- 0.000273 | 0.000821 +/- 0.000533 dex | 0.713 +/- 0.580% |
-| **0.02** | **64.1 +/- 0.8 s** | **0.001869 +/- 0.000413** | **0.001170 +/- 0.000723 dex** | **1.233 +/- 0.798%** |
-| 0.04  | 31.9 +/- 0.5 s  | 0.002419 +/- 0.000415 | 0.002297 +/- 0.000911 dex | 2.706 +/- 0.997% |
-| 0.08  | 15.8 +/- 0.2 s  | 0.004562 +/- 0.000365 | 0.005879 +/- 0.000783 dex | 6.421 +/- 0.722% |
+| 0.005 | 258.2 +/- 3.6 s | 0.001862 +/- 0.000417 | 0.000792 +/- 0.000422 dex | 0.537 +/- 0.418% |
+| 0.01  | 129.3 +/- 2.0 s | 0.001820 +/- 0.000271 | 0.000836 +/- 0.000624 dex | 0.782 +/- 0.674% |
+| **0.02** | **64.0 +/- 1.0 s** | **0.001866 +/- 0.000390** | **0.001247 +/- 0.000822 dex** | **1.341 +/- 0.899%** |
+| 0.04  | 31.9 +/- 0.6 s  | 0.002392 +/- 0.000493 | 0.002346 +/- 0.000984 dex | 2.839 +/- 1.117% |
+| 0.08  | 15.8 +/- 0.2 s  | 0.004533 +/- 0.000430 | 0.006035 +/- 0.000891 dex | 6.520 +/- 0.835% |
 
 Tightening `COL_BATH_EPS` from 0.04 to 0.02 doubles the runtime while improving
-mean TV by 23%, mean W1 by 49%, and mean second-moment error by 54%. Tightening
+mean TV by 22%, mean W1 by 47%, and mean second-moment error by 53%. Tightening
 from 0.02 to 0.01 doubles the runtime again, but improves the primary mean TV
-score by only 2.5%; its 30% W1 and 42% second-moment improvements make 0.01 a
+score by only 2.5%; its 33% W1 and 42% second-moment improvements make 0.01 a
 defensible tail-sensitive setting, but not the primary accuracy--cost knee.
-Tightening from 0.01 to 0.005 doubles the runtime once more without a resolved
-W1 or TV improvement.
+Tightening from 0.01 to 0.005 doubles the runtime once more, improves mean W1
+by only 5%, and slightly worsens mean TV; neither difference is resolved.
 
 ## Sampling floor and limits
 
@@ -136,8 +136,8 @@ between `N_K` values cannot be ranked reliably. The sampling-floor calculation
 assumes independent samples; correlations introduced by the
 representative-particle algorithm can modify it.
 
-Across all 375 runs, the maximum reported relative mass error was
-`5.33e-15`. Four runs recorded one recoverable activity overshoot and 80 runs
+Across all 250 runs, the maximum reported relative mass error was
+`5.33e-15`. Two runs recorded one recoverable activity overshoot and 55 runs
 recorded one recoverable distribution overshoot. No run recorded a persistent
 controller overshoot.
 

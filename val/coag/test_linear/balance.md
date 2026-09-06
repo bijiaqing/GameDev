@@ -16,7 +16,7 @@ neighbor count, so this is the best tested boundary. The campaign cannot
 exclude further improvement above `N_K = 200`.
 
 This recommendation is provisional because the quantitative tables below use
-only seed 0. They should be replaced by the five-seed statistics after the
+only seed 0. They should be replaced by the 10-seed statistics after the
 completed seed records are available locally.
 
 ## Data and scoring
@@ -134,9 +134,9 @@ either single-seed shape score. Tightening from 0.02 to 0.005 costs 361% more
 for a 7% W1 improvement and a 2% TV improvement. Within this realization,
 `COL_BATH_EPS = 0.02` is the practical tolerance knee.
 
-## Five-seed campaign
+## Ten-seed campaign
 
-The maintained runner executes replicate labels 0--4 sequentially. Because the
+The maintained runner executes replicate labels 0--9 sequentially. Because the
 linear test also has a random initial mass distribution, each replicate records
 three streams:
 
@@ -146,9 +146,13 @@ position seed       = 2*replicate + 1
 collision seed      = 2*replicate + 1
 ```
 
-The stream triples are `(0, 1, 1)` through `(4, 9, 9)`. The purpose is to
+The stream triples are `(0, 1, 1)` through `(9, 19, 19)`. The purpose is to
 determine whether the strong `N_K = 100` to 200 improvement and the weaker
 `COL_BATH_EPS = 0.02` knee persist across realizations.
+
+Replicates 5--9 can be added to the completed 0--4 campaign with the dedicated
+eight-task Slurm runner. It deliberately preserves the earlier model partition
+rather than retuning it from the observed 1--4 timings.
 
 The current conclusion is:
 
@@ -156,5 +160,5 @@ The current conclusion is:
   default supported jointly by the constant- and linear-kernel campaigns;
 - treat `N_K = 200` as a tested upper boundary rather than a demonstrated
   convergence knee for the linear kernel;
-- reassess the ranking from the five-seed summary before treating it as
+- reassess the ranking from the 10-seed summary before treating it as
   statistically established.

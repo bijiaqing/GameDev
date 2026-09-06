@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run and reduce the independent 15-seed constant-kernel campaign."""
+"""Run and reduce the independent 10-seed constant-kernel campaign."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ TEMP_DIR = PROJECT_ROOT/"val"/"temp"/"coag"/"test_const"
 OUTPUT_ROOT = PROJECT_ROOT/"out"/"test_const"/"multiseed"
 ARCHIVE_ROOT = PROJECT_ROOT/"out"/"test_const"/"seed_000"
 RESULT_ROOT = GROUP_DIR/"multiseed"
-SEED_COUNT = 15
+SEED_COUNT = 10
 
 SCORE_FIELDS = (
     "tv_distance", "js_distance", "w1_log10_mass_dex", "cdf_sup_distance",

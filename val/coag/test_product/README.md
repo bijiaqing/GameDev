@@ -150,7 +150,7 @@ Build one Ampere case with:
 make -C val/coag/test_product MODEL=1e+6n_1e+1k_1e-2b GPU_TARGET=sm_80
 ```
 
-Run the independent 15-seed campaign with:
+Run the independent 10-seed campaign with:
 
 ```sh
 python3 val/coag/test_product/run_models.py
@@ -159,7 +159,7 @@ python3 val/coag/test_product/run_models.py
 Executables and objects are written under `val/temp/coag/test_product/`.
 The campaign writes its active scientific output under
 `out/test_product/multiseed/<case>/`. The runner builds all 25 models once,
-then runs 15 deterministic replicates of the full grid. Replicate zero
+then runs 10 deterministic replicates of the full grid. Replicate zero
 uses the previous baseline streams `(position, collision, partner) = (1, 1,
 2)`; replicate `r` uses `(2r+1, 2r+1, 2r+2)`. Compilation is excluded from
 the process wall times. The completed standalone seed-0 process times are
@@ -183,7 +183,7 @@ Download the compact result directory:
 val/coag/test_product/multiseed/
 ```
 
-It contains `manifest.json`, `seed_000.json` through `seed_014.json`, and the
+It contains `manifest.json`, `seed_000.json` through `seed_009.json`, and the
 final across-seed `summary.json`. Seed JSON files are retained locally but
 ignored by Git; the manifest and summary remain trackable.
 

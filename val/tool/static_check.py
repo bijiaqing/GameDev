@@ -170,6 +170,7 @@ def check_python(errors: list[str]) -> None:
             shared_imports = [
                 position for marker in (
                     "from run_model import", "from run_chain import", "from score_model import",
+                    "import run_models",
                 )
                 if (position := text.find(marker)) >= 0
             ]

@@ -224,13 +224,13 @@ writes scientific output under `out/test_const/seed_000/<case>/`; `out/` is
 ignored by Git. This validation family is not registered with
 `val/tool/run_all.py`.
 
-Run the independent 15-seed campaign with:
+Run the independent 10-seed campaign with:
 
 ```sh
 python3 val/coag/test_const/run_models.py
 ```
 
-The script builds all 25 models once and then runs 15 deterministic replicates
+The script builds all 25 models once and then runs 10 deterministic replicates
 of the full grid. Replicate zero uses the previous baseline position and
 collision seeds `(1, 1)`; replicate `r` uses `(2r+1, 2r+1)`. Compilation is
 excluded from the process wall times. The completed standalone seed-0 process
@@ -255,6 +255,6 @@ Download the compact result directory:
 val/coag/test_const/multiseed/
 ```
 
-It contains `manifest.json`, `seed_000.json` through `seed_014.json`, and the
+It contains `manifest.json`, `seed_000.json` through `seed_009.json`, and the
 final across-seed `summary.json`. Seed JSON files are retained locally but
 ignored by Git; the manifest and summary remain trackable.
