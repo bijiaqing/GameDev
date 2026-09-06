@@ -174,7 +174,7 @@ in `wall_time.json`.
 To add replicates 5--9 to the existing replicates 0--4 on eight GPUs, submit:
 
 ```sh
-sbatch val/coag/test_linear/job_submit_multiseed.sh
+sbatch val/coag/test_linear/job_submit_multiseed_8gpu.sh
 ```
 
 The Slurm array preserves the previous eight-way model partition and runs all
@@ -186,6 +186,21 @@ are present, merge and summarize the 10 seeds with:
 
 ```sh
 python3 val/coag/test_linear/run_multiseed.py --finalize
+```
+
+The five-card, 36-hour alternative rebalances the 25 models from their measured
+seed-0 times and requires no seed-0--4 files while it runs:
+
+```sh
+sbatch val/coag/test_linear/job_submit_multiseed_5gpu.sh
+```
+
+Its independent checkpoints are under
+`multiseed/jobs_005_009_5gpu/job_<task>/`. Upload `seed_000.json` through
+`seed_004.json` only after the four tasks finish, then merge with:
+
+```sh
+python3 val/coag/test_linear/run_multiseed.py --cards 5 --finalize
 ```
 
 Executables and objects are written under `val/temp/coag/test_linear/`. The

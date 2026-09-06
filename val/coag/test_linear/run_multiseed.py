@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run linear-kernel replicates 5--9 in eight independent GPU jobs."""
+"""Run linear-kernel replicates 5--9 in five or eight independent GPU jobs."""
 
 from __future__ import annotations
 
@@ -17,10 +17,11 @@ import run_models as campaign
 
 
 REPLICATES = range(5, 10)
-JOBS_ROOT = campaign.RESULT_ROOT/"jobs_005_009"
+JOBS_ROOT_8 = campaign.RESULT_ROOT/"jobs_005_009"
+JOBS_ROOT_5 = campaign.RESULT_ROOT/"jobs_005_009_5gpu"
 
 # Preserve the seed-0 longest-processing-time partition used for replicates 1--4.
-JOB_MODELS = {
+JOB_MODELS_8 = {
     1: ["1e+6n_1e+1k_5e-3b"],
     2: ["1e+6n_2e+1k_1e-2b", "1e+6n_2e+2k_8e-2b"],
     3: ["1e+6n_2e+2k_5e-3b", "1e+6n_2e+1k_8e-2b", "1e+6n_1e+2k_8e-2b"],
@@ -29,6 +30,14 @@ JOB_MODELS = {
     6: ["1e+6n_2e+1k_5e-3b", "1e+6n_2e+2k_2e-2b", "1e+6n_2e+1k_2e-2b", "1e+6n_5e+1k_4e-2b"],
     7: ["1e+6n_5e+1k_5e-3b", "1e+6n_1e+2k_1e-2b", "1e+6n_5e+1k_2e-2b", "1e+6n_1e+2k_4e-2b"],
     8: ["1e+6n_5e+1k_1e-2b", "1e+6n_2e+2k_1e-2b", "1e+6n_1e+1k_8e-2b", "1e+6n_1e+1k_4e-2b"],
+}
+
+JOB_MODELS_5 = {
+    1: ["1e+6n_1e+1k_5e-3b", "1e+6n_1e+2k_1e-2b", "1e+6n_1e+2k_2e-2b", "1e+6n_1e+2k_8e-2b"],
+    2: ["1e+6n_2e+1k_1e-2b", "1e+6n_2e+2k_1e-2b", "1e+6n_2e+1k_2e-2b", "1e+6n_1e+1k_4e-2b", "1e+6n_2e+2k_8e-2b", "1e+6n_5e+1k_8e-2b"],
+    3: ["1e+6n_2e+2k_5e-3b", "1e+6n_5e+1k_1e-2b", "1e+6n_2e+2k_2e-2b", "1e+6n_2e+2k_4e-2b", "1e+6n_2e+1k_4e-2b"],
+    4: ["1e+6n_1e+1k_1e-2b", "1e+6n_5e+1k_5e-3b", "1e+6n_1e+1k_8e-2b", "1e+6n_2e+1k_8e-2b", "1e+6n_5e+1k_4e-2b"],
+    5: ["1e+6n_1e+2k_5e-3b", "1e+6n_2e+1k_5e-3b", "1e+6n_1e+1k_2e-2b", "1e+6n_5e+1k_2e-2b", "1e+6n_1e+2k_4e-2b"],
 }
 
 
@@ -43,15 +52,20 @@ def fingerprint(hashes: dict[str, str]) -> str:
     return hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
 
 
-def job_seed_path(job: int, replicate: int) -> Path:
-    return JOBS_ROOT/f"job_{job:02d}"/f"seed_{replicate:03d}.json"
+def strategy(cards: int) -> tuple[dict[int, list[str]], Path]:
+    return (JOB_MODELS_5, JOBS_ROOT_5) if cards == 5 else (JOB_MODELS_8, JOBS_ROOT_8)
 
 
-def run_job(job: int) -> None:
-    models = JOB_MODELS[job]
+def job_seed_path(jobs_root: Path, job: int, replicate: int) -> Path:
+    return jobs_root/f"job_{job:02d}"/f"seed_{replicate:03d}.json"
+
+
+def run_job(cards: int, job: int) -> None:
+    job_models, jobs_root = strategy(cards)
+    models = job_models[job]
     hashes = source_hashes()
     current_fingerprint = fingerprint(hashes)
-    job_root = JOBS_ROOT/f"job_{job:02d}"
+    job_root = jobs_root/f"job_{job:02d}"
     manifest_path = job_root/"manifest.json"
 
     if manifest_path.exists():
@@ -92,7 +106,7 @@ def run_job(job: int) -> None:
     completed = []
     for replicate in REPLICATES:
         try:
-            campaign.run_replicate(models, replicate, job_seed_path(job, replicate), current_fingerprint)
+            campaign.run_replicate(models, replicate, job_seed_path(jobs_root, job, replicate), current_fingerprint)
         except BaseException:
             manifest.update(status="failed", failed_replicate=replicate, finished_utc=campaign.utc_now())
             campaign.atomic_json(manifest_path, manifest)
@@ -122,9 +136,10 @@ def load_completed_seed(path: Path, models: list[str]) -> dict[str, object]:
     return seed
 
 
-def finalize() -> None:
+def finalize(cards: int) -> None:
+    job_models, jobs_root = strategy(cards)
     models = sorted(path.parent.name for path in campaign.MODELS_DIR.glob("*/flags.mk"))
-    partitioned = [model for job_models in JOB_MODELS.values() for model in job_models]
+    partitioned = [model for models_in_job in job_models.values() for model in models_in_job]
     if sorted(partitioned) != models or len(partitioned) != len(set(partitioned)):
         raise RuntimeError("JOB_MODELS must contain every model exactly once")
 
@@ -133,8 +148,8 @@ def finalize() -> None:
 
     hashes = source_hashes()
     current_fingerprint = fingerprint(hashes)
-    for job in JOB_MODELS:
-        manifest_path = JOBS_ROOT/f"job_{job:02d}"/"manifest.json"
+    for job in job_models:
+        manifest_path = jobs_root/f"job_{job:02d}"/"manifest.json"
         with manifest_path.open() as file:
             manifest = json.load(file)
         if manifest["status"] != "passed" or manifest["campaign_fingerprint"] != current_fingerprint:
@@ -142,8 +157,8 @@ def finalize() -> None:
 
     for replicate in REPLICATES:
         records = []
-        for job in JOB_MODELS:
-            seed = load_completed_seed(job_seed_path(job, replicate), sorted(JOB_MODELS[job]))
+        for job in job_models:
+            seed = load_completed_seed(job_seed_path(jobs_root, job, replicate), sorted(job_models[job]))
             if seed["campaign_fingerprint"] != current_fingerprint:
                 raise RuntimeError(f"job {job}, seed {replicate} used changed campaign sources")
             records.extend(seed["models"])
@@ -178,7 +193,7 @@ def finalize() -> None:
         "campaign_fingerprints_by_replicate": {
             str(replicate): seed["campaign_fingerprint"] for replicate, seed in enumerate(seeds)
         },
-        "jobs_005_009": {str(job): job_models for job, job_models in JOB_MODELS.items()},
+        jobs_root.name: {str(job): models_in_job for job, models_in_job in job_models.items()},
         "seed_policy": {
             "master_replicates": list(range(campaign.SEED_COUNT)),
             "mapping": "initialization = replicate; position = collision = 2*replicate + 1",
@@ -194,11 +209,15 @@ def finalize() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--cards", type=int, choices=(5, 8), default=8)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--job", type=int, choices=JOB_MODELS)
+    mode.add_argument("--job", type=int)
     mode.add_argument("--finalize", action="store_true")
     args = parser.parse_args()
-    finalize() if args.finalize else run_job(args.job)
+    job_models, _ = strategy(args.cards)
+    if args.job is not None and args.job not in job_models:
+        parser.error(f"--cards {args.cards} requires --job in {tuple(job_models)}")
+    finalize(args.cards) if args.finalize else run_job(args.cards, args.job)
 
 
 if __name__ == "__main__":
