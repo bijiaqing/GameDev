@@ -150,10 +150,6 @@ The stream triples are `(0, 1, 1)` through `(9, 19, 19)`. The purpose is to
 determine whether the strong `N_K = 100` to 200 improvement and the weaker
 `COL_BATH_EPS = 0.02` knee persist across realizations.
 
-Replicates 5--9 can be added to the completed 0--4 campaign with the dedicated
-eight-task Slurm runner. It deliberately preserves the earlier model partition
-rather than retuning it from the observed 1--4 timings.
-
 The current conclusion is:
 
 - use `N_K = 200`, `COL_BATH_EPS = 0.02` as the provisional production

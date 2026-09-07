@@ -139,102 +139,6 @@ def write_aggregate(models: list[str]) -> None:
     })
 
 
-def run_replicate(models: list[str], replicate: int, seed_path: Path, fingerprint: str) -> None:
-    streams = seed_streams(replicate)
-    if seed_path.exists():
-        with seed_path.open() as file:
-            seed_result = json.load(file)
-        if seed_result["campaign_fingerprint"] != fingerprint:
-            raise RuntimeError(f"refusing to mix changed campaign sources with {seed_path}")
-    else:
-        seed_result = {
-            "schema": 1,
-            "suite": "coag/test_linear",
-            "replicate": replicate,
-            "seeds": streams,
-            "campaign_fingerprint": fingerprint,
-            "status": "running",
-            "started_utc": utc_now(),
-            "finished_utc": None,
-            "models": [],
-        }
-    seed_result.update(status="running", finished_utc=None)
-    records = {record["model"]: record for record in seed_result["models"]}
-
-    for model in models:
-        if records.get(model, {}).get("status") == "passed":
-            if replicate > 0:
-                remove_raw_output(OUTPUT_ROOT/model)
-            continue
-
-        if replicate == 0 and records.get(model, {}).get("status") == "scored":
-            output_dir = OUTPUT_ROOT/model
-            archive_dir = ARCHIVE_ROOT/model
-            if archive_dir.exists() and output_dir.exists():
-                raise RuntimeError(f"both rolling and archived seed-0 output exist for {model}")
-            if not archive_dir.exists():
-                archive_seed_zero(output_dir, archive_dir)
-            records[model]["status"] = "passed"
-            atomic_json(seed_path, seed_result)
-            continue
-
-        executable = TEMP_DIR/"bin"/model/"gamedev"
-        output_dir = OUTPUT_ROOT/model
-        output_dir.mkdir(parents=True, exist_ok=True)
-        remove_raw_output(output_dir, remove_variables=True)
-
-        record: dict[str, object] = {
-            "model": model,
-            "status": "running",
-            "seeds": streams,
-            "started_utc": utc_now(),
-            "executable": str(executable),
-        }
-        records[model] = record
-        seed_result["models"] = [records[name] for name in models if name in records]
-        atomic_json(seed_path, seed_result)
-
-        print(f"\n=== seed {replicate:03d} run {model} ===", flush=True)
-        environment = os.environ.copy()
-        environment["COAG_INITIALIZATION_SEED"] = str(streams["initialization"])
-        environment["COAG_POSITION_SEED"] = str(streams["position"])
-        environment["COAG_COLLISION_SEED"] = str(streams["collision"])
-        start_ns = time.perf_counter_ns()
-        result = subprocess.run([str(executable)], cwd=PROJECT_ROOT, env=environment, check=False)
-        record["wall_seconds"] = (time.perf_counter_ns() - start_ns)/1.0e9
-        record["return_code"] = result.returncode
-        record["finished_utc"] = utc_now()
-
-        if result.returncode != 0:
-            record["status"] = "run_failed"
-            seed_result.update(status="failed", finished_utc=utc_now())
-            atomic_json(seed_path, seed_result)
-            raise SystemExit(result.returncode)
-
-        try:
-            scored = score_model(output_dir)
-            if scored["runtime_seeds"] != streams:
-                raise RuntimeError("saved runtime seeds do not match the requested streams")
-            record.update(scored)
-        except Exception:
-            record["status"] = "score_failed"
-            seed_result.update(status="failed", finished_utc=utc_now())
-            atomic_json(seed_path, seed_result)
-            raise
-
-        record["status"] = "scored" if replicate == 0 else "passed"
-        atomic_json(seed_path, seed_result)
-        if replicate == 0:
-            archive_seed_zero(output_dir, ARCHIVE_ROOT/model)
-            record["status"] = "passed"
-            atomic_json(seed_path, seed_result)
-        else:
-            remove_raw_output(output_dir)
-
-    seed_result.update(status="passed", finished_utc=utc_now())
-    atomic_json(seed_path, seed_result)
-
-
 def main() -> None:
     models = sorted(path.parent.name for path in MODELS_DIR.glob("*/flags.mk"))
     manifest_path = RESULT_ROOT/"manifest.json"
@@ -284,13 +188,102 @@ def main() -> None:
     atomic_json(manifest_path, manifest)
 
     for replicate in range(SEED_COUNT):
+        streams = seed_streams(replicate)
         seed_path = RESULT_ROOT/f"seed_{replicate:03d}.json"
-        try:
-            run_replicate(models, replicate, seed_path, fingerprint)
-        except BaseException:
-            manifest.update(status="failed", failed_replicate=replicate, finished_utc=utc_now())
-            atomic_json(manifest_path, manifest)
-            raise
+        if seed_path.exists():
+            with seed_path.open() as file:
+                seed_result = json.load(file)
+        else:
+            seed_result = {
+                "schema": 1,
+                "suite": "coag/test_linear",
+                "replicate": replicate,
+                "seeds": streams,
+                "campaign_fingerprint": fingerprint,
+                "status": "running",
+                "started_utc": utc_now(),
+                "finished_utc": None,
+                "models": [],
+            }
+        seed_result.update(status="running", finished_utc=None)
+        records = {record["model"]: record for record in seed_result["models"]}
+
+        for model in models:
+            if records.get(model, {}).get("status") == "passed":
+                if replicate > 0:
+                    remove_raw_output(OUTPUT_ROOT/model)
+                continue
+
+            if replicate == 0 and records.get(model, {}).get("status") == "scored":
+                output_dir = OUTPUT_ROOT/model
+                archive_dir = ARCHIVE_ROOT/model
+                if archive_dir.exists() and output_dir.exists():
+                    raise RuntimeError(f"both rolling and archived seed-0 output exist for {model}")
+                if not archive_dir.exists():
+                    archive_seed_zero(output_dir, archive_dir)
+                records[model]["status"] = "passed"
+                atomic_json(seed_path, seed_result)
+                continue
+
+            executable = TEMP_DIR/"bin"/model/"gamedev"
+            output_dir = OUTPUT_ROOT/model
+            output_dir.mkdir(parents=True, exist_ok=True)
+            remove_raw_output(output_dir, remove_variables=True)
+
+            record: dict[str, object] = {
+                "model": model,
+                "status": "running",
+                "seeds": streams,
+                "started_utc": utc_now(),
+                "executable": str(executable),
+            }
+            records[model] = record
+            seed_result["models"] = [records[name] for name in models if name in records]
+            atomic_json(seed_path, seed_result)
+
+            print(f"\n=== seed {replicate:03d} run {model} ===", flush=True)
+            environment = os.environ.copy()
+            environment["COAG_INITIALIZATION_SEED"] = str(streams["initialization"])
+            environment["COAG_POSITION_SEED"] = str(streams["position"])
+            environment["COAG_COLLISION_SEED"] = str(streams["collision"])
+            start_ns = time.perf_counter_ns()
+            result = subprocess.run([str(executable)], cwd=PROJECT_ROOT, env=environment, check=False)
+            record["wall_seconds"] = (time.perf_counter_ns() - start_ns)/1.0e9
+            record["return_code"] = result.returncode
+            record["finished_utc"] = utc_now()
+
+            if result.returncode != 0:
+                record["status"] = "run_failed"
+                seed_result.update(status="failed", finished_utc=utc_now())
+                atomic_json(seed_path, seed_result)
+                manifest.update(status="run_failed", failed_replicate=replicate, failed_model=model, finished_utc=utc_now())
+                atomic_json(manifest_path, manifest)
+                raise SystemExit(result.returncode)
+
+            try:
+                scored = score_model(output_dir)
+                if scored["runtime_seeds"] != streams:
+                    raise RuntimeError("saved runtime seeds do not match the requested streams")
+                record.update(scored)
+            except Exception:
+                record["status"] = "score_failed"
+                seed_result.update(status="failed", finished_utc=utc_now())
+                atomic_json(seed_path, seed_result)
+                manifest.update(status="score_failed", failed_replicate=replicate, failed_model=model, finished_utc=utc_now())
+                atomic_json(manifest_path, manifest)
+                raise
+
+            record["status"] = "scored" if replicate == 0 else "passed"
+            atomic_json(seed_path, seed_result)
+            if replicate == 0:
+                archive_seed_zero(output_dir, ARCHIVE_ROOT/model)
+                record["status"] = "passed"
+                atomic_json(seed_path, seed_result)
+            else:
+                remove_raw_output(output_dir)
+
+        seed_result.update(status="passed", finished_utc=utc_now())
+        atomic_json(seed_path, seed_result)
         manifest["replicates_completed"] = replicate + 1
         atomic_json(manifest_path, manifest)
 
