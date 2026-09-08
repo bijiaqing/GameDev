@@ -204,10 +204,9 @@ interval. There is no transport operator requiring two Strang-split half steps.
 
 The validation family is intentionally CUDA-specific because its runtime and supporting
 headers were copied from the CUDA production branch. A dry run resolves all seven
-shared source/header overrides, and repository static checks pass. Native CUDA
-runs through `particle_00009.dat` already exist for the nine `N_P = 1e6` cases
-in the former center-axis campaign. The sixteen newly added cross-combinations
-remain to be run on Vera.
+shared source/header overrides, and repository static checks pass. The complete
+25-model, 10-seed CUDA campaign has finished; its compact retained results are
+described below.
 
 An example build for an Ampere target is:
 

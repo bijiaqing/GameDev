@@ -1,30 +1,32 @@
 # Linear-kernel accuracy--cost balance
 
-## Provisional recommendation
+## Recommendation
 
-For the `N_P = 1e6` linear-kernel campaign, the best measured setting within
-the tested domain is
+For the `N_P = 1e6` linear-kernel campaign, the measured accuracy--cost balance is
 
 ```text
 N_K          = 200
-COL_BATH_EPS = 0.02
+COL_BATH_EPS = 0.04
 ```
 
-Unlike the constant-kernel result, `N_K = 200` is not an observed convergence
-knee. Accuracy continues to improve strongly through the largest tested
-neighbor count, so this is the best tested boundary. The campaign cannot
-exclude further improvement above `N_K = 200`.
+`N_K = 200` is not an observed convergence knee. Accuracy continues to improve
+strongly through the largest tested neighbor count, so it is the best tested
+boundary; the campaign cannot exclude further improvement above 200.
 
-This recommendation is provisional because the quantitative tables below use
-only seed 0. They should be replaced by the 10-seed statistics after the
-completed seed records are available locally.
+At fixed `N_K = 200`, the ten-seed shape errors at `COL_BATH_EPS = 0.005`
+through 0.04 are statistically indistinguishable. The 0.04 case is therefore
+the linear-only cost knee. The more conservative cross-kernel production
+default remains `N_K = 200`, `COL_BATH_EPS = 0.02`, supported by the constant-
+and product-kernel campaigns rather than by a resolved linear-only improvement
+from 0.04 to 0.02.
 
 ## Data and scoring
 
-This assessment used the 25 completed models downloaded to
-`/Users/jiaqingbi/Scratch/gamedev/test_linear`. All models used `N_P = 1e6`.
-All 25 runs reported `passed`. Their process times exclude compilation and sum
-to 29.46 GPU-hours for the complete seed-0 grid.
+This assessment uses `multiseed/summary.json`, containing 10 independent seeds
+for each of 25 models: 250 completed runs in total. All models used
+`N_P = 1e6`. Values below are across-seed means with sample standard deviations.
+Process times exclude compilation; the mean complete-grid cost is 25.87
+GPU-hours per seed.
 
 Only the final `particle_00004.dat` snapshot at dimensionless coagulation time
 `tau = 4` was scored. Grain mass was calculated as
@@ -76,17 +78,17 @@ explicit underflow and overflow mass.
 
 At `COL_BATH_EPS = 0.02`:
 
-| `N_K` | Wall time | W1 in log mass | TV distance |
+| `N_K` | Mean wall time | Mean W1 in log mass | Mean TV distance |
 | ---: | ---: | ---: | ---: |
-| 10  | 0.640 h | 0.11051 dex | 0.08172 |
-| 20  | 0.591 h | 0.05820 dex | 0.04609 |
-| 50  | 0.483 h | 0.02512 dex | 0.02063 |
-| 100 | 0.552 h | 0.01156 dex | 0.01079 |
-| **200** | **0.684 h** | **0.00632 dex** | **0.00603** |
+| 10  | 0.792 +/- 0.274 h | 0.11123 +/- 0.00166 dex | 0.08184 +/- 0.00096 |
+| 20  | 0.604 +/- 0.104 h | 0.05860 +/- 0.00128 dex | 0.04539 +/- 0.00085 |
+| 50  | 0.523 +/- 0.080 h | 0.02500 +/- 0.00082 dex | 0.02016 +/- 0.00047 |
+| 100 | 0.548 +/- 0.060 h | 0.01263 +/- 0.00152 dex | 0.01096 +/- 0.00087 |
+| **200** | **0.755 +/- 0.063 h** | **0.00682 +/- 0.00148 dex** | **0.00636 +/- 0.00052** |
 
-Increasing `N_K` from 100 to 200 costs 24% more wall time while improving W1
-by 45% and TV distance by 44%. This is a favorable exchange for an accuracy
-validation. The non-monotonic wall times below `N_K = 100` arise because the
+Increasing `N_K` from 100 to 200 costs 38% more wall time while improving mean
+W1 by 46% and mean TV distance by 42%. This is a favorable exchange for an
+accuracy validation. The non-monotonic wall times below `N_K = 100` arise because the
 frozen-bath count and continuation work also change with the sampled local
 partner reservoir; cost is not simply proportional to `N_K`.
 
@@ -111,50 +113,39 @@ not globally relabel the cached partners between baths. Each owner remains
 coupled to its fixed local reservoir, so temporal bath repetition does not
 average away the finite-`N_K` network error.
 
-The initial particle realization has `W1 = 0.00121 dex` relative to its exact
-mass distribution. The best final score, `0.00632 dex` at `N_K = 200`, remains
-well above that initial sampling discrepancy. The tested range therefore does
-not demonstrate `N_K` convergence.
+The final W1 falls by nearly a factor of two from `N_K = 100` to 200. The tested
+range therefore does not demonstrate `N_K` convergence.
 
 ## Bath-tolerance comparison
 
 At `N_K = 200`:
 
-| `COL_BATH_EPS` | Wall time | W1 in log mass | TV distance |
+| `COL_BATH_EPS` | Mean wall time | Mean W1 in log mass | Mean TV distance |
 | ---: | ---: | ---: | ---: |
-| 0.005 | 3.155 h | 0.00587 dex | 0.00591 |
-| 0.01  | 1.332 h | 0.00643 dex | 0.00624 |
-| **0.02** | **0.684 h** | **0.00632 dex** | **0.00603** |
-| 0.04  | 0.423 h | 0.00744 dex | 0.00643 |
-| 0.08  | 0.177 h | 0.00748 dex | 0.00697 |
+| 0.005 | 3.045 +/- 0.328 h | 0.00641 +/- 0.00112 dex | 0.00633 +/- 0.00061 |
+| 0.01  | 1.462 +/- 0.093 h | 0.00649 +/- 0.00159 dex | 0.00644 +/- 0.00064 |
+| 0.02  | 0.755 +/- 0.063 h | 0.00682 +/- 0.00148 dex | 0.00636 +/- 0.00052 |
+| **0.04** | **0.443 +/- 0.157 h** | **0.00647 +/- 0.00129 dex** | **0.00638 +/- 0.00069** |
+| 0.08  | 0.199 +/- 0.025 h | 0.00765 +/- 0.00139 dex | 0.00707 +/- 0.00052 |
 
-Tightening `COL_BATH_EPS` from 0.04 to 0.02 costs 62% more and improves W1 by
-15%. Tightening from 0.02 to 0.01 nearly doubles the runtime without improving
-either single-seed shape score. Tightening from 0.02 to 0.005 costs 361% more
-for a 7% W1 improvement and a 2% TV improvement. Within this realization,
-`COL_BATH_EPS = 0.02` is the practical tolerance knee.
+Tightening `COL_BATH_EPS` from 0.08 to 0.04 costs 122% more while improving
+mean W1 by 15% and mean TV by 9.8%. Tightening again from 0.04 to 0.02 costs
+71% more, changes mean TV by only 0.34%, and slightly worsens mean W1. Even the
+0.005 case improves both mean shape scores by less than 1% relative to 0.04
+while costing nearly seven times as much. These differences are smaller than
+the seed scatter. Paired 95% t-intervals for both TV and W1 differences between
+0.04 and either 0.02 or 0.005 include zero. This makes
+`COL_BATH_EPS = 0.04` the measured linear-only knee.
 
-## Ten-seed campaign
+Across all 250 runs, the maximum relative represented-mass error is
+`6.67e-15`, and no run records a persistent controller overshoot.
 
-The maintained runner executes replicate labels 0--9 sequentially. Because the
-linear test also has a random initial mass distribution, each replicate records
-three streams:
+The resulting conclusions are:
 
-```text
-initialization seed = replicate
-position seed       = 2*replicate + 1
-collision seed      = 2*replicate + 1
-```
-
-The stream triples are `(0, 1, 1)` through `(9, 19, 19)`. The purpose is to
-determine whether the strong `N_K = 100` to 200 improvement and the weaker
-`COL_BATH_EPS = 0.02` knee persist across realizations.
-
-The current conclusion is:
-
-- use `N_K = 200`, `COL_BATH_EPS = 0.02` as the provisional production
-  default supported jointly by the constant- and linear-kernel campaigns;
-- treat `N_K = 200` as a tested upper boundary rather than a demonstrated
-  convergence knee for the linear kernel;
-- reassess the ranking from the 10-seed summary before treating it as
-  statistically established.
+- use `N_K = 200` as the best tested boundary, not as a demonstrated
+  neighbor-count convergence knee;
+- use `COL_BATH_EPS = 0.04` for the measured linear-only accuracy--cost balance;
+- retain `COL_BATH_EPS = 0.02` as the conservative cross-kernel production
+  default;
+- do not infer convergence with representative-particle count because only
+  `N_P = 1e6` was tested.
