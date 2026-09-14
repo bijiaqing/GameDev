@@ -2340,10 +2340,13 @@ tree while making absorbed particles invisible to collision selection.
 ### 8.4 Adaptive Morton hierarchy
 
 The Morton builder maps Cartesian coordinates to integer cells, interleaves their bits into 64-bit
-keys, stable-sorts the records, and recursively refines cells above `MORTON_LEAF_TARGET`. Compact
-record and node arrays contain no pointers. The current hierarchy topology is assembled on the host
-after the GPU key sort; GPU-native construction remains a performance improvement rather than a
-correctness requirement.
+keys, stable-sorts the records, and refines cells above `MORTON_LEAF_TARGET` on the GPU. At each
+level, independent threads partition sorted-key ranges by child code; a device scan assigns child
+slots and a second kernel fills the next level. Compact record and node arrays contain no pointers.
+Keys and nodes stay on the device, including during node-buffer growth. The host reads scalar
+frontier counts to allocate storage and launch the next level, and the final leaf count. Benchmark
+leaf-occupancy diagnostics are copied to the host only when requested. Reported persistent storage
+includes retained node capacity, including allocation slack.
 
 For root origin $\boldsymbol o$, width $W$, and maximum level $L$, each Cartesian coordinate is
 quantized as
@@ -2993,7 +2996,7 @@ model itself rather than current test coverage.
   unconverged model-dependent controls.
 - The locally planar KNN boundary-cap correction is asymptotically consistent, not an exact
   curved-boundary intersection.
-- Multi-GPU Morton ownership, radial halo bins, GPU-native hierarchy construction, and a
+- Multi-GPU Morton ownership, radial halo bins, and a
   production-scale chain cache policy remain future work.
 - `--use_fast_math` changes division, square-root, transcendental, and subnormal behavior for
   performance. Statistical tolerances, exact-neighbor tie cases, and reproducibility claims must

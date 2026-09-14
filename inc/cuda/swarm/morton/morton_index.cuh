@@ -6,7 +6,7 @@
 #include <cmath>                          // fabsf, fmaxf, fminf
 #include <cstddef>                        // std::size_t
 #include <cstdint>                        // std::uint64_t
-#include <functional>                     // std::function
+#include <algorithm>                      // std::min, std::max
 #include <stdexcept>                      // std::invalid_argument, std::runtime_error
 #include <string>                         // std::string
 #include <vector>                         // std::vector
@@ -17,6 +17,11 @@
 #include <thrust/device_ptr.h>             // thrust::device_ptr
 #include <thrust/execution_policy.h>       // thrust::device
 #include <thrust/sort.h>                   // thrust::stable_sort_by_key
+#include <thrust/device_vector.h>          // device construction scratch space
+#include <thrust/scan.h>                   // child-slot offsets
+#include <thrust/count.h>                  // leaf count
+#include <thrust/copy.h>                   // diagnostic leaf compaction
+#include <thrust/iterator/transform_iterator.h> // diagnostic leaf sizes
 
 #include <morton/morton_types.cuh>
 
@@ -49,167 +54,219 @@ void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
     dev_point[idx].idx_old = dev_source_idx_old ? dev_source_idx_old[idx] : idx;
 }
 
-// own one adaptive Morton index and its device-resident point and node arrays
+// the input range shares all key bits above this child digit
+__host__ __device__ inline int morton_child_end(const std::uint64_t *keys, int begin, int end,
+                                    int shift, int code)
+{
+    while (begin < end)
+    {
+        int mid = begin + (end - begin)/2;
+        if (int((keys[mid] >> shift) & 7ULL) < code) begin = mid + 1;
+        else end = mid;
+    }
+    return begin;
+}
+
+static __device__ morton_node morton_cell(int begin, int count, float3 lower, float width)
+{
+    morton_node node{};
+    node.idx_begin = begin;
+    node.count = count;
+    node.lower = lower;
+    node.width = width;
+    for (int code = 0; code < 8; ++code) node.idx_child[code] = -1;
+    return node;
+}
+
+static __global__ void morton_origin(morton_node *nodes, int count, float3 lower, float width)
+{
+    nodes[0] = morton_cell(0, count, lower, width);
+}
+
+// independent sorted-key ranges need at most eight binary searches each
+static __global__ void morton_counts(morton_node *nodes, const std::uint64_t *keys,
+    int first, int count, int level, int max_level, int dim, int leaf_target, int *children)
+{
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx == 0) children[count] = 0;
+    if (idx >= count) return;
+    morton_node &node = nodes[first + idx];
+    int child_count = 0;
+    if (node.count > leaf_target && level < max_level)
+    {
+        int begin = node.idx_begin;
+        int end = begin + node.count;
+        int shift = 3*(max_level - level - 1);
+        for (int code = 1; code <= (1 << dim); ++code)
+        {
+            int next = morton_child_end(keys, begin, end, shift, code);
+            child_count += next > begin;
+            begin = next;
+        }
+    }
+    node.child_count = children[idx] = child_count;
+}
+
+// scan-assigned child slots preserve spatial child order without serial node numbering
+static __global__ void morton_expand(morton_node *nodes, const std::uint64_t *keys,
+    int first, int count, int next_first, const std::uint64_t *offsets, int level, int max_level, int dim)
+{
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= count) return;
+    morton_node parent = nodes[first + idx];
+    if (!parent.child_count) return;
+    int begin = parent.idx_begin;
+    int end = begin + parent.count;
+    int slot = next_first + int(offsets[idx]);
+    int shift = 3*(max_level - level - 1);
+    float width = 0.5f*parent.width;
+    for (int code = 0; code < (1 << dim); ++code)
+    {
+        int next = morton_child_end(keys, begin, end, shift, code + 1);
+        if (next > begin)
+        {
+            float3 lower = parent.lower;
+            if (code & 1) lower.x += width;
+            if (code & 2) lower.y += width;
+            if (dim == 3 && (code & 4)) lower.z += width;
+            nodes[slot] = morton_cell(begin, next - begin, lower, width);
+            nodes[first + idx].idx_child[code] = slot++;
+        }
+        begin = next;
+    }
+}
+
+struct morton_is_leaf
+{
+    __host__ __device__ bool operator()(const morton_node &node) const { return node.child_count == 0; }
+};
+struct morton_leaf_size
+{
+    __host__ __device__ int operator()(const morton_node &node) const { return node.child_count ? 0 : node.count; }
+};
+struct morton_nonzero
+{
+    __host__ __device__ bool operator()(int count) const { return count != 0; }
+};
+
 class morton_index
 {
 public:
-    morton_index () = default;
-    morton_index (const morton_index &) = delete;
-    morton_index &operator= (const morton_index &) = delete;
+    morton_index() = default;
+    morton_index(const morton_index &) = delete;
+    morton_index &operator=(const morton_index &) = delete;
+    ~morton_index() { release(); }
 
-    ~morton_index () { release(); }
-
-    void build (const float3 *dev_source_point, int point_count, float3 root_origin,
-        float root_width, int dim, int leaf_target, int max_level,
-        const int *dev_source_idx_old = nullptr)
+    void build(const float3 *source, int point_count, float3 origin, float width,
+        int dim, int leaf_target, int max_level, const int *source_ids = nullptr)
     {
         release();
-        if (point_count <= 0 || root_width <= 0.0f) throw std::invalid_argument("invalid adaptive Morton size");
+        if (point_count <= 0 || width <= 0.0f) throw std::invalid_argument("invalid adaptive Morton size");
         if (dim != 2 && dim != 3) throw std::invalid_argument("adaptive Morton dimension must be 2 or 3");
         if (leaf_target <= 0) throw std::invalid_argument("adaptive Morton leaf target must be positive");
         if (max_level <= 0 || max_level > 20) throw std::invalid_argument("adaptive Morton max level must be 1 through 20");
-
         point_count_ = point_count;
         dim_ = dim;
-        leaf_target_ = leaf_target;
         max_level_ = max_level;
-        root_origin_ = root_origin;
-        root_width_ = root_width;
-
-        std::uint64_t *dev_key = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_key, sizeof(std::uint64_t)*point_count_),
-            "allocate adaptive Morton keys");
-        _morton_cuda_check(cudaMalloc((void**)&dev_point_, sizeof(morton_point)*point_count_),
-            "allocate adaptive Morton points");
-
-        constexpr int thread_count = 256;
-        int block_count = (point_count_ + thread_count - 1) / thread_count;
-        morton_keygen <<< block_count, thread_count >>> (
-            dev_key, dev_point_, dev_source_point, dev_source_idx_old,
-            point_count_, root_origin_, root_width_, max_level_, dim_
-        );
+        thrust::device_vector<std::uint64_t> keys(point_count);
+        auto dev_key = thrust::raw_pointer_cast(keys.data());
+        _morton_cuda_check(cudaMalloc((void**)&dev_point_, sizeof(morton_point)*std::size_t(point_count)), "allocate Morton points");
+        morton_keygen<<<(point_count - 1)/256 + 1, 256>>>(dev_key, dev_point_, source, source_ids,
+            point_count, origin, width, max_level, dim);
         _morton_cuda_check(cudaGetLastError(), "launch morton_keygen");
+        thrust::stable_sort_by_key(thrust::device, keys.begin(), keys.end(), thrust::device_pointer_cast(dev_point_));
 
-        thrust::device_ptr<std::uint64_t> key_ptr(dev_key);
-        thrust::device_ptr<morton_point> point_ptr(dev_point_);
-        thrust::stable_sort_by_key(thrust::device, key_ptr, key_ptr + point_count_, point_ptr);
-        _morton_cuda_check(cudaDeviceSynchronize(), "sort adaptive Morton points");
-
-        std::vector<std::uint64_t> host_keys(point_count_);
-        _morton_cuda_check(cudaMemcpy(host_keys.data(), dev_key, sizeof(std::uint64_t)*point_count_,
-            cudaMemcpyDeviceToHost), "copy adaptive Morton keys");
-
-        std::vector<morton_node> host_nodes;
-        host_nodes.reserve(static_cast<std::size_t>(2*point_count_ / leaf_target_ + 64));
-        leaf_counts_.clear();
-
-        // split each sorted key range until its leaf occupancy or depth limit is reached
-        std::function<int(int, int, int, float3, float)> split =
-            [&] (int idx_begin, int idx_end, int level, float3 lower, float width) -> int
+        reserve_nodes(1);
+        morton_origin<<<1, 1>>>(dev_node_, point_count, origin, width);
+        _morton_cuda_check(cudaGetLastError(), "launch morton_origin");
+        node_count_ = 1;
+        int first = 0, count = 1;
+        thrust::device_vector<int> children;
+        thrust::device_vector<std::uint64_t> offsets;
+        for (int level = 0; level <= max_level && count; ++level)
         {
-            int idx_node = static_cast<int>(host_nodes.size());
-            morton_node node{};
-            node.lower = lower;
-            node.width = width;
-            node.idx_begin = idx_begin;
-            node.count = idx_end - idx_begin;
-            node.child_count = 0;
-            for (int idx_child = 0; idx_child < 8; idx_child++)
-            {
-                node.idx_child[idx_child] = -1;
-            }
-            host_nodes.push_back(node);
-
-            if (idx_end - idx_begin <= leaf_target_ || level == max_level_)
-            {
-                leaf_counts_.push_back(idx_end - idx_begin);
-                return idx_node;
-            }
-
-            constexpr int bits_per_level = 3;
-            int bit_shift = bits_per_level*(max_level_ - level - 1);
-            int child_count = (dim_ == 2) ? 4 : 8;
-            int idx_child_begin[9];
-            idx_child_begin[0] = idx_begin;
-            int idx_cursor = idx_begin;
-            for (int idx_child_code = 0; idx_child_code < child_count; idx_child_code++)
-            {
-                while (idx_cursor < idx_end
-                    && static_cast<int>((host_keys[idx_cursor] >> bit_shift) & 7ULL) == idx_child_code)
-                {
-                    idx_cursor++;
-                }
-                idx_child_begin[idx_child_code + 1] = idx_cursor;
-            }
-
-            float child_width = 0.5f*width;
-            for (int idx_child_code = 0; idx_child_code < child_count; idx_child_code++)
-            {
-                if (idx_child_begin[idx_child_code] == idx_child_begin[idx_child_code + 1]) continue;
-                float3 child_lower = lower;
-                if (idx_child_code & 1) child_lower.x += child_width;
-                if (idx_child_code & 2) child_lower.y += child_width;
-                if (dim_ == 3 && (idx_child_code & 4)) child_lower.z += child_width;
-                int idx_child = split(
-                    idx_child_begin[idx_child_code], idx_child_begin[idx_child_code + 1], level + 1,
-                    child_lower, child_width
-                );
-                host_nodes[idx_node].idx_child[idx_child_code] = idx_child;
-                host_nodes[idx_node].child_count++;
-            }
-            return idx_node;
-        };
-
-        split(0, point_count_, 0, root_origin_, root_width_);
-        node_count_ = static_cast<int>(host_nodes.size());
-        leaf_count_ = static_cast<int>(leaf_counts_.size());
-
-        _morton_cuda_check(cudaMalloc((void**)&dev_node_, sizeof(morton_node)*node_count_),
-            "allocate adaptive Morton nodes");
-        _morton_cuda_check(cudaMemcpy(dev_node_, host_nodes.data(), sizeof(morton_node)*node_count_,
-            cudaMemcpyHostToDevice), "copy adaptive Morton nodes");
-        _morton_cuda_check(cudaFree(dev_key), "release adaptive Morton keys");
+            children.resize(std::size_t(count) + 1);
+            offsets.resize(std::size_t(count) + 1);
+            auto counts_ptr = thrust::raw_pointer_cast(children.data());
+            auto offsets_ptr = thrust::raw_pointer_cast(offsets.data());
+            morton_counts<<<(count - 1)/256 + 1, 256>>>(dev_node_, dev_key, first, count,
+                level, max_level, dim, leaf_target, counts_ptr);
+            _morton_cuda_check(cudaGetLastError(), "launch morton_counts");
+            thrust::exclusive_scan(thrust::device, children.begin(), children.end(), offsets.begin(), std::uint64_t(0));
+            std::uint64_t next_count = 0;
+            // only allocation metadata crosses to the host; keys and nodes stay on-device
+            _morton_cuda_check(cudaMemcpy(&next_count, offsets_ptr + count, sizeof(next_count), cudaMemcpyDeviceToHost), "read Morton frontier count");
+            if (!next_count) break;
+            if (next_count > std::uint64_t(INT_MAX - node_count_)) throw std::overflow_error("Morton node index overflow");
+            reserve_nodes(node_count_ + int(next_count));
+            morton_expand<<<(count - 1)/256 + 1, 256>>>(dev_node_, dev_key, first, count,
+                node_count_, offsets_ptr, level, max_level, dim);
+            _morton_cuda_check(cudaGetLastError(), "launch morton_expand");
+            first = node_count_;
+            node_count_ += int(next_count);
+            count = int(next_count);
+        }
+        auto nodes = thrust::device_pointer_cast(dev_node_);
+        leaf_count_ = int(thrust::count_if(thrust::device, nodes, nodes + node_count_, morton_is_leaf{}));
+        _morton_cuda_check(cudaDeviceSynchronize(), "complete Morton hierarchy");
     }
 
-    void release () noexcept
+    void release() noexcept
     {
-        if (dev_point_) cudaFree(dev_point_);
-        if (dev_node_) cudaFree(dev_node_);
+        if (dev_point_) (void)cudaFree(dev_point_);
+        if (dev_node_) (void)cudaFree(dev_node_);
         dev_point_ = nullptr;
         dev_node_ = nullptr;
-        point_count_ = 0;
-        node_count_ = 0;
-        leaf_count_ = 0;
+        point_count_ = node_count_ = leaf_count_ = capacity_ = 0;
         leaf_counts_.clear();
     }
-
-    morton_view view () const
+    morton_view view() const { return {dev_point_, dev_node_, point_count_, node_count_, dim_, max_level_}; }
+    std::size_t persistent_bytes() const
     {
-        return {dev_point_, dev_node_, point_count_, node_count_, dim_, max_level_};
+        // report actual retained capacity, including allocation slack
+        return sizeof(morton_point)*std::size_t(point_count_) + sizeof(morton_node)*std::size_t(capacity_);
     }
-
-    std::size_t persistent_bytes () const
+    int node_count() const { return node_count_; }
+    int leaf_count() const { return leaf_count_; }
+    const std::vector<int> &leaf_counts() const
     {
-        return sizeof(morton_point)*static_cast<std::size_t>(point_count_)
-            + sizeof(morton_node)*static_cast<std::size_t>(node_count_);
+        // host occupancy statistics are requested by benchmarks, never by construction or queries
+        if (leaf_counts_.empty() && leaf_count_)
+        {
+            auto nodes = thrust::device_pointer_cast(dev_node_);
+            auto sizes = thrust::make_transform_iterator(nodes, morton_leaf_size{});
+            thrust::device_vector<int> compact(leaf_count_);
+            thrust::copy_if(thrust::device, sizes, sizes + node_count_, compact.begin(), morton_nonzero{});
+            leaf_counts_.resize(leaf_count_);
+            _morton_cuda_check(cudaMemcpy(leaf_counts_.data(), thrust::raw_pointer_cast(compact.data()),
+                sizeof(int)*std::size_t(leaf_count_), cudaMemcpyDeviceToHost), "read diagnostic Morton leaf sizes");
+        }
+        return leaf_counts_;
     }
-
-    int node_count () const { return node_count_; }
-    int leaf_count () const { return leaf_count_; }
-    const std::vector<int> &leaf_counts () const { return leaf_counts_; }
-
 private:
+    void reserve_nodes(int required)
+    {
+        if (required <= capacity_) return;
+        int capacity = int(std::max<long long>(required, std::min<long long>(INT_MAX, 2LL*capacity_)));
+        morton_node *nodes = nullptr;
+        _morton_cuda_check(cudaMalloc((void**)&nodes, sizeof(morton_node)*std::size_t(capacity)), "allocate Morton nodes");
+        if (dev_node_)
+        {
+            auto status = cudaMemcpy(nodes, dev_node_, sizeof(morton_node)*std::size_t(node_count_), cudaMemcpyDeviceToDevice);
+            if (status != cudaSuccess) { (void)cudaFree(nodes); _morton_cuda_check(status, "grow Morton nodes"); }
+            status = cudaFree(dev_node_);
+            dev_node_ = nodes;
+            capacity_ = capacity;
+            _morton_cuda_check(status, "release previous Morton nodes");
+        }
+        dev_node_ = nodes;
+        capacity_ = capacity;
+    }
     morton_point *dev_point_ = nullptr;
     morton_node *dev_node_ = nullptr;
-    int point_count_ = 0;
-    int node_count_ = 0;
-    int leaf_count_ = 0;
-    int dim_ = 0;
-    int leaf_target_ = 0;
-    int max_level_ = 0;
-    float3 root_origin_ = make_float3(0.0f, 0.0f, 0.0f);
-    float root_width_ = 0.0f;
-    std::vector<int> leaf_counts_;
+    int point_count_ = 0, node_count_ = 0, leaf_count_ = 0, capacity_ = 0;
+    int dim_ = 0, max_level_ = 0;
+    mutable std::vector<int> leaf_counts_;
 };
 
 // calculate a conservative point-to-node lower distance for branch pruning

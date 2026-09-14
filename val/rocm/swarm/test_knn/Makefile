@@ -21,7 +21,9 @@ EDGE_TARGET     := $(BUILD_DIR)/knn_edge_tests
 PERIODIC_TARGET := $(BUILD_DIR)/knn_periodic_tests
 WEDGE_TARGET    := $(BUILD_DIR)/knn_wedge_benchmark
 
-.PHONY: all edge periodic wedge suite clean
+TOPOLOGY_TARGET := $(BUILD_DIR)/knn_topology
+
+.PHONY: all edge periodic wedge topology suite clean
 
 all: $(TARGET)
 
@@ -31,6 +33,8 @@ periodic: $(PERIODIC_TARGET)
 
 wedge: $(WEDGE_TARGET)
 
+topology: $(TOPOLOGY_TARGET)
+
 suite: all edge periodic wedge
 
 $(CONFIG_STAMP):
@@ -39,6 +43,7 @@ $(CONFIG_STAMP):
 
 $(TARGET): $(TEST_DIR)/knn_benchmark.hip $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/kdtree/index_heap.cuh \
+	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_types.cuh $(TEST_DIR)/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
@@ -48,6 +53,7 @@ $(TARGET): $(TEST_DIR)/knn_benchmark.hip $(TEST_DIR)/knn_types.cuh \
 $(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.hip $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/kdtree/builder.h $(ROOT_DIR)/inc/rocm/swarm/kdtree/index_heap.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/kdtree/knn.h \
+	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_types.cuh $(TEST_DIR)/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
@@ -55,6 +61,7 @@ $(EDGE_TARGET): $(TEST_DIR)/knn_edge_tests.hip $(TEST_DIR)/knn_types.cuh \
 	@$(HIPCC) $(HIPFLAGS) $(INCLUDES) -o $@ $<
 
 $(PERIODIC_TARGET): $(TEST_DIR)/knn_periodic_tests.hip $(TEST_DIR)/periodic_query.cuh \
+	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_types.cuh $(TEST_DIR)/morton/morton_index.cuh \
 	$(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/periodic_query.cuh"
@@ -63,12 +70,21 @@ $(PERIODIC_TARGET): $(TEST_DIR)/knn_periodic_tests.hip $(TEST_DIR)/periodic_quer
 
 $(WEDGE_TARGET): $(TEST_DIR)/knn_wedge_benchmark.hip $(TEST_DIR)/knn_types.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/kdtree/index_heap.cuh \
+	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_types.cuh \
 	$(TEST_DIR)/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_ghost.cuh \
 	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_query.cuh $(CONFIG_STAMP)
 	@printf "%-22s %s\n" "Using external header" "$(TEST_DIR)/knn_types.cuh"
 	@printf "%-12s %s\n" "Compiling" "$@"
+	@$(HIPCC) $(HIPFLAGS) $(INCLUDES) -o $@ $<
+
+$(TOPOLOGY_TARGET): $(TEST_DIR)/knn_topology.hip \
+	$(ROOT_DIR)/val/comm/swarm/test_knn/topology.cuh \
+	$(ROOT_DIR)/val/comm/swarm/test_common/device_api.cuh \
+	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_index.cuh \
+	$(ROOT_DIR)/inc/rocm/swarm/morton/morton_types.cuh \
+	$(TEST_DIR)/morton/morton_index.cuh $(CONFIG_STAMP)
 	@$(HIPCC) $(HIPFLAGS) $(INCLUDES) -o $@ $<
 
 clean:

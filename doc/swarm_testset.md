@@ -369,6 +369,13 @@ query $\rightarrow$ cache $\rightarrow$ physical-rate handoff.
 All labeled adversarial checks and every matrix record must pass. Timing is recorded only as a
 diagnostic and is not an acceptance criterion.
 
+The optional `test_knn` Make target `topology` also compares the production GPU hierarchy with
+an independent serial oracle in 36 cases: 2D/3D, leaf targets 1/128, depths 1/5/20, mixed random,
+coincident and boundary points, all-coincident inputs, singleton roots, and repeated builds. It
+checks stable point ordering, every node range and bound, child links, and leaf statistics while
+allowing different node numbering. This structural regression is separate from the 48-case
+publication KNN matrix; it does not replace the neighbor or collision tests.
+
 ## 10. Production frozen-bath collision chain
 
 The four `test_colchain_*` cases use a validation runtime copy that retains the production

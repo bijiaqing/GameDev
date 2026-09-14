@@ -89,6 +89,41 @@ These commands preserve thread and swarm records and write the block fluid manif
 `val/logs/fluid/BACKEND/block/`. They do not create a `run_all` aggregate or record a source
 fingerprint; retain the source snapshot separately as required by the evidence contract below.
 
+## Morton integration check
+
+After changes to the Morton builder, run the optional structural oracle and the existing KNN,
+physical-collision, and collision-chain groups in each native GPU allocation. The topology target
+checks 36 cases against an independent CPU oracle. It is not an automatic static-check stage and
+does not change the publication matrix or its tolerances.
+
+CUDA:
+
+```bash
+make -f val/cuda/swarm/test_knn/Makefile topology ARCH=sm_80 &&
+mkdir -p val/logs/swarm/cuda/groups/knn &&
+val/temp/cuda/swarm/test_knn/knn_topology > val/logs/swarm/cuda/groups/knn/topology.json
+for group in knn collision chain; do
+    python3 val/cuda/swarm/test_common/run_suite.py --group "$group" --target sm_80 || break
+done
+```
+
+ROCm:
+
+```bash
+make -f val/rocm/swarm/test_knn/Makefile topology AMDGPU_TARGET=gfx942 &&
+mkdir -p val/logs/swarm/rocm/groups/knn &&
+val/temp/rocm/swarm/test_knn/knn_topology > val/logs/swarm/rocm/groups/knn/topology.json
+for group in knn collision chain; do
+    python3 val/rocm/swarm/test_common/run_suite.py --group "$group" --target gfx942 || break
+done
+```
+
+Return `topology.json` and the complete `groups/{knn,collision,chain}/` archives for each backend.
+CUDA and ROCm outputs have separate paths. Prototype results support the transplanted algorithm;
+qualification of the integrated production source still requires these native runs. Block-source
+provenance and separate native-build qualification remain pending until supported by their own
+evidence; these focused swarm runs do not settle them.
+
 ## Focused groups
 
 The backend-specific suite runners accept physical groups. Examples are
