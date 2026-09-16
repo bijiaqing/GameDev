@@ -89,8 +89,8 @@ All dimensional quantities in these models and their binary outputs are **CGS**.
 | Fragmentation threshold | 100 cm/s = 1 m/s |
 | Diffusion | D_R = D_Z = alpha c_s H, unit Schmidt numbers |
 | Collision neighbors | 200 slots, including the owner |
-| Duration | 200000 years |
-| Output interval | 1000 years, plus initial state |
+| Duration | Strong: 12500 years; weak: 25000 years |
+| Output interval | 100 years; strong: 125 intervals (126 snapshots); weak: 250 intervals (251 snapshots) |
 | Maximum dynamics/bath interval | 1 year; production controllers can shorten it |
 
 The code stores **diameter**: `INIT_SMIN=1e-4 cm` and `INIT_SMAX=2e-4 cm`.
@@ -103,12 +103,12 @@ physical v_phi, v_r, v_theta, grain diameter, and represented grain count.
 For analysis use radius a=par_size/2, cylindrical R=r sin(theta), Z=r cos(theta),
 and mass weights par_numr*pi*rho_s*par_size^3/6. Do not use unweighted particle
 counts as a physical grain-number distribution. Particle snapshots alone occupy
-about 12.6 GiB per completed model; RNG checkpoints and other outputs add to this.
+about 7.9 GiB for strong turbulence and 15.7 GiB for weak turbulence; RNG checkpoints and other outputs add to this.
 
 ## Initialization and local changes
 
 `common/const_defs.cuh` supplies the physical/numerical constants. The two model
-headers differ only in alpha. `common/swarm_host.cuh` imports the appropriate
+headers set alpha and the output count for each model. `common/swarm_host.cuh` imports the appropriate
 production backend header and overrides only the spatial sampling and its mass
 integral. Collision events use the production `_col_chain.cuh`; there is no
 model-local erosion or small-projectile grouping.
@@ -149,8 +149,8 @@ Important retained differences:
 - Density normalization uses the Gaussian midplane convention with exact spherical
   stratification. Its finite-domain integral is computed explicitly; it is not
   silently equated to an infinite Gaussian column mass.
-- Snapshots are on a 1000-year grid, not exactly the paper's 11133/23809-year times.
-  Use 11000/24000 years for nearby qualitative views, with actual times labeled.
+- Snapshots are on a 100-year grid, not exactly the paper's 11133/23809-year times.
+  Use outputs 111/238 (11100/23800 years) for nearby qualitative views, with actual times labeled.
 
 ## Reverting the erosion/grouping experiment
 
@@ -187,14 +187,14 @@ ROCm machine; no simulation output or runtime estimate is claimed.
 ### Runtime estimation
 
 No timings exist yet for these production-like models. The one-year maximum
-step requires at least 200000 dynamics steps over the full run; orbital,
+step requires at least 12500 (strong) or 25000 (weak) dynamics steps over the full run; orbital,
 settling and diffusion constraints can shorten them, and collisions can require
 additional bath intervals. The polar-acceleration limit near the inner domain
 can be about 0.3 year for material at large polar offsets. This is a local scale,
 not a prediction of the evolving global timestep.
 
 Estimate elapsed runtime from output timestamp differences on the actual GPU.
-Each output interval is 1000 simulated years; 200 times a measured interval gives
+Each output interval is 100 simulated years; 125 (strong) or 250 (weak) times a measured interval gives
 a provisional full-run estimate. Use several intervals and revise the estimate
 as grains grow and settle. Initialization/build time should be separated, and
 output I/O should be included consistently. Fixed-position synthetic-kernel

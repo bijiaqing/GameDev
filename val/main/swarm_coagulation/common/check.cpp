@@ -19,7 +19,8 @@ int _get_col_image_shift(int image) { return image==1 ? -1 : (image==2 ? 1 : 0);
 int main()
 {
     assert(N_X==1 && N_Z>1 && COAG_KERNEL==3 && N_P==1048576);
-    assert(SAVE_MAX*DT_OUT/YEAR==200000.0);
+    assert(SAVE_MAX==(ALPHA==1e-3 ? 125 : 250) && DT_OUT/YEAR==100.0);
+    assert(SAVE_MAX*DT_OUT/YEAR==(ALPHA==1e-3 ? 12500.0 : 25000.0));
     assert(INIT_SMIN/2==5e-5 && INIT_SMAX/2==1e-4 && V_FRAG==100.0);
     assert(std::abs(STOKES_0 - M_PI*RHO_0*(S_0/2)/(2*SIGMA_0))<1e-20);
     double cs = _get_cs(AU,ASPR_0);

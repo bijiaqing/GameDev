@@ -52,8 +52,8 @@ constexpr int MORTON_TPB = 256, MORTON_LEAF_TARGET = 128;
 constexpr int MORTON_MAX_LEVEL = 20, MORTON_WORK_SIZE = 1024;
 static_assert(3*N_K + MORTON_TPB <= MORTON_WORK_SIZE);
 
-constexpr int SAVE_MAX = 200, LIN_BASE = 1;
-constexpr real DT_OUT = 1000.0*YEAR, DT_MAX = YEAR, CFL_DYN = 0.45;
+constexpr int SAVE_MAX = COAG_OUTPUTS, LIN_BASE = 1;
+constexpr real DT_OUT = 100.0*YEAR, DT_MAX = YEAR, CFL_DYN = 0.45;
 struct swarm { real3 position; real3 velocity; real par_size; real par_numr; };
 static_assert(sizeof(swarm) == 8*sizeof(real));
 #ifdef COLLISION_KDTREE
