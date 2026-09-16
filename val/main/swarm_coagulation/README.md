@@ -155,8 +155,9 @@ Important retained differences:
 ## Reverting the erosion/grouping experiment
 
 The model-local mcdust fragmentation, erosion, and grouping experiment was removed.
-Query-local collision velocities and the production completed-particle early
-return remain enabled. When updating a server copy, also delete the obsolete
+Query-local collision velocities remain enabled. The experimental completed-particle
+early return was also removed, restoring the original continuation kernel entry.
+When updating a server copy, also delete the obsolete
 `common/_col_chain.cuh` and `common/collision_rules.hpp` files; an ordinary rsync
 without deletion will leave the old override active. Force a rebuild with
 `make -B` using the same model/backend/search arguments. Preserve existing outputs
