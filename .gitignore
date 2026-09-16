@@ -22,7 +22,10 @@ gamedev
 # generated validation artifacts
 /val/logs/
 /val/temp/
-/val/coag/**/seed_*.json
+/val/main/coagulation/**/seed_*.json
+/val/main/swarm_diffusion/outputs
+/val/main/swarm_drift/outputs
+/val/main/swarm_orbit/outputs
 
 # Python caches
 __pycache__/

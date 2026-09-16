@@ -296,6 +296,29 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     #endif // IMPORTGAS
 )
 {
+    #ifdef COLLISION_QUERY_LOCAL
+    // Benchmark closure: both sizes encounter the query particle's environment.
+    #if defined(IMPORTGAS) || defined(CODE_UNIT)
+    #error COLLISION_QUERY_LOCAL requires the benchmark's analytic CGS gas model
+    #endif
+    real y = dev_particle[idx_old_i].position.y;
+    real z = dev_particle[idx_old_i].position.z;
+    real R = _get_cyl_R(y, z), Z = _get_cyl_Z(y, z);
+    real h = _get_hg(R), omega = _get_omegaK(R);
+    real si = _get_stokes(R, Z, h, size_i);
+    real sj = _get_stokes(R, Z, h, size_j);
+    // mcdust uses vn = (dP/dR)/(2 rho Omega); use the analytic derivative.
+    real vn = -_get_eta(R, Z, h)*R*omega;
+    real fi = 1.0/(1.0 + si*si), fj = 1.0/(1.0 + sj*sj);
+    real dvr = 2.0*vn*(si*fi - sj*fj); // benchmark gas radial velocity is zero
+    real dvphi = vn*(fi - fj);
+    real dvz = Z*omega*(fmin(si, 0.5) - fmin(sj, 0.5));
+    // Effective column gives Re = sqrt(pi/2)*alpha*rho*cs*sigma/(Omega*m_mol).
+    real sigma_local = _get_sigma_g(R)*_get_gas_strat(R, Z, h);
+    real vt = _get_vrel_t(R, si, sj, h, sigma_local);
+    real vb = _get_vrel_b(R, size_i, size_j, h);
+    return sqrt(dvr*dvr + dvphi*dvphi + dvz*dvz + vt*vt + vb*vb);
+    #else
     real y_i = dev_particle[idx_old_i].position.y;
     real y_j = dev_particle[idx_old_j].position.y;
     
@@ -371,6 +394,7 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     vrel_sq += vrel_t*vrel_t;
 
     return sqrt(vrel_sq);
+    #endif // COLLISION_QUERY_LOCAL
 }
 
 // combine resolved and unresolved relative speeds for two frozen grain sizes

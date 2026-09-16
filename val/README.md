@@ -119,8 +119,11 @@ done
 ```
 
 Return `topology.json` and the complete `groups/{knn,collision,chain}/` archives for each backend.
-CUDA and ROCm outputs have separate paths. Prototype results support the transplanted algorithm;
-qualification of the integrated production source still requires these native runs. Block-source
+CUDA and ROCm outputs have separate paths. The integrated Morton builder passed these focused
+native checks on 2026-09-14 for CUDA sm_80 and ROCm gfx942: 36 topology cases, 48 KNN cases,
+three physical-collision models, and four collision-chain models with all ten variants on each
+backend. The downloaded JSON results contain no failed pass flags or missing referenced metrics
+or environment files. These results cover the tested source and configurations. Block-source
 provenance and separate native-build qualification remain pending until supported by their own
 evidence; these focused swarm runs do not settle them.
 

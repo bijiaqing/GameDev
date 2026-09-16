@@ -403,12 +403,12 @@ def check_metadata(errors: list[str]) -> None:
         relative = path.relative_to(PROJECT_ROOT)
         if (
             path.suffix == ".json"
-            and len(relative.parts) >= 4
-            and relative.parts[:2] == ("val", "coag")
-            and relative.parts[2] in {"test_const", "test_product", "test_linear"}
+            and len(relative.parts) >= 5
+            and relative.parts[:3] == ("val", "main", "coagulation")
+            and relative.parts[3] in {"test_const", "test_product", "test_linear"}
             and (
-                relative.parts[3] == "multiseed"
-                or relative.parts[3:] == ("wall_time.json",)
+                relative.parts[4] == "multiseed"
+                or relative.parts[4:] == ("wall_time.json",)
             )
         ):
             continue

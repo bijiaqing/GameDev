@@ -13,7 +13,7 @@ $N=32,64,128,256$, it contains 15 named entries: 14 analytical or statistical mo
 42 metric records, plus the standalone KNN matrix. The all-in-one campaign also runs four native
 collision-chain models. CUDA and ROCm use the same
 backend-neutral definitions and validators wherever their runtime APIs permit.
-The larger analytical coagulation campaigns under `val/coag/` are CUDA-only scientific campaigns
+The larger analytical coagulation campaigns under `val/main/coagulation/` are CUDA-only scientific campaigns
 and deliberately remain outside this routine matrix.
 
 The production equations and numerical methods are documented in
@@ -76,7 +76,7 @@ The constant material-density factor cancels in relative conservation errors.
 | collision physics | `test_colphys_code`, `test_colphys_cgs`, `test_colphys_3d` | turbulent, Brownian, resolved, vertically integrated, and periodic-image collision rates |
 | neighbor search | `test_knn` | exact K-nearest-neighbor results for KD-tree and Morton backends |
 | collision chain | `test_colchain_2d`, `test_colchain_frag_2d`, `test_colchain_wedge_2d`, `test_colchain_3d` | production frozen-bath evolution and controller behavior |
-| analytical coagulation | `coag/test_const`, `coag/test_linear`, `coag/test_product` | constant-, additive-, and product-kernel mass distributions against Smoluchowski solutions |
+| analytical coagulation | `main/coagulation/test_const`, `main/coagulation/test_linear`, `main/coagulation/test_product` | constant-, additive-, and product-kernel mass distributions against Smoluchowski solutions |
 
 The PR-drag and physical-collision cases use one fixed build because their test coordinate is a
 parameter index rather than a spatial resolution. `test_initial_3d` uses only the endpoint builds
@@ -407,7 +407,7 @@ campaign outputs are scientific results, not additional permanent validation rec
 
 ## 11. Analytical coagulation distributions
 
-The standalone campaigns in `val/coag/test_{const,linear,product}` evolve
+The standalone campaigns in `val/main/coagulation/test_{const,linear,product}` evolve
 `N_P = 10^6` fixed representative particles by coagulation alone. Each kernel
 uses the complete Cartesian grid
 
@@ -492,9 +492,9 @@ measured recommendations are:
 - product kernel: `COL_BATH_EPS = 0.02`; no general `N_K` conclusion is drawn.
 
 The full numerical assessments are in
-[`test_const/balance.md`](../val/coag/test_const/balance.md),
-[`test_linear/balance.md`](../val/coag/test_linear/balance.md), and
-[`test_product/balance.md`](../val/coag/test_product/balance.md). Their adjacent
+[`test_const/balance.md`](../val/main/coagulation/test_const/balance.md),
+[`test_linear/balance.md`](../val/main/coagulation/test_linear/balance.md), and
+[`test_product/balance.md`](../val/main/coagulation/test_product/balance.md). Their adjacent
 READMEs specify the initializers, schedules, runners, and output layout.
 
 ### 11.3 Model-local differences from the root code

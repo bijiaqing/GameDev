@@ -353,6 +353,11 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
 {
     int idx_old_i = blockIdx.x;
     if (idx_old_i >= N_P) return;
+    // Broadcast before initialization can change completion; return the whole block together.
+    __shared__ int already_complete;
+    if (threadIdx.x == 0) already_complete = dev_col_complete[idx_old_i];
+    __syncthreads();
+    if (already_complete) return;
 
     __shared__ real pair_rate[N_K];
     __shared__ real pair_jump1[N_K];

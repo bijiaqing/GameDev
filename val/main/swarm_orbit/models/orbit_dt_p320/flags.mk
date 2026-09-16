@@ -1,0 +1,3 @@
+DUST_REPR := swarm
+MODEL_PARENT := ../common
+GPU_FLAGS += -DTRANSPORT -DCODE_UNIT
