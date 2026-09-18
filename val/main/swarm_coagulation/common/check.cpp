@@ -16,8 +16,22 @@ index3 threadIdx{0}, blockIdx{0}, blockDim{64};
 #include "../../../../src/comm/swarm/particle_init.cu"
 int _get_col_image_shift(int image) { return image==1 ? -1 : (image==2 ? 1 : 0); }
 #include <collision_velocity_check.hpp>
+constexpr int CUSTOM_KERNEL=3;
+#include "query_environment.cuh"
+#include "erosion_outcome.cuh"
 int main()
 {
+    assert(COL_BATH_TPB==64 && N_K==200 && COL_BATH_EPS==.02);
+    assert(sticking_packet(1.e-5,false)==1.0); // retain narrow grouping
+    for(double R:{5.,10.,50.})for(double zr:{-.18,0.,.18}) {
+        swarm p{};p.position={0,R*AU*sqrt(1+zr*zr),atan2(1.,zr)};
+        auto e=cache_query_environment(p);
+        for(double si:{1.e-4,.001,.01,.1,1.,10.,100.})for(double sj:{1.e-4,.01,1.,100.}) {
+            double actual=cached_pair_velocity(e,si,sj);
+            double ref=_get_vrel_pair(&p,si,sj,0,0,0);
+            assert(std::abs(actual/ref-1)<3.e-13);
+        }
+    }
     assert(N_X==1 && N_Z>1 && COAG_KERNEL==3 && N_P==1048576);
     assert(SAVE_MAX==(ALPHA==1e-3 ? 125 : 250) && DT_OUT/YEAR==100.0);
     assert(SAVE_MAX*DT_OUT/YEAR==(ALPHA==1e-3 ? 12500.0 : 25000.0));

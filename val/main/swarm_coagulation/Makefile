@@ -1,6 +1,6 @@
 # Production build rules; model outputs and temporary products have separate roots.
 COAG_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-GPU_BACKEND ?= rocm
+GPU_BACKEND ?= cuda
 GPU_TARGET ?= $(if $(filter rocm,$(GPU_BACKEND)),gfx942,sm_80)
 CUDA_MATH ?= precise
 COLLISION_SEARCH ?= morton
