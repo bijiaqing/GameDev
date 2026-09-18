@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as tmp:
     (tmp/'swarm_kern.cuh').write_text('#include <const_defs.cuh>\n')
     # Compile the actual physical speed helpers and pair closure on the host.
     collision = (repo/'inc/comm/swarm/_collision.cuh').read_text()
-    physical = collision.split('#ifndef CODE_UNIT // physical units', 1)[1].split('// combine resolved and unresolved relative speeds', 1)[0]
+    physical = collision.split('#ifndef CODE_UNIT // physical units', 1)[1].split('// combine query-local relative speeds', 1)[0]
     (tmp/'collision_velocity_check.hpp').write_text('#ifndef CODE_UNIT\n' + physical)
     for model in ('strong_turbulence','weak_turbulence'):
         exe = tmp/model

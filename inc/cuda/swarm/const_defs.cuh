@@ -126,7 +126,7 @@ const real  CFL_COL     = 0.01;             // maximum collision propensity per 
 #endif // BERNOULLI
 
 #ifndef BERNOULLI
-const int   COL_BATH_TPB  = 256;            // cooperative threads assigned to one frozen-bath owner
+const int   COL_BATH_TPB  = 64;            // cooperative threads assigned to one frozen-bath owner
 const int   COL_EVENT_CAP = 32;              // accepted events permitted per representative and continuation launch
 const int   COL_BIN_X     = 8;               // azimuthal controller bins before reduced-dimension collapse
 const int   COL_BIN_Y     = 4;               // radial controller bins
@@ -134,7 +134,7 @@ const int   COL_BIN_Z     = 2;               // polar controller bins before red
 const int   COL_BIN_S     = 8;               // logarithmic grain-size controller bins
 const int   COL_BIN_MIN   = 64;              // target minimum representatives after adjacent size-bin merging
 const real  COL_BATH_MAX  = 0.05;            // maximum frozen-reservoir bath duration
-const real  COL_BATH_EPS  = 0.02;            // common activity and distribution-change tolerance
+const real  COL_BATH_EPS  = 0.02;            // log-size refresh and distribution-audit tolerance
 const real  COL_BATH_ALPHA = 1.0e-3;         // family-wise confidence-tail probability for realized audits
 #endif // FROZEN_BATH
 #endif // COLLISION

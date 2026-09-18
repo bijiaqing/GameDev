@@ -1,0 +1,37 @@
+{
+  "reference": "https://arxiv.org/pdf/2603.22550v2",
+  "frame": 110,
+  "size_grid_source": "https://github.com/astrolinn/dustComparison/blob/main/2Dsims/cuDisc/alpha1.e-3/grains.sizes",
+  "method": "Mass per size bin; spherical radial bins. Radial maps integrate both hemispheres. Vertical maps average both hemispheres and integrate rho dr, using per-particle M/r^2 divided by 4*pi*delta(sin(theta)). No smoothing.",
+  "normalization_limits": {
+    "Sigma": [
+      0.0001,
+      0.1
+    ],
+    "Sigma_r": [
+      1e-05,
+      1.0
+    ]
+  },
+  "reference_plotting_script_available": false,
+  "models": {
+    "kdtree": {
+      "path": "/Users/jiaqingbi/Scratch/gamedev/campaign_diskevol/strong_turbulence/rocm/kdtree/particle_00110.dat",
+      "sha256": "ee703cf605582420fbb487690f12e49aa31710294bc495251681f597f9db2d23",
+      "time_yr": 11000.0,
+      "active_particles": 1047677,
+      "plotted_particles": 1047677,
+      "plotted_mass_g": 8.90271818498954e+29,
+      "maximum_radius_cm": 0.20588071263400332
+    },
+    "morton": {
+      "path": "/Users/jiaqingbi/Scratch/gamedev/campaign_diskevol/strong_turbulence/rocm/morton/particle_00110.dat",
+      "sha256": "803fe7c61df28104d67b3d3190d5bc3deaafb2b91b6ef135840a3afa0f91dfdc",
+      "time_yr": 11000.0,
+      "active_particles": 1047654,
+      "plotted_particles": 1047654,
+      "plotted_mass_g": 8.902522740670103e+29,
+      "maximum_radius_cm": 0.20855519985039073
+    }
+  }
+}

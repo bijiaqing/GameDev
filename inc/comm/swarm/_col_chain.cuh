@@ -1,3 +1,4 @@
+// Active-owner dispatch, local refresh durations, compact continuations and cached rates.
 #ifndef SWARM_COL_CHAIN_CUH
 #define SWARM_COL_CHAIN_CUH
 
@@ -16,6 +17,227 @@
 
 #include <_col_cache.cuh>
 #include <_collision.cuh>
+struct query_environment {
+    real Z, omega, vn, radial, strat, cs, re_inv_sqrt, vg_sq;
+};
+#if !defined(IMPORTGAS) && !defined(CODE_UNIT) && !defined(CONST_ST)
+#define COL_QUERY_ENV_CACHE
+// Positions and gas are fixed throughout one collision half-operator.
+__device__ __forceinline__ query_environment cache_query_environment(const swarm &p) {
+    real R=_get_cyl_R(p.position.y,p.position.z);
+    real Z=_get_cyl_Z(p.position.y,p.position.z),h=_get_hg(R);
+    real omega=_get_omegaK(R),cs=_get_cs(R,h),alpha=_get_alpha(R,h);
+    real strat=_get_gas_strat(R,Z,h);
+    return {Z,omega,-_get_eta(R,Z,h)*R*omega,pow(R/R_0,IDX_P),strat,cs,
+        _get_re_inv_sqrt(R,alpha,_get_sigma_g(R)*strat),1.5*alpha*cs*cs};
+}
+__device__ __forceinline__ real cached_stokes(const query_environment &e,real size) {
+    real st=STOKES_0*(size/S_0); st/=e.radial; st/=e.strat; return st;
+}
+// Identical regime algebra to _get_vrel_t; only gas coefficients are precomputed.
+__device__ __forceinline__ real cached_turbulence(const query_environment &e,real stokes_i,real stokes_j) {
+    real re_inv_sqrt=e.re_inv_sqrt,vg_sq=e.vg_sq;
+    real stokes_large, stokes_small, eps;
+
+    if (stokes_i >= stokes_j)
+    {
+        stokes_large = stokes_i;
+        stokes_small = stokes_j;
+    }
+    else
+    {
+        stokes_large = stokes_j;
+        stokes_small = stokes_i;
+    }
+
+    eps = stokes_small / stokes_large;
+
+    // y_a = t_star / t_stop = 1.6 is the solution to y_star when St << 1
+    // y_s is an empirical polynomial fit to the exact solution of y_star (eq. 21d)
+    real y_a = 1.6;
+    real y_s = 1.6015125;
+
+    // taken from DustPy
+    y_s += -0.63119577*stokes_large;
+    y_s +=  0.32938936*stokes_large*stokes_large;
+    y_s += -0.29847604*stokes_large*stokes_large*stokes_large;
+
+    real vrel_sq = 0.0;
+
+    if (stokes_large < 0.2*re_inv_sqrt)
+    {
+        // regime 1: very small particles (t_stop_large << t_small) following eq. 27
+
+        vrel_sq = vg_sq*(stokes_large - stokes_small)*(stokes_large - stokes_small) / re_inv_sqrt;
+    }
+    else if (stokes_large < re_inv_sqrt / y_a)
+    {
+        // regime 2: transition near t_small boundary (t_stop_large ~ t_small) following eq. 26
+
+        vrel_sq = vg_sq*(stokes_large - stokes_small) / (stokes_large + stokes_small);
+        vrel_sq *= (stokes_large / (1.0 + re_inv_sqrt / stokes_large) - stokes_small / (1.0 + re_inv_sqrt / stokes_small));
+    }
+    else if (stokes_large < 5.0*re_inv_sqrt)
+    {
+        // regime 3: intermediate coupling (t_small < t_stop_large < 5*t_small)
+
+        real coeff = 0.0;
+        // coefficient of delta_VI^2  following eq. 17
+        coeff  = (stokes_large - stokes_small) / (stokes_large + stokes_small);
+        coeff *= (stokes_large / (1.0 + y_a) - stokes_small*stokes_small / (stokes_small + y_a*stokes_large));
+        // coefficient of delta_VII^2 following eq. 18
+        coeff += 2.0*(y_a*stokes_large - re_inv_sqrt) + stokes_large / (1.0 + y_a);
+        coeff -= stokes_large*stokes_large / (stokes_large + re_inv_sqrt);
+        coeff += stokes_small*stokes_small / (y_a*stokes_large + stokes_small);
+        coeff -= stokes_small*stokes_small / (stokes_small + re_inv_sqrt);
+
+        vrel_sq = vg_sq*coeff;
+    }
+    else if (stokes_large < 0.2)
+    {
+        // regime 4: fully intermediate regime (5t_small < t_stop_large < 0.2t_large) following eq. 28
+
+        vrel_sq = vg_sq*stokes_large;
+        vrel_sq *= (2.0*y_a - (1.0 + eps) + 2.0 / (1.0 + eps)*(1.0 / (1.0 + y_a) + eps*eps*eps / (y_a + eps)));
+    }
+    else if (stokes_large < 1.0)
+    {
+        // regime 5: transition near t_large boundary (0.2t_large < t_stop_large < t_large)
+        // following eq. 28, but uses the empirical y_s fit instead of the fixed y_a = 1.6
+
+        vrel_sq = vg_sq*stokes_large;
+        vrel_sq *= (2.0*y_s - (1.0 + eps) + 2.0 / (1.0 + eps)*(1.0 / (1.0 + y_s) + eps*eps*eps / (y_s + eps)));
+    }
+    else
+    {
+        // regime 6: heavy particles (t_stop_large >= t_large) following eq. 29
+
+        vrel_sq = vg_sq*(1.0 / (1.0 + stokes_large) + 1.0 / (1.0 + stokes_small));
+    }
+
+    if (vrel_sq < 0.0)
+    {
+        printf("ERROR: negative vrel_sq in _get_vrel_t\n");
+        assert(false);
+    }
+
+    return sqrt(vrel_sq);
+}
+
+
+__device__ __forceinline__ real cached_pair_velocity(const query_environment &e,real size_i,real size_j) {
+    real si=cached_stokes(e,size_i),sj=cached_stokes(e,size_j);
+    real fi=1.0/(1.0+si*si),fj=1.0/(1.0+sj*sj);
+    real dvr=2.0*e.vn*(si*fi-sj*fj),dvphi=e.vn*(fi-fj);
+    real dvz=e.Z*e.omega*(fmin(si,0.5)-fmin(sj,0.5));
+    real vt=cached_turbulence(e,si,sj);
+    real mi=_get_grain_mass(size_i),mj=_get_grain_mass(size_j);
+    real vb=fmin(sqrt(8.0*e.cs*e.cs*M_MOL*(mi+mj)/(M_PI*mi*mj)),e.cs);
+    return sqrt(dvr*dvr+dvphi*dvphi+dvz*dvz+vt*vt+vb*vb);
+}
+#endif // COL_QUERY_ENV_CACHE
+struct cached_rate_moments { real rate,first,second,maximum; };
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
+struct change_bound { double duration; int reason; };
+
+// A = mass-weighted mean absolute log-size jump rate.
+// B = mass-weighted second log-size jump moment rate (not variance of the mean).
+// Frozen-rate estimates: mean accumulated absolute change = h*A;
+// compound-Poisson fluctuation scale = sqrt(h*B). Bound each by epsilon.
+inline change_bound change_limit(double A, double B, double epsilon, double horizon) {
+    if (!std::isfinite(A) || A<0 || !std::isfinite(B) || B<0
+        || !std::isfinite(epsilon) || !(epsilon>0)
+        || !std::isfinite(horizon) || !(horizon>0))
+        throw std::runtime_error("invalid change-based refresh inputs");
+    change_bound result{horizon,0};
+    if (A>0 && epsilon/A<result.duration) result={epsilon/A,1};
+    if (B>0 && epsilon*epsilon/B<result.duration) result={epsilon*epsilon/B,2};
+    if (!(result.duration>0)) throw std::runtime_error("change-based timestep underflow");
+    return result;
+}
+constexpr int EVENT_CATEGORIES=7;
+struct event_work { unsigned long long count[EVENT_CATEGORIES]; real log_mass[EVENT_CATEGORIES]; };
+__host__ __device__ inline void record_event_work(event_work &work, int category, real log_mass) {
+    ++work.count[category];
+    work.log_mass[category]+=log_mass;
+}
+// Only tiny sticking projectiles; each packet adds at most 0.01% target mass.
+__host__ __device__ inline real sticking_packet(real q, bool fragmentation) {
+    return !fragmentation && q>0.0 && q<=1.e-6
+        ? fmax(1.0,floor(1.e-4/q)) : 1.0;
+}
+__host__ __device__ inline real sticking_mass_ratio(real size_i, real size_j) {
+    real ratio=size_j/size_i;
+    return ratio*ratio*ratio;
+}
+// ponytail: packets preserve frozen-state mean mass growth but inflate variance;
+// lower the 1e-4 packet bound if distribution comparisons show a bias.
+
+
+// Return sampled-rate / physical-rate and conditional absolute log-diameter moments.
+// Erosion is the superposition of remnant packets and ungrouped debris transitions.
+__host__ __device__ inline real erosion_outcome_moments(real si, real sj,
+    bool high_speed, real &mean, real &second, real &maximum) {
+    real q=sticking_mass_ratio(si,sj);
+    real G=sticking_packet(q,false);
+    if (!high_speed) {
+        mean=log1p(G*q)/3.0; second=mean*mean; maximum=mean;
+        return 1.0/G;
+    }
+    if (q<=0.1) {
+        real remnant=(1.0-q)/G, debris=q, factor=remnant+debris;
+        real jr=-log1p(-G*q)/3.0, jd=-log(q)/3.0;
+        mean=(remnant*jr+debris*jd)/factor;
+        second=(remnant*jr*jr+debris*jd*jd)/factor;
+        maximum=fmax(jr,jd);
+        return factor;
+    }
+    // Fragment diameter: [sqrt(s_min)+U*(sqrt(si)-sqrt(s_min))]^2.
+    // For L=log(si/s_min)/2, integrate -2 log(y) over y in [exp(-L),1].
+    real L=0.5*log(si/INIT_SMIN);
+    if (L<1.e-3) {
+        // Series avoid cancellation when the target is near the monomer floor.
+        mean=L-L*L/6.0+L*L*L*L/360.0;
+        second=L*L*(4.0/3.0-L/3.0+L*L/90.0+L*L*L/180.0);
+    } else {
+        real tail=exp(-L)/(-expm1(-L));
+        mean=2.0*(1.0-L*tail);
+        second=8.0-(4.0*L*L+8.0*L)*tail;
+    }
+    maximum=2.0*L;
+    return 1.0;
+}
+
+// Categories: four sticking q bins, fragmentation, remnant erosion, debris erosion.
+// u is used only for high-speed events; the caller supplies one independent draw.
+__host__ __device__ inline real sample_erosion_outcome(real si, real sj,
+    bool high_speed, real u, int &category, real &log_mass) {
+    real q=sticking_mass_ratio(si,sj);
+    real G=sticking_packet(q,false);
+    if (!high_speed) {
+        category=q<=1.e-6?0:q<=1.e-4?1:q<=1.e-2?2:3;
+        log_mass=log1p(G*q);
+        return cbrt(si*si*si+G*sj*sj*sj);
+    }
+    if (q<=0.1) {
+        real factor=(1.0-q)/G+q;
+        if (u<q/factor) {
+            category=6; log_mass=log(q);
+            return sj;
+        }
+        category=5; log_mass=log1p(-G*q);
+        return si*cbrt(1.0-G*q);
+    }
+    category=4;
+    real lower=sqrt(INIT_SMIN);
+    real root=lower+u*(sqrt(si)-lower);
+    real size=fmin(si,fmax(INIT_SMIN,root*root));
+    log_mass=3.0*log(size/si);
+    return size;
+}
 #ifdef COLLISION_MORTON
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
@@ -25,6 +247,8 @@ struct col_rate_bin
 {
     real mass;
     real weighted_rate;
+    real weighted_change;
+    real weighted_second;
     int owner_count;
     int invalid_count;
 };
@@ -72,6 +296,7 @@ struct col_bath_result
 
 struct col_bath_record
 {
+    int group_index = -1;
     int operator_index = 0;
     int bath_index = 0;
     int merged_bins = 0;
@@ -86,6 +311,7 @@ struct col_controller_summary
 {
     int operator_count = 0;
     int bath_count = 0;
+    int wave_count = 0;
     int continuation_launches = 0;
     int activity_overshoots = 0;
     int distribution_overshoots = 0;
@@ -145,7 +371,8 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
-    int idx_old_i, int idx_old_j, int image_j, real lambda_0, real &vrel)
+    int idx_old_i, int idx_old_j, int image_j, real lambda_0, real &vrel,
+    const query_environment *environment)
 {
     vrel = 0.0;
     real size_j = dev_size_old[idx_old_j];
@@ -165,11 +392,15 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     }
     else if constexpr (kernel == CUSTOM_KERNEL)
     {
-        vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
+        #ifdef COL_QUERY_ENV_CACHE
+        vrel = cached_pair_velocity(environment[idx_old_i],size_i,size_j);
+        #else
+        vrel = _get_vrel_pair(dev_particle,size_i,size_j,idx_old_i,idx_old_j,image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif // IMPORTGAS
+            #endif
         );
+        #endif
         real rate = numr_j*vrel*M_PI*(size_i + size_j)*(size_i + size_j) / 4.0;
         if constexpr (N_Z == 1)
         {
@@ -192,37 +423,14 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     }
 }
 
-__device__ __forceinline__
-void _get_col_jump (real size_i, real size_j, bool fragmentation,
-    real &mean, real &second, real &maximum)
-{
-    real merged_size = cbrt(size_i*size_i*size_i + size_j*size_j*size_j);
-    real log_growth = log(merged_size / size_i);
-    if (!fragmentation)
-    {
-        mean = log_growth;
-        second = log_growth*log_growth;
-        maximum = log_growth;
-        return;
-    }
-
-    real log_floor = log(INIT_SMIN / size_i);
-    real u_floor = fmin(fmax(sqrt(INIT_SMIN / merged_size), 0.0), 1.0);
-    real u_zero = fmin(fmax(sqrt(size_i / merged_size), u_floor), 1.0);
-    mean = fmax(log_growth - 2.0 + 4.0*u_zero - 2.0*u_floor, 0.0);
-    real second_at_one = log_growth*log_growth - 4.0*log_growth + 8.0;
-    real second_at_floor = u_floor*(log_floor*log_floor - 4.0*log_floor + 8.0);
-    second = fmax(u_floor*log_floor*log_floor + second_at_one - second_at_floor, 0.0);
-    maximum = fmax(log_growth, -log_floor);
-}
-
 // freeze the partner reservoir and reset continuation state for one bath
 __global__
-void col_bath_init (real *dev_size_old, real *dev_numr_old, real *dev_col_time,
+void col_bath_init (const int *owner_ids, int owner_count, real *dev_size_old, real *dev_numr_old, real *dev_col_time,
     int *dev_col_events, unsigned char *dev_col_complete, const swarm *dev_particle)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_P) return;
+    int slot = threadIdx.x + blockDim.x*blockIdx.x;
+    if (slot >= owner_count) return;
+    int idx = owner_ids[slot];
     dev_size_old[idx] = dev_particle[idx].par_size;
     dev_numr_old[idx] = dev_particle[idx].par_numr;
     dev_col_time[idx] = 0.0;
@@ -259,21 +467,24 @@ void col_space_bin (int *dev_col_spatial, const swarm *dev_particle)
 
 // calculate bath-start rates used by the pre-bath duration controller
 __global__
-void col_bath_rate (real *dev_col_rate, const swarm *dev_particle, const int *dev_col_neighbor,
+void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, real *change_rate, real *second_rate, const swarm *dev_particle, const int *dev_col_neighbor,
     const real *dev_col_measure, const unsigned char *dev_col_active,
     const real *dev_size_old, const real *dev_numr_old,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
-    real lambda_0)
+    real lambda_0, const query_environment *environment, cached_rate_moments *cached)
 {
-    int idx_old_i = blockIdx.x;
-    if (idx_old_i >= N_P) return;
+    int slot = blockIdx.x;
+    if (slot >= owner_count) return;
+    int idx_old_i = owner_ids[slot];
 
     __shared__ real rate_work[N_K];
+    __shared__ real change_work[N_K], second_work[N_K], maximum_work[N_K];
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {
         rate_work[idx_neighbor] = 0.0;
+        change_work[idx_neighbor] = second_work[idx_neighbor] = maximum_work[idx_neighbor] = 0.0;
         int neighbor = dev_col_neighbor[_get_col_offset(idx_old_i, idx_neighbor)];
         if (dev_col_active[idx_old_i] == 0 || neighbor < 0
             || !(dev_col_measure[idx_old_i] > 0.0)) continue;
@@ -288,58 +499,79 @@ void col_bath_rate (real *dev_col_rate, const swarm *dev_particle, const int *de
             #ifdef IMPORTGAS
             dev_gas_dens,
             #endif // IMPORTGAS
-            idx_old_i, idx_old_j, image_j, lambda_0, vrel
+            idx_old_i, idx_old_j, image_j, lambda_0, vrel, environment
         ) / dev_col_measure[idx_old_i];
-        (void)vrel;
+        real mean=0, second=0, maximum=0;
+        pair_rate *= erosion_outcome_moments(size_i,size_j,vrel>=V_FRAG,mean,second,maximum);
+        maximum_work[idx_neighbor]=pair_rate>0.0 ? maximum : 0.0;
+        change_work[idx_neighbor]=pair_rate*mean;
+        second_work[idx_neighbor]=pair_rate*second;
         rate_work[idx_neighbor] = pair_rate;
     }
     __syncthreads();
 
     if (threadIdx.x == 0)
     {
-        real rate = 0.0;
+        real rate = 0.0, change=0.0, second=0.0, maximum=0.0;
+        bool valid=true;
         for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+        {
+            valid=valid && isfinite(rate_work[idx_neighbor]) && rate_work[idx_neighbor]>=0.0;
+            maximum=fmax(maximum,maximum_work[idx_neighbor]);
             rate += rate_work[idx_neighbor];
+            change += change_work[idx_neighbor];
+            second += second_work[idx_neighbor];
+        }
+        cached[idx_old_i]={valid ? rate : -1.0,change,second,maximum};
         dev_col_rate[idx_old_i] = rate;
+        change_rate[idx_old_i]=change; second_rate[idx_old_i]=second;
     }
 }
 
 // count occupied size bins before merging statistically undersampled tails
 __global__
-void col_count_bin (int *dev_col_count, const swarm *dev_particle,
+void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, const swarm *dev_particle,
     const int *dev_col_spatial, const unsigned char *dev_col_active)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_P || dev_col_active[idx] == 0) return;
+    int slot = threadIdx.x + blockDim.x*blockIdx.x;
+    if (slot >= owner_count) return;
+    int idx = owner_ids[slot];
+    if (dev_col_active[idx] == 0) return;
     int idx_raw = dev_col_spatial[idx]*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size);
     atomicAdd(dev_col_count + idx_raw, 1);
 }
 
 // accumulate mass-weighted rates for the pre-bath duration bound
 __global__
-void col_rate_bins (col_rate_bin *dev_col_bin, const swarm *dev_particle,
-    const real *dev_col_rate, const int *dev_col_spatial, const int *dev_col_binmap,
+void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col_bin, const swarm *dev_particle,
+    const real *dev_col_rate, const real *change_rate, const real *second_rate, const int *dev_col_spatial, const int *dev_col_binmap,
     const unsigned char *dev_col_active)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_P || dev_col_active[idx] == 0) return;
+    int slot = threadIdx.x + blockDim.x*blockIdx.x;
+    if (slot >= owner_count) return;
+    int idx = owner_ids[slot];
+    if (dev_col_active[idx] == 0) return;
     int idx_raw = dev_col_spatial[idx]*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size);
     int idx_bin = dev_col_binmap[idx_raw];
     real weight = dev_particle[idx].par_numr*_get_grain_mass(dev_particle[idx].par_size);
     atomicAdd(&dev_col_bin[idx_bin].owner_count, 1);
     if (!isfinite(weight) || !(weight > 0.0)
-        || !isfinite(dev_col_rate[idx]) || dev_col_rate[idx] < 0.0)
+        || !isfinite(dev_col_rate[idx]) || dev_col_rate[idx] < 0.0
+        || !isfinite(change_rate[idx]) || change_rate[idx]<0
+        || !isfinite(second_rate[idx]) || second_rate[idx]<0)
     {
         atomicAdd(&dev_col_bin[idx_bin].invalid_count, 1);
         return;
     }
     atomicAdd(&dev_col_bin[idx_bin].mass, weight);
     atomicAdd(&dev_col_bin[idx_bin].weighted_rate, weight*dev_col_rate[idx]);
+    atomicAdd(&dev_col_bin[idx_bin].weighted_change,weight*change_rate[idx]);
+    atomicAdd(&dev_col_bin[idx_bin].weighted_second,weight*second_rate[idx]);
 }
 
 // evolve every owner against one frozen reservoir with bounded continuation
 __global__
-void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
+void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
     int *dev_col_unfinished, real *dev_col_time, int *dev_col_events,
     unsigned char *dev_col_complete, real *dev_col_hazard,
     real *dev_col_jump1_int, real *dev_col_jump2_int, real *dev_col_jumpmax_int,
@@ -349,10 +581,14 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
     #endif // IMPORTGAS
-    real lambda_0, real bath_end)
+    real lambda_0, const real *group_step, const int *spatial,
+    int *unfinished_ids, int *error_flag, event_work *work,
+    const query_environment *environment, const cached_rate_moments *cached)
 {
-    int idx_old_i = blockIdx.x;
-    if (idx_old_i >= N_P) return;
+    int slot = blockIdx.x;
+    if (slot >= owner_count) return;
+    int idx_old_i = owner_ids[slot];
+    real bath_end = group_step[spatial[idx_old_i]];
 
     __shared__ real pair_rate[N_K];
     __shared__ real pair_jump1[N_K];
@@ -372,6 +608,9 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
     #endif // GAMEDEV_CUDA
     __shared__ int event_count;
     __shared__ int accepted;
+#ifdef COL_DIAGNOSTICS
+    __shared__ event_work event_stats;
+#endif
     __shared__ bool keep_running;
 
     if (threadIdx.x == 0)
@@ -386,12 +625,40 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
         rngstate = dev_rngstate[idx_old_i];
         event_count = dev_col_events[idx_old_i];
         accepted = 0;
+#ifdef COL_DIAGNOSTICS
+        event_stats = work[idx_old_i];
+#endif
         keep_running = dev_col_complete[idx_old_i] == 0;
         if (dev_col_active[idx_old_i] == 0 || !(dev_col_measure[idx_old_i] > 0.0))
         {
             time_i = bath_end;
             dev_col_complete[idx_old_i] = 1;
             keep_running = false;
+        }
+    }
+    __syncthreads();
+
+    // Rates were computed after this wave's publication, with no intervening writes
+    // to reservoir arrays. Never use the start cache after an event/continuation.
+    if (threadIdx.x==0 && keep_running && time_i==0.0 && event_count==0) {
+        const auto c=cached[idx_old_i];
+        if (isfinite(c.rate) && c.rate>=0.0) {
+            if (c.rate==0.0) {
+                time_i=bath_end; dev_col_complete[idx_old_i]=1; keep_running=false;
+            } else {
+                curs before=rngstate;
+                real wait=-log(_get_col_uniform(&rngstate))/c.rate;
+                real remaining=bath_end-time_i;
+                if (isfinite(wait) && wait>0.0 && wait>=remaining) {
+                    hazard_i+=c.rate*remaining;
+                    jump1_i+=c.first*remaining; jump2_i+=c.second*remaining;
+                    jumpmax_i=fmax(jumpmax_i,c.maximum);
+                    time_i=bath_end; dev_col_complete[idx_old_i]=1; keep_running=false;
+                } else {
+                    // Normal path handles both events and invalid waits with its original draw.
+                    rngstate=before;
+                }
+            }
         }
     }
     __syncthreads();
@@ -421,11 +688,10 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
                     #ifdef IMPORTGAS
                     dev_gas_dens,
                     #endif // IMPORTGAS
-                    idx_old_i, idx_old_j, image_j, lambda_0, vrel
+                    idx_old_i, idx_old_j, image_j, lambda_0, vrel, environment
                 ) / dev_col_measure[idx_old_i];
-                bool fragmentation = vrel > V_FRAG;
                 real mean = 0.0, second = 0.0, maximum = 0.0;
-                _get_col_jump(size_i, size_j, fragmentation, mean, second, maximum);
+                pair_value *= erosion_outcome_moments(size_i,size_j,vrel>=V_FRAG,mean,second,maximum);
                 pair_rate[idx_neighbor] = pair_value;
                 pair_jump1[idx_neighbor] = pair_value*mean;
                 pair_jump2[idx_neighbor] = pair_value*second;
@@ -532,20 +798,25 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
                             real vrel = 0.0;
                             if constexpr (COAG_KERNEL == CUSTOM_KERNEL)
                             {
-                                vrel = _get_vrel_pair(
-                                    dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
+                                #ifdef COL_QUERY_ENV_CACHE
+                                vrel = cached_pair_velocity(environment[idx_old_i],size_i,size_j);
+                                #else
+                                vrel = _get_vrel_pair(dev_particle,size_i,size_j,idx_old_i,idx_old_j,image_j
                                     #ifdef IMPORTGAS
                                     , dev_gas_dens
-                                    #endif // IMPORTGAS
+                                    #endif
                                 );
+                                #endif
                             }
                             real mass_before = numr_i*size_i*size_i*size_i;
-                            real size_new = cbrt(size_i*size_i*size_i + size_j*size_j*size_j);
-                            if (vrel > V_FRAG)
-                            {
-                                real frag_sample = _get_col_uniform(&rngstate);
-                                size_new = fmax(INIT_SMIN, size_new*frag_sample*frag_sample);
-                            }
+                            bool high_speed=vrel>=V_FRAG;
+                            real sample=high_speed ? _get_col_uniform(&rngstate) : 0.0;
+                            int category; real log_mass;
+                            real size_new=sample_erosion_outcome(size_i,size_j,
+                                high_speed,sample,category,log_mass);
+#ifdef COL_DIAGNOSTICS
+                            record_event_work(event_stats,category,log_mass);
+#endif
                             numr_i = mass_before / (size_new*size_new*size_new);
                             size_i = size_new;
                             time_i = event_time;
@@ -571,6 +842,9 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
 
     if (threadIdx.x == 0)
     {
+#ifdef COL_DIAGNOSTICS
+        work[idx_old_i] = event_stats;
+#endif
         dev_particle[idx_old_i].par_size = size_i;
         dev_particle[idx_old_i].par_numr = numr_i;
         dev_rngstate[idx_old_i] = rngstate;
@@ -580,22 +854,27 @@ void col_chain_run (swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
         dev_col_jump1_int[idx_old_i] = jump1_i;
         dev_col_jump2_int[idx_old_i] = jump2_i;
         dev_col_jumpmax_int[idx_old_i] = jumpmax_i;
-        if (dev_col_complete[idx_old_i] == 0) atomicAdd(dev_col_unfinished, 1);
+        if (dev_col_error[idx_old_i]) atomicMax(error_flag, dev_col_error[idx_old_i]);
+        if (dev_col_complete[idx_old_i] == 0)
+            unfinished_ids[atomicAdd(dev_col_unfinished, 1)] = idx_old_i;
     }
 }
 
 // aggregate predicted moments and realized changes for post-bath validation
 __global__
-void col_audit_bin (col_audit_accum *dev_col_bin, const swarm *dev_particle,
+void col_audit_bin (const int *owner_ids, int owner_count, col_audit_accum *dev_col_bin, const swarm *dev_particle,
     const real *dev_size_old, const real *dev_numr_old, const real *dev_col_rate,
     const real *dev_col_hazard, const real *dev_col_jump1_int,
     const real *dev_col_jump2_int, const real *dev_col_jumpmax_int,
     const int *dev_col_events, const int *dev_col_spatial, const int *dev_col_binmap,
-    const unsigned char *dev_col_active, real duration)
+    const unsigned char *dev_col_active, const real *group_step)
 {
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-    if (idx >= N_P || dev_col_active[idx] == 0) return;
+    int slot = threadIdx.x + blockDim.x*blockIdx.x;
+    if (slot >= owner_count) return;
+    int idx = owner_ids[slot];
+    if (dev_col_active[idx] == 0) return;
     int idx_spatial = dev_col_spatial[idx];
+    real duration = group_step[idx_spatial];
     int idx_start_raw = idx_spatial*COL_BIN_S + _get_col_sizebin(dev_size_old[idx]);
     int idx_end_raw = idx_spatial*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size);
     int idx_start = dev_col_binmap[idx_start_raw];
@@ -686,23 +965,23 @@ int _build_col_binmap (const std::vector<int> &raw_count, std::vector<int> &raw_
     return merged_count;
 }
 
-// bound bath duration by the expected mass-weighted activity in every merged bin
+// Mean absolute log-size change and compound-Poisson variance constraints.
 inline
 real _choose_col_bath (const std::vector<col_rate_bin> &bin, int bin_count,
-    real remaining, real limit_scale)
+    real remaining, real limit_scale, int *binding=nullptr)
 {
-    real duration = std::min(remaining, COL_BATH_MAX);
-    real tolerance = COL_BATH_EPS*limit_scale;
-    for (int idx_bin = 0; idx_bin < bin_count; idx_bin++)
-    {
-        const col_rate_bin &value = bin[idx_bin];
-        if (value.invalid_count != 0)
-            throw std::runtime_error("collision bath controller returned invalid rate moments");
-        if (!(value.mass > 0.0) || !(value.weighted_rate > 0.0)) continue;
-        duration = std::min(duration, tolerance*value.mass / value.weighted_rate);
+    real duration=std::min(remaining,COL_BATH_MAX);
+    real tolerance=COL_BATH_EPS*limit_scale;
+    int reason=0;
+    for (int b=0;b<bin_count;++b) {
+        const auto &v=bin[b];
+        if (v.invalid_count) throw std::runtime_error("invalid change-based rate moments");
+        if (!(v.mass>0)) continue;
+        auto bound=change_limit(v.weighted_change/v.mass,v.weighted_second/v.mass,
+                                tolerance,duration);
+        if (bound.duration<duration) { duration=bound.duration; reason=bound.reason; }
     }
-    if (!(duration > 0.0) || !std::isfinite(duration))
-        throw std::runtime_error("collision bath controller selected an invalid duration");
+    if (binding) *binding=reason;
     return duration;
 }
 
@@ -755,8 +1034,10 @@ col_bath_result _finish_col_bath (const std::vector<col_audit_accum> &bin,
         result.max_events = std::max(result.max_events, events);
         result.max_g = std::max(result.max_g, growth);
         result.max_g_upper = std::max(result.max_g_upper, upper_g);
+        // Independent weight sums can put a fully touched fraction a few ulps
+        // above one. Keep the raw diagnostic, but enforce its physical ceiling.
         result.activity_overshoot = result.activity_overshoot
-            || touched > upper_f || events > upper_e;
+            || std::min(touched, real(1.0)) > upper_f || events > upper_e;
         result.distribution_overshoot = result.distribution_overshoot
             || growth > std::max(COL_BATH_EPS, upper_g);
     }
@@ -826,9 +1107,10 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
         ? summary.minimum_duration : 0.0;
     file << std::setprecision(17);
     file << "{\n"
-         << "  \"schema\": 1,\n"
+         << "  \"schema\": 2,\n"
          << "  \"operator_count\": " << summary.operator_count << ",\n"
          << "  \"bath_count\": " << summary.bath_count << ",\n"
+         << "  \"wave_count\": " << summary.wave_count << ",\n"
          << "  \"continuation_launches\": " << summary.continuation_launches << ",\n"
          << "  \"activity_overshoots\": " << summary.activity_overshoots << ",\n"
          << "  \"distribution_overshoots\": " << summary.distribution_overshoots << ",\n"
@@ -849,6 +1131,7 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
         const col_bath_record &record = summary.baths[idx];
         const col_bath_result &result = record.result;
         file << "    {\"operator\": " << record.operator_index
+             << ", \"group\": " << record.group_index
              << ", \"bath\": " << record.bath_index
              << ", \"merged_bins\": " << record.merged_bins
              << ", \"continuation_launches\": " << record.continuation_launches

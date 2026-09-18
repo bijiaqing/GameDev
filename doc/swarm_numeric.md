@@ -1932,28 +1932,30 @@ overlap factor and therefore must not be interpreted as the physical collision p
 shipped backend headers currently default to `COAG_KERNEL = 0`; a physical collision model must
 provide `COAG_KERNEL = 3` through its model-specific `const_defs.cuh`.
 
-The resolved relative speed is reconstructed from the complete Cartesian velocity difference.
-Brownian motion and the turbulent prescription of
-[Ormel & Cuzzi (2007)](https://arxiv.org/abs/astro-ph/0702303) are added in quadrature as unresolved
-contributions.
-Stokes numbers remain local inputs to drag and unresolved relative velocities, but not to the 2D
-vertical overlap closure. In an imported vertically integrated model, the turbulent Reynolds
-number uses the same external $\Sigma_g$ that determines the local Stokes number.
-
-For an imported 3D model, the local Stokes number uses the imported gas volume density, whereas
-the turbulent Reynolds closure retains the analytic $\Sigma_g(R)$ profile because the imported
-interface provides no vertically integrated gas column. This is a deliberate limitation of the
-current 3D imported-gas interface rather than a reconstruction of $\Sigma_g$ from the imported
-volume-density field.
-
-The speed entering the physical kernel is
+All physical collision paths use the lab query-local closure, on CUDA and ROCm,
+with either neighbor search and with analytic or imported gas. Both grain sizes use
+owner $i$'s position and gas environment; partner position, image orientation and
+instantaneous particle velocities do not enter the relative speed. Let
+$f_k=(1+\mathrm{St}_k^2)^{-1}$ and $v_n=-\eta R\Omega$ at the query location. Then
 
 $$
-\Delta v_{ij}^2
-=|\boldsymbol v_i-\boldsymbol v_j|^2
-+\Delta v_{B,ij}^2
-+\Delta v_{T,ij}^2.
+\Delta v_R=2v_n(\mathrm{St}_if_i-\mathrm{St}_jf_j),\qquad
+\Delta v_\phi=v_n(f_i-f_j),
 $$
+$$
+\Delta v_Z=Z\Omega[\min(\mathrm{St}_i,0.5)-\min(\mathrm{St}_j,0.5)],\qquad
+\Delta v_{ij}^2=\Delta v_R^2+\Delta v_\phi^2+\Delta v_Z^2
++\Delta v_{B,ij}^2+\Delta v_{T,ij}^2.
+$$
+
+The drift closure assumes zero gas radial velocity and uses the existing analytic
+pressure-gradient and temperature profiles, including with imported gas. Imported
+density is sampled at the query for both Stokes numbers. The turbulent Reynolds
+normalization uses the query surface density in 2D and the effective column
+$\sqrt{2\pi}\rho_g h_gR$ in 3D; analytic gas uses
+$\Sigma_g(R)$ times the local stratification factor. `CONST_ST` retains its prescribed
+size-to-Stokes relation. `COLLISION_QUERY_LOCAL` is no longer required to select this
+closure. Synthetic kernels 0–2 remain independent of physical relative velocities.
 
 Brownian motion is included only in physical-unit builds:
 
@@ -2117,10 +2119,24 @@ which preserves the mass represented by $i$ but is a model-specific one-fragment
 
 #### Default GPU continuous-time collision chain
 
+The root CUDA/ROCm implementation now uses the promoted local change-based
+`erosion_cached_rates` workflow. The Bernoulli reference above retains its own
+sticking/fragmentation law. For the default chain, let q=m_j/m_i and let G=1,
+except for q<=1e-6 where G=max(1,floor(1e-4/q)). Low-speed sticking uses rate
+lambda/G and target mass m_i+G*m_j. At speed >= V_FRAG and q<=0.1, erosion uses
+remnant rate lambda*(1-q)/G with mass m_i-G*m_j, and debris rate lambda*q with
+mass m_j. Other high-speed events draw diameter
+[sqrt(INIT_SMIN)+U*(sqrt(s_i)-sqrt(INIT_SMIN))]^2. The upper fragment mass is the
+old target mass. Each event preserves represented mass by changing multiplicity.
+These thresholds use each model's existing physical units and V_FRAG; root does
+not impose the publication suite's 100 cm/s threshold or disk parameters.
+
+
 When `COLLISION` is enabled without `BERNOULLI`, both GPU backends use the frozen-bath
 continuous-time chain. The spatial index and each owner's physical top-$K$ neighbor identities and
-KNN measure are fixed over one collision operator because positions do not change. At every shorter
-bath boundary, the partner sizes and represented numbers are refreshed from the current population.
+KNN measure are fixed over one collision operator because positions do not change. At a local group refresh, that group publishes its current partner sizes and represented
+numbers; other groups retain their last published values. Each owner chain reads immutable
+reservoir arrays until the current launch and audit finish.
 Within a bath, owner $i$ evolves by the Gillespie direct method against that immutable reservoir:
 
 $$
@@ -2141,25 +2157,25 @@ using the fastest particle to impose a global collision microstep. An event cap 
 launch but not the stochastic path: local time, event count, and RNG state persist across
 continuation launches, and the cap is checked before drawing another clock.
 
-The frozen-bath driver applies the same strict collision-clock progress requirement after every
-bath. Before constructing a search hierarchy, and before reusing an existing hierarchy in a new
-collision operator, both GPU backends also reject any particle with a nonfinite position, velocity,
-size, or represented grain number. These guards prevent invalid states from entering the spatial
-search and prevent a sub-ulp bath duration from creating a nonterminating host loop.
+The driver uses integer power-of-two endpoints to prevent floating-point scheduler
+stagnation. Geometry is checked for nonfinite particle state before construction/reuse.
+Owners are dispatched only when their spatial group is due; continuation queues contain
+only unfinished owners. Root defaults to 64 threads per owner and 32 events per launch.
 
-The bath duration is controlled in merged geometry-and-size bins. With represented mass
-$w_i=N_im_g(s_i)$, bin mass $M_q=\sum_{i\in q}w_i$, and bath-start rate $\lambda_i$, the candidate
-duration is
+For each merged size bin, define A and B as represented-mass-weighted first and
+second absolute log-diameter jump rates. The requested local duration is
 
-$$
-\tau_b=\min\left[
-\tau_{\rm remain},\tau_{\max},
-\min_q\frac{\epsilon s_{\rm safe}M_q}{\sum_{i\in q}w_i\lambda_i}
-\right].
-$$
+    h_requested = min(operator horizon, COL_BATH_MAX, epsilon/A, epsilon^2/B),
 
-This expression uses the linear upper bound
-$1-\exp(-\lambda_i\tau)\le\lambda_i\tau$ to keep the host-side duration solve compact. For the
+omitting terms whose denominators vanish. Here epsilon=COL_BATH_EPS*limit_scale.
+The scheduler rounds to power-of-two levels and limits interacting groups to a
+16:1 timestep ratio. Pending endpoints are immutable: neighbor compatibility may
+prevent immediate refinement to a newly requested duration. Actual/requested ratios
+and audit violations are recorded. This is a refresh control, not a guaranteed
+numerical-error bound. A passing audit permits direct timestep recovery, subject
+to neighbor compatibility and alignment.
+
+For the
 actual selected duration, the predicted mass-weighted touched fraction and event activity are
 
 $$
@@ -2173,7 +2189,8 @@ where $\lambda_i^{(b)}$ is the bath-start rate and $H_i$ is the path-integrated 
 below. The first-event probability depends only on the bath-start state because the owner cannot
 change before that event; the expected total activity must instead follow the complete owner path.
 
-The bath-start rate remains the inexpensive pre-control used to select the candidate duration. The
+Bath-start log-size jump moments select the requested duration; the total rate is retained
+for the first waiting time and touched-fraction prediction. The
 post-bath audit does not assume that this rate remains fixed after the owner changes size. Along the
 piecewise-constant owner path, the chain accumulates the exact predictable compensators
 
@@ -2240,11 +2257,36 @@ envelope, or when $D_{\rm bath}$ exceeds the configured tolerance.
 The next bath's safety factor is reduced after persistent activity or distribution overshoot and
 relaxed only after three quiet baths. Completed baths are not rejected and replayed, because
 conditioning acceptance on a random post-bath fluctuation would bias the stochastic process.
-Controller memory persists across split collision operators within one checkpoint interval. If two
-consecutive unacceptable baths occur at the minimum safety factor, the run aborts rather than
-continuing outside the controller contract. The full bath schedule and compact F/E/G/D summaries
-are written to `collision_chain_FRAME.json` at every output boundary; controller memory is then
-reset so restart files remain sufficient at that boundary.
+Controller memory persists across split collision operators within one checkpoint interval.
+Persistent overshoots at the minimum safety factor do not abort the run, matching the
+promoted lab workflow. Invalid particle states, rates and event-clock progress still
+produce errors. Evolution can therefore continue outside the requested audit tolerance.
+Controller memory resets at output boundaries so particle restart files remain sufficient.
+
+Production builds omit collision diagnostic files and event-category bookkeeping. The
+validation runtimes enable `COL_DIAGNOSTICS`: this retains the per-group schedule in
+schema-2 `collision_chain_FRAME.json` and interval timing/event statistics in
+`collision_local_*.jsonl`. The former uses existing controller audit transfers; the latter
+adds per-event memory traffic, a GPU reduction and a small device-to-host copy per collision
+operator. Disabling diagnostics removes these extra costs, history accumulation and file
+writing, but retains rate/audit transfers needed for timestep decisions and completion/error
+checks. Diagnostic event storage is 112 bytes per particle (double precision).
+With diagnostics enabled, `bath_count` counts group records, `wave_count` counts refresh
+waves and `continuation_launches` counts all chain launches.
+
+Collision-chain physics, grouping, diagnostics and coefficient-cache helpers are consolidated
+in `_col_chain.cuh`. `local_gpu.cuh` contains the scheduler and GPU workspace;
+`local_evolve.inc` supplies the shared CUDA/ROCm runtime body.
+
+Fresh start-rate totals and jump moments bypass the repeated neighbor pass when the
+first waiting time spans the whole interval. Event paths restore the RNG state and
+use the usual full chain; post-event and continuation states do not use initial totals.
+Analytic physical-unit configurations without `CONST_ST` also cache gas coefficients per
+half-step. Imported-gas, code-unit and constant-St paths evaluate the same query-local
+closure without this coefficient cache. Code-unit builds retain their prescribed Reynolds
+normalization and omit Brownian motion because no molecular mass in simulation units is
+provided. Cache storage is 32 bytes per owner for rates, plus 64 bytes per owner when the
+query-environment cache is active.
 
 Both search backends populate the same full physical-neighbor cache on CUDA and ROCm. The KD-tree
 path performs one exact heap query for each physical tree record and deduplicates overlapping wedge images by
@@ -2481,27 +2523,15 @@ top-$K$ selection; duplicate removal compares physical indices while keeping the
 image. The persistent collision cache stores the same code in its existing four-byte neighbor
 entry, so retaining image orientation adds no cache array or per-neighbor memory.
 
-For a collision between owner $i$ and partner code $(j,a)$, the partner's physical Cartesian
-velocity is reconstructed in the selected image basis,
-
-$$
-\boldsymbol v_j^{(a)}
-=\mathcal B\!\left(x_j+s_a\Delta\phi_w,y_j,z_j\right)
-\begin{pmatrix}\ell_{\phi,j}/R_j\\v_{r,j}\\\ell_{\theta,j}/y_j\end{pmatrix},
-\qquad
-s_a\in\{0,-1,+1\},
-$$
-
-and the resolved rate uses $|\boldsymbol v_i-\boldsymbol v_j^{(a)}|$. Rotating only the partner
-position but reconstructing its vector at $x_j$ would violate the rotational quotient and can give
-an order-one false relative velocity at the seam. Direct Bernoulli queries, cached Bernoulli
-queries, and frozen-bath chains all consume the retained image. Full-period and axisymmetric
-searches use $a=0$.
+Collision searches retain partner image codes for spatial neighbor selection. The physical
+relative-speed closure now uses only the query environment and the two grain sizes, so
+it does not reconstruct or subtract partner image velocities. This applies to direct
+Bernoulli queries, cached Bernoulli queries and frozen-neighbor chains.
 
 The two search representations need not admit identical image sets. KD-tree stores both adjacent
 images for every particle, while Morton stores only ghosts admitted by its seam cutoff. In a
 nearly full-period wedge, unrestricted minimization over $0,\pm\Delta\phi_w$ can select an image
-that Morton never searched. Relative-velocity evaluation must therefore use the retained image,
+that Morton never searched. Spatial neighbor validation must therefore use the retained image,
 not reconstruct the nearest image from positions. Each search is validated against its own
 candidate set; cross-search equality is required only where those sets are equivalent.
 

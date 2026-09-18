@@ -105,14 +105,15 @@ def validate_controller(path: Path, require_continuation: bool) -> dict:
         "maximum_g_upper", "maximum_d_bath",
     )
     finite = all(math.isfinite(float(data.get(key, math.nan))) for key in numeric)
-    complete = data.get("schema") == 1 \
+    complete = data.get("schema") == 2 \
         and data.get("bath_count") == len(baths) \
         and data.get("bath_count", 0) > 0 \
         and data.get("operator_count", 0) > 0 \
+        and data.get("wave_count", 0) > 0 \
         and data.get("persistent_overshoots") == 0
-    continuation = data.get("continuation_launches", 0) >= data.get("bath_count", 0)
+    continuation = data.get("continuation_launches", 0) >= data.get("wave_count", 0)
     if require_continuation:
-        continuation = data.get("continuation_launches", 0) > data.get("bath_count", 0)
+        continuation = data.get("continuation_launches", 0) > data.get("wave_count", 0)
     bath_numeric = (
         "duration", "limit_before", "limit_after", "max_f", "max_e", "max_touched",
         "max_events", "max_g", "max_g_upper", "d_bath",
@@ -121,7 +122,7 @@ def validate_controller(path: Path, require_continuation: bool) -> dict:
         record.get("operator", 0) > 0
         and record.get("bath", 0) > 0
         and record.get("merged_bins", 0) > 0
-        and record.get("continuation_launches", 0) > 0
+        and record.get("group", -1) >= 0
         and record.get("duration", 0.0) > 0.0
         and 0.25 <= record.get("limit_before", 0.0) <= 1.0
         and 0.25 <= record.get("limit_after", 0.0) <= 1.0

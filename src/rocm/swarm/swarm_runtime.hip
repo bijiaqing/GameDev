@@ -1,3 +1,4 @@
+// Root transport with local collision scheduling.
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
@@ -18,6 +19,7 @@
 
 #if defined(COLLISION) && !defined(BERNOULLI)
 #include <_col_chain.cuh>
+#include "local_gpu.cuh"
 #endif // COLLISION && !BERNOULLI
 
 #ifdef KNN_CACHE
@@ -348,14 +350,20 @@ int main (int argc, char **argv)
         );
     }
     #if defined(COLLISION) && !defined(BERNOULLI)
-    col_bath_state bath_state;
+    local_workspace local(PATH);
+    bool local_geometry_valid = false;
+#ifdef COL_DIAGNOSTICS
     col_controller_summary col_summary;
+#endif
     #endif // COLLISION && !BERNOULLI
 
     // invalidate the search package only when a position update ends its current geometry epoch
     auto invalidate_col_geometry = [&] ()
     {
         col_geom_valid = false;
+        #ifndef BERNOULLI
+        local_geometry_valid = false;
+        #endif
     };
 
     // evolve collisions over a fixed-position interval with the configured collision integrator
@@ -462,154 +470,7 @@ int main (int argc, char **argv)
         }
 
         #ifndef BERNOULLI
-        std::vector<int> col_count(col_raw_count);
-        std::vector<int> col_binmap(col_raw_count);
-        std::vector<col_rate_bin> col_ratebin(col_raw_count);
-        std::vector<col_audit_accum> col_audit(col_raw_count);
-        col_summary.operator_count++;
-        int operator_index = col_summary.operator_count;
-        int bath_index = 0;
-        real elapsed = 0.0;
-        while (elapsed < duration)
-        {
-
-            col_bath_init <<< NB_P, TPB >>> (
-                dev_size_old, dev_numr_old, dev_col_time, dev_col_events,
-                dev_col_complete, dev_particle
-            );
-            HIP_KERNEL_CHECK("col_bath_init");
-            col_bath_rate <<< N_P, COL_BATH_TPB >>> (
-                dev_col_rate, dev_particle, dev_col_neighbor, dev_col_measure, dev_col_active,
-                dev_size_old, dev_numr_old,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                N_P / static_cast<real>(N_K) / total_dust_mass
-            );
-            HIP_KERNEL_CHECK("col_bath_rate");
-
-            HIP_CHECK(hipMemset(dev_col_count, 0, sizeof(int)*col_raw_count));
-            col_count_bin <<< NB_P, TPB >>> (
-                dev_col_count, dev_particle, dev_col_spatial, dev_col_active
-            );
-            HIP_KERNEL_CHECK("col_count_bin");
-            HIP_CHECK(hipMemcpy(
-                col_count.data(), dev_col_count, sizeof(int)*col_raw_count, hipMemcpyDeviceToHost
-            ));
-            int col_merged_count = _build_col_binmap(col_count, col_binmap);
-            HIP_CHECK(hipMemcpy(
-                dev_col_binmap, col_binmap.data(), sizeof(int)*col_raw_count, hipMemcpyHostToDevice
-            ));
-
-            HIP_CHECK(hipMemset(dev_col_ratebin, 0, sizeof(col_rate_bin)*col_raw_count));
-            col_rate_bins <<< NB_P, TPB >>> (
-                dev_col_ratebin, dev_particle, dev_col_rate,
-                dev_col_spatial, dev_col_binmap, dev_col_active
-            );
-            HIP_KERNEL_CHECK("col_rate_bins");
-            HIP_CHECK(hipMemcpy(
-                col_ratebin.data(), dev_col_ratebin, sizeof(col_rate_bin)*col_merged_count,
-                hipMemcpyDeviceToHost
-            ));
-
-            real active_mass = 0.0;
-            for (int idx_bin = 0; idx_bin < col_merged_count; idx_bin++)
-            {
-                if (col_ratebin[idx_bin].invalid_count != 0)
-                    throw std::runtime_error("collision bath controller returned invalid rate moments");
-                active_mass += col_ratebin[idx_bin].mass;
-            }
-            if (!(active_mass > 0.0))
-            {
-                dt_col = duration - elapsed;
-                elapsed = duration;
-                break;
-            }
-
-            dt_col = _choose_col_bath(
-                col_ratebin, col_merged_count, duration - elapsed, bath_state.limit_scale
-            );
-            real limit_before = bath_state.limit_scale;
-
-            HIP_CHECK(hipMemset(dev_col_hazard, 0, sizeof(real)*N_P));
-            HIP_CHECK(hipMemset(dev_col_jump1_int, 0, sizeof(real)*N_P));
-            HIP_CHECK(hipMemset(dev_col_jump2_int, 0, sizeof(real)*N_P));
-            HIP_CHECK(hipMemset(dev_col_jumpmax_int, 0, sizeof(real)*N_P));
-            int unfinished = N_P;
-            int continuation_count = 0;
-            while (unfinished > 0)
-            {
-                if (++continuation_count > 1000000)
-                    throw std::runtime_error("collision chain continuation limit exceeded");
-                HIP_CHECK(hipMemset(dev_col_unfinished, 0, sizeof(int)));
-                col_chain_run <<< N_P, COL_BATH_TPB >>> (
-                    dev_particle, dev_rngstate, dev_col_error, dev_col_unfinished,
-                    dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
-                    dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, dev_col_neighbor,
-                    dev_col_measure, dev_col_active, dev_size_old, dev_numr_old,
-                    #ifdef IMPORTGAS
-                    dev_gas_dens,
-                    #endif // IMPORTGAS
-                    N_P / static_cast<real>(N_K) / total_dust_mass, dt_col
-                );
-                HIP_KERNEL_CHECK("col_chain_run");
-                HIP_CHECK(hipMemcpy(
-                    &unfinished, dev_col_unfinished, sizeof(int), hipMemcpyDeviceToHost
-                ));
-            }
-
-            thrust::device_ptr <const int> col_error_ptr(dev_col_error);
-            int max_col_error = *thrust::max_element(col_error_ptr, col_error_ptr + N_P);
-            if (max_col_error != 0)
-                throw std::runtime_error("collision chain returned error " + std::to_string(max_col_error));
-
-
-            HIP_CHECK(hipMemset(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
-            col_audit_bin <<< NB_P, TPB >>> (
-                dev_col_audit, dev_particle, dev_size_old, dev_numr_old, dev_col_rate,
-                dev_col_hazard, dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int,
-                dev_col_events,
-                dev_col_spatial, dev_col_binmap, dev_col_active, dt_col
-            );
-            HIP_KERNEL_CHECK("col_audit_bin");
-            HIP_CHECK(hipMemcpy(
-                col_audit.data(), dev_col_audit, sizeof(col_audit_accum)*col_merged_count,
-                hipMemcpyDeviceToHost
-            ));
-            col_bath_result bath_result = _finish_col_bath(
-                col_audit, col_merged_count, bath_state
-            );
-            col_bath_record bath_record;
-            bath_record.operator_index = operator_index;
-            bath_record.bath_index = ++bath_index;
-            bath_record.merged_bins = col_merged_count;
-            bath_record.continuation_launches = continuation_count;
-            bath_record.duration = dt_col;
-            bath_record.limit_before = limit_before;
-            bath_record.limit_after = bath_state.limit_scale;
-            bath_record.result = bath_result;
-            _record_col_bath(col_summary, bath_record);
-            if (bath_result.persistent_overshoot)
-            {
-                std::string failure_file = PATH + "collision_chain_failure.json";
-                if (!save_col_controller(failure_file, col_summary))
-                    throw std::runtime_error(
-                        "collision bath controller failed and its diagnostics could not be saved"
-                    );
-                throw std::runtime_error(
-                    "collision bath controller remained outside tolerance at minimum scale"
-                );
-            }
-
-            real elapsed_old = elapsed;
-            elapsed += dt_col;
-            if (!(elapsed > elapsed_old))
-                throw std::runtime_error("collision timestep cannot advance the operator clock");
-            if (duration - elapsed < 8.0*std::numeric_limits<real>::epsilon()*duration)
-                elapsed = duration;
-            clock_dyn = elapsed;
-            count_col++;
-        }
+        #include "local_evolve.inc"
         #else  // BERNOULLI
         real elapsed = 0.0;
         while (elapsed < duration)
@@ -778,8 +639,10 @@ int main (int argc, char **argv)
 
         #if defined(COLLISION) && !defined(BERNOULLI)
         // restart controller memory at checkpoint boundaries while retaining it across split operators
-        bath_state = col_bath_state{};
+        std::fill(local.state.begin(), local.state.end(), col_bath_state{});
+#ifdef COL_DIAGNOSTICS
         col_summary = col_controller_summary{};
+#endif
         #endif // COLLISION && !BERNOULLI
 
         PRINT_TITLE_TO_SCREEN();
@@ -943,12 +806,14 @@ int main (int argc, char **argv)
         #endif // LOGTIMING / LOGOUTPUT / LINEAR_OUTPUT
 
         #if defined(COLLISION) && !defined(BERNOULLI)
+#ifdef COL_DIAGNOSTICS
         std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
         if (!save_col_controller(controller_file, col_summary))
         {
             std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
             return 1;
         }
+#endif
         #endif // COLLISION && !BERNOULLI
 
 

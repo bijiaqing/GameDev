@@ -287,7 +287,8 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g, real sigma_g)
     return sqrt(vrel_sq);
 }
 
-// combine resolved Cartesian motion with unresolved Brownian and turbulent speeds for explicit grain sizes
+// Query-local drift, settling, Brownian and turbulence closure for explicit grain sizes.
+// Partner position, image and instantaneous velocities do not enter this closure.
 __device__ __forceinline__
 real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     int idx_old_i, int idx_old_j, int image_j
@@ -296,17 +297,20 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     #endif // IMPORTGAS
 )
 {
-    #ifdef COLLISION_QUERY_LOCAL
-    // Benchmark closure: both sizes encounter the query particle's environment.
-    #if defined(IMPORTGAS) || defined(CODE_UNIT)
-    #error COLLISION_QUERY_LOCAL requires the benchmark's analytic CGS gas model
-    #endif
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
     real R = _get_cyl_R(y, z), Z = _get_cyl_Z(y, z);
     real h = _get_hg(R), omega = _get_omegaK(R);
-    real si = _get_stokes(R, Z, h, size_i);
-    real sj = _get_stokes(R, Z, h, size_j);
+    real si = _get_stokes(R, Z, h, size_i
+        #ifdef IMPORTGAS
+        , dev_particle[idx_old_i].position.x, y, z, dev_gas_dens
+        #endif
+    );
+    real sj = _get_stokes(R, Z, h, size_j
+        #ifdef IMPORTGAS
+        , dev_particle[idx_old_i].position.x, y, z, dev_gas_dens
+        #endif
+    );
     // mcdust uses vn = (dP/dR)/(2 rho Omega); use the analytic derivative.
     real vn = -_get_eta(R, Z, h)*R*omega;
     real fi = 1.0/(1.0 + si*si), fj = 1.0/(1.0 + sj*sj);
@@ -315,89 +319,23 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     real dvz = Z*omega*(fmin(si, 0.5) - fmin(sj, 0.5));
     // Effective column gives Re = sqrt(pi/2)*alpha*rho*cs*sigma/(Omega*m_mol).
     real sigma_local = _get_sigma_g(R)*_get_gas_strat(R, Z, h);
+    #ifdef IMPORTGAS
+    real density = _interp_field(dev_gas_dens,
+        _get_loc_x(dev_particle[idx_old_i].position.x), _get_loc_y(y), _get_loc_z(z));
+    if constexpr (N_Z == 1) sigma_local = density;
+    else sigma_local = sqrt(2.0*M_PI)*density*h*R;
+    #endif
     real vt = _get_vrel_t(R, si, sj, h, sigma_local);
-    real vb = _get_vrel_b(R, size_i, size_j, h);
-    return sqrt(dvr*dvr + dvphi*dvphi + dvz*dvz + vt*vt + vb*vb);
-    #else
-    real y_i = dev_particle[idx_old_i].position.y;
-    real y_j = dev_particle[idx_old_j].position.y;
-    
-    real z_i = dev_particle[idx_old_i].position.z;
-    real z_j = dev_particle[idx_old_j].position.z;
-
-    #ifdef IMPORTGAS
-    real x_i = dev_particle[idx_old_i].position.x;
-    real x_j = dev_particle[idx_old_j].position.x;
-    #endif // IMPORTGAS
-    
-    real R_i = _get_cyl_R(y_i, z_i);
-    real R_j = _get_cyl_R(y_j, z_j);
-
-    real Z_i = _get_cyl_Z(y_i, z_i);
-    real Z_j = _get_cyl_Z(y_j, z_j);
-    
-    real R = 0.5*(R_i + R_j);
-    real sigma_g = _get_sigma_g(R);
-
-    real h_g = _get_hg(R);
-    real h_gi = _get_hg(R_i);
-    real h_gj = _get_hg(R_j);
-
-    real stokes_i = _get_stokes(R_i, Z_i, h_gi, size_i
-        #ifdef IMPORTGAS
-        , x_i, y_i, z_i, dev_gas_dens
-        #endif // IMPORTGAS
-    );
-    real stokes_j = _get_stokes(R_j, Z_j, h_gj, size_j
-        #ifdef IMPORTGAS
-        , x_j, y_j, z_j, dev_gas_dens
-        #endif // IMPORTGAS
-    );
-
-    #ifdef IMPORTGAS
-    if constexpr (N_Z == 1)
-    {
-        if constexpr (N_X == 1)
-        {
-            sigma_g = _interp_field(dev_gas_dens, 0.0, _get_loc_y(R), 0.0);
-        }
-        else
-        {
-            real sigma_gi = _interp_field(
-                dev_gas_dens, _get_loc_x(x_i), _get_loc_y(y_i), _get_loc_z(z_i)
-            );
-            real sigma_gj = _interp_field(
-                dev_gas_dens, _get_loc_x(x_j), _get_loc_y(y_j), _get_loc_z(z_j)
-            );
-            sigma_g = 0.5*(sigma_gi + sigma_gj);
-        }
-    }
-    #endif // IMPORTGAS
-
-    real3 v_i = _get_cart_vel(dev_particle[idx_old_i]);
-    real3 v_j = _get_cart_vel(dev_particle[idx_old_j], image_j);
-
-    real dvx = v_i.x - v_j.x;
-    real dvy = v_i.y - v_j.y;
-    real dvz = v_i.z - v_j.z;
-
-    real vrel_sq = dvx*dvx + dvy*dvy + dvz*dvz;
-
-    // omit Brownian motion in code units and use the prescribed Reynolds-number normalization for turbulence
-
+    // Code-unit models do not provide a molecular mass in simulation mass units.
+    real vb = 0.0;
     #ifndef CODE_UNIT
-    real vrel_b = _get_vrel_b(R, size_i, size_j, h_g);
-    vrel_sq += vrel_b*vrel_b;
-    #endif // NOT CODE_UNIT
+    vb = _get_vrel_b(R, size_i, size_j, h);
+    #endif
+    return sqrt(dvr*dvr + dvphi*dvphi + dvz*dvz + vt*vt + vb*vb);
 
-    real vrel_t = _get_vrel_t(R, stokes_i, stokes_j, h_g, sigma_g);
-    vrel_sq += vrel_t*vrel_t;
-
-    return sqrt(vrel_sq);
-    #endif // COLLISION_QUERY_LOCAL
 }
 
-// combine resolved and unresolved relative speeds for two frozen grain sizes
+// combine query-local relative speeds for two frozen grain sizes
 __device__ __forceinline__
 real _get_vrel (const swarm *dev_particle, const real *dev_size_old,
     int idx_old_i, int idx_old_j, int image_j
