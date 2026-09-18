@@ -4,7 +4,7 @@
 // import the production transport header under a private name, then replace only its second SSA substep in this test
 // retain the production first drift, launch interface, boundaries, and ordering in the public ssa_transport kernel
 #define _ssa_substep_2 _val_production_ssa_substep_2
-#include "../../../../inc/comm/swarm/_transport.cuh"
+#include "../../../../inc/swarm/_transport.cuh"
 #undef _ssa_substep_2
 
 #define VAL_ZERO_DRAG_ACTIVE 1

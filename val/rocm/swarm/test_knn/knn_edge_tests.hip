@@ -245,20 +245,20 @@ bool run_kdtree_filter_case (const edge_case &test)
     int *dev_near_idx_old = nullptr;
     float *dev_near_dist_sq = nullptr;
     unsigned char *dev_active = nullptr;
-    _morton_hip_check(hipMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*kdtree_node.size()),
+    _morton_gpu_check(hipMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*kdtree_node.size()),
         "allocate filtered KD tree");
-    _morton_hip_check(hipMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)),
+    _morton_gpu_check(hipMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)),
         "allocate filtered KD bounds");
-    _morton_hip_check(hipMalloc((void**)&dev_near_idx_old, sizeof(int)*K),
+    _morton_gpu_check(hipMalloc((void**)&dev_near_idx_old, sizeof(int)*K),
         "allocate filtered KD indices");
-    _morton_hip_check(hipMalloc((void**)&dev_near_dist_sq, sizeof(float)*K),
+    _morton_gpu_check(hipMalloc((void**)&dev_near_dist_sq, sizeof(float)*K),
         "allocate filtered KD distances");
-    _morton_hip_check(hipMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
+    _morton_gpu_check(hipMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
         "allocate filtered KD active flags");
-    _morton_hip_check(hipMemcpy(dev_kdtree_node, kdtree_node.data(),
+    _morton_gpu_check(hipMemcpy(dev_kdtree_node, kdtree_node.data(),
         sizeof(kdtree_point)*kdtree_node.size(), hipMemcpyHostToDevice),
         "copy filtered KD points");
-    _morton_hip_check(hipMemcpy(dev_active, test.active.data(),
+    _morton_gpu_check(hipMemcpy(dev_active, test.active.data(),
         sizeof(unsigned char)*test.active.size(), hipMemcpyHostToDevice),
         "copy filtered KD active flags");
 
@@ -269,13 +269,13 @@ bool run_kdtree_filter_case (const edge_case &test)
         dev_near_idx_old, dev_near_dist_sq, test.queries.front(), dev_kdtree_node,
         dev_kdtree_box, static_cast<int>(kdtree_node.size()), test.radius, dev_active
     );
-    _morton_hip_check(hipDeviceSynchronize(), "run filtered KD query");
+    _morton_gpu_check(hipDeviceSynchronize(), "run filtered KD query");
 
     std::vector<int> near_idx_old(K);
     std::vector<float> near_dist_sq(K);
-    _morton_hip_check(hipMemcpy(near_idx_old.data(), dev_near_idx_old,
+    _morton_gpu_check(hipMemcpy(near_idx_old.data(), dev_near_idx_old,
         sizeof(int)*K, hipMemcpyDeviceToHost), "copy filtered KD indices");
-    _morton_hip_check(hipMemcpy(near_dist_sq.data(), dev_near_dist_sq,
+    _morton_gpu_check(hipMemcpy(near_dist_sq.data(), dev_near_dist_sq,
         sizeof(float)*K, hipMemcpyDeviceToHost), "copy filtered KD distances");
 
     std::vector<std::pair<float, int>> actual;
@@ -297,11 +297,11 @@ bool run_kdtree_filter_case (const edge_case &test)
             && error <= 2.0e-6f*std::max(1.0f, std::fabs(expected[idx_neighbor].first));
     }
 
-    _morton_hip_check(hipFree(dev_active), "release KD active mask");
-    _morton_hip_check(hipFree(dev_near_dist_sq), "release KD neighbor distances");
-    _morton_hip_check(hipFree(dev_near_idx_old), "release KD neighbor identifiers");
-    _morton_hip_check(hipFree(dev_kdtree_box), "release KD bounds");
-    _morton_hip_check(hipFree(dev_kdtree_node), "release KD nodes");
+    _morton_gpu_check(hipFree(dev_active), "release KD active mask");
+    _morton_gpu_check(hipFree(dev_near_dist_sq), "release KD neighbor distances");
+    _morton_gpu_check(hipFree(dev_near_idx_old), "release KD neighbor identifiers");
+    _morton_gpu_check(hipFree(dev_kdtree_box), "release KD bounds");
+    _morton_gpu_check(hipFree(dev_kdtree_node), "release KD nodes");
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << "kdtree_" << test.name << std::endl;
     return passed;
@@ -322,21 +322,21 @@ bool run_case (const edge_case &test)
     unsigned char *dev_active = nullptr;
     std::size_t output_count = test.queries.size()*K;
 
-    _morton_hip_check(hipMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate edge points");
-    _morton_hip_check(hipMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate edge queries");
-    _morton_hip_check(hipMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate edge near_idx_old");
-    _morton_hip_check(hipMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate edge near_dist_sq");
-    _morton_hip_check(hipMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
+    _morton_gpu_check(hipMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate edge points");
+    _morton_gpu_check(hipMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate edge queries");
+    _morton_gpu_check(hipMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate edge near_idx_old");
+    _morton_gpu_check(hipMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate edge near_dist_sq");
+    _morton_gpu_check(hipMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate edge overflow flags");
     if (!test.active.empty())
-        _morton_hip_check(hipMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
+        _morton_gpu_check(hipMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
             "allocate edge active flags");
-    _morton_hip_check(hipMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
+    _morton_gpu_check(hipMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
         hipMemcpyHostToDevice), "copy edge points");
-    _morton_hip_check(hipMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
+    _morton_gpu_check(hipMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
         hipMemcpyHostToDevice), "copy edge queries");
     if (dev_active)
-        _morton_hip_check(hipMemcpy(dev_active, test.active.data(), sizeof(unsigned char)*test.active.size(),
+        _morton_gpu_check(hipMemcpy(dev_active, test.active.data(), sizeof(unsigned char)*test.active.size(),
             hipMemcpyHostToDevice), "copy edge active flags");
 
     morton_index morton_owner;
@@ -349,16 +349,16 @@ bool run_case (const edge_case &test)
         dev_query_point, static_cast<int>(test.queries.size()), morton_owner.view(), test.radius,
         dev_active
     );
-    _morton_hip_check(hipDeviceSynchronize(), "run edge queries");
+    _morton_gpu_check(hipDeviceSynchronize(), "run edge queries");
 
     std::vector<int> near_idx_old(output_count);
     std::vector<float> near_dist_sq(output_count);
     std::vector<unsigned int> stack_overflow(test.queries.size());
-    _morton_hip_check(hipMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, hipMemcpyDeviceToHost),
+    _morton_gpu_check(hipMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, hipMemcpyDeviceToHost),
         "copy edge near_idx_old");
-    _morton_hip_check(hipMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
+    _morton_gpu_check(hipMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
         hipMemcpyDeviceToHost), "copy edge near_dist_sq");
-    _morton_hip_check(hipMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
+    _morton_gpu_check(hipMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
         hipMemcpyDeviceToHost), "copy edge overflow flags");
 
     bool passed = true;
@@ -408,12 +408,12 @@ bool run_case (const edge_case &test)
         }
     }
 
-    if (dev_active) _morton_hip_check(hipFree(dev_active), "release Morton active mask");
-    _morton_hip_check(hipFree(dev_stack_overflow), "release Morton overflow flags");
-    _morton_hip_check(hipFree(dev_near_dist_sq), "release Morton neighbor distances");
-    _morton_hip_check(hipFree(dev_near_idx_old), "release Morton neighbor identifiers");
-    _morton_hip_check(hipFree(dev_query_point), "release Morton query points");
-    _morton_hip_check(hipFree(dev_point), "release Morton points");
+    if (dev_active) _morton_gpu_check(hipFree(dev_active), "release Morton active mask");
+    _morton_gpu_check(hipFree(dev_stack_overflow), "release Morton overflow flags");
+    _morton_gpu_check(hipFree(dev_near_dist_sq), "release Morton neighbor distances");
+    _morton_gpu_check(hipFree(dev_near_idx_old), "release Morton neighbor identifiers");
+    _morton_gpu_check(hipFree(dev_query_point), "release Morton query points");
+    _morton_gpu_check(hipFree(dev_point), "release Morton points");
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;

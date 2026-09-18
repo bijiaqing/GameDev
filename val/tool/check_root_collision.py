@@ -4,7 +4,7 @@ from pathlib import Path
 import os,re,subprocess,sys
 repo=Path(__file__).resolve().parents[2]
 lab=repo/'val/main/swarm_coagulation'
-model=repo/'inc/comm/swarm';parent=lab/'common'
+model=repo/'inc/swarm';parent=lab/'common'
 constants=lab/'models/weak_turbulence'
 out=repo/'val/temp/swarm_coagulation/checks/root_collision';out.mkdir(parents=True,exist_ok=True)
 env=dict(os.environ)
@@ -15,8 +15,25 @@ def function(path,name):
  while depth:
   depth+=(s[j]=='{')-(s[j]=='}');j+=1
  return s[a:j]+'\n'
-phys=repo/'inc/comm/swarm/param_phys.cuh';grid=repo/'inc/comm/swarm/param_grid.cuh';collision=repo/'inc/comm/swarm/_collision.cuh'
+phys=repo/'inc/swarm/param_phys.cuh';grid=repo/'inc/swarm/param_grid.cuh';collision=repo/'inc/swarm/_collision.cuh'
 (out/'curand_kernel.h').write_text('struct curandState { unsigned long long value=17; };\n')
+stubs=r'''
+#define CUDA_CHECK(x) do { (void)(x); } while(0)
+#define HIP_CHECK CUDA_CHECK
+#define CUDA_KERNEL_CHECK(x) do{}while(0)
+#define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
+int cudaMalloc(void**,size_t){return 0;}
+int cudaFree(void*){return 0;}
+int cudaMemcpy(void*,const void*,size_t,int){return 0;}
+int cudaMemset(void*,int,size_t){return 0;}
+constexpr int cudaMemcpyHostToDevice=0,cudaMemcpyDeviceToHost=1;
+#define hipMalloc cudaMalloc
+#define hipFree cudaFree
+#define hipMemcpy cudaMemcpy
+#define hipMemset cudaMemset
+#define hipMemcpyHostToDevice cudaMemcpyHostToDevice
+#define hipMemcpyDeviceToHost cudaMemcpyDeviceToHost
+'''
 pre=r'''
 #include <cmath>
 #include <cassert>
@@ -53,7 +70,10 @@ for name in ('_get_cyl_R','_get_cyl_Z'):pre+=function(grid,name)
 for name in ('_get_grain_mass','_get_omegaK','_get_hg','_get_eta','_get_gas_strat','_get_sigma_g','_get_cs','_get_alpha','_get_stokes'):pre+=function(phys,name)
 for name in ('_get_vrel_b','_get_re_inv_sqrt','_get_vrel_t','_get_vrel_pair'):pre+=function(collision,name)
 (out/'_col_cache.cuh').write_text('');(out/'_collision.cuh').write_text('')
-pre+='#include "'+str(model/'_col_chain.cuh')+'"\n'
+# Parse the actual controller and kernels with GPU launch syntax removed.
+host_header=out/'_col_chain_host.cuh'
+host_header.write_text(re.sub(r'<<<.*?>>>','',(model/'_col_chain.cuh').read_text()))
+pre+=stubs+'\n#include "'+str(host_header)+'"\n'
 old=parent.joinpath('_col_chain.cuh').read_text()
 a=old.index('template <KernelType kernel>');b=old.index('// freeze the partner reservoir',a)
 pre+=old[a:b].replace('_get_col_chain_rate','parent_rate')
@@ -107,42 +127,24 @@ int main(){
 }
 '''
 cpp=out/'check.cpp';cpp.write_text(pre+test);exe=out/'check'
-subprocess.run(['c++','-std=c++17','-O2','-I'+str(out),'-I'+str(model),'-I'+str(constants),str(cpp),'-o',str(exe)],check=True,env=env)
+subprocess.run(['c++','-std=c++17','-O2','-I'+str(out),'-I'+str(constants),'-I'+str(model),str(cpp),'-o',str(exe)],check=True,env=env)
 subprocess.run([str(exe)],check=True)
 # Production omits event bookkeeping but must preserve particle state and RNG.
 cpp=out/'check_no_diagnostics.cpp';cpp.write_text((pre+test).replace('#define COL_DIAGNOSTICS',''))
 exe=out/'check_no_diagnostics'
-subprocess.run(['c++','-std=c++17','-O2','-I'+str(out),'-I'+str(model),'-I'+str(constants),str(cpp),'-o',str(exe)],check=True,env=env)
+subprocess.run(['c++','-std=c++17','-O2','-I'+str(out),'-I'+str(constants),'-I'+str(model),str(cpp),'-o',str(exe)],check=True,env=env)
 subprocess.run([str(exe)],check=True)
 
-for name in ('erosion_outcome.cuh','grouped_sticking.cuh','event_work.cuh','local_schedule.hpp','change_limit.hpp'):
- lines=(parent/name).read_text().splitlines(keepends=True)
- body=''.join(line for line in lines[2:-1] if line.strip()!='#include "grouped_sticking.cuh"').strip()
- destination='local_gpu.cuh' if name=='local_schedule.hpp' else '_col_chain.cuh'
- assert body in (model/destination).read_text(),name
 for backend in ('cuda','rocm'):
  for search in ('kdtree','morton'):
   plan=subprocess.check_output(['make','-Bn','-C',str(repo),'MODEL=swarm_fiducial','GPU_BACKEND='+backend,'COLLISION_SEARCH='+search,'GPU_FLAGS=-DCOLLISION -DMULTISIZE -DCODE_UNIT'],text=True)
-  assert str(repo/'src'/backend/'swarm'/('swarm_runtime.'+('cu' if backend=='cuda' else 'hip'))) in plan
-print('Promoted physics/scheduler identity and root backend routing passed.')
+  assert str(repo/'src/swarm/swarm_runtime.cu') in plan
+print('Root backend routing passed.')
 # Type-check the actual host launch arguments for both backends with launch syntax removed.
-stubs=r'''
-#define CUDA_CHECK(x) do { (void)(x); } while(0)
-#define HIP_CHECK CUDA_CHECK
-#define CUDA_KERNEL_CHECK(x) do{}while(0)
-#define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
-int cudaMalloc(void**,size_t){return 0;}
-int cudaFree(void*){return 0;}
-int cudaMemcpy(void*,const void*,size_t,int){return 0;}
-int cudaMemset(void*,int,size_t){return 0;}
-constexpr int cudaMemcpyHostToDevice=0,cudaMemcpyDeviceToHost=1;
-#define hipMalloc cudaMalloc
-#define hipFree cudaFree
-#define hipMemcpy cudaMemcpy
-#define hipMemset cudaMemset
-#define hipMemcpyHostToDevice cudaMemcpyHostToDevice
-#define hipMemcpyDeviceToHost cudaMemcpyDeviceToHost
-'''
+
+runtime=(repo/'src/swarm/swarm_runtime.cu').read_text()
+start=runtime.index('evolve_local_collisions(')
+controller_call=runtime[start:runtime.index(');',start)+2]
 driver=r'''
 void check_driver() {
  double duration=1.,total_dust_mass=1.,clock_sim=0,clock_dyn=0,dt_col=0;
@@ -155,18 +157,18 @@ void check_driver() {
  real *dev_size_old=nullptr,*dev_numr_old=nullptr,*dev_col_time=nullptr,*dev_col_rate=nullptr;
  real *dev_col_hazard=nullptr,*dev_col_jump1_int=nullptr,*dev_col_jump2_int=nullptr,*dev_col_jumpmax_int=nullptr,*dev_col_measure=nullptr;
  col_rate_bin *dev_col_ratebin=nullptr;col_audit_accum *dev_col_audit=nullptr;
-'''+re.sub(r'<<<.*?>>>','',(model/'local_evolve.inc').read_text())+'\n}\n'
+'''+controller_call+'\n}\n'
 (out/'hiprand').mkdir(exist_ok=True)
 (out/'hiprand/hiprand_kernel.h').write_text('struct hiprandState { unsigned long long value=17; };\n')
 for backend in ('cuda','rocm'):
- source=pre+stubs+'\n#include "'+str(model/'local_gpu.cuh')+'"\n'+driver
+ source=pre+driver
  if backend=='rocm':source=source.replace('#define GAMEDEV_CUDA','#define GAMEDEV_ROCM').replace('curand_uniform_double','hiprand_uniform_double')
  cpp=out/(backend+'_syntax.cpp');cpp.write_text(source)
- subprocess.run(['c++','-std=c++17','-fsyntax-only','-I'+str(out),'-I'+str(model),'-I'+str(constants),str(cpp)],check=True,env=env)
+ subprocess.run(['c++','-std=c++17','-fsyntax-only','-I'+str(out),'-I'+str(constants),'-I'+str(model),str(cpp)],check=True,env=env)
  # Also type-check the production controller with diagnostics compiled out.
  source=source.replace('#define COL_DIAGNOSTICS','')
  cpp=out/(backend+'_production_syntax.cpp');cpp.write_text(source)
- subprocess.run(['c++','-std=c++17','-fsyntax-only','-I'+str(out),'-I'+str(model),'-I'+str(constants),str(cpp)],check=True,env=env)
+ subprocess.run(['c++','-std=c++17','-fsyntax-only','-I'+str(out),'-I'+str(constants),'-I'+str(model),str(cpp)],check=True,env=env)
 print('CUDA/ROCm launch-argument host-stub syntax checks passed; these do not compile GPU device code.')
 
 # Compile alternate root physics paths; imported interpolation is a signature stub.
@@ -178,7 +180,7 @@ constexpr real REYNOLDS_0=1.e6;
 """
 for mode in ('analytic','code_unit','imported','imported_2d','imported_code','constant_st','query_2d'):
  for backend in ('cuda','rocm'):
-  source=pre.split('template <KernelType kernel>')[0]+stubs+'\n#include "'+str(model/'local_gpu.cuh')+'"\n'+driver
+  source=pre.split('template <KernelType kernel>')[0]+driver
   source=source.replace('real _get_grain_mass (',extra+'\nreal _get_grain_mass (',1)
   if mode in ('analytic','code_unit','imported'):source=source.replace('#define COLLISION_QUERY_LOCAL','')
   if mode in ('code_unit','imported_code'):source='#define CODE_UNIT\n'+source
@@ -190,9 +192,9 @@ for mode in ('analytic','code_unit','imported','imported_2d','imported_code','co
   (config/'const_defs.cuh').write_text(values)
   if backend=='rocm':source=source.replace('#define GAMEDEV_CUDA','#define GAMEDEV_ROCM').replace('curand_uniform_double','hiprand_uniform_double')
   cpp=out/(mode+'_'+backend+'.cpp');cpp.write_text(source)
-  subprocess.run(['c++','-std=c++17','-fsyntax-only','-I'+str(out),'-I'+str(model),'-I'+str(config),str(cpp)],check=True,env=env)
+  subprocess.run(['c++','-std=c++17','-fsyntax-only','-I'+str(out),'-I'+str(config),'-I'+str(model),str(cpp)],check=True,env=env)
   if backend=='cuda':
-   physics=source.split('#include "'+str(model/'_col_chain.cuh')+'"')[0]
+   physics=source.split('#include "'+str(host_header)+'"')[0]
    physics+=r'''
 int main(){
  swarm p[2]{};p[0].position={.1,10*AU,1.4};p[1].position={2.,30*AU,.9};
@@ -212,7 +214,7 @@ int main(){
 }
 '''
    numerical=out/(mode+'_local.cpp');numerical.write_text(physics);binary=out/(mode+'_local')
-   subprocess.run(['c++','-std=c++17','-O2','-I'+str(out),'-I'+str(model),'-I'+str(config),str(numerical),'-o',str(binary)],check=True,env=env)
+   subprocess.run(['c++','-std=c++17','-O2','-I'+str(out),'-I'+str(config),'-I'+str(model),str(numerical),'-o',str(binary)],check=True,env=env)
    subprocess.run([str(binary)],check=True)
 print('Query-local numerical checks and CUDA/ROCm host-stub syntax passed for analytic, code-unit, imported 2D/3D, imported code-unit, constant-St and 2D paths.')
 # Controller records are per group; launch counts are per wave, not per record.

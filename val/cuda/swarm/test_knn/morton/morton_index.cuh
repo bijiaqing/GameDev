@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../../../inc/cuda/swarm/morton/morton_index.cuh"
+#include "../../../../../inc/swarm/morton/morton_index.cuh"
 
 // expose one cooperative exact top-K query per CUDA block for tests and standalone consumers
 template<int K, int BLOCK_SIZE = 256, int SORT_SIZE = 512, int STACK_SIZE = 256>

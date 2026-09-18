@@ -431,7 +431,7 @@ int main (int argc, char **argv)
             #if !defined(BERNOULLI) || defined(KNN_CACHE)
             // retain fixed physical neighbors while collision properties continue to evolve
             #ifdef COLLISION_KDTREE
-            col_cache_get <<< NB_T, TPB >>> (
+            col_cache_get <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (
                 dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
                 dev_col_active, dev_particle, image_dist_min
             );
@@ -643,7 +643,7 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
+            col_rate_calc <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_col_rate, dev_col_dist, dev_particle,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -724,7 +724,7 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
+            col_event_run <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,

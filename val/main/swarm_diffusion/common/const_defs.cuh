@@ -25,7 +25,7 @@ const int N_G = N_X*N_Y*N_Z;
 // D_R = ALPHA*h0^2*Omega0*R^2 = 1e-4 R^2; deterministic motion is disabled.
 const real ASPR_0 = 0.05, IDX_P = 1.0, IDX_Q = 0.5;
 const real SIGMA_0 = 1.0, METAL_Z = 0.01, RHO_0 = 1.0;
-const real STOKES_0 = 1.0;
+const real STOKES_0 = 0.0; // tracer limit preserves D_R = 1e-4 R² in this isolated diffusion test.
 const real ALPHA = 0.04, SCHMIDT_X = 1.0, SCHMIDT_R = 1.0, SCHMIDT_Z = 1.0;
 const real RING_LOG_WIDTH = 0.05;
 const int RING_INIT_SEED = 17;

@@ -1,6 +1,6 @@
 #ifndef COAG_SWARM_HOST_CUH
 #define COAG_SWARM_HOST_CUH
-// Reuse production I/O, MRN size sampling, mass normalization and runtime helpers.
+// Reuse production I/O, size sampling, mass normalization and runtime helpers.
 // Replace only the settled/smoothed spatial initializer and its domain-mass integral.
 #define initmass_calc production_initmass_calc
 #define rand_disk_poly production_rand_disk_poly

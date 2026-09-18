@@ -17,10 +17,11 @@
 
 #include <_col_cache.cuh>
 #include <_collision.cuh>
-#include "query_environment.cuh"
-#include "change_limit.hpp"
-#include "event_work.cuh"
-#include "erosion_outcome.cuh"
+#include "collision_physics.cuh"
+
+
+
+
 #ifdef COLLISION_MORTON
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
@@ -282,23 +283,32 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         second_work[idx_neighbor]=pair_rate*second;
         rate_work[idx_neighbor] = pair_rate;
     }
+    // Lab parallel reduction: pair calculations above are unchanged.
+    __shared__ unsigned char valid_work[N_K];
+    for (int j = threadIdx.x; j < N_K; j += blockDim.x)
+        valid_work[j] = isfinite(rate_work[j]) && rate_work[j] >= 0.0;
     __syncthreads();
 
+    // Fold the upper half into the lower half, including odd active counts.
+    for (int count = N_K; count > 1; count = (count + 1)/2)
+    {
+        int half = (count + 1)/2;
+        for (int j = threadIdx.x; j < count/2; j += blockDim.x)
+        {
+            rate_work[j] += rate_work[j + half];
+            change_work[j] += change_work[j + half];
+            second_work[j] += second_work[j + half];
+            maximum_work[j] = fmax(maximum_work[j], maximum_work[j + half]);
+            valid_work[j] = valid_work[j] && valid_work[j + half];
+        }
+        __syncthreads();
+    }
     if (threadIdx.x == 0)
     {
-        real rate = 0.0, change=0.0, second=0.0, maximum=0.0;
-        bool valid=true;
-        for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
-        {
-            valid=valid && isfinite(rate_work[idx_neighbor]) && rate_work[idx_neighbor]>=0.0;
-            maximum=fmax(maximum,maximum_work[idx_neighbor]);
-            rate += rate_work[idx_neighbor];
-            change += change_work[idx_neighbor];
-            second += second_work[idx_neighbor];
-        }
-        cached[idx_old_i]={valid ? rate : -1.0,change,second,maximum};
+        real rate = rate_work[0], change = change_work[0], second = second_work[0];
+        cached[idx_old_i] = {valid_work[0] ? rate : -1.0, change, second, maximum_work[0]};
         dev_col_rate[idx_old_i] = rate;
-        change_rate[idx_old_i]=change; second_rate[idx_old_i]=second;
+        change_rate[idx_old_i] = change; second_rate[idx_old_i] = second;
     }
 }
 
@@ -468,29 +478,46 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 pair_jumpmax[idx_neighbor] = (pair_value > 0.0) ? maximum : 0.0;
             }
         }
+        // Lab chain reduction: preserve pair_rate for serial partner sampling.
+        __shared__ real total_work[N_K];
+        __shared__ int last_work[N_K];
+        for (int j = threadIdx.x; j < N_K; j += blockDim.x)
+        {
+            total_work[j] = pair_rate[j];
+            // -2 propagates invalid input; -1 denotes no positive contribution.
+            last_work[j] = (!isfinite(pair_rate[j]) || pair_rate[j] < 0.0)
+                ? -2 : (pair_rate[j] > 0.0 ? j : -1);
+        }
         __syncthreads();
+        for (int count = N_K; count > 1; count = (count + 1)/2)
+        {
+            int half = (count + 1)/2;
+            for (int j = threadIdx.x; j < count/2; j += blockDim.x)
+            {
+                total_work[j] += total_work[j + half];
+                pair_jump1[j] += pair_jump1[j + half];
+                pair_jump2[j] += pair_jump2[j + half];
+                pair_jumpmax[j] = fmax(pair_jumpmax[j], pair_jumpmax[j + half]);
+                int left = last_work[j], right = last_work[j + half];
+                last_work[j] = (left == -2 || right == -2) ? -2
+                    : (left > right ? left : right);
+            }
+            __syncthreads();
+        }
+        // End lab chain reduction.
 
         if (threadIdx.x == 0)
         {
-            real total_rate = 0.0;
-            real total_jump1 = 0.0;
-            real total_jump2 = 0.0;
-            real total_jumpmax = 0.0;
-            int last_positive = -1;
-            for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
+            real total_rate = total_work[0];
+            real total_jump1 = pair_jump1[0];
+            real total_jump2 = pair_jump2[0];
+            real total_jumpmax = pair_jumpmax[0];
+            int last_positive = last_work[0];
+            if (last_positive == -2)
             {
-                if (!isfinite(pair_rate[idx_neighbor]) || pair_rate[idx_neighbor] < 0.0)
-                {
-                    dev_col_error[idx_old_i] = 1;
-                    dev_col_complete[idx_old_i] = 1;
-                    keep_running = false;
-                    break;
-                }
-                if (pair_rate[idx_neighbor] > 0.0) last_positive = idx_neighbor;
-                total_rate += pair_rate[idx_neighbor];
-                total_jump1 += pair_jump1[idx_neighbor];
-                total_jump2 += pair_jump2[idx_neighbor];
-                total_jumpmax = fmax(total_jumpmax, pair_jumpmax[idx_neighbor]);
+                dev_col_error[idx_old_i] = 1;
+                dev_col_complete[idx_old_i] = 1;
+                keep_running = false;
             }
             if (keep_running && (!isfinite(total_rate) || total_rate < 0.0))
             {

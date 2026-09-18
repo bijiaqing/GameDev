@@ -13,15 +13,15 @@ inline double atomicAdd(double *p,double value) { double old=*p; *p+=value; retu
 struct index3 { int x; };
 index3 threadIdx{0}, blockIdx{0}, blockDim{64};
 #include "initial_profile.hpp"
-#include "../../../../src/comm/swarm/particle_init.cu"
+#include "../../../../src/swarm/particle_init.cu"
 int _get_col_image_shift(int image) { return image==1 ? -1 : (image==2 ? 1 : 0); }
 #include <collision_velocity_check.hpp>
 constexpr int CUSTOM_KERNEL=3;
-#include "query_environment.cuh"
-#include "erosion_outcome.cuh"
+#include "collision_physics.cuh"
+#include "_diffusion.cuh"
 int main()
 {
-    assert(COL_BATH_TPB==64 && N_K==200 && COL_BATH_EPS==.02);
+    assert(COL_BATH_TPB==64 && N_K==256 && COL_BATH_EPS==.02);
     assert(sticking_packet(1.e-5,false)==1.0); // retain narrow grouping
     for(double R:{5.,10.,50.})for(double zr:{-.18,0.,.18}) {
         swarm p{};p.position={0,R*AU*sqrt(1+zr*zr),atan2(1.,zr)};
@@ -35,7 +35,7 @@ int main()
     assert(N_X==1 && N_Z>1 && COAG_KERNEL==3 && N_P==1048576);
     assert(SAVE_MAX==(ALPHA==1e-3 ? 125 : 250) && DT_OUT/YEAR==100.0);
     assert(SAVE_MAX*DT_OUT/YEAR==(ALPHA==1e-3 ? 12500.0 : 25000.0));
-    assert(INIT_SMIN/2==5e-5 && INIT_SMAX/2==1e-4 && V_FRAG==100.0);
+    assert(INIT_SMIN/2==5e-5 && INIT_SMAX==INIT_SMIN && V_FRAG==100.0);
     assert(std::abs(STOKES_0 - M_PI*RHO_0*(S_0/2)/(2*SIGMA_0))<1e-20);
     double cs = _get_cs(AU,ASPR_0);
     assert(std::abs(cs*cs*M_MOL/1.380649e-16/209.7926358245702-1)<1e-13);

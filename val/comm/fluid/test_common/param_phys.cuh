@@ -9,7 +9,7 @@
 #define _get_alpha _test_prod_alpha
 #endif // DIFFUSION
 
-#include "../../../../inc/comm/fluid/param_phys.cuh"
+#include "../../../../inc/fluid/param_phys.cuh"
 
 #ifdef DIFFUSION
 #undef _get_nu

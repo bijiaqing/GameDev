@@ -35,8 +35,7 @@ namespace
 {
 
 constexpr int K = VAL_KNN_K;
-constexpr int KDTREE_TPB = 64;
-constexpr int MORTON_TPB = 256;
+constexpr int MORTON_TPB = 64;
 using kdtree_boxf = kdtree::box_t<float3>;
 
 struct options
@@ -103,7 +102,7 @@ void morton_wedge_query (int *dev_near_idx_old, float *dev_near_dist_sq, unsigne
     __shared__ unsigned int candidate_count;
     __shared__ unsigned int stack_overflow;
 
-    _morton_ghost_topk<TOP_K, 256, 1024, 256>(
+    _morton_ghost_topk<TOP_K, MORTON_TPB, 1024, 256>(
         morton_data, dev_query_point[idx_query], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
         leaf_visit_count, candidate_count, stack_overflow
@@ -138,7 +137,7 @@ void morton_wedge_checksum (double *dev_checksum, unsigned int *dev_stack_overfl
     __shared__ unsigned int candidate_count;
     __shared__ unsigned int stack_overflow;
 
-    _morton_ghost_topk<TOP_K, 256, 1024, 256>(
+    _morton_ghost_topk<TOP_K, MORTON_TPB, 1024, 256>(
         morton_data, dev_query_point[idx_query], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
         leaf_visit_count, candidate_count, stack_overflow
@@ -298,7 +297,7 @@ double wall_time_ms (Function operation)
 {
     auto time_start = std::chrono::steady_clock::now();
     operation();
-    _morton_cuda_check(cudaDeviceSynchronize(), "synchronize build");
+    _morton_gpu_check(cudaDeviceSynchronize(), "synchronize build");
     auto time_stop = std::chrono::steady_clock::now();
     return std::chrono::duration<double, std::milli>(time_stop - time_start).count();
 }
@@ -307,20 +306,20 @@ template<typename Function>
 double kernel_time_ms (Function operation, int repeats)
 {
     operation();
-    _morton_cuda_check(cudaDeviceSynchronize(), "synchronize warmup");
+    _morton_gpu_check(cudaDeviceSynchronize(), "synchronize warmup");
     cudaEvent_t event_start;
     cudaEvent_t event_stop;
-    _morton_cuda_check(cudaEventCreate(&event_start), "create timing event");
-    _morton_cuda_check(cudaEventCreate(&event_stop), "create timing event");
-    _morton_cuda_check(cudaEventRecord(event_start), "record timing start");
+    _morton_gpu_check(cudaEventCreate(&event_start), "create timing event");
+    _morton_gpu_check(cudaEventCreate(&event_stop), "create timing event");
+    _morton_gpu_check(cudaEventRecord(event_start), "record timing start");
     for (int repeat = 0; repeat < repeats; repeat++)
     {
         operation();
     }
-    _morton_cuda_check(cudaEventRecord(event_stop), "record timing end");
-    _morton_cuda_check(cudaEventSynchronize(event_stop), "synchronize timing end");
+    _morton_gpu_check(cudaEventRecord(event_stop), "record timing end");
+    _morton_gpu_check(cudaEventSynchronize(event_stop), "synchronize timing end");
     float elapsed_ms = 0.0f;
-    _morton_cuda_check(cudaEventElapsedTime(&elapsed_ms, event_start, event_stop), "read timing");
+    _morton_gpu_check(cudaEventElapsedTime(&elapsed_ms, event_start, event_stop), "read timing");
     cudaEventDestroy(event_start);
     cudaEventDestroy(event_stop);
     return static_cast<double>(elapsed_ms) / repeats;
@@ -587,11 +586,11 @@ int main (int argc, char **argv)
 
         float3 *dev_point = nullptr;
         float *dev_azimuth = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_point, sizeof(float3)*config.particles), "allocate wedge points");
-        _morton_cuda_check(cudaMalloc((void**)&dev_azimuth, sizeof(float)*config.particles), "allocate wedge azimuths");
-        _morton_cuda_check(cudaMemcpy(dev_point, points.data(), sizeof(float3)*config.particles,
+        _morton_gpu_check(cudaMalloc((void**)&dev_point, sizeof(float3)*config.particles), "allocate wedge points");
+        _morton_gpu_check(cudaMalloc((void**)&dev_azimuth, sizeof(float)*config.particles), "allocate wedge azimuths");
+        _morton_gpu_check(cudaMemcpy(dev_point, points.data(), sizeof(float3)*config.particles,
             cudaMemcpyHostToDevice), "copy wedge points");
-        _morton_cuda_check(cudaMemcpy(dev_azimuth, azimuth.data(), sizeof(float)*config.particles,
+        _morton_gpu_check(cudaMemcpy(dev_azimuth, azimuth.data(), sizeof(float)*config.particles,
             cudaMemcpyHostToDevice), "copy wedge azimuths");
 
         // compare the three-copy KD representation with the compact Morton ghost representation
@@ -600,8 +599,8 @@ int main (int argc, char **argv)
         kdtree_boxf *dev_kdtree_box = nullptr;
         double kdtree_build_ms = wall_time_ms([&]
         {
-            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*kdtree_node_count), "allocate wedge KD tree");
-            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate wedge KD bounds");
+            _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*kdtree_node_count), "allocate wedge KD tree");
+            _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate wedge KD bounds");
             int block_count = (kdtree_node_count + 255) / 256;
             kdtree_wedge_init <<< block_count, 256 >>> (dev_kdtree_node, dev_point, config.particles, width);
             kdtree::buildTree<kdtree_point, kdtree_traits>(dev_kdtree_node, kdtree_node_count, dev_kdtree_box);
@@ -632,14 +631,14 @@ int main (int argc, char **argv)
         float *dev_kdtree_dist_sq = nullptr;
         float *dev_morton_dist_sq = nullptr;
         unsigned int *dev_quality_stack_overflow = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_count), "allocate KD quality indices");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_count), "allocate Morton quality indices");
-        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_count), "allocate KD quality distances");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_count), "allocate Morton quality distances");
-        _morton_cuda_check(cudaMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
+        _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_count), "allocate KD quality indices");
+        _morton_gpu_check(cudaMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_count), "allocate Morton quality indices");
+        _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_count), "allocate KD quality distances");
+        _morton_gpu_check(cudaMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_count), "allocate Morton quality distances");
+        _morton_gpu_check(cudaMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
             "allocate quality overflows");
 
-        kdtree_wedge_query<K> <<< (config.queries + KDTREE_TPB - 1) / KDTREE_TPB, KDTREE_TPB >>> (
+        kdtree_wedge_query<K> <<< (config.queries + kdtree_heap<K>::threads - 1)/kdtree_heap<K>::threads, kdtree_heap<K>::threads >>> (
             dev_kdtree_idx_old, dev_kdtree_dist_sq, dev_point, config.queries,
             dev_kdtree_node, dev_kdtree_box, kdtree_node_count, config.radius, kdtree_dedup_needed
         );
@@ -648,22 +647,22 @@ int main (int argc, char **argv)
             dev_point, config.queries, morton_owner.view(), config.radius,
             morton_owner.unique_ids()
         );
-        _morton_cuda_check(cudaDeviceSynchronize(), "run wedge quality queries");
+        _morton_gpu_check(cudaDeviceSynchronize(), "run wedge quality queries");
 
         std::vector<int> kdtree_idx_old(quality_count);
         std::vector<int> morton_idx_old(quality_count);
         std::vector<float> kdtree_dist_sq(quality_count);
         std::vector<float> morton_dist_sq(quality_count);
         std::vector<unsigned int> quality_stack_overflow(config.queries);
-        _morton_cuda_check(cudaMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_count,
+        _morton_gpu_check(cudaMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_count,
             cudaMemcpyDeviceToHost), "copy KD quality indices");
-        _morton_cuda_check(cudaMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_count,
+        _morton_gpu_check(cudaMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_count,
             cudaMemcpyDeviceToHost), "copy Morton quality indices");
-        _morton_cuda_check(cudaMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_count,
+        _morton_gpu_check(cudaMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_count,
             cudaMemcpyDeviceToHost), "copy KD quality distances");
-        _morton_cuda_check(cudaMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_count,
+        _morton_gpu_check(cudaMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_count,
             cudaMemcpyDeviceToHost), "copy Morton quality distances");
-        _morton_cuda_check(cudaMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
+        _morton_gpu_check(cudaMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy quality overflows");
 
         int mismatched_queries = 0;
@@ -723,17 +722,17 @@ int main (int argc, char **argv)
         double *dev_kdtree_checksum = nullptr;
         double *dev_morton_checksum = nullptr;
         unsigned int *dev_performance_stack_overflow = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
+        _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
             "allocate KD checksums");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
+        _morton_gpu_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
             "allocate Morton checksums");
-        _morton_cuda_check(cudaMalloc((void**)&dev_performance_stack_overflow, sizeof(unsigned int)*config.particles),
+        _morton_gpu_check(cudaMalloc((void**)&dev_performance_stack_overflow, sizeof(unsigned int)*config.particles),
             "allocate performance overflows");
 
         // time all-particle searches through checksums after correctness has been established
         double kdtree_query_ms = kernel_time_ms([&]
         {
-            kdtree_wedge_checksum<K> <<< (config.particles + KDTREE_TPB - 1) / KDTREE_TPB, KDTREE_TPB >>> (
+            kdtree_wedge_checksum<K> <<< (config.particles + kdtree_heap<K>::threads - 1)/kdtree_heap<K>::threads, kdtree_heap<K>::threads >>> (
                 dev_kdtree_checksum, dev_point, config.particles,
                 dev_kdtree_node, dev_kdtree_box, kdtree_node_count, config.radius, kdtree_dedup_needed
             );
@@ -748,7 +747,7 @@ int main (int argc, char **argv)
         }, config.repeats);
 
         std::vector<unsigned int> performance_stack_overflow(config.particles);
-        _morton_cuda_check(cudaMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
+        _morton_gpu_check(cudaMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
             sizeof(unsigned int)*config.particles, cudaMemcpyDeviceToHost), "copy performance overflows");
         unsigned long long stack_overflows = 0;
         for (int idx = 0; idx < config.particles; idx++)

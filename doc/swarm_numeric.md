@@ -6,7 +6,7 @@ The Lagrangian branch represents dust with computational swarms, each carrying o
 location and, in multisize models, one grain size and a represented physical grain count. Gas is
 prescribed analytically or imported, dust does not back-react on it, and enabled operators advance
 particle trajectories, stochastic spatial diffusion, radiation forces, and representative-particle
-collisions. Backend-neutral complete files live under `inc/comm/swarm/` and `src/comm/swarm/`;
+collisions. Backend-neutral complete files live under `inc/swarm/` and `src/swarm/`;
 runtime, random-number, collision-search, declaration, and launch-policy files live under the
 corresponding `cuda/swarm/` or `rocm/swarm/` branch.
 
@@ -294,7 +294,7 @@ Z_{\rm metal}=\frac{\Sigma_d}{\Sigma_g},
 \qquad
 \alpha=\frac{\nu}{H_g^2\Omega_K},
 \qquad
-\mathrm{Sc}_a=\frac{\nu}{D_a}.
+\mathrm{Sc}_a=\frac{\nu}{D_a(1+\mathrm{St}^2)}.
 $$
 
 Here $r$ denotes spherical radius, $R=r\sin\theta$ cylindrical radius, and $Z=r\cos\theta$
@@ -333,7 +333,8 @@ The swarm executable is likewise a compile-time specialization:
 | Selection | Effect |
 |---|---|
 | `TRANSPORT` | integrate deterministic trajectories, drag, gravity, and enabled radiative forces |
-| `DIFFUSION` | add cylindrical stochastic density diffusion |
+| `DIFFUSION` | add cylindrical stochastic diffusion |
+| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration; omit for density diffusion |
 | `RADIATION` | deposit and accumulate optical depth and add radiation pressure |
 | `PR_EFFECT` | add first-order Poynting–Robertson drag; requires `RADIATION` |
 | `COLLISION` | evolve representative-particle coagulation and fragmentation |
@@ -1629,111 +1630,57 @@ $c=2.99792458\times10^{10}\ {\rm cm\,s^{-1}}$.
 Models enable this term with `GPU_FLAGS += -DPR_EFFECT`. Compile-time validation rejects `PR_EFFECT`
 without `RADIATION`.
 
-## 7. Stochastic density diffusion
+## 7. Stochastic diffusion
 
 ### 7.1 Target diffusion equation and Itô process
 
-Stochastic particle trajectories are a standard Lagrangian representation of disk diffusion; see,
-for example, [Charnoz et al. (2011)](https://arxiv.org/abs/1105.3440). The selected swarm equation
-here deliberately represents diffusion of dust density rather than dust-to-gas concentration. Let
-$\varrho_d=\Sigma_d$ when `N_Z == 1` and
-$\varrho_d=\rho_d$ when the vertical dimension is resolved. Its diffusion tensor is diagonal in
-cylindrical coordinates:
+`DIFFUSION` enables diffusion. Add `-DDIFFUSE_CONCENTRATION` to the model's
+`GPU_FLAGS` to diffuse dust-to-gas concentration; omit it for density diffusion.
+Both modes use the local Stokes number at the current grain size:
 
 $$
-(D_\phi,D_R,D_Z)
-=\left(\frac{\nu}{\mathrm{Sc}_x},
-\frac{\nu}{\mathrm{Sc}_R},
-\frac{\nu}{\mathrm{Sc}_Z}\right).
+D_a=\frac{\nu}{\mathrm{Sc}_a(1+\mathrm{St}^2)},\qquad a=\phi,R,Z.
 $$
 
-The Fickian target equation is therefore
+The Schmidt numbers specify the gas-mixing coefficients before Stokes suppression.
+Let $w=1$ for density diffusion and $w=\varrho_g$ for concentration diffusion,
+where $\varrho$ denotes surface density in 2D and volume density in 3D. The target is
 
 $$
-\frac{\partial\varrho_d}{\partial t}
-=\frac{1}{R^2}\frac{\partial}{\partial\phi}
-\left(D_\phi\frac{\partial\varrho_d}{\partial\phi}\right)
-+\frac{1}{R}\frac{\partial}{\partial R}
-\left(RD_R\frac{\partial\varrho_d}{\partial R}\right)
-+\frac{\partial}{\partial Z}
-\left(D_Z\frac{\partial\varrho_d}{\partial Z}\right).
+\partial_t\varrho_d=\nabla\cdot\left[w\boldsymbol D\nabla(\varrho_d/w)\right].
 $$
 
-Terms belonging to inactive coordinates are omitted. Thus the radial-only model keeps only the
-$R$ operator, the radial–azimuthal model keeps the $\phi$ and $R$ operators, and resolved 3D
-models retain all three.
-
-The Itô drift terms are chosen so the ensemble probability density satisfies this equation with
-the cylindrical volume element $R\,dR\,d\phi\,dZ$.
-
-The Itô increments are
+The diffusion tensor is diagonal in cylindrical coordinates. Independent Wiener
+increments give the implemented Itô process:
 
 $$
-d\phi
-=\frac{\partial_\phi D_\phi}{R^2}\,dt
-+\frac{\sqrt{2D_\phi}}{R}\,dW_\phi,
+d\phi=\frac{\partial_\phi D_\phi+D_\phi\partial_\phi\ln w}{R^2}\,dt
+ +\frac{\sqrt{2D_\phi}}{R}\,dW_\phi,
+$$
+$$
+dR=\left(\partial_RD_R+D_R/R+D_R\partial_R\ln w\right)dt
+ +\sqrt{2D_R}\,dW_R,
+$$
+$$
+dZ=\left(\partial_ZD_Z+D_Z\partial_Z\ln w\right)dt
+ +\sqrt{2D_Z}\,dW_Z.
 $$
 
-$$
-dR
-=\left(\partial_R D_R+\frac{D_R}{R}\right)dt
-+\sqrt{2D_R}\,dW_R,
-$$
+Inactive coordinates are omitted. The cylindrical volume-measure term $D_R/R$
+applies in both modes. Derivatives hold grain size fixed and include
+$\nabla\ln D_a=\nabla\ln\nu-2\mathrm{St}^2/(1+\mathrm{St}^2)\nabla\ln\mathrm{St}$.
+Thus vertical diffusivity gradients can be nonzero even for viscosity depending only on $R$.
+Analytic gas gradients follow the same spherical stratification used by drag.
+With `IMPORTGAS`, gradients differentiate the actual periodic, boundary-clamped
+trilinear gas-density interpolant; both diffusion half-steps use the working gas field.
+`CONST_ST` freezes spatial Stokes variation only for analytic gas, as in the drag routine.
 
-$$
-dZ
-=\partial_ZD_Z\,dt
-+\sqrt{2D_Z}\,dW_Z.
-$$
-
-The current analytic viscosity depends only on $R$, so the azimuthal and vertical coefficient
-gradients are zero; explicit placeholders mark where more general dependencies would enter. The
-radial drift includes both the variable-diffusivity derivative and the cylindrical Itô term
-$D_R/R$.
-
-The kernel applies the Euler–Maruyama discretization described, for example, by
-[Kloeden & Platen (1992)](https://doi.org/10.1007/978-3-662-12616-5) over its requested interval
-$\Delta t$. For independent standard normal deviates $(\xi_\phi,\xi_R,\xi_Z)$,
-
-$$
-\Delta\phi
-=\frac{\partial_\phi D_\phi}{R^2}\Delta t
-+\frac{\sqrt{2D_\phi\Delta t}}{R}\xi_\phi,
-$$
-
-$$
-\Delta R
-=\left(\partial_RD_R+\frac{D_R}{R}\right)\Delta t
-+\sqrt{2D_R\Delta t}\,\xi_R,
-$$
-
-$$
-\Delta Z
-=\partial_ZD_Z\Delta t
-+\sqrt{2D_Z\Delta t}\,\xi_Z.
-$$
-
-For the analytic viscosity law $D_R\propto R^{g_D}$,
-
-```math
-\partial_RD_R+\frac{D_R}{R}=\frac{(g_D+1)D_R}{R},
-\qquad
-g_D=
-\left\{\begin{array}{ll}
-0,&\nu=\mathrm{constant},\\
-q+3/2,&\alpha=\mathrm{constant}.
-\end{array}\right.
-```
-
-These drift terms are required for the Fokker–Planck equation to be
-$\partial_t\varrho_d=\nabla\cdot(D\nabla\varrho_d)$ in cylindrical coordinates. Omitting $D_R/R$
-would instead produce the wrong radial equilibrium because a cylindrical annulus has measure
-$R\,dR$.
-
-For frozen coefficients, these increments reproduce the exact one-step mean and covariance. For
-spatially varying coefficients, Euler–Maruyama is generally strong order $1/2$ and weak order $1$;
-the dynamics timestep bounds both RMS and drift displacements so the coefficient-freezing error can
-be tested by timestep refinement.
+Euler–Maruyama uses independent standard normal draws, with physical displacement
+variance $2D_a\Delta t$. There is no MCDUST-specific noise rescaling. The method
+has strong order $1/2$ and weak order $1$ for regular spatially varying coefficients.
+The dynamics rate includes these drift and RMS displacements; imported-gas rates
+are evaluated at both supplied time endpoints. This endpoint policy is not a proof
+of a bound throughout nonlinear temporal interpolation.
 
 ### 7.2 Boundaries and velocity reprojection
 
@@ -2275,8 +2222,9 @@ With diagnostics enabled, `bath_count` counts group records, `wave_count` counts
 waves and `continuation_launches` counts all chain launches.
 
 Collision-chain physics, grouping, diagnostics and coefficient-cache helpers are consolidated
-in `_col_chain.cuh`. `local_gpu.cuh` contains the scheduler and GPU workspace;
-`local_evolve.inc` supplies the shared CUDA/ROCm runtime body.
+in `_col_chain.cuh`, together with the scheduler, GPU workspace and
+`evolve_local_collisions()` host function. CUDA and ROCm runtimes call that shared
+function with explicit state arguments after geometry/cache construction.
 
 Fresh start-rate totals and jump moments bypass the repeated neighbor pass when the
 first waiting time spans the whole interval. Event paths restore the RNG state and
@@ -2379,7 +2327,25 @@ but the KD heap rejects their stable identifiers before insertion. They therefor
 of the retained $N_K$ slots or reduce the active-neighbor radius. This avoids rebuilding a compacted
 tree while making absorbed particles invisible to collision selection.
 
+The production heap stores one independent strided shared-memory column per query
+thread. Launches use `kdtree_heap::threads`: 16 through `N_K=256`, then 8/4/2/1
+through 512/1024/2048/4096. Heap storage stays at or below 32 KiB per block.
+This limit applies to the heap only; other collision buffers can impose tighter
+resource limits. Cached and uncached search launches use the same column count.
+
 ### 8.4 Adaptive Morton hierarchy
+
+The shared implementation lives in `inc/swarm/morton/` and supports CUDA and ROCm.
+Root defaults to 64 threads per query. Candidate compaction uses the hardware
+`warpSize` (32 or 64 lanes), with stable packing across all warps in the block.
+Block sizes divisible by 32, up to the device limit and at most 1024, use this
+path; other block sizes retain the general cooperative path. Shared-memory
+requirements can limit usable block sizes further. Top-K merging
+reuses the sorted retained prefix, sorts the candidate half, retains the lower half,
+and skips batches that cannot improve the cutoff. Periodic-image deduplication and
+distance/identifier ordering are preserved. Ordinary merge padding is the next
+power of two covering both `2*N_K` and `N_K+MORTON_TPB`; the root periodic workspace
+covers `3*N_K+MORTON_TPB`. Non-power-of-two neighbor counts are supported.
 
 The Morton builder maps Cartesian coordinates to integer cells, interleaves their bits into 64-bit
 keys, stable-sorts the records, and refines cells above `MORTON_LEAF_TARGET` on the GPU. At each
@@ -2825,15 +2791,15 @@ The main numerical components map to the production source as follows:
 | Scientific operation | Principal implementation |
 |---|---|
 | mass bank, size sampling, and spatial CDFs | `inc/{cuda,rocm}/swarm/swarm_host.cuh` |
-| particle state initialization | `src/comm/swarm/particle_init.cu` |
-| semi-analytic dynamics | `src/comm/swarm/ssa_substep_1.cu`, `src/comm/swarm/ssa_substep_2.cu`, `src/comm/swarm/ssa_transport.cu` |
-| stochastic diffusion | `src/{cuda,rocm}/swarm/diffusion_pos.*` |
-| density and opacity deposition | `src/comm/swarm/dustdens_*.cu`, `src/comm/swarm/optdepth_*.cu` |
-| pairwise collision physics | `inc/comm/swarm/_collision.cuh` |
-| neighbor caching and frozen-bath chain | `inc/comm/swarm/_col_cache.cuh`, `inc/comm/swarm/_col_chain.cuh` |
+| particle state initialization | `src/swarm/particle_init.cu` |
+| semi-analytic dynamics | `src/swarm/ssa_substep_1.cu`, `src/swarm/ssa_substep_2.cu`, `src/swarm/ssa_transport.cu` |
+| stochastic diffusion | `src/swarm/diffusion_pos.cu` |
+| density and opacity deposition | `src/swarm/dustdens_*.cu`, `src/swarm/optdepth_*.cu` |
+| pairwise collision physics | `inc/swarm/_collision.cuh` |
+| neighbor caching and frozen-bath chain | `inc/swarm/_col_cache.cuh`, `inc/swarm/_col_chain.cuh` |
 | collision rates and events | `src/{cuda,rocm}/swarm/col_rate_calc.*`, `src/{cuda,rocm}/swarm/col_event_run.*` |
-| KD-tree and Morton search | `inc/{cuda,rocm}/swarm/kdtree/`, `inc/{cuda,rocm}/swarm/morton/` |
-| operator driver and output clock | `src/{cuda,rocm}/swarm/swarm_runtime.*` |
+| KD-tree and Morton search | `inc/swarm/{kdtree,morton}/`, backend builder/types under `inc/{cuda,rocm}/swarm/` |
+| operator driver and output clock | `src/swarm/swarm_runtime.cu` |
 
 The particle state is stored in double precision, while both collision-search backends use
 single-precision Cartesian search coordinates and squared distances. The physical collision rate,
@@ -3054,3 +3020,30 @@ model itself rather than current test coverage.
 - Shakura & Sunyaev (1973), [$\alpha$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)
 - Epstein (1924), [drag on small spheres in a dilute gas](https://doi.org/10.1103/PhysRev.23.710)
 - Acklam (2000), *An algorithm for computing the inverse normal cumulative distribution function*
+
+### Shared CUDA/ROCm application source
+
+Root application kernels and runtimes are maintained in `src/`; representation
+constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
+compile the same `.cu` files (ROCm uses `hipcc -x hip`).
+`inc/gpu_compat.cuh` maps runtime allocation/copy/error APIs and random sampling
+to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
+does not alter stream initialization or make raw RNG checkpoints interchangeable.
+
+Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
+CFL synchronization, and collision RNG storage. Both complete search libraries now
+live under `inc/swarm/{kdtree,morton}/`. Runtime API spelling and Thrust policy
+use the compatibility header. Explicit branches retain CUDA/ROCm allocator choices,
+compiler-specific host/device qualifiers, and CUB/hipCUB calls. Model overrides
+retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
+
+Host diffusion/collision checks and preprocessed source comparisons are available
+under `val/tool/`. Migration evidence is saved in `val/temp/shared_gpu/`; it is
+not native GPU compilation or performance qualification.
+
+Search consolidation is checked by `val/tool/check_shared_search.py` against the
+pre-migration snapshot in `val/temp/shared_search/before/` (200 preprocessed
+comparisons). `val/tool/check_search_optimizations.py` checks exact retained
+neighbors and Morton packing with 32/64-lane host emulation at block sizes
+32/64/128/256. These checks do not establish native compilation or speed on a GPU.
+Launch defaults remain unchanged; there is no automatic performance tuning.

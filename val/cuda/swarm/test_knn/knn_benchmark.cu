@@ -35,7 +35,7 @@ namespace
 
 constexpr int K = VAL_KNN_K;
 constexpr int KDTREE_TPB = 64;
-constexpr int MORTON_TPB = 256;
+constexpr int MORTON_TPB = 64;
 
 using kdtree_boxf = kdtree::box_t<float3>;
 
@@ -258,7 +258,7 @@ double wall_time_ms (Function operation)
 {
     auto time_start = std::chrono::steady_clock::now();
     operation();
-    _morton_cuda_check(cudaDeviceSynchronize(), "synchronize timed operation");
+    _morton_gpu_check(cudaDeviceSynchronize(), "synchronize timed operation");
     auto time_stop = std::chrono::steady_clock::now();
     return std::chrono::duration<double, std::milli>(time_stop - time_start).count();
 }
@@ -267,21 +267,21 @@ template<typename Function>
 double kernel_time_ms (Function operation, int repeats)
 {
     operation();
-    _morton_cuda_check(cudaDeviceSynchronize(), "synchronize benchmark warmup");
+    _morton_gpu_check(cudaDeviceSynchronize(), "synchronize benchmark warmup");
 
     cudaEvent_t event_start;
     cudaEvent_t event_stop;
-    _morton_cuda_check(cudaEventCreate(&event_start), "create benchmark start event");
-    _morton_cuda_check(cudaEventCreate(&event_stop), "create benchmark end event");
-    _morton_cuda_check(cudaEventRecord(event_start), "record benchmark start");
+    _morton_gpu_check(cudaEventCreate(&event_start), "create benchmark start event");
+    _morton_gpu_check(cudaEventCreate(&event_stop), "create benchmark end event");
+    _morton_gpu_check(cudaEventRecord(event_start), "record benchmark start");
     for (int repeat = 0; repeat < repeats; repeat++)
     {
         operation();
     }
-    _morton_cuda_check(cudaEventRecord(event_stop), "record benchmark end");
-    _morton_cuda_check(cudaEventSynchronize(event_stop), "synchronize benchmark end");
+    _morton_gpu_check(cudaEventRecord(event_stop), "record benchmark end");
+    _morton_gpu_check(cudaEventSynchronize(event_stop), "synchronize benchmark end");
     float elapsed_ms = 0.0f;
-    _morton_cuda_check(cudaEventElapsedTime(&elapsed_ms, event_start, event_stop), "read benchmark duration");
+    _morton_gpu_check(cudaEventElapsedTime(&elapsed_ms, event_start, event_stop), "read benchmark duration");
     cudaEventDestroy(event_start);
     cudaEventDestroy(event_stop);
     return static_cast<double>(elapsed_ms) / repeats;
@@ -632,8 +632,8 @@ int main (int argc, char **argv)
         get_root(points, config.dim, root_origin, root_width);
 
         float3 *dev_point = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_point, sizeof(float3)*points.size()), "allocate benchmark points");
-        _morton_cuda_check(cudaMemcpy(dev_point, points.data(), sizeof(float3)*points.size(), cudaMemcpyHostToDevice),
+        _morton_gpu_check(cudaMalloc((void**)&dev_point, sizeof(float3)*points.size()), "allocate benchmark points");
+        _morton_gpu_check(cudaMemcpy(dev_point, points.data(), sizeof(float3)*points.size(), cudaMemcpyHostToDevice),
             "copy benchmark points");
 
         // build both indexes from the same physical records and include allocation in build timing
@@ -641,11 +641,11 @@ int main (int argc, char **argv)
         kdtree_boxf *dev_kdtree_box = nullptr;
         double kdtree_build_ms = wall_time_ms([&]
         {
-            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*points.size()), "allocate KD tree");
-            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate KD bounds");
+            _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*points.size()), "allocate KD tree");
+            _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate KD bounds");
             int block_count = (config.particles + KDTREE_TPB - 1) / KDTREE_TPB;
             kdtree_point_init <<< block_count, KDTREE_TPB >>> (dev_kdtree_node, dev_point, config.particles);
-            _morton_cuda_check(cudaGetLastError(), "launch kdtree_point_init");
+            _morton_gpu_check(cudaGetLastError(), "launch kdtree_point_init");
             kdtree::buildTree<kdtree_point, kdtree_traits>(dev_kdtree_node, config.particles, dev_kdtree_box);
         });
 
@@ -676,26 +676,25 @@ int main (int argc, char **argv)
         unsigned int *dev_leaf_visit_count = nullptr;
         unsigned int *dev_candidate_count = nullptr;
         unsigned int *dev_quality_stack_overflow = nullptr;
-        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_size), "allocate KD quality indices");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_size), "allocate Morton quality indices");
-        _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_size), "allocate KD quality distances");
-        _morton_cuda_check(cudaMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_size), "allocate Morton quality distances");
-        _morton_cuda_check(cudaMalloc((void**)&dev_leaf_visit_count, sizeof(unsigned int)*config.queries), "allocate cell visits");
-        _morton_cuda_check(cudaMalloc((void**)&dev_candidate_count, sizeof(unsigned int)*config.queries),
+        _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_size), "allocate KD quality indices");
+        _morton_gpu_check(cudaMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_size), "allocate Morton quality indices");
+        _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_size), "allocate KD quality distances");
+        _morton_gpu_check(cudaMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_size), "allocate Morton quality distances");
+        _morton_gpu_check(cudaMalloc((void**)&dev_leaf_visit_count, sizeof(unsigned int)*config.queries), "allocate cell visits");
+        _morton_gpu_check(cudaMalloc((void**)&dev_candidate_count, sizeof(unsigned int)*config.queries),
             "allocate candidate visits");
-        _morton_cuda_check(cudaMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
+        _morton_gpu_check(cudaMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
             "allocate quality stack-overflow flags");
 
-        int kdtree_quality_block_count = (config.queries + KDTREE_TPB - 1) / KDTREE_TPB;
-        kdtree_query<K> <<< kdtree_quality_block_count, KDTREE_TPB >>> (
+        kdtree_query<K> <<< (config.queries + kdtree_heap<K>::threads - 1)/kdtree_heap<K>::threads, kdtree_heap<K>::threads >>> (
             dev_kdtree_idx_old, dev_kdtree_dist_sq, dev_point, config.queries,
             dev_kdtree_node, dev_kdtree_box, config.particles, config.radius
         );
-        morton_search<K> <<< config.queries, MORTON_TPB >>> (
+        morton_search<K, MORTON_TPB> <<< config.queries, MORTON_TPB >>> (
             dev_morton_idx_old, dev_morton_dist_sq, dev_leaf_visit_count, dev_candidate_count, dev_quality_stack_overflow,
             dev_point, config.queries, morton_owner.view(), config.radius
         );
-        _morton_cuda_check(cudaDeviceSynchronize(), "run KNN quality queries");
+        _morton_gpu_check(cudaDeviceSynchronize(), "run KNN quality queries");
 
         std::vector<int> kdtree_idx_old(quality_size);
         std::vector<int> morton_idx_old(quality_size);
@@ -704,23 +703,23 @@ int main (int argc, char **argv)
         std::vector<unsigned int> leaf_visit_count(config.queries);
         std::vector<unsigned int> candidate_count(config.queries);
         std::vector<unsigned int> quality_stack_overflow(config.queries);
-        _morton_cuda_check(cudaMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_gpu_check(cudaMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
             "copy KD quality indices");
-        _morton_cuda_check(cudaMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_gpu_check(cudaMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_size, cudaMemcpyDeviceToHost),
             "copy Morton quality indices");
-        _morton_cuda_check(cudaMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_gpu_check(cudaMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
             "copy KD quality distances");
-        _morton_cuda_check(cudaMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
+        _morton_gpu_check(cudaMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_size, cudaMemcpyDeviceToHost),
             "copy Morton quality distances");
-        _morton_cuda_check(cudaMemcpy(leaf_visit_count.data(), dev_leaf_visit_count, sizeof(unsigned int)*config.queries,
+        _morton_gpu_check(cudaMemcpy(leaf_visit_count.data(), dev_leaf_visit_count, sizeof(unsigned int)*config.queries,
             cudaMemcpyDeviceToHost), "copy cell visits");
-        _morton_cuda_check(cudaMemcpy(candidate_count.data(), dev_candidate_count,
+        _morton_gpu_check(cudaMemcpy(candidate_count.data(), dev_candidate_count,
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy candidate visits");
-        _morton_cuda_check(cudaMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
+        _morton_gpu_check(cudaMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
             sizeof(unsigned int)*config.queries, cudaMemcpyDeviceToHost), "copy quality stack-overflow flags");
         morton_view morton_data = morton_owner.view();
         std::vector<morton_point> morton_records(morton_data.point_count);
-        _morton_cuda_check(cudaMemcpy(morton_records.data(), morton_data.dev_point,
+        _morton_gpu_check(cudaMemcpy(morton_records.data(), morton_data.dev_point,
             sizeof(morton_point)*morton_data.point_count, cudaMemcpyDeviceToHost),
             "copy Morton records for quality diagnosis");
 
@@ -750,31 +749,30 @@ int main (int argc, char **argv)
         if (!config.quality_only)
         {
             // time all-particle queries through checksums to avoid output-transfer cost
-            _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
+            _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
                 "allocate KD checksum");
-            _morton_cuda_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
+            _morton_gpu_check(cudaMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
                 "allocate Morton checksum");
-            _morton_cuda_check(cudaMalloc((void**)&dev_performance_stack_overflow,
+            _morton_gpu_check(cudaMalloc((void**)&dev_performance_stack_overflow,
                 sizeof(unsigned int)*config.particles), "allocate performance stack-overflow flags");
 
-            int kdtree_block_count = (config.particles + KDTREE_TPB - 1) / KDTREE_TPB;
             kdtree_query_ms = kernel_time_ms([&]
             {
-                kdtree_checksum<K> <<< kdtree_block_count, KDTREE_TPB >>> (
+                kdtree_checksum<K> <<< (config.particles + kdtree_heap<K>::threads - 1)/kdtree_heap<K>::threads, kdtree_heap<K>::threads >>> (
                     dev_kdtree_checksum, dev_point, config.particles,
                     dev_kdtree_node, dev_kdtree_box, config.particles, config.radius
                 );
             }, config.repeats);
             morton_query_ms = kernel_time_ms([&]
             {
-                morton_digest<K> <<< config.particles, MORTON_TPB >>> (
+                morton_digest<K, MORTON_TPB> <<< config.particles, MORTON_TPB >>> (
                     dev_morton_checksum, dev_performance_stack_overflow,
                     dev_point, config.particles, morton_owner.view(), config.radius
                 );
             }, config.repeats);
 
             std::vector<unsigned int> performance_stack_overflow(config.particles);
-            _morton_cuda_check(cudaMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
+            _morton_gpu_check(cudaMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
                 sizeof(unsigned int)*config.particles, cudaMemcpyDeviceToHost),
                 "copy performance stack-overflow flags");
             for (unsigned int overflow : performance_stack_overflow)

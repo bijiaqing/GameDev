@@ -36,20 +36,21 @@ constexpr real M_MOL = 2.34*1.67262192369e-24, X_SEC = 2.0e-15;
 constexpr real RHO_0 = 1.0;
 constexpr real STOKES_0 = M_PI*RHO_0*S_0/(4.0*SIGMA_0);
 constexpr real SCHMIDT_X = 1.0, SCHMIDT_R = 1.0, SCHMIDT_Z = 1.0;
-constexpr real INIT_SMIN = 1.0e-4, INIT_SMAX = 2.0e-4; // radii 0.5--1 micron
+constexpr real INIT_SMIN = 1.0e-4, INIT_SMAX = INIT_SMIN; // fixed 0.5-micron radius monomers
 
-constexpr int COAG_KERNEL = 3, N_K = 200;
+constexpr int COAG_KERNEL = 3, N_K = 256;
 constexpr real H_SEARCH = 1.0, V_FRAG = 100.0;
 constexpr int COL_BATH_TPB = 64, COL_EVENT_CAP = 32;
 constexpr int COL_BIN_X = 1, COL_BIN_Y = 16, COL_BIN_Z = 8, COL_BIN_S = 32;
 constexpr int COL_BIN_MIN = 64;
 constexpr real COL_BATH_MAX = YEAR;
 constexpr real COL_BATH_EPS = 0.02, COL_BATH_ALPHA = 1.0e-3;
-static_assert(N_K == 200 && COL_BATH_EPS == 0.02, "Benchmark settings must match across variants");
+static_assert(N_K == 256 && COL_BATH_EPS == 0.02, "Benchmark settings must match across variants");
 // Controller bins only: these are not hard physical grain-size cutoffs.
 constexpr real COL_SIZE_MIN = 0.5*INIT_SMIN, COL_SIZE_MAX = 100.0;
-constexpr int MORTON_TPB = 256, MORTON_LEAF_TARGET = 128;
-constexpr int MORTON_MAX_LEVEL = 20, MORTON_WORK_SIZE = 1024;
+constexpr int MORTON_TPB = 64, MORTON_LEAF_TARGET = 128;
+constexpr int neighbor_pow2(int n) { int p=1; while(p<n) p*=2; return p; }
+constexpr int MORTON_MAX_LEVEL = 20, MORTON_WORK_SIZE = neighbor_pow2(3*N_K+MORTON_TPB);
 static_assert(3*N_K + MORTON_TPB <= MORTON_WORK_SIZE);
 
 constexpr int SAVE_MAX = COAG_OUTPUTS, LIN_BASE = 1;

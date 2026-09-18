@@ -245,20 +245,20 @@ bool run_kdtree_filter_case (const edge_case &test)
     int *dev_near_idx_old = nullptr;
     float *dev_near_dist_sq = nullptr;
     unsigned char *dev_active = nullptr;
-    _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*kdtree_node.size()),
+    _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*kdtree_node.size()),
         "allocate filtered KD tree");
-    _morton_cuda_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)),
+    _morton_gpu_check(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)),
         "allocate filtered KD bounds");
-    _morton_cuda_check(cudaMalloc((void**)&dev_near_idx_old, sizeof(int)*K),
+    _morton_gpu_check(cudaMalloc((void**)&dev_near_idx_old, sizeof(int)*K),
         "allocate filtered KD indices");
-    _morton_cuda_check(cudaMalloc((void**)&dev_near_dist_sq, sizeof(float)*K),
+    _morton_gpu_check(cudaMalloc((void**)&dev_near_dist_sq, sizeof(float)*K),
         "allocate filtered KD distances");
-    _morton_cuda_check(cudaMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
+    _morton_gpu_check(cudaMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
         "allocate filtered KD active flags");
-    _morton_cuda_check(cudaMemcpy(dev_kdtree_node, kdtree_node.data(),
+    _morton_gpu_check(cudaMemcpy(dev_kdtree_node, kdtree_node.data(),
         sizeof(kdtree_point)*kdtree_node.size(), cudaMemcpyHostToDevice),
         "copy filtered KD points");
-    _morton_cuda_check(cudaMemcpy(dev_active, test.active.data(),
+    _morton_gpu_check(cudaMemcpy(dev_active, test.active.data(),
         sizeof(unsigned char)*test.active.size(), cudaMemcpyHostToDevice),
         "copy filtered KD active flags");
 
@@ -269,13 +269,13 @@ bool run_kdtree_filter_case (const edge_case &test)
         dev_near_idx_old, dev_near_dist_sq, test.queries.front(), dev_kdtree_node,
         dev_kdtree_box, static_cast<int>(kdtree_node.size()), test.radius, dev_active
     );
-    _morton_cuda_check(cudaDeviceSynchronize(), "run filtered KD query");
+    _morton_gpu_check(cudaDeviceSynchronize(), "run filtered KD query");
 
     std::vector<int> near_idx_old(K);
     std::vector<float> near_dist_sq(K);
-    _morton_cuda_check(cudaMemcpy(near_idx_old.data(), dev_near_idx_old,
+    _morton_gpu_check(cudaMemcpy(near_idx_old.data(), dev_near_idx_old,
         sizeof(int)*K, cudaMemcpyDeviceToHost), "copy filtered KD indices");
-    _morton_cuda_check(cudaMemcpy(near_dist_sq.data(), dev_near_dist_sq,
+    _morton_gpu_check(cudaMemcpy(near_dist_sq.data(), dev_near_dist_sq,
         sizeof(float)*K, cudaMemcpyDeviceToHost), "copy filtered KD distances");
 
     std::vector<std::pair<float, int>> actual;
@@ -322,21 +322,21 @@ bool run_case (const edge_case &test)
     unsigned char *dev_active = nullptr;
     std::size_t output_count = test.queries.size()*K;
 
-    _morton_cuda_check(cudaMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate edge points");
-    _morton_cuda_check(cudaMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate edge queries");
-    _morton_cuda_check(cudaMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate edge near_idx_old");
-    _morton_cuda_check(cudaMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate edge near_dist_sq");
-    _morton_cuda_check(cudaMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
+    _morton_gpu_check(cudaMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate edge points");
+    _morton_gpu_check(cudaMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate edge queries");
+    _morton_gpu_check(cudaMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate edge near_idx_old");
+    _morton_gpu_check(cudaMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate edge near_dist_sq");
+    _morton_gpu_check(cudaMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate edge overflow flags");
     if (!test.active.empty())
-        _morton_cuda_check(cudaMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
+        _morton_gpu_check(cudaMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
             "allocate edge active flags");
-    _morton_cuda_check(cudaMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
+    _morton_gpu_check(cudaMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
         cudaMemcpyHostToDevice), "copy edge points");
-    _morton_cuda_check(cudaMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
+    _morton_gpu_check(cudaMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
         cudaMemcpyHostToDevice), "copy edge queries");
     if (dev_active)
-        _morton_cuda_check(cudaMemcpy(dev_active, test.active.data(), sizeof(unsigned char)*test.active.size(),
+        _morton_gpu_check(cudaMemcpy(dev_active, test.active.data(), sizeof(unsigned char)*test.active.size(),
             cudaMemcpyHostToDevice), "copy edge active flags");
 
     morton_index morton_owner;
@@ -349,16 +349,16 @@ bool run_case (const edge_case &test)
         dev_query_point, static_cast<int>(test.queries.size()), morton_owner.view(), test.radius,
         dev_active
     );
-    _morton_cuda_check(cudaDeviceSynchronize(), "run edge queries");
+    _morton_gpu_check(cudaDeviceSynchronize(), "run edge queries");
 
     std::vector<int> near_idx_old(output_count);
     std::vector<float> near_dist_sq(output_count);
     std::vector<unsigned int> stack_overflow(test.queries.size());
-    _morton_cuda_check(cudaMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, cudaMemcpyDeviceToHost),
+    _morton_gpu_check(cudaMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, cudaMemcpyDeviceToHost),
         "copy edge near_idx_old");
-    _morton_cuda_check(cudaMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
+    _morton_gpu_check(cudaMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
         cudaMemcpyDeviceToHost), "copy edge near_dist_sq");
-    _morton_cuda_check(cudaMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
+    _morton_gpu_check(cudaMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
         cudaMemcpyDeviceToHost), "copy edge overflow flags");
 
     bool passed = true;

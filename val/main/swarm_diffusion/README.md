@@ -17,6 +17,8 @@ It is a pilot for selecting a later convergence matrix, not a complete accuracy 
 | Evolution seed | production default 1 |
 
 ALPHA=0.04, ASPR_0=0.05, IDX_Q=0.5, and SCHMIDT_R=1 give A=1e-4.
+STOKES_0=0 selects the tracer limit, preserving this analytical coefficient after
+root diffusion gained the factor 1/(1+St²). Dynamics are disabled in this model.
 The initial velocities are zero. A model-local no-op ssa_transport.cu disables
 deterministic motion; dyn_rate_calc.cu fixes the timestep. The production runtime
 still makes two diffusion calls per step, each of duration 0.5. The diffusion

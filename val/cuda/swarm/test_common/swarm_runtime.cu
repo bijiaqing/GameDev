@@ -23,7 +23,6 @@
 
 #if defined(COLLISION) && !defined(BERNOULLI)
 #include <_col_chain.cuh>
-#include <local_gpu.cuh>
 #endif // COLLISION && !BERNOULLI
 
 #ifdef KNN_CACHE
@@ -525,7 +524,7 @@ int main (int argc, char **argv)
             #if !defined(BERNOULLI) || defined(KNN_CACHE)
             // retain fixed physical neighbors while collision properties continue to evolve
             #ifdef COLLISION_KDTREE
-            col_cache_get <<< NB_T, TPB >>> (
+            col_cache_get <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (
                 dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
                 dev_col_active, dev_particle, image_dist_min
             );
@@ -587,7 +586,22 @@ int main (int argc, char **argv)
         #endif // COL_GEOM_VAL
 
         #ifndef BERNOULLI
-        #include <local_evolve.inc>
+        evolve_local_collisions(
+            local, local_geometry_valid, duration, total_dust_mass,
+            clock_dyn, dt_col, count_col, col_raw_count,
+            dev_particle, dev_rngstate, dev_col_spatial, dev_col_neighbor,
+            dev_col_events, dev_col_count, dev_col_binmap, dev_col_error,
+            dev_col_unfinished, dev_col_active, dev_col_complete, dev_size_old,
+            dev_numr_old, dev_col_time, dev_col_rate, dev_col_hazard,
+            dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, dev_col_measure,
+            dev_col_ratebin, dev_col_audit
+            #ifdef IMPORTGAS
+            , dev_gas_dens
+            #endif
+            #ifdef COL_DIAGNOSTICS
+            , clock_sim, col_summary
+            #endif
+        );
         #else  // BERNOULLI
         real elapsed = 0.0;
         while (elapsed < duration)
@@ -614,7 +628,7 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
+            col_rate_calc <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_col_rate, dev_col_dist, dev_particle,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -682,7 +696,7 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
+            col_event_run <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -768,6 +782,7 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 , dev_gas_velx, dev_gas_vely, dev_gas_velz
                 , dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
+                , dev_gas_dens, dev_gas_dens_next
                 #endif // IMPORTGAS
             );
             CUDA_KERNEL_CHECK("dyn_rate_calc");
@@ -796,7 +811,11 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the first half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
+#ifdef IMPORTGAS
+                , dev_gas_dens
+#endif
+            );
             CUDA_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
             invalidate_col_geometry();
@@ -850,7 +869,11 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
+#ifdef IMPORTGAS
+                , dev_gas_dens
+#endif
+            );
             CUDA_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
             invalidate_col_geometry();

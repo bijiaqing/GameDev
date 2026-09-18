@@ -237,20 +237,20 @@ bool run_case (const periodic_case &test)
     unsigned int *dev_image_count = nullptr;
     std::size_t output_count = test.queries.size()*K;
 
-    _morton_hip_check(hipMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate periodic points");
-    _morton_hip_check(hipMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate periodic queries");
-    _morton_hip_check(hipMalloc((void**)&dev_query_x, sizeof(float)*test.query_x.size()), "allocate query azimuths");
-    _morton_hip_check(hipMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate periodic near_idx_old");
-    _morton_hip_check(hipMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate periodic near_dist_sq");
-    _morton_hip_check(hipMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
+    _morton_gpu_check(hipMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate periodic points");
+    _morton_gpu_check(hipMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate periodic queries");
+    _morton_gpu_check(hipMalloc((void**)&dev_query_x, sizeof(float)*test.query_x.size()), "allocate query azimuths");
+    _morton_gpu_check(hipMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate periodic near_idx_old");
+    _morton_gpu_check(hipMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate periodic near_dist_sq");
+    _morton_gpu_check(hipMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate periodic overflow flags");
-    _morton_hip_check(hipMalloc((void**)&dev_image_count, sizeof(unsigned int)*test.queries.size()),
+    _morton_gpu_check(hipMalloc((void**)&dev_image_count, sizeof(unsigned int)*test.queries.size()),
         "allocate periodic image counts");
-    _morton_hip_check(hipMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
+    _morton_gpu_check(hipMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
         hipMemcpyHostToDevice), "copy periodic points");
-    _morton_hip_check(hipMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
+    _morton_gpu_check(hipMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
         hipMemcpyHostToDevice), "copy periodic queries");
-    _morton_hip_check(hipMemcpy(dev_query_x, test.query_x.data(), sizeof(float)*test.query_x.size(),
+    _morton_gpu_check(hipMemcpy(dev_query_x, test.query_x.data(), sizeof(float)*test.query_x.size(),
         hipMemcpyHostToDevice), "copy query azimuths");
 
     morton_index morton_owner;
@@ -263,19 +263,19 @@ bool run_case (const periodic_case &test)
         dev_query_point, dev_query_x, static_cast<int>(test.queries.size()), morton_owner.view(),
         test.radius, test.x_min, test.x_max
     );
-    _morton_hip_check(hipDeviceSynchronize(), "run periodic queries");
+    _morton_gpu_check(hipDeviceSynchronize(), "run periodic queries");
 
     std::vector<int> near_idx_old(output_count);
     std::vector<float> near_dist_sq(output_count);
     std::vector<unsigned int> stack_overflow(test.queries.size());
     std::vector<unsigned int> image_count(test.queries.size());
-    _morton_hip_check(hipMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, hipMemcpyDeviceToHost),
+    _morton_gpu_check(hipMemcpy(near_idx_old.data(), dev_near_idx_old, sizeof(int)*output_count, hipMemcpyDeviceToHost),
         "copy periodic near_idx_old");
-    _morton_hip_check(hipMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
+    _morton_gpu_check(hipMemcpy(near_dist_sq.data(), dev_near_dist_sq, sizeof(float)*output_count,
         hipMemcpyDeviceToHost), "copy periodic near_dist_sq");
-    _morton_hip_check(hipMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
+    _morton_gpu_check(hipMemcpy(stack_overflow.data(), dev_stack_overflow, sizeof(unsigned int)*test.queries.size(),
         hipMemcpyDeviceToHost), "copy periodic overflow flags");
-    _morton_hip_check(hipMemcpy(image_count.data(), dev_image_count,
+    _morton_gpu_check(hipMemcpy(image_count.data(), dev_image_count,
         sizeof(unsigned int)*test.queries.size(), hipMemcpyDeviceToHost), "copy periodic image counts");
 
     bool passed = true;
@@ -332,13 +332,13 @@ bool run_case (const periodic_case &test)
         }
     }
 
-    _morton_hip_check(hipFree(dev_image_count), "release image counts");
-    _morton_hip_check(hipFree(dev_stack_overflow), "release overflow flags");
-    _morton_hip_check(hipFree(dev_near_dist_sq), "release neighbor distances");
-    _morton_hip_check(hipFree(dev_near_idx_old), "release neighbor identifiers");
-    _morton_hip_check(hipFree(dev_query_x), "release query azimuths");
-    _morton_hip_check(hipFree(dev_query_point), "release query points");
-    _morton_hip_check(hipFree(dev_point), "release indexed points");
+    _morton_gpu_check(hipFree(dev_image_count), "release image counts");
+    _morton_gpu_check(hipFree(dev_stack_overflow), "release overflow flags");
+    _morton_gpu_check(hipFree(dev_near_dist_sq), "release neighbor distances");
+    _morton_gpu_check(hipFree(dev_near_idx_old), "release neighbor identifiers");
+    _morton_gpu_check(hipFree(dev_query_x), "release query azimuths");
+    _morton_gpu_check(hipFree(dev_query_point), "release query points");
+    _morton_gpu_check(hipFree(dev_point), "release indexed points");
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;

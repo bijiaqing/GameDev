@@ -19,7 +19,7 @@ where their gas-disk assumptions are physically identical.
 
 ## Source and validation layout
 
-- `inc/comm/fluid/`, `inc/comm/swarm/`, `src/comm/fluid/`, and `src/comm/swarm/` contain complete
+- `inc/fluid/`, `inc/swarm/`, `src/fluid/`, and `src/swarm/` contain complete
   backend-neutral files.
 - `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files.
 - `mod/` contains the published production model configuration.

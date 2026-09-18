@@ -104,11 +104,12 @@ def analyze_diffusion(out_dir: Path, resolution: int, meta: dict[str, str]) -> d
     nparticle = int(meta["np"])
     dt = float(meta["dt"])
     state = load_state(out_dir, resolution, nparticle)
-    expected_variance = 2.0*NU*dt
+    diffusivity = NU/(1.0 + 0.2**2)
+    expected_variance = 2.0*diffusivity*dt
 
     if meta["case"] == "diffusion_1d":
         samples = state[1] - 1.0
-        mean_expected = NU*dt
+        mean_expected = diffusivity*(1.0 + 4.0*0.2**2/(1.0+0.2**2))*dt
         velocity_error = np.concatenate((
             state[3]/state[1] - 0.7,
             state[4] - 0.2,
@@ -128,7 +129,7 @@ def analyze_diffusion(out_dir: Path, resolution: int, meta: dict[str, str]) -> d
         radius = state[1]*np.sin(state[2])
         height = state[1]*np.cos(state[2])
         components = {"R": radius - 1.0, "Z": height}
-        mean_expected = NU*dt
+        mean_expected = diffusivity*(1.0 + 4.0*0.2**2/(1.0+0.2**2))*dt
 
         vx = state[3]/radius
         vz = state[5]/state[1]
@@ -196,7 +197,8 @@ def analyze_wedge_diffusion(out_dir: Path, resolution: int, meta: dict[str, str]
     crossed_lower = int(np.count_nonzero(lower & (final[0] > 0.0)))
     crossed_upper = int(np.count_nonzero(upper & (final[0] < 0.0)))
     unique_unwrap = bool(np.max(np.abs(delta_x)) < 0.5*width)
-    expected_variance = float(np.mean(2.0*NU*dt/(radius_initial*radius_initial)))
+    stokes = 0.2/radius_initial**2/np.exp((radius_initial/initial[1]-1.0)/0.05**2)
+    expected_variance = float(np.mean(2.0*NU*dt/((1.0+stokes**2)*radius_initial**2)))
     mean_error = float(np.mean(delta_x))
     variance_error = float(np.var(delta_x) - expected_variance)
     mean_limit = 6.0*math.sqrt(expected_variance/nparticle)

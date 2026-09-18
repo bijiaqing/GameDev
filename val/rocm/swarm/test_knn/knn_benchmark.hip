@@ -35,7 +35,7 @@ namespace
 
 constexpr int K = VAL_KNN_K;
 constexpr int KDTREE_TPB = 64;
-constexpr int MORTON_TPB = 256;
+constexpr int MORTON_TPB = 64;
 
 using kdtree_boxf = kdtree::box_t<float3>;
 
@@ -258,7 +258,7 @@ double wall_time_ms (Function operation)
 {
     auto time_start = std::chrono::steady_clock::now();
     operation();
-    _morton_hip_check(hipDeviceSynchronize(), "synchronize timed operation");
+    _morton_gpu_check(hipDeviceSynchronize(), "synchronize timed operation");
     auto time_stop = std::chrono::steady_clock::now();
     return std::chrono::duration<double, std::milli>(time_stop - time_start).count();
 }
@@ -267,23 +267,23 @@ template<typename Function>
 double kernel_time_ms (Function operation, int repeats)
 {
     operation();
-    _morton_hip_check(hipDeviceSynchronize(), "synchronize benchmark warmup");
+    _morton_gpu_check(hipDeviceSynchronize(), "synchronize benchmark warmup");
 
     hipEvent_t event_start;
     hipEvent_t event_stop;
-    _morton_hip_check(hipEventCreate(&event_start), "create benchmark start event");
-    _morton_hip_check(hipEventCreate(&event_stop), "create benchmark end event");
-    _morton_hip_check(hipEventRecord(event_start), "record benchmark start");
+    _morton_gpu_check(hipEventCreate(&event_start), "create benchmark start event");
+    _morton_gpu_check(hipEventCreate(&event_stop), "create benchmark end event");
+    _morton_gpu_check(hipEventRecord(event_start), "record benchmark start");
     for (int repeat = 0; repeat < repeats; repeat++)
     {
         operation();
     }
-    _morton_hip_check(hipEventRecord(event_stop), "record benchmark end");
-    _morton_hip_check(hipEventSynchronize(event_stop), "synchronize benchmark end");
+    _morton_gpu_check(hipEventRecord(event_stop), "record benchmark end");
+    _morton_gpu_check(hipEventSynchronize(event_stop), "synchronize benchmark end");
     float elapsed_ms = 0.0f;
-    _morton_hip_check(hipEventElapsedTime(&elapsed_ms, event_start, event_stop), "read benchmark duration");
-    _morton_hip_check(hipEventDestroy(event_start), "destroy benchmark start event");
-    _morton_hip_check(hipEventDestroy(event_stop), "destroy benchmark end event");
+    _morton_gpu_check(hipEventElapsedTime(&elapsed_ms, event_start, event_stop), "read benchmark duration");
+    _morton_gpu_check(hipEventDestroy(event_start), "destroy benchmark start event");
+    _morton_gpu_check(hipEventDestroy(event_stop), "destroy benchmark end event");
     return static_cast<double>(elapsed_ms) / repeats;
 }
 
@@ -646,8 +646,8 @@ int main (int argc, char **argv)
         get_root(points, config.dim, root_origin, root_width);
 
         float3 *dev_point = nullptr;
-        _morton_hip_check(hipMalloc((void**)&dev_point, sizeof(float3)*points.size()), "allocate benchmark points");
-        _morton_hip_check(hipMemcpy(dev_point, points.data(), sizeof(float3)*points.size(), hipMemcpyHostToDevice),
+        _morton_gpu_check(hipMalloc((void**)&dev_point, sizeof(float3)*points.size()), "allocate benchmark points");
+        _morton_gpu_check(hipMemcpy(dev_point, points.data(), sizeof(float3)*points.size(), hipMemcpyHostToDevice),
             "copy benchmark points");
 
         // build both indexes from the same physical records and include allocation in build timing
@@ -655,11 +655,11 @@ int main (int argc, char **argv)
         kdtree_boxf *dev_kdtree_box = nullptr;
         double kdtree_build_ms = wall_time_ms([&]
         {
-            _morton_hip_check(hipMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*points.size()), "allocate KD tree");
-            _morton_hip_check(hipMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate KD bounds");
+            _morton_gpu_check(hipMalloc((void**)&dev_kdtree_node, sizeof(kdtree_point)*points.size()), "allocate KD tree");
+            _morton_gpu_check(hipMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)), "allocate KD bounds");
             int block_count = (config.particles + KDTREE_TPB - 1) / KDTREE_TPB;
             kdtree_point_init <<< block_count, KDTREE_TPB >>> (dev_kdtree_node, dev_point, config.particles);
-            _morton_hip_check(hipGetLastError(), "launch kdtree_point_init");
+            _morton_gpu_check(hipGetLastError(), "launch kdtree_point_init");
             kdtree::buildTree<kdtree_point, kdtree_traits>(dev_kdtree_node, config.particles, dev_kdtree_box);
         });
 
@@ -690,26 +690,25 @@ int main (int argc, char **argv)
         unsigned int *dev_leaf_visit_count = nullptr;
         unsigned int *dev_candidate_count = nullptr;
         unsigned int *dev_quality_stack_overflow = nullptr;
-        _morton_hip_check(hipMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_size), "allocate KD quality indices");
-        _morton_hip_check(hipMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_size), "allocate Morton quality indices");
-        _morton_hip_check(hipMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_size), "allocate KD quality distances");
-        _morton_hip_check(hipMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_size), "allocate Morton quality distances");
-        _morton_hip_check(hipMalloc((void**)&dev_leaf_visit_count, sizeof(unsigned int)*config.queries), "allocate cell visits");
-        _morton_hip_check(hipMalloc((void**)&dev_candidate_count, sizeof(unsigned int)*config.queries),
+        _morton_gpu_check(hipMalloc((void**)&dev_kdtree_idx_old, sizeof(int)*quality_size), "allocate KD quality indices");
+        _morton_gpu_check(hipMalloc((void**)&dev_morton_idx_old, sizeof(int)*quality_size), "allocate Morton quality indices");
+        _morton_gpu_check(hipMalloc((void**)&dev_kdtree_dist_sq, sizeof(float)*quality_size), "allocate KD quality distances");
+        _morton_gpu_check(hipMalloc((void**)&dev_morton_dist_sq, sizeof(float)*quality_size), "allocate Morton quality distances");
+        _morton_gpu_check(hipMalloc((void**)&dev_leaf_visit_count, sizeof(unsigned int)*config.queries), "allocate cell visits");
+        _morton_gpu_check(hipMalloc((void**)&dev_candidate_count, sizeof(unsigned int)*config.queries),
             "allocate candidate visits");
-        _morton_hip_check(hipMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
+        _morton_gpu_check(hipMalloc((void**)&dev_quality_stack_overflow, sizeof(unsigned int)*config.queries),
             "allocate quality stack-overflow flags");
 
-        int kdtree_quality_block_count = (config.queries + KDTREE_TPB - 1) / KDTREE_TPB;
-        kdtree_query<K> <<< kdtree_quality_block_count, KDTREE_TPB >>> (
+        kdtree_query<K> <<< (config.queries + kdtree_heap<K>::threads - 1)/kdtree_heap<K>::threads, kdtree_heap<K>::threads >>> (
             dev_kdtree_idx_old, dev_kdtree_dist_sq, dev_point, config.queries,
             dev_kdtree_node, dev_kdtree_box, config.particles, config.radius
         );
-        morton_search<K> <<< config.queries, MORTON_TPB >>> (
+        morton_search<K, MORTON_TPB> <<< config.queries, MORTON_TPB >>> (
             dev_morton_idx_old, dev_morton_dist_sq, dev_leaf_visit_count, dev_candidate_count, dev_quality_stack_overflow,
             dev_point, config.queries, morton_owner.view(), config.radius
         );
-        _morton_hip_check(hipDeviceSynchronize(), "run KNN quality queries");
+        _morton_gpu_check(hipDeviceSynchronize(), "run KNN quality queries");
 
         std::vector<int> kdtree_idx_old(quality_size);
         std::vector<int> morton_idx_old(quality_size);
@@ -718,23 +717,23 @@ int main (int argc, char **argv)
         std::vector<unsigned int> leaf_visit_count(config.queries);
         std::vector<unsigned int> candidate_count(config.queries);
         std::vector<unsigned int> quality_stack_overflow(config.queries);
-        _morton_hip_check(hipMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_size, hipMemcpyDeviceToHost),
+        _morton_gpu_check(hipMemcpy(kdtree_idx_old.data(), dev_kdtree_idx_old, sizeof(int)*quality_size, hipMemcpyDeviceToHost),
             "copy KD quality indices");
-        _morton_hip_check(hipMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_size, hipMemcpyDeviceToHost),
+        _morton_gpu_check(hipMemcpy(morton_idx_old.data(), dev_morton_idx_old, sizeof(int)*quality_size, hipMemcpyDeviceToHost),
             "copy Morton quality indices");
-        _morton_hip_check(hipMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_size, hipMemcpyDeviceToHost),
+        _morton_gpu_check(hipMemcpy(kdtree_dist_sq.data(), dev_kdtree_dist_sq, sizeof(float)*quality_size, hipMemcpyDeviceToHost),
             "copy KD quality distances");
-        _morton_hip_check(hipMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_size, hipMemcpyDeviceToHost),
+        _morton_gpu_check(hipMemcpy(morton_dist_sq.data(), dev_morton_dist_sq, sizeof(float)*quality_size, hipMemcpyDeviceToHost),
             "copy Morton quality distances");
-        _morton_hip_check(hipMemcpy(leaf_visit_count.data(), dev_leaf_visit_count, sizeof(unsigned int)*config.queries,
+        _morton_gpu_check(hipMemcpy(leaf_visit_count.data(), dev_leaf_visit_count, sizeof(unsigned int)*config.queries,
             hipMemcpyDeviceToHost), "copy cell visits");
-        _morton_hip_check(hipMemcpy(candidate_count.data(), dev_candidate_count,
+        _morton_gpu_check(hipMemcpy(candidate_count.data(), dev_candidate_count,
             sizeof(unsigned int)*config.queries, hipMemcpyDeviceToHost), "copy candidate visits");
-        _morton_hip_check(hipMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
+        _morton_gpu_check(hipMemcpy(quality_stack_overflow.data(), dev_quality_stack_overflow,
             sizeof(unsigned int)*config.queries, hipMemcpyDeviceToHost), "copy quality stack-overflow flags");
         morton_view morton_data = morton_owner.view();
         std::vector<morton_point> morton_records(morton_data.point_count);
-        _morton_hip_check(hipMemcpy(morton_records.data(), morton_data.dev_point,
+        _morton_gpu_check(hipMemcpy(morton_records.data(), morton_data.dev_point,
             sizeof(morton_point)*morton_data.point_count, hipMemcpyDeviceToHost),
             "copy Morton records for quality diagnosis");
 
@@ -764,31 +763,30 @@ int main (int argc, char **argv)
         if (!config.quality_only)
         {
             // time all-particle queries through checksums to avoid output-transfer cost
-            _morton_hip_check(hipMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
+            _morton_gpu_check(hipMalloc((void**)&dev_kdtree_checksum, sizeof(double)*config.particles),
                 "allocate KD checksum");
-            _morton_hip_check(hipMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
+            _morton_gpu_check(hipMalloc((void**)&dev_morton_checksum, sizeof(double)*config.particles),
                 "allocate Morton checksum");
-            _morton_hip_check(hipMalloc((void**)&dev_performance_stack_overflow,
+            _morton_gpu_check(hipMalloc((void**)&dev_performance_stack_overflow,
                 sizeof(unsigned int)*config.particles), "allocate performance stack-overflow flags");
 
-            int kdtree_block_count = (config.particles + KDTREE_TPB - 1) / KDTREE_TPB;
             kdtree_query_ms = kernel_time_ms([&]
             {
-                kdtree_checksum<K> <<< kdtree_block_count, KDTREE_TPB >>> (
+                kdtree_checksum<K> <<< (config.particles + kdtree_heap<K>::threads - 1)/kdtree_heap<K>::threads, kdtree_heap<K>::threads >>> (
                     dev_kdtree_checksum, dev_point, config.particles,
                     dev_kdtree_node, dev_kdtree_box, config.particles, config.radius
                 );
             }, config.repeats);
             morton_query_ms = kernel_time_ms([&]
             {
-                morton_digest<K> <<< config.particles, MORTON_TPB >>> (
+                morton_digest<K, MORTON_TPB> <<< config.particles, MORTON_TPB >>> (
                     dev_morton_checksum, dev_performance_stack_overflow,
                     dev_point, config.particles, morton_owner.view(), config.radius
                 );
             }, config.repeats);
 
             std::vector<unsigned int> performance_stack_overflow(config.particles);
-            _morton_hip_check(hipMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
+            _morton_gpu_check(hipMemcpy(performance_stack_overflow.data(), dev_performance_stack_overflow,
                 sizeof(unsigned int)*config.particles, hipMemcpyDeviceToHost),
                 "copy performance stack-overflow flags");
             for (unsigned int overflow : performance_stack_overflow)
@@ -814,21 +812,21 @@ int main (int argc, char **argv)
         );
 
         if (dev_kdtree_checksum)
-            _morton_hip_check(hipFree(dev_kdtree_checksum), "release KD checksum");
+            _morton_gpu_check(hipFree(dev_kdtree_checksum), "release KD checksum");
         if (dev_morton_checksum)
-            _morton_hip_check(hipFree(dev_morton_checksum), "release Morton checksum");
+            _morton_gpu_check(hipFree(dev_morton_checksum), "release Morton checksum");
         if (dev_performance_stack_overflow)
-            _morton_hip_check(hipFree(dev_performance_stack_overflow), "release performance overflow flags");
-        _morton_hip_check(hipFree(dev_kdtree_idx_old), "release KD neighbor identifiers");
-        _morton_hip_check(hipFree(dev_morton_idx_old), "release Morton neighbor identifiers");
-        _morton_hip_check(hipFree(dev_kdtree_dist_sq), "release KD neighbor distances");
-        _morton_hip_check(hipFree(dev_morton_dist_sq), "release Morton neighbor distances");
-        _morton_hip_check(hipFree(dev_leaf_visit_count), "release leaf counters");
-        _morton_hip_check(hipFree(dev_candidate_count), "release candidate counters");
-        _morton_hip_check(hipFree(dev_quality_stack_overflow), "release quality overflow flags");
-        _morton_hip_check(hipFree(dev_kdtree_node), "release KD nodes");
-        _morton_hip_check(hipFree(dev_kdtree_box), "release KD bounds");
-        _morton_hip_check(hipFree(dev_point), "release benchmark points");
+            _morton_gpu_check(hipFree(dev_performance_stack_overflow), "release performance overflow flags");
+        _morton_gpu_check(hipFree(dev_kdtree_idx_old), "release KD neighbor identifiers");
+        _morton_gpu_check(hipFree(dev_morton_idx_old), "release Morton neighbor identifiers");
+        _morton_gpu_check(hipFree(dev_kdtree_dist_sq), "release KD neighbor distances");
+        _morton_gpu_check(hipFree(dev_morton_dist_sq), "release Morton neighbor distances");
+        _morton_gpu_check(hipFree(dev_leaf_visit_count), "release leaf counters");
+        _morton_gpu_check(hipFree(dev_candidate_count), "release candidate counters");
+        _morton_gpu_check(hipFree(dev_quality_stack_overflow), "release quality overflow flags");
+        _morton_gpu_check(hipFree(dev_kdtree_node), "release KD nodes");
+        _morton_gpu_check(hipFree(dev_kdtree_box), "release KD bounds");
+        _morton_gpu_check(hipFree(dev_point), "release benchmark points");
 
         bool quality_passed = quality.mismatched_queries == 0
             && quality.kdtree_brute_mismatches == 0 && quality.morton_brute_mismatches == 0

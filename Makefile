@@ -19,10 +19,8 @@ VAL_ROOT        = $(ROOT_DIR)/val
 VAL_COMM_DIR    = $(VAL_ROOT)/comm
 VAL_FLUID_DIR   = $(VAL_COMM_DIR)/fluid
 VAL_SWARM_DIR   = $(VAL_COMM_DIR)/swarm
-INC_COMM_DIR    = $(ROOT_DIR)/inc/comm
-INC_BACKEND_DIR = $(ROOT_DIR)/inc/$(GPU_BACKEND)
-SRC_COMM_DIR    = $(ROOT_DIR)/src/comm
-SRC_BACKEND_DIR = $(ROOT_DIR)/src/$(GPU_BACKEND)
+INC_DIR    = $(ROOT_DIR)/inc
+SRC_DIR    = $(ROOT_DIR)/src
 MODEL_EXEC_DIRS = $(dir $(wildcard $(MOD_ROOT)/*/flags.mk))
 MODEL_EXECUTABLES = $(addsuffix gamedev,$(MODEL_EXEC_DIRS))
 
@@ -252,10 +250,8 @@ _OBJ_SWARM = \
 
 ifdef MODEL
 RELINK_TRIGGER := FORCE
-INC_BRANCH_DIR = $(INC_COMM_DIR)/$(DUST_REPR)
-INC_BACKEND_BRANCH_DIR = $(INC_BACKEND_DIR)/$(DUST_REPR)
-SRC_BRANCH_DIR = $(SRC_COMM_DIR)/$(DUST_REPR)
-SRC_BACKEND_BRANCH_DIR = $(SRC_BACKEND_DIR)/$(DUST_REPR)
+INC_BRANCH_DIR = $(INC_DIR)/$(DUST_REPR)
+SRC_BRANCH_DIR = $(SRC_DIR)/$(DUST_REPR)
 
 ifeq ($(DUST_REPR),fluid)
 FLUID_SWEEP ?= $(if $(filter rocm,$(GPU_BACKEND)),block,thread)
@@ -297,11 +293,11 @@ endif
 
 _OBJ += $(_OBJ_MOD)
 OBJ = $(foreach file,$(strip $(_OBJ)),$(OBJ_DIR)/$(strip $(file)))
-SOURCE_SEARCH_DIRS = $(MODEL_SOURCE_DIRS) $(SRC_BACKEND_BRANCH_DIR) $(SRC_BRANCH_DIR)
-INC_SEARCH_FLAGS = $(MODEL_INCLUDE_FLAGS) -I $(INC_BACKEND_BRANCH_DIR) -I $(INC_BRANCH_DIR)
+SOURCE_SEARCH_DIRS = $(MODEL_SOURCE_DIRS) $(SRC_BRANCH_DIR)
+INC_SEARCH_FLAGS = -I $(INC_DIR) $(MODEL_INCLUDE_FLAGS) -I $(INC_BRANCH_DIR)
 BUILD_CONFIG = $(OBJ_DIR)/.build_config
 
-INC_HEADER_PATHS := $(shell find $(INC_BACKEND_BRANCH_DIR) $(INC_BRANCH_DIR) -type f \
+INC_HEADER_PATHS := $(INC_DIR)/gpu_compat.cuh $(shell find $(INC_BRANCH_DIR) -type f \
     \( -name '*.cuh' -o -name '*.h' -o -name '*.hpp' \) 2>/dev/null)
 INC_HEADER_NAMES := $(sort $(notdir $(INC_HEADER_PATHS)))
 HEADER_OVERRIDE_PATHS := $(sort $(foreach header,$(INC_HEADER_NAMES),\
@@ -345,7 +341,7 @@ ifneq ($(strip $(MODEL_BACKEND_DIR)),)
 $(info Using backend overlay: $(MODEL_BACKEND_DIR))
 endif
 ifeq ($(strip $(MODEL_CONST)),)
-$(info Using representation constants: $(INC_BACKEND_BRANCH_DIR)/const_defs.cuh)
+$(info Using representation constants: $(INC_BRANCH_DIR)/const_defs.cuh)
 endif
 $(foreach header,$(HEADER_OVERRIDE_PATHS),$(info Using header override: $(header)))
 $(info Using dust representation: $(DUST_REPR))

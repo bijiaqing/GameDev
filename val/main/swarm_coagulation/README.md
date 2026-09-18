@@ -1,146 +1,200 @@
-# Radial–vertical coagulation experiments
+# Optimized radial–vertical coagulation campaign
 
-Fresh weak/strong turbulence runs using the validated `erosion_cached_rates`
-implementation promoted from `lab/collision_fix`. The two model folders select
-alpha and output count; `common/` contains the shared local collision scheduler,
-64-thread event kernel, erosion outcomes, narrow grouping, and query-environment /
-initial-rate caches. This suite has no dependency on `lab/`. Root `inc/` and
-`src/` are unchanged. The original lab models/results remain available.
+Eight independent fresh runs: weak/strong turbulence × CUDA/ROCm × KD-tree/Morton.
+The two model directories select alpha and duration; every configuration uses
+`common/`. There is no lab dependency at build/run time. Root `inc/` and `src/`
+are unchanged by this campaign update.
 
-## Four requested CUDA runs
+## Physical setup
 
-| Model | Alpha | Search | Outputs after initial 0 | End time |
-|---|---:|---|---:|---:|
-| weak_turbulence | 1e-4 | KD-tree | 250 | 25000 yr |
-| weak_turbulence | 1e-4 | Morton | 250 | 25000 yr |
-| strong_turbulence | 1e-3 | KD-tree | 125 | 12500 yr |
-| strong_turbulence | 1e-3 | Morton | 125 | 12500 yr |
+| Setting | Value |
+|---|---|
+| Weak / strong alpha | 1e-4 / 1e-3 |
+| Weak / strong outputs | 250 / 125 intervals after initial output 0 |
+| Output spacing | 100 years |
+| Weak / strong end time | 25000 / 12500 years |
+| Representative particles | 1048576 |
+| Collision neighbors | N_K=256, including the owner |
+| Refresh parameter | COL_BATH_EPS=0.02 |
+| Initial grains | Fixed radius 0.5 micron; diameter 1e-4 cm |
+| Material density | 1 g/cm^3 |
+| Initial dust/gas ratio | 0.01, spatially well mixed in the finite domain |
+| Star / domain | 1 solar mass; spherical r=5–50 au; theta=pi/2 ± 0.2 |
+| Mesh | (1,128,64), axisymmetric |
+| Gas surface density | 1410.4014065096128 g/cm² at 1 au; exponent -1 |
+| Temperature | 209.7926358245702 K at 1 au; exponent -1/2 |
+| Fragmentation threshold | 100 cm/s |
 
-Output spacing is 100 yr. CUDA is the suite default; specify search explicitly.
-All commands below start at time zero: **no checkpoint argument**.
+All dimensional code/output quantities are CGS. The code stores grain diameter,
+not radius. `INIT_SMIN=INIT_SMAX=1e-4 cm`; sizes are initialized exactly with
+`std::fill`. The existing normalization assigns represented grain numbers so
+the total dust mass equals the integral over the simulated domain.
 
-Transfer the entire `val/main/swarm_coagulation/` directory plus the root Makefile,
-inc/ and src/. Before the first fresh launch, preserve any server outputs from
-older implementations (do this once, before starting any of the four jobs):
+Monomer provenance: the retained MCDUST comparison
+`lab/collision_fix/results/mcdust_comparison/README.md` records that its output 0
+contains only 0.5-micron-radius grains. The supplied MCDUST directory was no
+longer available locally during this update; its setup was not freshly reread.
+
+### Dust-to-gas diffusion
+
+The diffusive mass flux is
+
+    J_d = -rho_g D grad(rho_d/rho_g).
+
+All eight configurations enable `DIFFUSE_CONCENTRATION` and use the root diffusion
+implementation (no model-local diffusion source overrides).
+
+The cylindrical stochastic update uses D_R=nu/[SCHMIDT_R*(1+St²)] and
+D_Z=nu/[SCHMIDT_Z*(1+St²)], with nu=alpha*c_s*H and unit Schmidt numbers.
+St is evaluated at the particle location using its current diameter. The radial
+drift is dD_R/dR + D_R/R + D_R*d(ln rho_g)/dR; the vertical drift is
+dD_Z/dZ + D_Z*d(ln rho_g)/dZ. Diffusivity derivatives include the local Stokes
+number gradients at fixed grain size. Noise variance remains 2D dt, with no
+additional MCDUST normalization factor. The gas-density derivatives are analytic derivatives of
+this model's spherical hydrostatic gas profile. The dynamics timestep controller
+includes the same additional drift. Cartesian velocities are preserved during
+diffusion; existing boundary handling is retained.
+
+This aligns the diffused quantity and initial grain size with the MCDUST
+comparison. It does not make all gas, velocity, boundary, or collision
+prescriptions identical to MCDUST.
+
+## Optimized implementation and consolidation
+
+- Generalized compacted Morton search: sorted-prefix merging, lower-half
+  selection, skip checks, and candidate compaction; 64 threads per query.
+  Buffer sizes derive from N_K. Duplicate-image queries retain the full-sort
+  branch when the retained set exceeds half the available workspace.
+- KD-tree shared heaps: 16 threads at N_K=256; fewer columns for larger heaps
+  keep heap storage within 32 KiB per block. Both KD-tree launch sites agree
+  with the heap layout.
+- Parallel collision-rate and event-chain reductions, query-environment/rate
+  caches, local change-based refreshes, narrow sticking/erosion grouping, and
+  the existing fragmentation/erosion physics are retained from the tested lab
+  workflow. The per-continuation event cap remains 32.
+- `collision_physics.cuh` combines the five small query-environment, refresh,
+  diagnostic-event, sticking and erosion helper headers. `_col_chain.cuh`
+  contains the shared GPU collision kernels.
+- `swarm_runtime.cu` owns the scheduler/workspace and the former contents of
+  `local_evolve.inc`; the separate `.inc`, `local_gpu.cuh` and
+  `local_schedule.hpp` files are removed. `swarm_runtime.hip` includes the same
+  runtime body with HIP API mappings.
+- Morton headers are shared across CUDA/ROCm using conditional backend sections.
+  Diffusion likewise has one implementation and a thin HIP entry file.
+- Collision diagnostics are retained; this change does not alter their cadence.
+
+## Fresh run commands
+
+Upload the entire updated suite, including `common/morton/` and `common/kdtree/`,
+plus the current root Makefile, `inc/`, and `src/`. Replace the server's old
+`common/` directory so deleted helper files are not retained.
+
+Before starting this campaign, move any existing output directory aside **once**
+on the server. Do not perform this while a suite run is active:
 
 ```sh
-if [ -d val/main/swarm_coagulation/outputs ]; then
-    mv val/main/swarm_coagulation/outputs "val/main/swarm_coagulation/outputs_before_cached_$(date +%Y%m%d_%H%M%S)"
-fi
+mv val/main/swarm_coagulation/outputs val/main/swarm_coagulation/outputs_previous_campaign
 ```
 
-Run independently, or sequentially on the same GPU for useful timings:
+Run that only when `outputs` exists and the destination is unused. These are
+fresh starts: no checkpoint argument. Old output-20 restart benchmarks are not
+the initial conditions for this campaign.
+
+### CUDA
+
+Each block is one independent GPU run.
+
+**weak_turbulence, kdtree**
 
 ```sh
 make -C val/main/swarm_coagulation -j8 MODEL=weak_turbulence GPU_BACKEND=cuda GPU_TARGET=sm_80 COLLISION_SEARCH=kdtree &&
 val/temp/swarm_coagulation/bin/weak_turbulence/cuda/kdtree/gamedev
+```
 
+**weak_turbulence, morton**
+
+```sh
 make -C val/main/swarm_coagulation -j8 MODEL=weak_turbulence GPU_BACKEND=cuda GPU_TARGET=sm_80 COLLISION_SEARCH=morton &&
 val/temp/swarm_coagulation/bin/weak_turbulence/cuda/morton/gamedev
+```
 
+**strong_turbulence, kdtree**
+
+```sh
 make -C val/main/swarm_coagulation -j8 MODEL=strong_turbulence GPU_BACKEND=cuda GPU_TARGET=sm_80 COLLISION_SEARCH=kdtree &&
 val/temp/swarm_coagulation/bin/strong_turbulence/cuda/kdtree/gamedev
+```
 
+**strong_turbulence, morton**
+
+```sh
 make -C val/main/swarm_coagulation -j8 MODEL=strong_turbulence GPU_BACKEND=cuda GPU_TARGET=sm_80 COLLISION_SEARCH=morton &&
 val/temp/swarm_coagulation/bin/strong_turbulence/cuda/morton/gamedev
 ```
 
-Outputs: `val/main/swarm_coagulation/outputs/<model>/<backend>/<search>/`.
-Objects: `val/temp/swarm_coagulation/obj/`.
-Executables: `val/temp/swarm_coagulation/bin/<model>/<backend>/<search>/gamedev`.
-ROCm remains selectable with `GPU_BACKEND=rocm GPU_TARGET=gfx942`; it is not one
-of these four requested runs. CUDA math defaults to precise.
+### ROCM
 
-## Collision implementation
+Each block is one independent GPU run.
 
-- Query-local gas: both sizes use the owner's R,Z. Relative speeds combine
-  differential radial/azimuthal drift, settling capped at St=0.5, Brownian motion,
-  and the existing Ormel–Cuzzi turbulent regimes. Epstein stopping times remain.
-- Low-speed collisions stick. Narrow packet grouping remains q<=1e-6 with a
-  maximum 1e-4 target-mass increment; the wider-grouping experiment is not included.
-- High-speed collisions at v>=100 cm/s use erosion for q=m_projectile/m_target<=0.1.
-  Remnant packets and debris transitions retain their separate rates/probabilities.
-  Other high-speed events fragment with the old target mass as the upper bound,
-  truncated at the monomer floor. See `common/erosion_outcome.cuh`.
-- The local change-based adaptive scheduler, neighbor compatibility, audit feedback,
-  compact continuations and 32-event continuation cap are inherited unchanged.
-  N_K=200 and COL_BATH_EPS=0.02 remain fixed. The event cap is not a refresh cap.
-- Eight query-environment coefficients are cached per collision half-step. Fresh
-  rate totals skip the repeated pair pass for no-event intervals. No stale rates
-  are reused after events or reservoir publication. Persistent extra memory is
-  96 MiB for 2^20 representatives.
+**weak_turbulence, kdtree**
 
-This replaces the former production-controller-only suite and its old cancelled
-experimental override. Do **not** follow the obsolete instruction to delete
-common/_col_chain.cuh: that file is now required. The promoted implementation is
-shared by both search methods; neither search is silently replaced by the other.
+```sh
+make -C val/main/swarm_coagulation -j8 MODEL=weak_turbulence GPU_BACKEND=rocm GPU_TARGET=gfx942 COLLISION_SEARCH=kdtree &&
+val/temp/swarm_coagulation/bin/weak_turbulence/rocm/kdtree/gamedev
+```
 
-## Model parameters
+**weak_turbulence, morton**
 
+```sh
+make -C val/main/swarm_coagulation -j8 MODEL=weak_turbulence GPU_BACKEND=rocm GPU_TARGET=gfx942 COLLISION_SEARCH=morton &&
+val/temp/swarm_coagulation/bin/weak_turbulence/rocm/morton/gamedev
+```
 
-All dimensional quantities in these models and their binary outputs are **CGS**.
-`CODE_UNIT` is disabled so Brownian collision velocities are included.
+**strong_turbulence, kdtree**
 
-| Parameter | Both models |
-|---|---|
-| Star | 1 solar mass |
-| Spherical radius | 5–50 au |
-| Polar angle | pi/2 +/- 0.2 radians; both hemispheres |
-| Mesh | axisymmetric: (N_X,N_Y,N_Z) = (1,128,64) |
-| Representative particles | 2^20 = 1048576 |
-| Gas surface-density normalization | 1410.4014065096128 g/cm^2 at 1 au; radial exponent -1 |
-| Temperature | 209.7926358245702 K at 1 au; radial exponent -1/2 |
-| Mean molecular mass | 2.34 proton masses |
-| Initial dust/gas volume-density ratio | 0.01 throughout the finite domain |
-| Initial grain radius | 0.5–1 micron, MRN number spectrum dN/da proportional to a^-3.5 |
-| Grain internal density | 1 g/cm^3 |
-| Fragmentation threshold | 100 cm/s = 1 m/s |
-| Diffusion | D_R = D_Z = alpha c_s H, unit Schmidt numbers |
-| Collision neighbors | 200 slots, including the owner |
-| Duration | Strong: 12500 years; weak: 25000 years |
-| Output interval | 100 years; strong: 125 intervals (126 snapshots); weak: 250 intervals (251 snapshots) |
-| Maximum dynamics/bath interval | 1 year; production controllers can shorten it |
+```sh
+make -C val/main/swarm_coagulation -j8 MODEL=strong_turbulence GPU_BACKEND=rocm GPU_TARGET=gfx942 COLLISION_SEARCH=kdtree &&
+val/temp/swarm_coagulation/bin/strong_turbulence/rocm/kdtree/gamedev
+```
 
-The code stores **diameter**: `INIT_SMIN=1e-4 cm` and `INIT_SMAX=2e-4 cm`.
-The reference Stokes number is pi*rho_s*S_0/(4*Sigma_0); its local value follows
-production Epstein scaling with grain diameter and gas density. Gas density and
-temperature are static. Gas radial accretion, radiation, and P-R drag are disabled.
+**strong_turbulence, morton**
 
-The saved particle record contains eight doubles: phi, spherical r, theta,
-physical v_phi, v_r, v_theta, grain diameter, and represented grain count.
-For analysis use radius a=par_size/2, cylindrical R=r sin(theta), Z=r cos(theta),
-and mass weights par_numr*pi*rho_s*par_size^3/6. Do not use unweighted particle
-counts as a physical grain-number distribution. Particle snapshots alone occupy
-about 7.9 GiB for strong turbulence and 15.7 GiB for weak turbulence; RNG checkpoints and other outputs add to this.
+```sh
+make -C val/main/swarm_coagulation -j8 MODEL=strong_turbulence GPU_BACKEND=rocm GPU_TARGET=gfx942 COLLISION_SEARCH=morton &&
+val/temp/swarm_coagulation/bin/strong_turbulence/rocm/morton/gamedev
+```
 
-## Initialization and comparison scope
+## Paths and checks
 
-The existing `common/swarm_host.cuh` and `initial_profile.hpp` retain the same
-finite-domain, well-mixed spherical hydrostatic dust initialization and equal
-represented masses as the lab run. Root transport and density diffusion remain.
-These are Eriksson-inspired experiments, not exact reproductions or analytical
-accuracy tests. MCDUST's downloaded run starts with monomers rather than our MRN
-range; gas evaluation, diffusion, grouping and domain/boundary details also differ.
-
-## Verification and provenance
-
-The promoted implementation files match `lab/collision_fix/models/erosion_cached_rates`
-byte-for-byte. Shared constants match its header after removing the two model
-selector defines; weak/strong model headers select alpha/output count separately.
-The existing initializer files are unchanged. Diagnostics retain method name
-`erosion_cached_rates`; model/backend/search are identified by their output path.
+- Outputs: `val/main/swarm_coagulation/outputs/<model>/<backend>/<search>/`.
+- Executables: `val/temp/swarm_coagulation/bin/<model>/<backend>/<search>/gamedev`.
+- Objects/check artifacts: `val/temp/swarm_coagulation/`.
 
 ```sh
 python3 val/main/swarm_coagulation/check_setup.py
+python3 val/main/swarm_coagulation/check_diffusion.py
 ```
 
-The host check covers initialization, normalization, cached versus original
-relative velocities at both alphas, fixed controller parameters/narrow grouping,
-and all eight available model/backend/search build routes, including shared runtime
-and header overrides. It does not execute GPU kernels.
+Diffusion checks cover local St=1e-4,0.1,1,10 and compare analytic diffusivity
+gradients against spatial finite differences. Host checks cover initial mass normalization and spatial sampling, fixed monomer
+parameters, query-local collision speeds, diffusion drift/noise moments and
+Cartesian velocity preservation, plus all eight build routes. Consolidation
+was also checked against the lab source. These are not native GPU compilation
+or runtime qualification. The earlier CUDA N_K=256 optimization comparisons
+were byte-identical to their references; this fresh campaign changes diffusion
+and initial grain sizes, so those old snapshots are not expected to match it.
+Native CUDA and ROCm campaign runs remain pending.
 
-Prior downloaded weak/CUDA/KD-tree lab evidence at 2500 yr: 46.49 min versus
-66.44 min without caching, with particle hashes identical at outputs
-0,5,10,15,20,25. This is evidence for that lab configuration only. New publication
-runs, strong turbulence, Morton and ROCm are not qualified by those timings.
-Do not extrapolate full-run time linearly: collision work changes as grains evolve.
+## Root search promotion
+
+KD-tree shared heaps and generalized Morton merge/compaction now come from
+`inc/swarm/{kdtree,morton}/`; the suite's duplicate search headers were removed.
+Both backends use the same source. All cached and uncached KD-tree query launches
+use the heap's compile-time column count. Root retains its configured neighbor
+count (200 by default); this suite retains 256. Root Morton defaults to 64 threads.
+
+`python3 val/tool/check_search_optimizations.py` checks shared-heap independence
+and exact top-K results against sorted oracles, including periodic deduplication,
+inactive particles, padding boundaries, and emulated 32/64-lane packing. Its report
+is `val/temp/search_optimizations/checks.json`. These host checks and make dry runs
+do not constitute native GPU compilation or a new root performance measurement.

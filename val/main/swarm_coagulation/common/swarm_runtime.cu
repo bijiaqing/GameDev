@@ -19,7 +19,247 @@
 
 #if defined(COLLISION) && !defined(BERNOULLI)
 #include <_col_chain.cuh>
-#include "local_gpu.cuh"
+#ifndef COLLISION_LOCAL_GPU_CUH
+#define COLLISION_LOCAL_GPU_CUH
+#ifndef COLLISION_LOCAL_SCHEDULE_HPP
+#define COLLISION_LOCAL_SCHEDULE_HPP
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+#include <vector>
+#include <utility>
+
+// Integer endpoints avoid rounding drift between power-of-two timestep levels.
+struct local_schedule {
+    double horizon;
+    std::vector<std::pair<int,int>> links;
+    std::vector<int> level;
+    std::vector<std::uint64_t> step, next;
+    std::uint64_t end;
+
+    local_schedule(double h, const std::vector<double>& requested,
+                   const std::vector<unsigned int>& edges)
+        : horizon(h), level(requested.size(), 0), step(requested.size()),
+          next(requested.size(), 0) {
+        if (!(h > 0) || !std::isfinite(h))
+            throw std::runtime_error("invalid local collision horizon");
+        const int n = static_cast<int>(level.size()), words = (n+31)/32;
+        for (int c=0; c<n; ++c) {
+            if (!(requested[c] > 0) || !std::isfinite(requested[c]))
+                throw std::runtime_error("invalid local collision timestep");
+            double dt = h;
+            while (dt > requested[c]) {
+                if (++level[c] > 52)
+                    throw std::runtime_error("local collision timestep exceeds time resolution");
+                dt *= 0.5;
+            }
+        }
+        for (int c=0;c<n;++c) for (int d=c+1;d<n;++d)
+            if ((edges[c*words+d/32] & (1u<<(d%32))) ||
+                (edges[d*words+c/32] & (1u<<(c%32)))) links.emplace_back(c,d);
+        // Symmetric compatibility on every directed KNN dependency: ratio <= 16.
+        bool changed;
+        do {
+            changed = false;
+            for (int c=0; c<n; ++c) for (int d=0; d<n; ++d) {
+                if (!(edges[c*words+d/32] & (1u << (d%32)))) continue;
+                if (level[c] < level[d]-4) { level[c]=level[d]-4; changed=true; }
+                if (level[d] < level[c]-4) { level[d]=level[c]-4; changed=true; }
+            }
+        } while (changed);
+        // A fixed lattice permits later refinement without moving pending endpoints.
+        int finest = 52;
+        end = std::uint64_t(1) << finest;
+        for (int c=0; c<n; ++c) step[c] = std::uint64_t(1) << (finest-level[c]);
+    }
+    std::uint64_t time() const { return *std::min_element(next.begin(),next.end()); }
+    double seconds(std::uint64_t tick) const { return horizon*(double(tick)/double(end)); }
+    std::vector<int> due(std::uint64_t tick) const {
+        std::vector<int> out;
+        for (int c=0; c<int(next.size()); ++c) if (next[c]==tick) out.push_back(c);
+        return out;
+    }
+    // Only due groups may change: other groups already hold computed endpoints.
+    void adapt(std::uint64_t tick, const std::vector<int>& groups,
+               const std::vector<double>& requested, const std::vector<bool>& passed) {
+        const int n=level.size();
+        std::vector<bool> active(n,false);
+        for (int c:groups) active[c]=true;
+        // Largest permitted level, propagated from immutable pending neighbors.
+        std::vector<int> cap(n,52), candidate=level;
+        for (int c=0;c<n;++c) if (!active[c]) cap[c]=level[c];
+        bool changed;
+        do {
+            changed=false;
+            for (const auto &edge:links) {
+                int c=edge.first,d=edge.second;
+                if (active[c] && cap[c]>cap[d]+4) {cap[c]=cap[d]+4;changed=true;}
+                if (active[d] && cap[d]>cap[c]+4) {cap[d]=cap[c]+4;changed=true;}
+            }
+        } while (changed);
+        for (int c:groups) {
+            if (!(requested[c]>0) || !std::isfinite(requested[c]))
+                throw std::runtime_error("invalid adaptive collision timestep");
+            int want=0;
+            double h=horizon;
+            while (h>requested[c]) {
+                if (++want>52) throw std::runtime_error("adaptive collision time resolution exceeded");
+                h*=0.5;
+            }
+            // After a passing audit, recover directly; alignment and neighbors still constrain it.
+            candidate[c]=passed[c] ? want : std::max(want,level[c]);
+            while (tick % (std::uint64_t(1)<<(52-candidate[c]))) ++candidate[c];
+            candidate[c]=std::min(candidate[c],cap[c]);
+        }
+        // Refine due groups until all directed dependencies satisfy ratio <= 16.
+        // Caps above ensure this never requires changing an in-flight endpoint.
+        do {
+            changed=false;
+            for (const auto &edge:links) {
+                int c=edge.first,d=edge.second;
+                if (active[c] && candidate[c]<candidate[d]-4) {
+                    candidate[c]=candidate[d]-4;changed=true;
+                }
+                if (active[d] && candidate[d]<candidate[c]-4) {
+                    candidate[d]=candidate[c]-4;changed=true;
+                }
+            }
+        } while (changed);
+        for (int c:groups) {
+            level[c]=candidate[c];
+            step[c]=std::uint64_t(1)<<(52-level[c]);
+        }
+    }
+    void advance(const std::vector<int>& groups) {
+        for (int c:groups) next[c] += step[c];
+    }
+};
+#endif
+
+#include <chrono>
+#include <numeric>
+
+#ifdef GAMEDEV_CUDA
+#define LOCAL_CHECK CUDA_CHECK
+#define LOCAL_KERNEL CUDA_KERNEL_CHECK
+#define localMalloc cudaMalloc
+#define localFree cudaFree
+#define localCopy cudaMemcpy
+#define localZero cudaMemset
+#define localH2D cudaMemcpyHostToDevice
+#define localD2H cudaMemcpyDeviceToHost
+#else
+#define LOCAL_CHECK HIP_CHECK
+#define LOCAL_KERNEL HIP_KERNEL_CHECK
+#define localMalloc hipMalloc
+#define localFree hipFree
+#define localCopy hipMemcpy
+#define localZero hipMemset
+#define localH2D hipMemcpyHostToDevice
+#define localD2H hipMemcpyDeviceToHost
+#endif
+
+constexpr int LOCAL_GROUPS = ((N_X>1)?COL_BIN_X:1)*COL_BIN_Y*((N_Z>1)?COL_BIN_Z:1);
+constexpr int LOCAL_WORDS = (LOCAL_GROUPS+31)/32;
+
+__global__ void cache_query_environments(query_environment *env,const swarm *particle) {
+    int i=blockIdx.x*blockDim.x+threadIdx.x;
+    if (i<N_P && particle[i].position.y>0.0) env[i]=cache_query_environment(particle[i]);
+}
+
+// One geometry-epoch pass. Reduce duplicate neighbor-group edges within each owner
+// before issuing atomics; no per-neighbor transfer to the CPU is needed.
+__global__ void local_graph(unsigned int *edges, const int *spatial,
+    const int *neighbors, const unsigned char *active) {
+    int i=blockIdx.x*blockDim.x+threadIdx.x;
+    if (i>=N_P || !active[i]) return;
+    unsigned int bits[LOCAL_WORDS] = {};
+    for (int k=0;k<N_K;++k) {
+        int entry=neighbors[_get_col_offset(i,k)];
+        if (entry<0) continue;
+        int j=_get_col_idx_old(entry), c=spatial[j];
+        bits[c/32] |= 1u << (c%32);
+    }
+    for (int w=0;w<LOCAL_WORDS;++w)
+        if (bits[w]) atomicOr(edges+spatial[i]*LOCAL_WORDS+w,bits[w]);
+}
+
+__global__ void local_reset(const int *ids, int count, real *hazard,
+    real *jump1, real *jump2, real *jumpmax) {
+    int slot=blockIdx.x*blockDim.x+threadIdx.x;
+    if (slot>=count) return;
+    int i=ids[slot];
+    hazard[i]=jump1[i]=jump2[i]=jumpmax[i]=0;
+}
+
+// One block per category reduces per-owner diagnostics once per collision half-step.
+__global__ void summarize_event_work(const event_work *work, event_work *sum) {
+    const int k=blockIdx.x, t=threadIdx.x;
+    __shared__ unsigned long long counts[TPB];
+    __shared__ real growth[TPB];
+    unsigned long long n=0; real g=0;
+    for (int i=t;i<N_P;i+=TPB) { n+=work[i].count[k]; g+=work[i].log_mass[k]; }
+    counts[t]=n;growth[t]=g;__syncthreads();
+    for (int stride=TPB/2;stride>0;stride/=2) {
+        if (t<stride) {counts[t]+=counts[t+stride];growth[t]+=growth[t+stride];}
+        __syncthreads();
+    }
+    if (t==0) {sum->count[k]=counts[0];sum->log_mass[k]=growth[0];}
+}
+static_assert(TPB>0 && (TPB & (TPB-1))==0,"event reduction needs power-of-two TPB");
+
+struct local_group_stats {
+    std::uint64_t updates=0;
+    int overshoots=0, persistent=0;
+    real max_age=0, max_growth=0, max_activity=0, max_requested_ratio=0;
+};
+
+// Scratch allocations survive all operator calls. Particle IDs retain their RNG
+// identity even when continuation queues are reordered by atomic append.
+struct local_workspace {
+    query_environment *environment=nullptr;
+    cached_rate_moments *cached=nullptr;
+    event_work *work=nullptr, *work_sum=nullptr;
+    int *ids=nullptr, *queue_a=nullptr, *queue_b=nullptr, *error=nullptr;
+    real *dt=nullptr, *change_rate=nullptr, *second_rate=nullptr;
+    unsigned int *graph=nullptr;
+    std::vector<std::vector<int>> owners;
+    std::vector<unsigned int> edges;
+    std::vector<col_bath_state> state;
+    std::ofstream log;
+    std::uint64_t operator_id=0;
+    local_workspace(const std::string &path): owners(LOCAL_GROUPS), edges(LOCAL_GROUPS*LOCAL_WORDS),
+        state(LOCAL_GROUPS) {
+        LOCAL_CHECK(localMalloc((void**)&environment,sizeof(query_environment)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&cached,sizeof(cached_rate_moments)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&work,sizeof(event_work)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&work_sum,sizeof(event_work)));
+        LOCAL_CHECK(localMalloc((void**)&ids,sizeof(int)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&queue_a,sizeof(int)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&queue_b,sizeof(int)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&error,sizeof(int)));
+        LOCAL_CHECK(localMalloc((void**)&dt,sizeof(real)*LOCAL_GROUPS));
+        LOCAL_CHECK(localMalloc((void**)&change_rate,sizeof(real)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&second_rate,sizeof(real)*N_P));
+        LOCAL_CHECK(localMalloc((void**)&graph,sizeof(unsigned int)*edges.size()));
+        auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        log.open(path+"collision_local_"+std::to_string(stamp)+".jsonl");
+        if (!log) throw std::runtime_error("cannot open local collision diagnostics");
+        log << std::setprecision(17);
+    }
+    ~local_workspace() {
+        localFree(environment); localFree(cached);
+        localFree(work); localFree(work_sum);
+        localFree(ids); localFree(queue_a); localFree(queue_b);
+        localFree(error); localFree(dt); localFree(graph);
+        localFree(change_rate); localFree(second_rate);
+    }
+};
+#endif
+
 #endif // COLLISION && !BERNOULLI
 
 #ifdef KNN_CACHE
@@ -29,6 +269,34 @@
 #ifdef COLLISION_MORTON
 #include <morton/morton_ghost.cuh>
 #endif // COLLISION_MORTON
+
+#ifdef GAMEDEV_ROCM
+#define COAG_CHECK HIP_CHECK
+#define COAG_KERNEL_CHECK HIP_KERNEL_CHECK
+#define COAG_DeviceSynchronize hipDeviceSynchronize
+#define COAG_Free hipFree
+#define COAG_FreeHost hipHostFree
+#define COAG_Malloc hipMalloc
+#define COAG_MallocHost hipHostMalloc
+#define COAG_Memcpy hipMemcpy
+#define COAG_MemcpyDeviceToDevice hipMemcpyDeviceToDevice
+#define COAG_MemcpyDeviceToHost hipMemcpyDeviceToHost
+#define COAG_MemcpyHostToDevice hipMemcpyHostToDevice
+#define COAG_Memset hipMemset
+#else
+#define COAG_CHECK CUDA_CHECK
+#define COAG_KERNEL_CHECK CUDA_KERNEL_CHECK
+#define COAG_DeviceSynchronize cudaDeviceSynchronize
+#define COAG_Free cudaFree
+#define COAG_FreeHost cudaFreeHost
+#define COAG_Malloc cudaMalloc
+#define COAG_MallocHost cudaMallocHost
+#define COAG_Memcpy cudaMemcpy
+#define COAG_MemcpyDeviceToDevice cudaMemcpyDeviceToDevice
+#define COAG_MemcpyDeviceToHost cudaMemcpyDeviceToHost
+#define COAG_MemcpyHostToDevice cudaMemcpyHostToDevice
+#define COAG_Memset cudaMemset
+#endif
 
 std::mt19937 rand_generator;
 
@@ -75,85 +343,85 @@ int main (int argc, char **argv)
     
     // allocate the particle state and feature-dependent work arrays
     swarm *particle, *dev_particle;
-    CUDA_CHECK(cudaMallocHost((void**)&particle, sizeof(swarm)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_particle, sizeof(swarm)*N_P));
+    COAG_CHECK(COAG_MallocHost((void**)&particle, sizeof(swarm)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_particle, sizeof(swarm)*N_P));
 
     #ifdef TRANSPORT
     real *dev_dyn_rate;
-    CUDA_CHECK(cudaMalloc((void**)&dev_dyn_rate, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_dyn_rate, sizeof(real)*N_P));
     #endif // TRANSPORT
     
     #ifdef SAVE_DENS
     real *dustdens, *dev_dustdens;
-    CUDA_CHECK(cudaMallocHost((void**)&dustdens, sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
+    COAG_CHECK(COAG_MallocHost((void**)&dustdens, sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_dustdens, sizeof(real)*N_G));
     #endif // SAVE_DENS
     
     #ifdef IMPORTGAS
     real *gas_dens, *dev_gas_dens;
-    CUDA_CHECK(cudaMallocHost((void**)&gas_dens,  sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_dens,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_MallocHost((void**)&gas_dens,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_dens,  sizeof(real)*N_G));
 
     real *gas_velx, *dev_gas_velx;
-    CUDA_CHECK(cudaMallocHost((void**)&gas_velx,  sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velx,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_MallocHost((void**)&gas_velx,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_velx,  sizeof(real)*N_G));
 
     real *gas_vely, *dev_gas_vely;
-    CUDA_CHECK(cudaMallocHost((void**)&gas_vely,  sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_vely,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_MallocHost((void**)&gas_vely,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_vely,  sizeof(real)*N_G));
 
     real *gas_velz, *dev_gas_velz;
-    CUDA_CHECK(cudaMallocHost((void**)&gas_velz,  sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velz,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_MallocHost((void**)&gas_velz,  sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_velz,  sizeof(real)*N_G));
 
     real *dev_gas_dens_next, *dev_gas_velx_next, *dev_gas_vely_next, *dev_gas_velz_next;
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_dens_next, sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velx_next, sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_vely_next, sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_gas_velz_next, sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_dens_next, sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_velx_next, sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_vely_next, sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_gas_velz_next, sizeof(real)*N_G));
     #endif // IMPORTGAS
     
     #ifdef RADIATION
     real *optdepth, *dev_optdepth;
-    CUDA_CHECK(cudaMallocHost((void**)&optdepth, sizeof(real)*N_G));
-    CUDA_CHECK(cudaMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
+    COAG_CHECK(COAG_MallocHost((void**)&optdepth, sizeof(real)*N_G));
+    COAG_CHECK(COAG_Malloc((void**)&dev_optdepth, sizeof(real)*N_G));
     #endif // RADIATION
 
     #ifdef COLLISION
     unsigned char *dev_col_active;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_active, sizeof(unsigned char)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_active, sizeof(unsigned char)*N_P));
 
     int *dev_bad_part;
-    CUDA_CHECK(cudaMalloc((void**)&dev_bad_part, sizeof(int)));
+    COAG_CHECK(COAG_Malloc((void**)&dev_bad_part, sizeof(int)));
 
     #ifdef COLLISION_KDTREE
     kdtree_boxf *dev_kdtree_box;
-    CUDA_CHECK(cudaMalloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)));
+    COAG_CHECK(COAG_Malloc((void**)&dev_kdtree_box, sizeof(kdtree_boxf)));
 
     kdtree_node *dev_kdtree_node;
-    CUDA_CHECK(cudaMalloc((void**)&dev_kdtree_node, sizeof(kdtree_node)*N_T));
+    COAG_CHECK(COAG_Malloc((void**)&dev_kdtree_node, sizeof(kdtree_node)*N_T));
     #else  // COLLISION_MORTON
     float3 *dev_morton_point;
     float *dev_morton_posx, *dev_search_dist;
     unsigned int *dev_morton_overflow;
-    CUDA_CHECK(cudaMalloc((void**)&dev_morton_point, sizeof(float3)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_morton_posx, sizeof(float)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_search_dist, sizeof(float)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_morton_overflow, sizeof(unsigned int)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_morton_point, sizeof(float3)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_morton_posx, sizeof(float)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_search_dist, sizeof(float)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_morton_overflow, sizeof(unsigned int)*N_P));
     morton_ghost_index morton_owner;
     #endif // COLLISION_KDTREE
 
     real *dev_size_old, *dev_numr_old, *dev_col_rate;
-    CUDA_CHECK(cudaMalloc((void**)&dev_size_old, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_size_old, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_numr_old, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_rate, sizeof(real)*N_P));
 
     #if !defined(BERNOULLI) || defined(KNN_CACHE)
     const std::size_t col_neighbor_count = static_cast<std::size_t>(N_P)*N_K;
     int *dev_col_neighbor;
     real *dev_col_measure;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_measure, sizeof(real)*N_P));
 
     #endif // FROZEN_BATH || KNN_CACHE
 
@@ -166,30 +434,30 @@ int main (int argc, char **argv)
     unsigned char *dev_col_complete;
     col_rate_bin *dev_col_ratebin;
     col_audit_accum *dev_col_audit;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_events, sizeof(int)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_spatial, sizeof(int)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_count, sizeof(int)*col_raw_count));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_binmap, sizeof(int)*col_raw_count));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_error, sizeof(int)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_unfinished, sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_time, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_hazard, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_jump1_int, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_jump2_int, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_jumpmax_int, sizeof(real)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_complete, sizeof(unsigned char)*N_P));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
-    CUDA_CHECK(cudaMemset(dev_col_error, 0, sizeof(int)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_events, sizeof(int)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_spatial, sizeof(int)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_count, sizeof(int)*col_raw_count));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_binmap, sizeof(int)*col_raw_count));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_error, sizeof(int)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_unfinished, sizeof(int)));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_time, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_hazard, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_jump1_int, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_jump2_int, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_jumpmax_int, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_complete, sizeof(unsigned char)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
+    COAG_CHECK(COAG_Memset(dev_col_error, 0, sizeof(int)*N_P));
     #elif !defined(KNN_CACHE)  // DIRECT_BERNOULLI
     real *dev_col_dist;
-    CUDA_CHECK(cudaMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_col_dist, sizeof(real)*N_P));
     #endif // FROZEN_BATH / KNN_CACHE / DIRECT_BERNOULLI
     #endif // COLLISION
 
     #if defined(COLLISION) || defined(DIFFUSION)
     curs *dev_rngstate;
-    CUDA_CHECK(cudaMalloc((void**)&dev_rngstate, sizeof(curs)*N_P));
+    COAG_CHECK(COAG_Malloc((void**)&dev_rngstate, sizeof(curs)*N_P));
     #endif // COLLISION || DIFFUSION
 
     if (argc <= 1)
@@ -199,36 +467,32 @@ int main (int argc, char **argv)
         idx_from = 0;
 
         real *randposx, *dev_randposx;
-        CUDA_CHECK(cudaMallocHost((void**)&randposx, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_randposx, sizeof(real)*N_P));
+        COAG_CHECK(COAG_MallocHost((void**)&randposx, sizeof(real)*N_P));
+        COAG_CHECK(COAG_Malloc((void**)&dev_randposx, sizeof(real)*N_P));
 
         real *randposy, *dev_randposy;
-        CUDA_CHECK(cudaMallocHost((void**)&randposy, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_randposy, sizeof(real)*N_P));
+        COAG_CHECK(COAG_MallocHost((void**)&randposy, sizeof(real)*N_P));
+        COAG_CHECK(COAG_Malloc((void**)&dev_randposy, sizeof(real)*N_P));
 
         real *randposz, *dev_randposz;
-        CUDA_CHECK(cudaMallocHost((void**)&randposz, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_randposz, sizeof(real)*N_P));
+        COAG_CHECK(COAG_MallocHost((void**)&randposz, sizeof(real)*N_P));
+        COAG_CHECK(COAG_Malloc((void**)&dev_randposz, sizeof(real)*N_P));
 
         #ifdef MULTISIZE
         real *randsize, *dev_randsize;
-        CUDA_CHECK(cudaMallocHost((void**)&randsize, sizeof(real)*N_P));
-        CUDA_CHECK(cudaMalloc((void**)&dev_randsize, sizeof(real)*N_P));
+        COAG_CHECK(COAG_MallocHost((void**)&randsize, sizeof(real)*N_P));
+        COAG_CHECK(COAG_Malloc((void**)&dev_randsize, sizeof(real)*N_P));
 
         real *dev_mass_bank;
-        CUDA_CHECK(cudaMalloc((void**)&dev_mass_bank, sizeof(real)*mass_bank.size()));
-        CUDA_CHECK(cudaMemcpy(dev_mass_bank, mass_bank.data(), sizeof(real)*mass_bank.size(), cudaMemcpyHostToDevice));
+        COAG_CHECK(COAG_Malloc((void**)&dev_mass_bank, sizeof(real)*mass_bank.size()));
+        COAG_CHECK(COAG_Memcpy(dev_mass_bank, mass_bank.data(), sizeof(real)*mass_bank.size(), COAG_MemcpyHostToDevice));
         #endif // MULTISIZE
 
         rand_generator.seed(0); // keep initialization reproducible across runs
 
         #ifdef MULTISIZE
-        // sample grain properties before positions so settled spatial distributions can depend on size
-        real power_idx = -0.5;  // full-column equal-mass sampling proposal
-        #ifdef RADIATION
-        power_idx = -1.5;       // full-column equal-area sampling proposal, see _get_grain_number
-        #endif // RADIATION
-        rand_powerlaw(randsize, N_P, INIT_SMIN, INIT_SMAX, power_idx);
+        // Every representative starts at the same monomer diameter.
+        std::fill(randsize, randsize + N_P, INIT_SMIN); // fixed monomer diameter
 
         // correct size sampling and finite-domain containment so represented masses sum exactly to total_dust_mass
         real mass_norm = get_mass_norm(randsize, mass_bank, total_dust_mass);
@@ -238,7 +502,7 @@ int main (int argc, char **argv)
         LOAD_GAS_DATA_TO_VRAM(idx_from);
 
         real *epsilon;
-        CUDA_CHECK(cudaMallocHost((void**)&epsilon,  sizeof(real)*N_G));
+        COAG_CHECK(COAG_MallocHost((void**)&epsilon,  sizeof(real)*N_G));
         
         if (!load_epsilon(PATH, idx_from, epsilon))
         {
@@ -249,7 +513,7 @@ int main (int argc, char **argv)
         // use one imported total-dust spatial distribution for all previously sampled grain species
         rand_from_file(randposx, randposy, randposz, N_P, gas_dens, epsilon);
         
-        CUDA_CHECK(cudaFreeHost(epsilon));
+        COAG_CHECK(COAG_FreeHost(epsilon));
         #else  // NO IMPORTGAS
         #if defined(MULTISIZE) && defined(DIFFUSION)
         rand_disk_poly(randposx, randposy, randposz, randsize, N_P);
@@ -258,12 +522,12 @@ int main (int argc, char **argv)
         #endif // MULTISIZE && DIFFUSION
         #endif // IMPORTGAS
 
-        CUDA_CHECK(cudaMemcpy(dev_randposx, randposx, sizeof(real)*N_P, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_randposy, randposy, sizeof(real)*N_P, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_randposz, randposz, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_randposx, randposx, sizeof(real)*N_P, COAG_MemcpyHostToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_randposy, randposy, sizeof(real)*N_P, COAG_MemcpyHostToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_randposz, randposz, sizeof(real)*N_P, COAG_MemcpyHostToDevice));
 
         #ifdef MULTISIZE
-        CUDA_CHECK(cudaMemcpy(dev_randsize, randsize, sizeof(real)*N_P, cudaMemcpyHostToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_randsize, randsize, sizeof(real)*N_P, COAG_MemcpyHostToDevice));
         #endif // MULTISIZE
 
         // convert sampled coordinates and sizes into the device particle state
@@ -275,24 +539,24 @@ int main (int argc, char **argv)
             , dev_gas_dens
             #endif // IMPORTGAS
         );
-        CUDA_KERNEL_CHECK("particle_init");
+        COAG_KERNEL_CHECK("particle_init");
 
-        CUDA_CHECK(cudaFreeHost(randposx));
-        CUDA_CHECK(cudaFree(dev_randposx));
-        CUDA_CHECK(cudaFreeHost(randposy));
-        CUDA_CHECK(cudaFree(dev_randposy));
-        CUDA_CHECK(cudaFreeHost(randposz));
-        CUDA_CHECK(cudaFree(dev_randposz));
+        COAG_CHECK(COAG_FreeHost(randposx));
+        COAG_CHECK(COAG_Free(dev_randposx));
+        COAG_CHECK(COAG_FreeHost(randposy));
+        COAG_CHECK(COAG_Free(dev_randposy));
+        COAG_CHECK(COAG_FreeHost(randposz));
+        COAG_CHECK(COAG_Free(dev_randposz));
 
         #ifdef MULTISIZE
-        CUDA_CHECK(cudaFreeHost(randsize));
-        CUDA_CHECK(cudaFree(dev_randsize));
-        CUDA_CHECK(cudaFree(dev_mass_bank));
+        COAG_CHECK(COAG_FreeHost(randsize));
+        COAG_CHECK(COAG_Free(dev_randsize));
+        COAG_CHECK(COAG_Free(dev_mass_bank));
         #endif // MULTISIZE
         
         #if defined(COLLISION) || defined(DIFFUSION)
         rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
-        CUDA_KERNEL_CHECK("rngstate_init");
+        COAG_KERNEL_CHECK("rngstate_init");
         #endif // COLLISION || DIFFUSION
         
         // write the initial state and active configuration before evolution
@@ -369,11 +633,11 @@ int main (int argc, char **argv)
         // geometry reuse must not suppress the per-operator nonfinite-state failure path
         if (col_geom_valid)
         {
-            CUDA_CHECK(cudaMemset(dev_bad_part, 0, sizeof(int)));
+            COAG_CHECK(COAG_Memset(dev_bad_part, 0, sizeof(int)));
             colstate_flag <<< NB_P, TPB >>> (dev_particle, dev_bad_part);
-            CUDA_KERNEL_CHECK("colstate_flag");
+            COAG_KERNEL_CHECK("colstate_flag");
             int bad_part = 0;
-            CUDA_CHECK(cudaMemcpy(&bad_part, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            COAG_CHECK(COAG_Memcpy(&bad_part, dev_bad_part, sizeof(int), COAG_MemcpyDeviceToHost));
             if (bad_part != 0)
             {
                 std::cerr << "Error: non-finite particle state before collision search at particle "
@@ -386,14 +650,14 @@ int main (int argc, char **argv)
         if (!col_geom_valid)
         {
 
-            CUDA_CHECK(cudaMemset(dev_bad_part, 0, sizeof(int)));
+            COAG_CHECK(COAG_Memset(dev_bad_part, 0, sizeof(int)));
             #ifdef COLLISION_KDTREE
             col_site_init <<< NB_P, TPB >>> (
                 dev_kdtree_node, dev_col_active, dev_particle, dev_bad_part
             );
-            CUDA_KERNEL_CHECK("col_site_init");
+            COAG_KERNEL_CHECK("col_site_init");
             int bad_part = 0;
-            CUDA_CHECK(cudaMemcpy(&bad_part, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            COAG_CHECK(COAG_Memcpy(&bad_part, dev_bad_part, sizeof(int), COAG_MemcpyDeviceToHost));
             if (bad_part != 0)
             {
                 std::cerr << "Error: non-finite particle state before collision search at particle "
@@ -403,15 +667,15 @@ int main (int argc, char **argv)
             kdtree::buildTree <kdtree_node, kdtree_traits> (
                 dev_kdtree_node, N_T, dev_kdtree_box
             );
-            CUDA_KERNEL_CHECK("kdtree::buildTree");
+            COAG_KERNEL_CHECK("kdtree::buildTree");
             #else  // COLLISION_MORTON
             col_site_init <<< NB_P, TPB >>> (
                 dev_morton_point, dev_morton_posx, dev_search_dist,
                 dev_col_active, dev_particle, dev_bad_part
             );
-            CUDA_KERNEL_CHECK("col_site_init");
+            COAG_KERNEL_CHECK("col_site_init");
             int bad_part = 0;
-            CUDA_CHECK(cudaMemcpy(&bad_part, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            COAG_CHECK(COAG_Memcpy(&bad_part, dev_bad_part, sizeof(int), COAG_MemcpyDeviceToHost));
             if (bad_part != 0)
             {
                 std::cerr << "Error: non-finite particle state before collision search at particle "
@@ -433,17 +697,17 @@ int main (int argc, char **argv)
             #if !defined(BERNOULLI) || defined(KNN_CACHE)
             // retain fixed physical neighbors while collision properties continue to evolve
             #ifdef COLLISION_KDTREE
-            col_cache_get <<< NB_T, TPB >>> (
+            col_cache_get <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (
                 dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
                 dev_col_active, dev_particle, image_dist_min
             );
-            CUDA_KERNEL_CHECK("col_cache_get");
+            COAG_KERNEL_CHECK("col_cache_get");
             #else  // COLLISION_MORTON
             col_cache_get <<< N_P, MORTON_TPB >>> (
                 dev_col_neighbor, dev_col_measure, dev_morton_overflow, dev_morton_point,
                 dev_col_active, dev_particle, morton_owner.view(), morton_owner.unique_ids()
             );
-            CUDA_KERNEL_CHECK("col_cache_get");
+            COAG_KERNEL_CHECK("col_cache_get");
             thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
             unsigned int max_morton_overflow = *thrust::max_element(
                 morton_overflow_ptr, morton_overflow_ptr + N_P
@@ -456,7 +720,7 @@ int main (int argc, char **argv)
 
             #ifndef BERNOULLI
             col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
-            CUDA_KERNEL_CHECK("col_space_bin");
+            COAG_KERNEL_CHECK("col_space_bin");
             #endif // FROZEN_BATH
 
             // publish validity only after every required hierarchy, cache, and guard has completed
@@ -464,7 +728,257 @@ int main (int argc, char **argv)
         }
 
         #ifndef BERNOULLI
-        #include "local_evolve.inc"
+        // Included inside evolve_collisions after production geometry/cache construction.
+// All launches below use the default stream. No publication occurs while an
+// event chain or its audit can still be reading the previous reservoir.
+using local_clock = std::chrono::steady_clock;
+const auto local_begin=local_clock::now();
+cache_query_environments<<<NB_P,TPB>>>(local.environment,dev_particle);
+LOCAL_KERNEL("cache_query_environments");
+LOCAL_CHECK(localZero(local.work,0,sizeof(event_work)*N_P));
+if (!local_geometry_valid) {
+    std::vector<int> spatial(N_P);
+    LOCAL_CHECK(localCopy(spatial.data(),dev_col_spatial,sizeof(int)*N_P,localD2H));
+    for (auto &v:local.owners) v.clear();
+    for (int i=0;i<N_P;++i) local.owners[spatial[i]].push_back(i);
+    LOCAL_CHECK(localZero(local.graph,0,sizeof(unsigned int)*local.edges.size()));
+    local_graph<<<NB_P,TPB>>>(local.graph,dev_col_spatial,dev_col_neighbor,dev_col_active);
+    LOCAL_KERNEL("local_graph");
+    LOCAL_CHECK(localCopy(local.edges.data(),local.graph,
+        sizeof(unsigned int)*local.edges.size(),localD2H));
+    local_geometry_valid=true;
+}
+
+std::vector<int> ids(N_P), counts(col_raw_count), binmap(col_raw_count);
+std::iota(ids.begin(),ids.end(),0);
+LOCAL_CHECK(localCopy(local.ids,ids.data(),sizeof(int)*N_P,localH2D));
+std::vector<col_rate_bin> ratebin(col_raw_count);
+std::vector<col_audit_accum> audit(col_raw_count);
+const real lambda0=N_P/static_cast<real>(N_K)/total_dust_mass;
+
+auto initialize = [&](int count) {
+    int blocks=(count+TPB-1)/TPB;
+    col_bath_init<<<blocks,TPB>>>(local.ids,count,dev_size_old,dev_numr_old,
+        dev_col_time,dev_col_events,dev_col_complete,dev_particle);
+    LOCAL_KERNEL("local_publish_and_init");
+    local_reset<<<blocks,TPB>>>(local.ids,count,dev_col_hazard,dev_col_jump1_int,
+        dev_col_jump2_int,dev_col_jumpmax_int);
+    LOCAL_KERNEL("local_reset");
+};
+auto rates_and_bins = [&](int count) {
+    col_bath_rate<<<count,COL_BATH_TPB>>>(local.ids,count,dev_col_rate,local.change_rate,local.second_rate,
+        dev_particle,dev_col_neighbor,dev_col_measure,dev_col_active,
+        dev_size_old,dev_numr_old,
+        #ifdef IMPORTGAS
+        dev_gas_dens,
+        #endif
+        lambda0,local.environment,local.cached);
+    LOCAL_KERNEL("local_rates");
+    LOCAL_CHECK(localZero(dev_col_count,0,sizeof(int)*col_raw_count));
+    col_count_bin<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_col_count,
+        dev_particle,dev_col_spatial,dev_col_active);
+    LOCAL_KERNEL("local_count");
+    LOCAL_CHECK(localCopy(counts.data(),dev_col_count,sizeof(int)*col_raw_count,localD2H));
+    int merged=_build_col_binmap(counts,binmap);
+    LOCAL_CHECK(localCopy(dev_col_binmap,binmap.data(),sizeof(int)*col_raw_count,localH2D));
+    LOCAL_CHECK(localZero(dev_col_ratebin,0,sizeof(col_rate_bin)*col_raw_count));
+    col_rate_bins<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_col_ratebin,
+        dev_particle,dev_col_rate,local.change_rate,local.second_rate,dev_col_spatial,dev_col_binmap,dev_col_active);
+    LOCAL_KERNEL("local_rate_bins");
+    LOCAL_CHECK(localCopy(ratebin.data(),dev_col_ratebin,sizeof(col_rate_bin)*merged,localD2H));
+    return merged;
+};
+auto bin_end = [&](int c,int merged) {
+    return c+1<LOCAL_GROUPS ? binmap[(c+1)*COL_BIN_S] : merged;
+};
+auto requested_step = [&](int c,int merged,int *binding=nullptr) {
+    int first=binmap[c*COL_BIN_S], last=bin_end(c,merged);
+    std::vector<col_rate_bin> slice(ratebin.begin()+first,ratebin.begin()+last);
+    return _choose_col_bath(slice,int(slice.size()),duration,local.state[c].limit_scale,binding);
+};
+
+initialize(N_P);
+int merged=rates_and_bins(N_P);
+std::vector<double> requested(LOCAL_GROUPS);
+std::vector<int> binding(LOCAL_GROUPS);
+for (int c=0;c<LOCAL_GROUPS;++c) requested[c]=requested_step(c,merged,&binding[c]);
+local_schedule schedule(duration,requested,local.edges);
+std::vector<real> steps(LOCAL_GROUPS), published(LOCAL_GROUPS,0);
+for (int c=0;c<LOCAL_GROUPS;++c) steps[c]=schedule.seconds(schedule.step[c]);
+LOCAL_CHECK(localCopy(local.dt,steps.data(),sizeof(real)*LOCAL_GROUPS,localH2D));
+std::vector<local_group_stats> stats(LOCAL_GROUPS);
+std::vector<bool> passed(LOCAL_GROUPS,true);
+std::vector<int> initial_level=schedule.level;
+std::vector<std::uint64_t> coarsened(LOCAL_GROUPS,0), refined(LOCAL_GROUPS,0),
+    constrained(LOCAL_GROUPS,0);
+std::vector<double> current_request=requested, min_request=requested, max_request=requested;
+std::uint64_t owner_updates=0, chain_blocks=0, waves=0, launches=0;
+double chain_seconds=0, audit_seconds=0;
+col_summary.operator_count++;
+int operator_index=col_summary.operator_count;
+int batch_index=0;
+
+while (schedule.time()<schedule.end) {
+    auto tick=schedule.time();
+    auto groups=schedule.due(tick);
+    real time=schedule.seconds(tick);
+    ids.clear();
+    for (int c:groups) {
+        published[c]=time;
+        ids.insert(ids.end(),local.owners[c].begin(),local.owners[c].end());
+    }
+    int count=static_cast<int>(ids.size());
+    if (count==0) { schedule.advance(groups); continue; }
+    // At tick zero the complete population was already initialized and rated.
+    if (tick!=0) {
+        LOCAL_CHECK(localCopy(local.ids,ids.data(),sizeof(int)*count,localH2D));
+        initialize(count);
+        merged=rates_and_bins(count);
+    }
+    if (tick!=0) {
+        for (int c:groups) {
+            current_request[c]=requested_step(c,merged);
+            min_request[c]=std::min(min_request[c],current_request[c]);
+            max_request[c]=std::max(max_request[c],current_request[c]);
+        }
+        auto previous=schedule.level;
+        schedule.adapt(tick,groups,current_request,passed);
+        for (int c:groups) {
+            coarsened[c]+=schedule.level[c]<previous[c];
+            refined[c]+=schedule.level[c]>previous[c];
+            steps[c]=schedule.seconds(schedule.step[c]);
+            constrained[c]+=steps[c]>current_request[c];
+        }
+        LOCAL_CHECK(localCopy(local.dt,steps.data(),sizeof(real)*LOCAL_GROUPS,localH2D));
+    }
+    for (int c:groups) {
+        if (local.owners[c].empty()) continue;
+        for (int d=0;d<LOCAL_GROUPS;++d)
+            if (local.edges[c*LOCAL_WORDS+d/32] & (1u<<(d%32)))
+                stats[c].max_age=std::max(stats[c].max_age,time-published[d]);
+        stats[c].max_requested_ratio=std::max(stats[c].max_requested_ratio,
+            steps[c]/requested_step(c,merged));
+    }
+
+    const auto chain_begin=local_clock::now();
+    LOCAL_CHECK(localZero(local.error,0,sizeof(int)));
+    int unfinished=count, continuations=0;
+    const int *input=local.ids;
+    int *output=local.queue_a;
+    while (unfinished>0) {
+        if (++continuations>1000000)
+            throw std::runtime_error("local collision continuation limit exceeded");
+        LOCAL_CHECK(localZero(dev_col_unfinished,0,sizeof(int)));
+        chain_blocks+=unfinished;
+        col_chain_run<<<unfinished,COL_BATH_TPB>>>(input,unfinished,
+            dev_particle,dev_rngstate,dev_col_error,dev_col_unfinished,
+            dev_col_time,dev_col_events,dev_col_complete,dev_col_hazard,
+            dev_col_jump1_int,dev_col_jump2_int,dev_col_jumpmax_int,dev_col_neighbor,
+            dev_col_measure,dev_col_active,dev_size_old,dev_numr_old,
+            #ifdef IMPORTGAS
+            dev_gas_dens,
+            #endif
+            lambda0,local.dt,dev_col_spatial,output,local.error,local.work,local.environment,local.cached);
+        LOCAL_KERNEL("local_chain");
+        LOCAL_CHECK(localCopy(&unfinished,dev_col_unfinished,sizeof(int),localD2H));
+        input=output;
+        output=(output==local.queue_a)?local.queue_b:local.queue_a;
+    }
+    int error=0;
+    LOCAL_CHECK(localCopy(&error,local.error,sizeof(int),localD2H));
+    if (error) throw std::runtime_error("local collision chain error "+std::to_string(error));
+    chain_seconds+=std::chrono::duration<double>(local_clock::now()-chain_begin).count();
+
+    const auto audit_begin=local_clock::now();
+    LOCAL_CHECK(localZero(dev_col_audit,0,sizeof(col_audit_accum)*col_raw_count));
+    col_audit_bin<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_col_audit,
+        dev_particle,dev_size_old,dev_numr_old,dev_col_rate,dev_col_hazard,
+        dev_col_jump1_int,dev_col_jump2_int,dev_col_jumpmax_int,dev_col_events,
+        dev_col_spatial,dev_col_binmap,dev_col_active,local.dt);
+    LOCAL_KERNEL("local_audit");
+    LOCAL_CHECK(localCopy(audit.data(),dev_col_audit,
+        sizeof(col_audit_accum)*merged,localD2H));
+    for (int c:groups) {
+        if (local.owners[c].empty()) continue;
+        int first=binmap[c*COL_BIN_S], last=bin_end(c,merged);
+        real mass=0;
+        for (int b=first;b<last;++b) {
+            if (audit[b].invalid_count) throw std::runtime_error("invalid local audit state");
+            mass+=audit[b].mass;
+        }
+        if (!(mass>0)) continue;
+        real before=local.state[c].limit_scale;
+        std::vector<col_audit_accum> slice(audit.begin()+first,audit.begin()+last);
+        auto result=_finish_col_bath(slice,int(slice.size()),local.state[c]);
+        passed[c]=!(result.activity_overshoot || result.distribution_overshoot || result.persistent_overshoot);
+        auto &s=stats[c];
+        ++s.updates;
+        s.overshoots+=result.activity_overshoot || result.distribution_overshoot;
+        s.persistent+=result.persistent_overshoot;
+        s.max_growth=std::max(s.max_growth,result.max_g);
+        s.max_activity=std::max(s.max_activity,result.max_f);
+        // Audit feedback controls the next due update; pending neighbors stay fixed.
+        col_bath_record record;
+        record.group_index=c;
+        record.operator_index=operator_index; record.bath_index=++batch_index;
+        record.merged_bins=last-first; record.duration=steps[c];
+        record.limit_before=before; record.limit_after=local.state[c].limit_scale;
+        record.result=result;
+        _record_col_bath(col_summary,record);
+    }
+    // Count physical launches once per wave, not once per group in that wave.
+    col_summary.continuation_launches+=continuations;
+    audit_seconds+=std::chrono::duration<double>(local_clock::now()-audit_begin).count();
+    owner_updates+=count; launches+=continuations; ++waves;
+    ++count_col;
+    dt_col=duration;
+    for (int c:groups) dt_col=std::min(dt_col,steps[c]);
+    schedule.advance(groups);
+    clock_dyn=schedule.seconds(schedule.time());
+}
+// Every pending endpoint has now reached H; transport may read all particle states.
+clock_dyn=duration;
+local.log << "{\"schema\":1,\"method\":\"erosion_cached_rates\",\"operator\":" << ++local.operator_id
+    << ",\"clock_sim\":" << clock_sim << ",\"duration\":" << duration
+    << ",\"waves\":" << waves << ",\"owner_updates\":" << owner_updates
+    << ",\"chain_blocks\":" << chain_blocks << ",\"chain_launches\":" << launches
+    << ",\"chain_seconds\":" << chain_seconds << ",\"audit_seconds\":" << audit_seconds
+    << ",\"scheduler_wall_seconds\":"
+    << std::chrono::duration<double>(local_clock::now()-local_begin).count()
+    << ",\"finest_ticks\":" << schedule.end << ",\"groups\":[";
+for (int c=0;c<LOCAL_GROUPS;++c) {
+    if (c) local.log << ',';
+    const auto &s=stats[c];
+    local.log << "{\"id\":" << c << ",\"owners\":" << local.owners[c].size()
+        << ",\"level\":" << schedule.level[c] << ",\"dt\":" << steps[c]
+        << ",\"initial_level\":" << initial_level[c]
+        << ",\"coarsened_updates\":" << coarsened[c]
+        << ",\"refined_updates\":" << refined[c]
+        << ",\"neighbor_constrained_updates\":" << constrained[c]
+        << ",\"minimum_requested_dt\":" << min_request[c]
+        << ",\"maximum_requested_dt\":" << max_request[c]
+        << ",\"final_requested_dt\":" << current_request[c]
+        << ",\"initial_requested_dt\":" << requested[c]
+        << ",\"initial_binding_constraint\":" << binding[c]
+        << ",\"updates\":" << s.updates << ",\"overshoots\":" << s.overshoots
+        << ",\"persistent_overshoots\":" << s.persistent
+        << ",\"max_snapshot_age_at_start\":" << s.max_age
+        << ",\"max_requested_dt_ratio\":" << s.max_requested_ratio
+        << ",\"max_growth\":" << s.max_growth
+        << ",\"max_predicted_activity\":" << s.max_activity << '}';
+}
+local.log << "],\"event_counts\":[";
+summarize_event_work<<<EVENT_CATEGORIES,TPB>>>(local.work,local.work_sum);
+LOCAL_KERNEL("summarize_event_work");
+event_work totals;
+LOCAL_CHECK(localCopy(&totals,local.work_sum,sizeof(event_work),localD2H));
+for (int k=0;k<EVENT_CATEGORIES;++k) {if(k) local.log<<',';local.log<<totals.count[k];}
+local.log << "],\"event_log_mass_sums\":[";
+for (int k=0;k<EVENT_CATEGORIES;++k) {if(k) local.log<<',';local.log<<totals.log_mass[k];}
+local.log << "]}\n";
+local.log.flush();
+if (!local.log) throw std::runtime_error("cannot write local collision diagnostics");
+
         #else  // BERNOULLI
         real elapsed = 0.0;
         while (elapsed < duration)
@@ -472,7 +986,7 @@ int main (int argc, char **argv)
 
             // freeze only the species fields changed by collisions while positions and velocities remain fixed
             col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
-            CUDA_KERNEL_CHECK("col_snap_save");
+            COAG_KERNEL_CHECK("col_snap_save");
             #ifdef KNN_CACHE
             #ifdef COLLISION_KDTREE
             col_rate_calc <<< NB_P, TPB >>> (
@@ -488,7 +1002,7 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_rate_calc <<< NB_T, TPB >>> (dev_col_rate, dev_col_dist, dev_particle,
+            col_rate_calc <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_col_rate, dev_col_dist, dev_particle,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -508,9 +1022,9 @@ int main (int argc, char **argv)
             );
             #endif // COLLISION_KDTREE
             #endif // KNN_CACHE
-            CUDA_KERNEL_CHECK("col_rate_calc");
+            COAG_KERNEL_CHECK("col_rate_calc");
 
-            CUDA_CHECK(cudaMemset(dev_bad_part, 0, sizeof(int)));
+            COAG_CHECK(COAG_Memset(dev_bad_part, 0, sizeof(int)));
             inf_rate_flag <<< NB_P, TPB >>> (dev_col_rate,
                 #ifdef KNN_CACHE
                 dev_col_measure,
@@ -519,9 +1033,9 @@ int main (int argc, char **argv)
                 #endif // KNN_CACHE
                 dev_bad_part
             );
-            CUDA_KERNEL_CHECK("inf_rate_flag");
+            COAG_KERNEL_CHECK("inf_rate_flag");
             int bad_result = 0;
-            CUDA_CHECK(cudaMemcpy(&bad_result, dev_bad_part, sizeof(int), cudaMemcpyDeviceToHost));
+            COAG_CHECK(COAG_Memcpy(&bad_result, dev_bad_part, sizeof(int), COAG_MemcpyDeviceToHost));
             if (bad_result != 0)
             {
                 std::cerr << "Error: non-finite collision result at particle "
@@ -569,7 +1083,7 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_event_run <<< NB_T, TPB >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
+            col_event_run <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -591,8 +1105,8 @@ int main (int argc, char **argv)
             );
             #endif // COLLISION_KDTREE
             #endif // KNN_CACHE
-            CUDA_KERNEL_CHECK("col_event_run");
-            CUDA_CHECK(cudaDeviceSynchronize());
+            COAG_KERNEL_CHECK("col_event_run");
+            COAG_CHECK(COAG_DeviceSynchronize());
 
             #if defined(COLLISION_MORTON) && !defined(KNN_CACHE)
             max_morton_overflow = *thrust::max_element(
@@ -647,9 +1161,10 @@ int main (int argc, char **argv)
                 #ifdef IMPORTGAS
                 , dev_gas_velx, dev_gas_vely, dev_gas_velz
                 , dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next
+                , dev_gas_dens, dev_gas_dens_next
                 #endif // IMPORTGAS
             );
-            CUDA_KERNEL_CHECK("dyn_rate_calc");
+            COAG_KERNEL_CHECK("dyn_rate_calc");
             thrust::device_ptr <const real> dt_rate_ptr(dev_dyn_rate);
             real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
             dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rate, dt_out - clock_out));
@@ -662,7 +1177,7 @@ int main (int argc, char **argv)
                 dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
                 dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend
             );
-            CUDA_KERNEL_CHECK("gas_lerp_calc");
+            COAG_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
             #endif // IMPORTGAS
 
@@ -675,8 +1190,12 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the first half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
-            CUDA_KERNEL_CHECK("diffusion_pos");
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
+#ifdef IMPORTGAS
+                , dev_gas_dens
+#endif
+            );
+            COAG_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
             invalidate_col_geometry();
             #endif // COLLISION
@@ -685,18 +1204,18 @@ int main (int argc, char **argv)
             #ifdef RADIATION
             // drift to midpoint positions and reconstruct the optical depth used by the force solve
             ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt_dyn);
-            CUDA_KERNEL_CHECK("ssa_substep_1");
+            COAG_KERNEL_CHECK("ssa_substep_1");
             #ifdef COLLISION
             invalidate_col_geometry();
             #endif // COLLISION
             optdepth_init <<< NB_G, TPB >>> (dev_optdepth);
-            CUDA_KERNEL_CHECK("optdepth_init");
+            COAG_KERNEL_CHECK("optdepth_init");
             optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);
-            CUDA_KERNEL_CHECK("optdepth_depo");
+            COAG_KERNEL_CHECK("optdepth_depo");
             optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);
-            CUDA_KERNEL_CHECK("optdepth_calc");
+            COAG_KERNEL_CHECK("optdepth_calc");
             optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
-            CUDA_KERNEL_CHECK("optdepth_csum");
+            COAG_KERNEL_CHECK("optdepth_csum");
 
             real taper = (T_BETA > 0.0) ? (clock_sim + 0.5*dt_dyn) / T_BETA : 1.0;
             taper = fmin(fmax(taper, 0.0), 1.0);
@@ -709,7 +1228,7 @@ int main (int argc, char **argv)
                 beta_taper,
                 dt_dyn
             );
-            CUDA_KERNEL_CHECK("ssa_substep_2");
+            COAG_KERNEL_CHECK("ssa_substep_2");
             #ifdef COLLISION
             invalidate_col_geometry();
             #endif // COLLISION
@@ -721,7 +1240,7 @@ int main (int argc, char **argv)
                 #endif // IMPORTGAS
                 dt_dyn
             );
-            CUDA_KERNEL_CHECK("ssa_transport");
+            COAG_KERNEL_CHECK("ssa_transport");
             #ifdef COLLISION
             invalidate_col_geometry();
             #endif // COLLISION
@@ -729,8 +1248,12 @@ int main (int argc, char **argv)
 
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
-            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn);
-            CUDA_KERNEL_CHECK("diffusion_pos");
+            diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
+#ifdef IMPORTGAS
+                , dev_gas_dens
+#endif
+            );
+            COAG_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
             invalidate_col_geometry();
             #endif // COLLISION
@@ -741,7 +1264,7 @@ int main (int argc, char **argv)
             evolve_collisions(0.5*dt_dyn);
             #endif // COLLISION
 
-            CUDA_CHECK(cudaDeviceSynchronize());
+            COAG_CHECK(COAG_DeviceSynchronize());
             clock_sim += dt_dyn;
             clock_out += dt_dyn;
             count_dyn++;
@@ -761,7 +1284,7 @@ int main (int argc, char **argv)
                 dev_gas_dens, dev_gas_velx, dev_gas_vely, dev_gas_velz,
                 dev_gas_dens_next, dev_gas_velx_next, dev_gas_vely_next, dev_gas_velz_next, gas_blend
             );
-            CUDA_KERNEL_CHECK("gas_lerp_calc");
+            COAG_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
             #endif // IMPORTGAS
             
@@ -774,10 +1297,10 @@ int main (int argc, char **argv)
 
         #ifdef IMPORTGAS
         // replace the incrementally blended working fields by the exact endpoint snapshot
-        CUDA_CHECK(cudaMemcpy(dev_gas_dens, dev_gas_dens_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_gas_velx, dev_gas_velx_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_gas_vely, dev_gas_vely_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
-        CUDA_CHECK(cudaMemcpy(dev_gas_velz, dev_gas_velz_next, sizeof(real)*N_G, cudaMemcpyDeviceToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_gas_dens, dev_gas_dens_next, sizeof(real)*N_G, COAG_MemcpyDeviceToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_gas_velx, dev_gas_velx_next, sizeof(real)*N_G, COAG_MemcpyDeviceToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_gas_vely, dev_gas_vely_next, sizeof(real)*N_G, COAG_MemcpyDeviceToDevice));
+        COAG_CHECK(COAG_Memcpy(dev_gas_velz, dev_gas_velz_next, sizeof(real)*N_G, COAG_MemcpyDeviceToDevice));
         #endif // IMPORTGAS
 
         // reconstruct requested mesh fields and save particle frames under the configured output cadence

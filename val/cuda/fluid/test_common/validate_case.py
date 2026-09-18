@@ -348,7 +348,10 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         rho_g = gas_density(yc, beta)
         for j, radius in enumerate(yc):
             omega = math.sqrt((1.0 - beta) / radius**3)
-            decay = math.exp(-DIFFUSIVITY * MODE * MODE * time / radius**2)
+            # Preserve the coupled ring's finite stopping time (St_0=0.1, p=1.2).
+            stokes = 0.1 * radius**(-1.2)
+            diffusivity = DIFFUSIVITY / (1.0 + stokes*stokes)
+            decay = math.exp(-diffusivity * MODE * MODE * time / radius**2)
             average = (np.sin(MODE * (x1 - omega * time))
                      - np.sin(MODE * (x0 - omega * time))) / (MODE * dx)
             mode_values[j] = Q0 + EPS * decay * average

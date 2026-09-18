@@ -5,7 +5,7 @@
 The Eulerian branch represents monodisperse, pressureless dust as a finite-volume continuum on the
 disk grid. Gas is prescribed analytically, dust does not back-react on it, and the solver combines
 conservative transport with local forces and optional density diffusion. Backend-neutral complete
-files live under `inc/comm/fluid/` and `src/comm/fluid/`; runtime, random-number, declaration, and
+files live under `inc/fluid/` and `src/fluid/`; runtime, random-number, declaration, and
 launch-policy files live under the corresponding `cuda/fluid/` or `rocm/fluid/` branch.
 
 ### 1.1 Supported configurations
@@ -27,7 +27,7 @@ The fluid is monodisperse and does not back-react on the prescribed gas.
 | radial–azimuthal | `N_X > 1`, `N_Z == 1` | $\Sigma_d$ | vertically integrated disk |
 | full 3D | `N_X > 1`, `N_Z > 1` | $\rho_d$ | spherical radial–polar volume |
 
-Transport and source evolution are always active. `DIFFUSION` enables density diffusion,
+Transport and source evolution are always active. `DIFFUSION` enables diffusion,
 `RADIATION` enables attenuated radiation pressure, `VISC_FLOW` replaces the static gas radial
 target with the viscous prescription, and `HALF_DISK` selects a reflecting upper midplane in 3D.
 `VISC_FLOW` requires `DIFFUSION`, and every 3D fluid model requires `DIFFUSION` to support the dust
@@ -292,7 +292,7 @@ Z_{\rm metal}=\frac{\Sigma_d}{\Sigma_g},
 \qquad
 \alpha=\frac{\nu}{H_g^2\Omega_K},
 \qquad
-\mathrm{Sc}_a=\frac{\nu}{D_a}.
+\mathrm{Sc}_a=\frac{\nu}{D_a(1+\mathrm{St}^2)}.
 $$
 
 Throughout this guide, $r$ denotes spherical radius, $R=r\sin\theta$ cylindrical radius, and
@@ -322,7 +322,8 @@ The production fluid branch is specialized at compilation rather than switched a
 
 | Selection | Effect |
 |---|---|
-| `DIFFUSION` | add the three directional density-diffusion operators and their momentum closure |
+| `DIFFUSION` | add the three directional diffusion operators and their momentum closure |
+| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration; omit for density diffusion |
 | `RADIATION` | construct optical depth and add attenuated radiation pressure |
 | `VISC_FLOW` | use the viscous gas target velocity; requires `DIFFUSION` |
 | `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required |
@@ -1293,7 +1294,7 @@ values of its own radial cell. Optical depth is recomputed from the density at t
 symmetric global step, so radiation uses the centered mass distribution rather than the state at
 only the beginning or end of the step.
 
-## 7. Density diffusion and momentum consistency
+## 7. Diffusion and momentum consistency
 
 ### 7.1 Target diffusion equation and coordinate basis
 
@@ -1304,8 +1305,11 @@ $$
 =\nabla\cdot(\boldsymbol D\nabla\rho_d),
 $$
 
-with $\rho_d$ interpreted as $\Sigma_d$ in 2D. The code deliberately does not diffuse
-$\rho_d/\rho_g$.
+with $\rho_d$ interpreted as $\Sigma_d$ in 2D. This is the default.
+Add `-DDIFFUSE_CONCENTRATION` to the model's `GPU_FLAGS` to instead use
+$\partial_t\rho_d=\nabla\cdot[\rho_g\boldsymbol D\nabla(\rho_d/\rho_g)]$.
+The gas weight is the analytic surface density in 2D and volume density in 3D.
+For this mode, replace each gradient below by $\rho_g\nabla(\rho_d/\rho_g)$.
 
 In a vertically integrated radial–azimuthal disk, the scalar operator is
 
@@ -1332,17 +1336,37 @@ $$
 The fluid diffusion tensor is diagonal in the spherical $x/y/z$ basis:
 
 $$
-D_x=\frac{\nu}{\mathrm{Sc}_x},
+D_x=\frac{\nu}{\mathrm{Sc}_x(1+\mathrm{St}^2)},
 \qquad
-D_y=\frac{\nu}{\mathrm{Sc}_y},
+D_y=\frac{\nu}{\mathrm{Sc}_y(1+\mathrm{St}^2)},
 \qquad
-D_z=\frac{\nu}{\mathrm{Sc}_z}.
+D_z=\frac{\nu}{\mathrm{Sc}_z(1+\mathrm{St}^2)}.
 $$
 
 The disk profiles used to evaluate $\nu$ depend on cylindrical $R$; this does not change the
 coordinate basis of the differential operator.
 
 ### 7.2 Crank–Nicolson finite-volume solve
+
+Both modes use the local Stokes number. The Schmidt numbers describe gas mixing
+before Stokes suppression. The equations below first describe density diffusion.
+In concentration mode the radial and polar solves use $q_i=\rho_{d,i}/w_i$
+as the unknown, with $w_i=\rho_{g,i}$ (arbitrary common normalization):
+
+$$
+\mathcal F_{i+1/2}=-A_{i+1/2}D_{i+1/2}w_{i+1/2}
+\frac{q_{i+1}-q_i}{\delta l_{i+1/2}},\qquad
+c_i^\pm=\frac{\delta t}{2}\frac{A_{i\pm1/2}D_{i\pm1/2}w_{i\pm1/2}}
+{V_i\delta l_{i\pm1/2}w_i}.
+$$
+
+The same tridiagonal row below then applies to $q$. Gas weights and diffusivities
+are evaluated at the corresponding centers and faces. The positivity substep
+criterion uses these weighted coefficients. Final mass and donor momentum updates
+use the conservative face flux, preserving a constant concentration equilibrium.
+Axisymmetric gas makes the azimuthal concentration operator equal to its density form.
+Initialization uses the selected diffusion flux in the velocity balance; its approximate
+small-height dust scale height includes the midplane Stokes suppression and gas weighting.
 
 Each direction uses the second-order implicit trapezoidal method of
 [Crank & Nicolson (1947)](https://doi.org/10.1017/S0305004100023197) in finite-volume form. The
@@ -1793,12 +1817,12 @@ The main numerical components map to the production source as follows:
 | Scientific operation | Principal implementation |
 |---|---|
 | convolved profile and PPM geometry setup | `inc/{cuda,rocm}/fluid/fluid_host.cuh` |
-| density and velocity initialization | `src/{cuda,rocm}/fluid/init_rho_calc.*`, `src/comm/fluid/init_vel_calc.cu` |
-| conservative transport | `src/comm/fluid/advection_[xyz]{th,bl}.cu` |
-| drag, gravity, geometry, and radiation | `src/comm/fluid/source_update.cu` |
-| density and donor-momentum diffusion | `src/comm/fluid/diffusion_[xyz]{th,bl}.cu` |
-| optical-depth increment and prefix sum | `src/comm/fluid/optdepth_calc.cu`, `src/comm/fluid/optdepth_csum.cu` |
-| primitive/conserved conversion | `src/comm/fluid/momentum_getv.cu`, `src/comm/fluid/momentum_setv.cu` |
+| density and velocity initialization | `src/{cuda,rocm}/fluid/init_rho_calc.*`, `src/fluid/init_vel_calc.cu` |
+| conservative transport | `src/fluid/advection_[xyz]{th,bl}.cu` |
+| drag, gravity, geometry, and radiation | `src/fluid/source_update.cu` |
+| density and donor-momentum diffusion | `src/fluid/diffusion_[xyz]{th,bl}.cu` |
+| optical-depth increment and prefix sum | `src/fluid/optdepth_calc.cu`, `src/fluid/optdepth_csum.cu` |
+| primitive/conserved conversion | `src/fluid/momentum_getv.cu`, `src/fluid/momentum_setv.cu` |
 | operator driver and output clock | `src/{cuda,rocm}/fluid/fluid_runtime.*` |
 
 The same PPM/HLL and Crank–Nicolson discretizations have two compile-time GPU implementations:
@@ -1969,3 +1993,21 @@ model itself rather than current test coverage.
 - Burns, Lamy & Soter (1979), [radiation forces on small particles](https://doi.org/10.1016/0019-1035(79)90050-2)
 - Shakura & Sunyaev (1973), [$\alpha$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)
 - Epstein (1924), [drag on small spheres in a dilute gas](https://doi.org/10.1103/PhysRev.23.710)
+
+### Shared CUDA/ROCm application source
+
+Root application kernels and runtimes are maintained in `src/`; representation
+constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
+compile the same `.cu` files (ROCm uses `hipcc -x hip`).
+`inc/gpu_compat.cuh` maps runtime allocation/copy/error APIs and random sampling
+to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
+does not alter stream initialization or make raw RNG checkpoints interchangeable.
+
+Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
+CFL synchronization, and collision RNG storage. The bundled KD-tree library remains
+under backend directories, as do Morton backend type/ghost helpers. Model overrides
+retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
+
+Host diffusion/collision checks and preprocessed source comparisons are available
+under `val/tool/`. Migration evidence is saved in `val/temp/shared_gpu/`; it is
+not native GPU compilation or performance qualification.
