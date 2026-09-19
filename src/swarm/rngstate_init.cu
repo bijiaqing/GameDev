@@ -1,4 +1,4 @@
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #if defined(COLLISION) || defined(DIFFUSION)
 
 #include <swarm_kern.cuh>

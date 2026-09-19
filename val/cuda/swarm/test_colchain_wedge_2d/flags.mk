@@ -1,4 +1,0 @@
-DUST_REPR := swarm
-MODEL_INCLUDE_DIRS := $(VAL_ROOT)/cuda/swarm/test_common
-
-GPU_FLAGS += -DCOLLISION -DMULTISIZE -DCODE_UNIT

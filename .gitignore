@@ -20,12 +20,11 @@ gamedev
 !/doc/README.md
 
 # generated validation artifacts
-/val/logs/
-/val/temp/
-/val/main/coagulation/**/seed_*.json
-/val/main/swarm_diffusion/outputs
-/val/main/swarm_drift/outputs
-/val/main/swarm_orbit/outputs
+/val/*.json
+/val/paper/coagulation/**/seed_*.json
+/val/paper/swarm_diffusion/out
+/val/paper/swarm_drift/out
+/val/paper/swarm_orbit/out
 
 # Python caches
 __pycache__/
@@ -37,3 +36,11 @@ __pycache__/
 
 # OS metadata
 .DS_Store
+
+# Representation-local validation artifacts
+/val/fluid/out/
+/val/fluid/obj/
+/val/swarm/out/
+/val/swarm/obj/
+
+/val/paper/**/obj/

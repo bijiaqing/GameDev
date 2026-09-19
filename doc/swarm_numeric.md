@@ -2994,9 +2994,8 @@ model itself rather than current test coverage.
   curved-boundary intersection.
 - Multi-GPU Morton ownership, radial halo bins, and a
   production-scale chain cache policy remain future work.
-- `--use_fast_math` changes division, square-root, transcendental, and subnormal behavior for
-  performance. Statistical tolerances, exact-neighbor tie cases, and reproducibility claims must
-  be interpreted for the compiled arithmetic mode.
+- Both backends omit blanket fast-math flags. Backend libraries and hardware can still
+  affect rounding and random sequences; reproducibility claims must record the build environment.
 
 ## 13. References
 
@@ -3026,24 +3025,18 @@ model itself rather than current test coverage.
 Root application kernels and runtimes are maintained in `src/`; representation
 constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
 compile the same `.cu` files (ROCm uses `hipcc -x hip`).
-`inc/gpu_compat.cuh` maps runtime allocation/copy/error APIs and random sampling
+`inc/gpu.cuh` maps runtime allocation/copy/error APIs and random sampling
 to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
 does not alter stream initialization or make raw RNG checkpoints interchangeable.
 
 Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
-CFL synchronization, and collision RNG storage. Both complete search libraries now
+and collision RNG storage. Both complete search libraries now
 live under `inc/swarm/{kdtree,morton}/`. Runtime API spelling and Thrust policy
 use the compatibility header. Explicit branches retain CUDA/ROCm allocator choices,
 compiler-specific host/device qualifiers, and CUB/hipCUB calls. Model overrides
 retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
 
-Host diffusion/collision checks and preprocessed source comparisons are available
-under `val/tool/`. Migration evidence is saved in `val/temp/shared_gpu/`; it is
-not native GPU compilation or performance qualification.
+Standalone host sanity checks and migration snapshots were removed. Native accuracy
+validation is run through `val/run_all.py`; analytical references remain with the tests.
 
-Search consolidation is checked by `val/tool/check_shared_search.py` against the
-pre-migration snapshot in `val/temp/shared_search/before/` (200 preprocessed
-comparisons). `val/tool/check_search_optimizations.py` checks exact retained
-neighbors and Morton packing with 32/64-lane host emulation at block sizes
-32/64/128/256. These checks do not establish native compilation or speed on a GPU.
 Launch defaults remain unchanged; there is no automatic performance tuning.

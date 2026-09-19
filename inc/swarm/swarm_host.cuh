@@ -7,7 +7,7 @@
 #include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #include <fstream>          // std::ofstream, std::ifstream
 #include <iomanip>          // std::setw, std::setfill, std::setprecision
 #include <iostream>         // std::cout, std::cerr, std::endl

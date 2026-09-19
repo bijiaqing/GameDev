@@ -19,7 +19,7 @@
 
 #include "kdtree/helpers.h"
 #include "kdtree/box.h"
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 
 /* This is a single include file from which
 

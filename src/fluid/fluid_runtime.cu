@@ -7,7 +7,7 @@
 #include <string>         // std::string
 #include <vector>         // std::vector
 
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 
 #include <fluid_kern.cuh>
 #include <fluid_host.cuh>
@@ -345,11 +345,7 @@ int main (int argc, char **argv)
     while (idx_from < SAVE_MAX)
     {
         // clip the global step at the next output time
-        #ifdef GAMEDEV_ROCM
-        real dt_cfl = recalc_dt_cfl(true);
-#else
         real dt_cfl = recalc_dt_cfl(false);
-#endif
         real dt = dt_cfl;
         real dt_to_out = DT_OUT - clock_out;
         bool output_due = (dt >= dt_to_out);

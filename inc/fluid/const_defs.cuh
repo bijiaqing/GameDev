@@ -1,4 +1,4 @@
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 

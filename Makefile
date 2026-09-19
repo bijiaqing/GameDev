@@ -16,9 +16,8 @@ MOD_ROOT        = $(ROOT_DIR)/mod
 OBJ_ROOT        = $(ROOT_DIR)/obj
 OUT_ROOT        = $(ROOT_DIR)/out
 VAL_ROOT        = $(ROOT_DIR)/val
-VAL_COMM_DIR    = $(VAL_ROOT)/comm
-VAL_FLUID_DIR   = $(VAL_COMM_DIR)/fluid
-VAL_SWARM_DIR   = $(VAL_COMM_DIR)/swarm
+VAL_FLUID_DIR   = $(VAL_ROOT)/fluid/mod
+VAL_SWARM_DIR   = $(VAL_ROOT)/swarm/mod
 INC_DIR    = $(ROOT_DIR)/inc
 SRC_DIR    = $(ROOT_DIR)/src
 MODEL_EXEC_DIRS = $(dir $(wildcard $(MOD_ROOT)/*/flags.mk))
@@ -34,17 +33,7 @@ GPU_LINK_FLAGS =
 BACKEND_EXT = cu
 BACKEND_DEFINE = -DGAMEDEV_CUDA
 
-CUDA_MATH ?= fast
-ifneq ($(words $(CUDA_MATH)),1)
-$(error CUDA_MATH must be fast or precise)
-endif
-ifeq ($(filter fast precise,$(CUDA_MATH)),)
-$(error CUDA_MATH must be fast or precise)
-endif
-ifeq ($(CUDA_MATH),fast)
-GPU_BASE_FLAGS += --use_fast_math
-endif
-MATH_PATH = /$(CUDA_MATH)
+
 else
 GPU_COMPILER ?= hipcc
 GPU_TARGET ?= gfx942
@@ -55,7 +44,6 @@ GPU_LANGUAGE_FLAG = -x hip
 GPU_LINK_FLAGS = -fgpu-rdc
 BACKEND_EXT = hip
 BACKEND_DEFINE = -DGAMEDEV_ROCM
-MATH_PATH =
 ifneq ($(strip $(RESOURCE_REPORT)),)
 GPU_BASE_FLAGS += -Rpass-analysis=kernel-resource-usage
 endif
@@ -71,29 +59,20 @@ ifdef MODEL
 PROD_MODEL_MATCH := $(wildcard $(MOD_ROOT)/$(MODEL))
 VAL_FLUID_MATCH := $(wildcard $(VAL_FLUID_DIR)/$(MODEL))
 VAL_SWARM_MATCH := $(wildcard $(VAL_SWARM_DIR)/$(MODEL))
-VAL_COMM_MATCH := $(VAL_FLUID_MATCH) $(VAL_SWARM_MATCH)
-VAL_FLUID_OVERLAY := $(wildcard $(VAL_ROOT)/$(GPU_BACKEND)/fluid/$(MODEL))
-VAL_SWARM_OVERLAY := $(wildcard $(VAL_ROOT)/$(GPU_BACKEND)/swarm/$(MODEL))
-VAL_BACKEND_MATCH := $(VAL_FLUID_OVERLAY) $(VAL_SWARM_OVERLAY)
+VAL_MODEL_MATCH := $(VAL_FLUID_MATCH) $(VAL_SWARM_MATCH)
 
-ifneq ($(words $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH)),1)
-ifneq ($(words $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH)),0)
-$(error MODEL=$(MODEL) is ambiguous: $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH))
+ifneq ($(words $(PROD_MODEL_MATCH) $(VAL_MODEL_MATCH)),1)
+ifneq ($(words $(PROD_MODEL_MATCH) $(VAL_MODEL_MATCH)),0)
+$(error MODEL=$(MODEL) is ambiguous: $(PROD_MODEL_MATCH) $(VAL_MODEL_MATCH))
 endif
 endif
-ifeq ($(strip $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH) $(VAL_BACKEND_MATCH)),)
-$(error MODEL=$(MODEL) was not found under mod/, val/comm/fluid/, val/comm/swarm/, or val/$(GPU_BACKEND)/)
-endif
-ifneq ($(words $(VAL_BACKEND_MATCH)),0)
-ifneq ($(words $(VAL_BACKEND_MATCH)),1)
-$(error MODEL=$(MODEL) has ambiguous backend overlays: $(VAL_BACKEND_MATCH))
-endif
+ifeq ($(strip $(PROD_MODEL_MATCH) $(VAL_MODEL_MATCH)),)
+$(error MODEL=$(MODEL) was not found under mod/, val/fluid/mod/, or val/swarm/mod/)
 endif
 
-MODEL_DIR := $(firstword $(PROD_MODEL_MATCH) $(VAL_COMM_MATCH) $(VAL_BACKEND_MATCH))
-MODEL_BACKEND_DIR := $(firstword $(VAL_BACKEND_MATCH))
-MODEL_FLAG_FILE := $(firstword $(wildcard $(MODEL_DIR)/flags.mk) $(wildcard $(MODEL_BACKEND_DIR)/flags.mk))
-ifeq ($(strip $(MODEL_FLAG_FILE)),)
+MODEL_DIR := $(firstword $(PROD_MODEL_MATCH) $(VAL_MODEL_MATCH))
+MODEL_FLAG_FILE := $(MODEL_DIR)/flags.mk
+ifeq ($(wildcard $(MODEL_FLAG_FILE)),)
 $(error Model flag file for MODEL=$(MODEL) does not exist)
 endif
 
@@ -115,7 +94,7 @@ ifeq ($(filter fluid swarm,$(DUST_REPR)),)
 $(error DUST_REPR must be fluid or swarm)
 endif
 
-IS_VAL := $(strip $(VAL_COMM_MATCH) $(VAL_BACKEND_MATCH))
+IS_VAL := $(strip $(VAL_MODEL_MATCH))
 ifneq ($(IS_VAL),)
 ifneq ($(strip $(RES)),)
 GPU_FLAGS += -DTEST_RES=$(RES)
@@ -149,15 +128,14 @@ GPU_FLAGS += $(if $(filter x,$(DIRECTION)),-DTEST_DIRECTION_X,$(if $(filter y,$(
 endif
 endif
 
-VAL_BACKEND_COMMON_DIR = $(VAL_ROOT)/$(GPU_BACKEND)/$(DUST_REPR)/test_common
-VAL_REPR_COMMON_DIR = $(VAL_ROOT)/comm/$(DUST_REPR)/test_common
+VAL_REPR_SRC_DIR = $(VAL_ROOT)/$(DUST_REPR)/src
 
-MODEL_SOURCE_DIRS := $(strip $(MODEL_BACKEND_DIR) $(MODEL_DIR))
+MODEL_SOURCE_DIRS := $(MODEL_DIR)
 MODEL_HEADER_DIRS := $(MODEL_SOURCE_DIRS)
 ifneq ($(IS_VAL),)
 # allow validation models to replace complete files without adding test branches to production files
-MODEL_SOURCE_DIRS += $(VAL_BACKEND_COMMON_DIR) $(VAL_REPR_COMMON_DIR)
-MODEL_HEADER_DIRS += $(VAL_BACKEND_COMMON_DIR) $(VAL_REPR_COMMON_DIR)
+MODEL_SOURCE_DIRS += $(VAL_REPR_SRC_DIR)
+MODEL_HEADER_DIRS += $(VAL_REPR_SRC_DIR)
 endif
 MODEL_HEADER_DIRS += $(MODEL_INCLUDE_DIRS)
 MODEL_INCLUDE_FLAGS := $(addprefix -I ,$(MODEL_HEADER_DIRS))
@@ -178,8 +156,8 @@ ifeq ($(IS_VAL),)
 EXEC = $(dir $(MODEL_FLAG_FILE))gamedev
 else
 # keep generated validation build products out of the source and production trees
-OBJ_ROOT = $(VAL_ROOT)/temp/obj
-EXEC = $(VAL_ROOT)/temp/bin/$(GPU_BACKEND)/$(DUST_REPR)/$(MODEL)/gamedev
+OBJ_ROOT = $(VAL_ROOT)/$(DUST_REPR)/obj
+EXEC = $(OBJ_ROOT)/$(MODEL)/$(GPU_BACKEND)/gamedev
 endif
 
 ifeq ($(IS_VAL),)
@@ -189,10 +167,10 @@ OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
 VAL_SCOPE ?= all
 VAL_SCOPE_DIR = $(if $(filter all,$(VAL_SCOPE)),,/groups/$(VAL_SCOPE))
 ifeq ($(DUST_REPR),fluid)
-VAL_SWEEP ?= $(FLUID_SWEEP)
-OUT_DIR = $(VAL_ROOT)/logs/fluid/$(GPU_BACKEND)/$(VAL_SWEEP)$(VAL_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
+VAL_SWEEP ?= $(FLUID_SWEEP)$(if $(filter cuda,$(GPU_BACKEND)),_precise)
+OUT_DIR = $(VAL_ROOT)/fluid/out/$(MODEL)/$(GPU_BACKEND)/$(VAL_SWEEP)$(VAL_SCOPE_DIR)$(OUT_TAG_DIR)
 else
-OUT_DIR = $(VAL_ROOT)/logs/swarm/$(GPU_BACKEND)$(VAL_SCOPE_DIR)/$(MODEL)$(OUT_TAG_DIR)
+OUT_DIR = $(VAL_ROOT)/swarm/out/$(MODEL)/$(GPU_BACKEND)$(VAL_SCOPE_DIR)$(OUT_TAG_DIR)
 endif
 endif
 endif
@@ -268,7 +246,7 @@ _OBJ_FLUID += $(_OBJ_FLUID_BLOCK)
 else
 _OBJ_FLUID += $(_OBJ_FLUID_THREAD)
 endif
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/fluid/$(GPU_BACKEND)/$(FLUID_SWEEP)$(MATH_PATH)/$(GPU_TARGET)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/fluid/$(GPU_BACKEND)/$(FLUID_SWEEP)/$(GPU_TARGET)
 _OBJ = $(_OBJ_FLUID)
 else
 ifneq ($(filter -DCOLLISION,$(GPU_FLAGS)),)
@@ -284,11 +262,15 @@ GPU_FLAGS += -DCOLLISION_MORTON
 else
 GPU_FLAGS += -DCOLLISION_KDTREE
 endif
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(COLLISION_SEARCH)$(MATH_PATH)/$(GPU_TARGET)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(COLLISION_SEARCH)/$(GPU_TARGET)
 else
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)$(MATH_PATH)/$(GPU_TARGET)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(GPU_TARGET)
 endif
 _OBJ = $(_OBJ_SWARM)
+endif
+
+ifneq ($(IS_VAL),)
+OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(GPU_BACKEND)$(if $(filter fluid,$(DUST_REPR)),/$(FLUID_SWEEP),$(if $(strip $(COLLISION_SEARCH)),/$(COLLISION_SEARCH)))/$(GPU_TARGET)
 endif
 
 _OBJ += $(_OBJ_MOD)
@@ -297,7 +279,7 @@ SOURCE_SEARCH_DIRS = $(MODEL_SOURCE_DIRS) $(SRC_BRANCH_DIR)
 INC_SEARCH_FLAGS = -I $(INC_DIR) $(MODEL_INCLUDE_FLAGS) -I $(INC_BRANCH_DIR)
 BUILD_CONFIG = $(OBJ_DIR)/.build_config
 
-INC_HEADER_PATHS := $(INC_DIR)/gpu_compat.cuh $(shell find $(INC_BRANCH_DIR) -type f \
+INC_HEADER_PATHS := $(INC_DIR)/gpu.cuh $(shell find $(INC_BRANCH_DIR) -type f \
     \( -name '*.cuh' -o -name '*.h' -o -name '*.hpp' \) 2>/dev/null)
 INC_HEADER_NAMES := $(sort $(notdir $(INC_HEADER_PATHS)))
 HEADER_OVERRIDE_PATHS := $(sort $(foreach header,$(INC_HEADER_NAMES),\
@@ -337,17 +319,11 @@ SOURCE_MISMATCH_OBJ := $(foreach object,$(OBJ),\
 $(info Using GPU backend: $(GPU_BACKEND))
 $(info Using GPU target: $(GPU_TARGET))
 $(info Using model setup: $(MODEL) from $(MODEL_DIR))
-ifneq ($(strip $(MODEL_BACKEND_DIR)),)
-$(info Using backend overlay: $(MODEL_BACKEND_DIR))
-endif
 ifeq ($(strip $(MODEL_CONST)),)
 $(info Using representation constants: $(INC_BRANCH_DIR)/const_defs.cuh)
 endif
 $(foreach header,$(HEADER_OVERRIDE_PATHS),$(info Using header override: $(header)))
 $(info Using dust representation: $(DUST_REPR))
-ifeq ($(GPU_BACKEND),cuda)
-$(info Using CUDA math: $(CUDA_MATH))
-endif
 ifeq ($(DUST_REPR),fluid)
 $(info Using fluid sweep: $(FLUID_SWEEP))
 else ifneq ($(filter -DCOLLISION,$(GPU_FLAGS)),)
@@ -420,7 +396,7 @@ ifdef MODEL
 else
 	@printf "%-12s %s\n" "Cleaning" "all object and model executable files"
 	@rm -rf $(OBJ_ROOT)/*
-	@rm -rf $(VAL_ROOT)/temp
+	@rm -rf $(VAL_ROOT)/fluid/obj $(VAL_ROOT)/swarm/obj $(VAL_ROOT)/paper/*/obj $(VAL_ROOT)/paper/coagulation/*/obj
 	@rm -f $(MODEL_EXECUTABLES)
 endif
 

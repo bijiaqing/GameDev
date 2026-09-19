@@ -7,9 +7,9 @@ model. Every retained case tests a complete physical operator, a geometric bound
 coupled evolution path against an independent reference. It deliberately omits micro-tests whose
 only claim is that one local expression returns the value written in the source.
 
-The canonical matrix is defined in `val/tool/val_config.py`. With resolutions
+The canonical matrix is defined in `val/val_config.py`. With resolutions
 $N=32,64,128,256$, it contains 19 models and 76 metric records. CUDA and ROCm use the same
-backend-neutral model definitions and validators under `val/comm/fluid/`.
+backend-neutral model definitions and validators under `val/fluid/`.
 
 This document explains what the cases establish. The fluid equations and production algorithms are
 described in [fluid_numeric.md](fluid_numeric.md); archive commands are summarized in
@@ -302,11 +302,11 @@ its native pass does not qualify every production-runtime branch or output/resta
 
 ## 10. Running and interpreting the suite
 
-Run a native backend through `val/tool/run_all.py` as shown in [`val/README.md`](../val/README.md).
+Run a native backend through `val/run_all.py` as shown in [`val/README.md`](../val/README.md).
 The canonical fluid archive is below
-`val/logs/fluid/BACKEND/SWEEP/`. Disposable validation executables and object files are isolated below
-`val/temp/`, never in the source-model directories. A complete default campaign contains 76 records and a passing
-`manifest_all.json`.
+`val/fluid/out/MODEL/BACKEND/SWEEP/`. Disposable validation executables and object files are isolated below
+`val/fluid/obj/MODEL/BACKEND/`, never in the source-model directories. A complete default campaign contains 76 records and a passing
+`val/fluid/out/_suite/BACKEND/SWEEP/manifest_all.json`.
 
 The most important evidence is the combination of:
 

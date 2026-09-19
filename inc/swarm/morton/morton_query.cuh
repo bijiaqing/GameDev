@@ -4,9 +4,9 @@
 #include <climits>                         // INT_MAX
 
 #ifdef GAMEDEV_ROCM
-#include <gpu_compat.cuh>                  // HIP device qualifiers
+#include <gpu.cuh>                  // HIP device qualifiers
 #else
-#include <gpu_compat.cuh>                  // CUDA device qualifiers
+#include <gpu.cuh>                  // CUDA device qualifiers
 #include <math_constants.h>                // CUDART_INF_F
 #endif
 

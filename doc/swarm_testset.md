@@ -8,12 +8,12 @@ rates, nearest-neighbor geometry, the production frozen-bath collision integrato
 coagulation against analytical Smoluchowski solutions. The retained tests compare complete algorithms
 with closed-form, statistical, or brute-force references.
 
-The common matrix is defined in `val/tool/val_config.py`. For the standard resolutions
+The common matrix is defined in `val/val_config.py`. For the standard resolutions
 $N=32,64,128,256$, it contains 15 named entries: 14 analytical or statistical models producing
 42 metric records, plus the standalone KNN matrix. The all-in-one campaign also runs four native
 collision-chain models. CUDA and ROCm use the same
 backend-neutral definitions and validators wherever their runtime APIs permit.
-The larger analytical coagulation campaigns under `val/main/coagulation/` are CUDA-only scientific campaigns
+The larger analytical coagulation campaigns under `val/paper/coagulation/` are CUDA-only scientific campaigns
 and deliberately remain outside this routine matrix.
 
 The production equations and numerical methods are documented in
@@ -407,7 +407,7 @@ campaign outputs are scientific results, not additional permanent validation rec
 
 ## 11. Analytical coagulation distributions
 
-The standalone campaigns in `val/main/coagulation/test_{const,linear,product}` evolve
+The standalone campaigns in `val/paper/coagulation/test_{const,linear,product}` evolve
 `N_P = 10^6` fixed representative particles by coagulation alone. Each kernel
 uses the complete Cartesian grid
 
@@ -492,9 +492,9 @@ measured recommendations are:
 - product kernel: `COL_BATH_EPS = 0.02`; no general `N_K` conclusion is drawn.
 
 The full numerical assessments are in
-[`test_const/balance.md`](../val/main/coagulation/test_const/balance.md),
-[`test_linear/balance.md`](../val/main/coagulation/test_linear/balance.md), and
-[`test_product/balance.md`](../val/main/coagulation/test_product/balance.md). Their adjacent
+[`test_const/balance.md`](../val/paper/coagulation/test_const/balance.md),
+[`test_linear/balance.md`](../val/paper/coagulation/test_linear/balance.md), and
+[`test_product/balance.md`](../val/paper/coagulation/test_product/balance.md). Their adjacent
 READMEs specify the initializers, schedules, runners, and output layout.
 
 ### 11.3 Model-local differences from the root code
@@ -536,12 +536,12 @@ identity and production collision-chain behavior remain covered separately by
 `test_knn` and `test_colchain_*`.
 
 The analytical campaigns have independent runners and compact JSON manifests
-and are not registered with `val/tool/run_all.py`.
+and are not registered with `val/run_all.py`.
 
 ## 12. Running and interpreting the suite
 
-The canonical common archive is below `val/logs/swarm/BACKEND/`; disposable executables, objects,
-KNN binaries, and compiler stamps are isolated below `val/temp/`. The collision-chain publication
+The canonical common archive is below `val/swarm/out/MODEL/BACKEND/`; disposable executables, objects,
+KNN binaries, and compiler stamps are isolated below `val/swarm/obj/MODEL/BACKEND/`. The collision-chain publication
 records are below `groups/chain/`. A complete standard campaign reports 42 analytical/statistical metrics, a
 passing KNN suite manifest, and four passing collision-chain manifests.
 The analytical coagulation campaigns are run and interpreted separately from

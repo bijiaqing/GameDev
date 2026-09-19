@@ -11,7 +11,7 @@
 #include <string>                         // std::string
 #include <vector>                         // std::vector
 
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #ifndef GAMEDEV_ROCM
 #include <math_constants.h>  // CUDART_INF_F
 #endif

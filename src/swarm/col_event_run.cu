@@ -1,4 +1,4 @@
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #ifdef COLLISION
 
 #ifdef KNN_CACHE

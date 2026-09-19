@@ -1,4 +1,4 @@
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>

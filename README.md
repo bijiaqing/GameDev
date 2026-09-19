@@ -171,8 +171,8 @@ The CUDA backend requires:
 - a C++17-compatible host compiler supported by the installed CUDA toolkit
 - Python 3 and NumPy for the verification runners and validators
 
-The CUDA backend uses `GPU_TARGET=sm_80`, `-O2`, `--use_fast_math`, and `-std=c++17` by default.
-Set `CUDA_MATH=precise` to omit `--use_fast_math` for matched-arithmetic verification. `sm_80`
+The CUDA backend uses `GPU_TARGET=sm_80`, `-O2`, and `-std=c++17` by default,
+with standard CUDA math settings and no fast-math mode. `sm_80`
 targets NVIDIA Ampere GPUs such as the A100.
 
 The ROCm backend requires `hipcc`, HIP Runtime, hipRAND, rocThrust, hipCUB, and an AMD GPU supported
@@ -270,7 +270,7 @@ mod/
     └── const_defs.cuh    # optional
 ```
 
-The build searches `mod/`, `val/comm/fluid/`, and `val/comm/swarm/` for the requested `MODEL`.
+The build searches `mod/`, `val/fluid/`, and `val/swarm/` for the requested `MODEL`.
 The name must resolve to exactly one directory.
 
 ### Fluid model flags
@@ -346,12 +346,10 @@ while value `3` enables the physical cross-section and relative-velocity prescri
 
 If a model needs different physical parameters, grid dimensions, particle count, cadence, or GPU
 launch settings, place a complete `const_defs.cuh` in the model directory. The build gives this file
-priority over the backend and representation default:
+priority over the shared representation default:
 
-- [`inc/cuda/fluid/const_defs.cuh`](inc/cuda/fluid/const_defs.cuh)
-- [`inc/rocm/fluid/const_defs.cuh`](inc/rocm/fluid/const_defs.cuh)
-- [`inc/cuda/swarm/const_defs.cuh`](inc/cuda/swarm/const_defs.cuh)
-- [`inc/rocm/swarm/const_defs.cuh`](inc/rocm/swarm/const_defs.cuh)
+- [`inc/fluid/const_defs.cuh`](inc/fluid/const_defs.cuh)
+- [`inc/swarm/const_defs.cuh`](inc/swarm/const_defs.cuh)
 
 Models that do not need different constants should omit the local header and inherit the selected
 representation's defaults. Do not add preprocessor parameters to the production constant headers
@@ -502,7 +500,7 @@ by the simulation.
 Verification models, validators, generated metrics, and standalone numerical checks live under
 `val/`, separate from production models in `mod/`.
 
-Run the complete native campaign with `val/tool/run_all.py`; use `--quick` for a short workflow
+Run the complete native campaign with `val/run_all.py`; use `--quick` for a short workflow
 check. The backend-neutral archive-transfer and comparison procedure is documented in
 [`val/README.md`](val/README.md). Test equations, acceptance criteria, focused commands, evidence
 requirements, and remaining coverage are maintained in
@@ -517,18 +515,17 @@ requirements, and remaining coverage are maintained in
 ├── README.md                 # project entry point
 ├── LICENSE                   # MIT license
 ├── inc/
-│   ├── comm/                 # backend-neutral headers by representation
-│   ├── cuda/                 # complete CUDA-owned headers by representation
-│   └── rocm/                 # complete ROCm-owned headers by representation
+│   ├── gpu.cuh        # CUDA/ROCm compatibility mappings
+│   ├── fluid/               # shared fluid headers
+│   └── swarm/               # shared particle and search headers
 ├── src/
-│   ├── comm/                 # backend-neutral translation units by representation
-│   ├── cuda/                 # CUDA-owned translation units
-│   └── rocm/                 # ROCm-owned translation units
-├── mod/                      # production model configurations
+│   ├── fluid/               # shared fluid translation units
+│   └── swarm/               # shared particle translation units
+├── mod/                     # production model setups
 ├── val/
-│   ├── comm/                 # backend-neutral test definitions by representation
-│   ├── cuda/                 # CUDA test drivers and backend-specific cases
-│   ├── rocm/                 # ROCm test drivers and backend-specific sources
+│   ├── fluid/               # shared fluid tests and runners
+│   ├── swarm/               # shared particle tests and runners
+│   ├── main/                # publication models
 │   ├── tool/                 # backend-neutral validation and comparison utilities
 │   ├── logs/                 # generated, backend-separated validation records and fields
 │   └── temp/                 # generated validation executables, objects, and compiler stamps
@@ -576,7 +573,7 @@ relevant observables.
 | Symptom | Check |
 |---|---|
 | `MODEL is not defined` | run `make MODEL=<directory-name>` from the repository root |
-| model not found or ambiguous | ensure the name occurs exactly once under `mod/`, `val/comm/fluid/`, or `val/comm/swarm/` |
+| model not found or ambiguous | ensure the name occurs exactly once under `mod/`, `val/fluid/`, or `val/swarm/` |
 | missing `flags.mk` | every model requires a local `flags.mk` containing `DUST_REPR` |
 | unsupported GPU architecture | pass the correct `GPU_TARGET=<architecture>` for the selected backend and rebuild |
 | feature-dependency compile error | review the fluid or swarm flag constraints in [Configuring a model](#configuring-a-model) |
@@ -603,7 +600,7 @@ relevant observables.
 - Multi-GPU domain decomposition is not implemented
 - CUDA and ROCm are selected from one build tree, but checkpoints and vendor RNG-state files are
   intentionally not portable between them
-- `--use_fast_math`, backend choice, and GPU target can change rounding and long-time
+- Backend choice and GPU target can change rounding and long-time
   trajectories; reproducibility claims must record the build environment
 - Some long-time, imported-gas, extreme-vacuum, and large-production collision regimes remain less
   thoroughly exercised than the analytical core
@@ -636,7 +633,7 @@ GameDev's original code is distributed under the [MIT License](LICENSE). Copyrig
 
 GameDev includes modified portions of
 [cudaKDTree](https://github.com/ingowald/cudaKDTree), copyright 2018-2023 Ingo Wald, under the
-[Apache License 2.0](inc/cuda/swarm/kdtree/Apache-2.0.txt). The license is retained beside both
-backend implementations. Files under the CUDA and ROCm `swarm/kdtree/cubit/` directories derive from
+[Apache License 2.0](inc/swarm/kdtree/Apache-2.0.txt). The license is retained beside the
+shared implementation. Files under `inc/swarm/kdtree/cubit/` derive from
 [cudaBitonic](https://github.com/ingowald/cudaBitonic), copyright 2018-2023 Ingo Wald, under the
 same license. The original copyright and license notices are retained in the bundled source files.

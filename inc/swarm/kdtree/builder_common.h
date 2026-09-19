@@ -21,7 +21,7 @@
 #include "kdtree/box.h"
 #include "kdtree/data.h"
 
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 
 namespace kdtree {
 

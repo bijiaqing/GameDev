@@ -23,11 +23,10 @@ where their gas-disk assumptions are physically identical.
   backend-neutral files.
 - `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files.
 - `mod/` contains the published production model configuration.
-- `val/comm/` contains backend-neutral publication-test definitions and validators.
-- `val/cuda/` and `val/rocm/` contain native drivers and backend-owned test source.
-- `val/tool/` contains archive and cross-backend utilities.
-- ignored numerical evidence is written below `val/logs/`, while disposable validation builds are
-  written below `val/temp/`.
+- `val/{fluid,swarm}/mod/` contains test definitions; `src/` contains shared drivers and validators.
+- `val/*.py` contains native campaign, archive, and cross-backend utilities.
+- Numerical evidence is retained under `val/{fluid,swarm}/out/` and campaign summaries under
+  `val/*.json`; disposable builds use each suite's `obj/` directory.
 
 The build shares a file only when the complete file is backend-neutral. It does not split partially
 portable translation units. Fluid and swarm files are also kept separate rather than creating a
@@ -103,7 +102,7 @@ updating qualification claims.
 When statements disagree, use this authority order:
 
 1. current production source, flags, and constants;
-2. freshly generated machine-readable evidence under `val/logs/`;
+2. freshly generated machine-readable evidence under `val/*.json`;
 3. the canonical documents in this directory;
 4. historical results and development notes.
 

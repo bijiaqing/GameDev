@@ -5,7 +5,7 @@
 #include <string>                           // std::string
 
 #if defined(COLLISION) || defined(DIFFUSION)
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION_KDTREE

@@ -23,7 +23,7 @@
 #  define _USE_MATH_DEFINES
 #endif
 #include <math.h> // using cmath causes issues under Windows
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #ifdef GAMEDEV_ROCM
 #include <hip/hip_math_constants.h>
 #else

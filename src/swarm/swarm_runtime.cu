@@ -1,4 +1,4 @@
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 // Root transport with local collision scheduling.
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit

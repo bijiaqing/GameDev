@@ -1,4 +1,4 @@
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #ifndef FLUID_KERN_CUH
 #define FLUID_KERN_CUH
 

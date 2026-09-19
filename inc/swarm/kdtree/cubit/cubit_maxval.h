@@ -17,7 +17,7 @@
 #pragma once
 
 #include "../cubit/common.h"
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 
 namespace cubit {
 

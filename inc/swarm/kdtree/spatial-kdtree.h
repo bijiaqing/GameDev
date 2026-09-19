@@ -27,7 +27,7 @@
 #else
 #include <cub/cub.cuh>
 #endif
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 
 namespace kdtree {
 

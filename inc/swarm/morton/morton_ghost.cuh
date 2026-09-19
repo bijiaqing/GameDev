@@ -5,7 +5,7 @@
 #include <cstddef>                       // std::size_t
 #include <stdexcept>                     // std::invalid_argument
 
-#include <gpu_compat.cuh>                // CUDA allocation and kernel-launch API
+#include <gpu.cuh>                // CUDA allocation and kernel-launch API
 #include <thrust/device_ptr.h>           // thrust::device_ptr
 #include <thrust/execution_policy.h>     // thrust::device
 #ifdef GAMEDEV_ROCM

@@ -13,7 +13,7 @@
 #include <string>              // std::string, std::to_string
 #include <vector>              // std::vector
 
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #include <thrust/device_ptr.h> // thrust::device_ptr
 #include <thrust/extrema.h>    // thrust::max_element
 #include <thrust/reduce.h>     // thrust::reduce

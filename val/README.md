@@ -14,34 +14,26 @@ compare the tests.
 
 ```text
 val/
-├── comm/                 backend-neutral model definitions and validators
-│   ├── fluid/
-│   └── swarm/
-├── cuda/                 CUDA drivers and backend-specific test code
-│   ├── fluid/
-│   └── swarm/
-├── rocm/                 ROCm drivers and backend-specific test code
-│   ├── fluid/
-│   └── swarm/
-├── tool/                 archive, comparison, and all-in-one runners
-├── logs/                 ignored numerical evidence and terminal records
-└── temp/                 ignored executables, objects, and compiler stamps
+├── fluid/                shared fluid models, drivers, and validators
+├── swarm/                shared particle models, drivers, and validators
+├── paper/                 publication models
+├── *.json                cross-component campaign and comparison summaries
+└── *.py                  numerical campaign, archive, and comparison tools
 ```
 
-Every generated validation result is written below `val/logs/`, regardless of format. This includes
-JSON manifests, terminal captures, and binary numerical fields. Disposable executables, object and
-dependency files, and compiler stamps are written below `val/temp/`. Test source directories
-therefore remain source-only after a build.
+Both `fluid/` and `swarm/` contain `mod/<model>/` for models, `src/` for shared
+code, `out/<model>/<backend>/` for results, and `obj/<model>/<backend>/` for executables
+and object files. Fluid results add the sweep directory. Suite summaries use
+`out/_suite/<backend>/`. Build products are disposable; result files are not.
 
 ## Native publication campaign
 
-`run_all.py` runs the native numerical suites and archive checks. The standalone
-`val/tool/static_check.py` is manual-only and is not a campaign stage.
+`run_all.py` runs the native numerical suites and archive checks.
 
 Run the full CUDA campaign with
 
 ```bash
-python3 val/tool/run_all.py \
+python3 val/run_all.py \
     --backend cuda \
     --target sm_80 \
     --res 32 64 128 256
@@ -50,14 +42,14 @@ python3 val/tool/run_all.py \
 Run the matching ROCm campaign with
 
 ```bash
-python3 val/tool/run_all.py \
+python3 val/run_all.py \
     --backend rocm \
     --target gfx942 \
     --res 32 64 128 256
 ```
 
 Without `--compare`, each command writes only its native backend archive. Add `--compare` on the
-second machine after copying the first machine's `val/logs/` tree into the project. The order is
+second machine after copying the first machine's `val/fluid/out/`, `val/swarm/out/`, and `val/*.json` records into the project. The order is
 irrelevant: CUDA can be copied to ROCm or ROCm to CUDA. The comparator itself requires Python but no
 GPU.
 
@@ -70,23 +62,23 @@ Thread/block selects a fluid implementation; swarm does not have this sweep choi
 complete thread campaigns, run just the block fluid matrix in each backend's GPU allocation:
 
 ```bash
-FLUID_SWEEP=block python3 val/cuda/fluid/test_common/run_suite.py \
+FLUID_SWEEP=block GPU_BACKEND=cuda python3 val/fluid/src/run_suite.py \
     --group all --target sm_80 --res 32 64 128 256 &&
-python3 val/tool/check_archive.py \
-    --backend cuda --component fluid --fluid-sweep block \
-    --output archive_check_cuda_block.json
+python3 val/check_archive.py \
+    --backend cuda --component fluid --fluid-sweep block_precise \
+    --output check_archive_cuda_block.json
 ```
 
 ```bash
-FLUID_SWEEP=block python3 val/rocm/fluid/test_common/run_suite.py \
+FLUID_SWEEP=block GPU_BACKEND=rocm python3 val/fluid/src/run_suite.py \
     --group all --target gfx942 --res 32 64 128 256 &&
-python3 val/tool/check_archive.py \
+python3 val/check_archive.py \
     --backend rocm --component fluid --fluid-sweep block \
-    --output archive_check_rocm_block.json
+    --output check_archive_rocm_block.json
 ```
 
-These commands preserve thread and swarm records and write the block fluid manifests below
-`val/logs/fluid/BACKEND/block/`. They do not create a `run_all` aggregate or record a source
+These commands preserve thread and swarm records. CUDA block fluid manifests use
+`val/fluid/out/<model>/cuda/block_precise/`; ROCm uses `val/fluid/out/<model>/rocm/block/`. They do not create a `run_all` aggregate or record a source
 fingerprint; retain the source snapshot separately as required by the evidence contract below.
 
 ## Morton integration check
@@ -99,22 +91,22 @@ does not change the publication matrix or its tolerances.
 CUDA:
 
 ```bash
-make -f val/cuda/swarm/test_knn/Makefile topology ARCH=sm_80 &&
-mkdir -p val/logs/swarm/cuda/groups/knn &&
-val/temp/cuda/swarm/test_knn/knn_topology > val/logs/swarm/cuda/groups/knn/topology.json
+make -f val/swarm/mod/test_knn/Makefile GPU_BACKEND=cuda topology GPU_TARGET=sm_80 &&
+mkdir -p val/swarm/out/test_knn/cuda/groups/knn &&
+val/swarm/obj/test_knn/cuda/knn_topology > val/swarm/out/test_knn/cuda/groups/knn/topology.json
 for group in knn collision chain; do
-    python3 val/cuda/swarm/test_common/run_suite.py --group "$group" --target sm_80 || break
+    GPU_BACKEND=cuda python3 val/swarm/src/run_suite.py --group "$group" --target sm_80 || break
 done
 ```
 
 ROCm:
 
 ```bash
-make -f val/rocm/swarm/test_knn/Makefile topology AMDGPU_TARGET=gfx942 &&
-mkdir -p val/logs/swarm/rocm/groups/knn &&
-val/temp/rocm/swarm/test_knn/knn_topology > val/logs/swarm/rocm/groups/knn/topology.json
+make -f val/swarm/mod/test_knn/Makefile GPU_BACKEND=rocm topology GPU_TARGET=gfx942 &&
+mkdir -p val/swarm/out/test_knn/rocm/groups/knn &&
+val/swarm/obj/test_knn/rocm/knn_topology > val/swarm/out/test_knn/rocm/groups/knn/topology.json
 for group in knn collision chain; do
-    python3 val/rocm/swarm/test_common/run_suite.py --group "$group" --target gfx942 || break
+    GPU_BACKEND=rocm python3 val/swarm/src/run_suite.py --group "$group" --target gfx942 || break
 done
 ```
 
@@ -129,20 +121,20 @@ evidence; these focused swarm runs do not settle them.
 
 ## Focused groups
 
-The backend-specific suite runners accept physical groups. Examples are
+The shared suite runners accept physical groups. Examples are
 
 ```bash
-python3 val/cuda/fluid/test_common/run_suite.py \
+GPU_BACKEND=cuda python3 val/fluid/src/run_suite.py \
     --group diffusion \
     --res 32 64 128 256 \
     --target sm_80
 
-python3 val/rocm/swarm/test_common/run_suite.py \
+GPU_BACKEND=rocm python3 val/swarm/src/run_suite.py \
     --group transport \
     --res 32 64 128 256 \
     --target gfx942
 
-python3 val/cuda/swarm/test_common/run_suite.py \
+GPU_BACKEND=cuda python3 val/swarm/src/run_suite.py \
     --group chain \
     --target sm_80
 ```
@@ -155,36 +147,27 @@ Direct model invocations write below `groups/manual/` unless `VAL_SCOPE` is set 
 The canonical archives are
 
 ```text
-val/logs/
-├── fluid/
-│   ├── cuda/SWEEP/MODEL/
-│   └── rocm/SWEEP/MODEL/
-├── swarm/
-│   ├── cuda/MODEL/
-│   └── rocm/MODEL/
-├── archive_check_cuda.json
-├── archive_check_rocm.json
-├── backend_comparison.json
-├── run_all_cuda.json
-└── run_all_rocm.json
-
-val/temp/
-├── bin/BACKEND/REPRESENTATION/MODEL/
-├── cuda/swarm/test_knn/
-├── rocm/swarm/test_knn/
-└── obj/MODEL/REPRESENTATION/BACKEND/
+val/fluid/out/MODEL/BACKEND/SWEEP/
+val/swarm/out/MODEL/BACKEND/
+val/fluid/out/_suite/BACKEND/SWEEP/
+val/swarm/out/_suite/BACKEND/
+val/{fluid,swarm}/obj/MODEL/BACKEND/
+val/run_all_BACKEND_SWEEP.json
+val/check_archive_BACKEND_SWEEP.json
+val/backend_comparison.json
 ```
 
-The `temp/` subtree is disposable and is not part of the scientific archive. Model result
+The `obj/` subtrees are disposable and are not part of the scientific archive. Model result
 directories contain numerical metrics and, where required, compact binary fields. Suite manifests
 record the expected cases, resolutions, completion state, backend, and target. The top-level
 `run_all.py` campaign records the initial and final source fingerprints; standalone suite manifests
-do not. `val/tool/check_archive.py` rejects an incomplete native archive.
+do not. `val/check_archive.py` rejects an incomplete native archive.
 
-Keep a successful campaign record for each tested backend/sweep before a later run overwrites the
-canonical `run_all_BACKEND.json`, for example by copying it immediately to
-`run_all_cuda_thread.json` or `run_all_rocm_thread.json` after the respective thread pass. A second
-full `run_all.py` campaign also reruns swarm and overwrites its backend-specific records.
+Campaign and archive-check summaries use the backend and sweep in their filenames,
+for example `run_all_cuda_thread.json` and `check_archive_rocm_block.json`.
+The sweep is `thread` or `block`; CUDA's `_precise` suffix remains in the data paths.
+Running the same backend/sweep again replaces its summary. A second full campaign
+also reruns swarm and overwrites its backend-specific model records.
 Matching hashes in a failed or different-sweep campaign do not
 establish the provenance of a standalone run. The comparator's hash check alone does not verify
 campaign success or sweep identity. Associate each result with its actual source snapshot and
@@ -206,14 +189,14 @@ the dated swarm assessment records its outstanding failures. Resolve such cases 
 retaining native tolerances and failed reports rather than loosening the global comparison limits.
 
 When transferring evidence between machines, copy the result and campaign records but exclude
-`val/temp/`; executables, objects, and compiler stamps are backend-local and reproducible.
+all `obj/` directories; executables, objects, and compiler stamps are backend-local and reproducible.
 
 Validate archives without rerunning the simulations:
 
 ```bash
-python3 val/tool/check_archive.py --backend cuda --component all
-python3 val/tool/check_archive.py --backend rocm --component all
-python3 val/tool/compare_backends.py --component all
+python3 val/check_archive.py --backend cuda --component all
+python3 val/check_archive.py --backend rocm --component all
+python3 val/compare_backends.py --component all
 ```
 
 When the two archives live in separate copied validation roots, pass `--cuda-root` and `--rocm-root` to
@@ -250,3 +233,38 @@ checks, restart plumbing, implementation-to-implementation sweep comparisons, an
 benchmarks. Those can be developed outside the publication archive when a concrete defect or
 performance claim requires them. Their absence is not evidence that every configuration, flag
 combination, or hardware limit has been tested.
+
+## Shared validation source
+
+`val/fluid/` and `val/swarm/` replace the former `comm/`, `cuda/`, and `rocm/`
+source trees. Each model has one definition, one validator, and one driver;
+ROCm compiles the shared `.cu` files with `hipcc -x hip`. Genuine backend
+requirements remain explicit branches, including fluid shared-memory checks.
+Analytical references and acceptance thresholds were retained.
+
+`run_all.py --backend cuda|rocm` selects the backend for the full campaign.
+For a direct model or suite runner, set `GPU_BACKEND=cuda` or `GPU_BACKEND=rocm`.
+Suite and KNN runners accept `--target`; direct analytical models inherit
+`CUDA_ARCH` or `AMDGPU_TARGET`. KNN Make commands use `GPU_BACKEND` and `GPU_TARGET`.
+Executables and archives retain separate backend paths. Existing component archives were relocated into `out/` without changing file contents.
+CUDA fluid archives retain the `_precise` suffix to separate them from historical
+fast-math results; the campaign and archive tools use that suffix consistently.
+
+## Retained validation code
+
+- `mod/` and `src/`: numerical test setups, GPU drivers, analytical references,
+  error metrics, and accuracy acceptance criteria.
+- `val_config.py`: shared case lists, paths, backend selection, and evidence metadata.
+- `run_all.py`: native campaign runner.
+- `check_archive.py`: checks that numerical results and required cases are complete and passed.
+- `compare_backends.py`: compares CUDA and ROCm numerical results.
+- `paper/`: publication models and their analysis/plotting scripts.
+
+Standalone source sanity checks, CPU emulations, migration snapshots, and tests of
+analysis helpers were removed. They are not needed to run or score the numerical cases.
+Native output archives remain intact. Publication build products now live under
+each suite's `obj/` directory; no build uses `val/temp/`.
+
+Every retained validation Python script disables bytecode writing before importing
+local or third-party modules. The runners also pass `PYTHONDONTWRITEBYTECODE=1`
+to child processes. Existing `__pycache__` directories were removed.

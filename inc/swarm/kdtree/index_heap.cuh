@@ -2,9 +2,9 @@
 #define GAMEDEV_KDTREE_INDEX_HEAP_CUH
 
 #ifdef GAMEDEV_ROCM
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #else
-#include <gpu_compat.cuh>
+#include <gpu.cuh>
 #endif
 
 // retain the exact top-K physical neighbors while filtering inactive particles and periodic duplicate images

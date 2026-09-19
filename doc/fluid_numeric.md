@@ -1850,8 +1850,8 @@ method.
 
 The backend does not change the discrete equations. Ordinary elementwise and thread-line kernels
 use `TPB = 64` on both backends, while block-line kernels use 32 threads on CUDA and one 64-lane
-wavefront on ROCm. CUDA defaults to `--use_fast_math` and offers `CUDA_MATH=precise`; ROCm omits
-blanket `-ffast-math` because its finite-only assumptions can invalidate nonfinite-state checks.
+wavefront on ROCm. Both backends omit blanket fast-math flags; there is no selectable
+CUDA fast-math mode. Finite-only assumptions can invalidate nonfinite-state checks.
 Cross-backend validation therefore compares convergence, conserved fields, and density-weighted
 velocity norms rather than requiring byte equality.
 
@@ -1972,7 +1972,7 @@ model itself rather than current test coverage.
   evidence required after each change; an FFT is not required.
 - Pressureless dust cannot represent multistreaming after caustic formation. A swarm or another
   kinetic representation is required in that regime.
-- `--use_fast_math` trades correctly rounded division/square root and subnormal handling for speed.
+- CUDA uses standard math settings; backend and hardware differences can still affect rounding.
   Verification tolerances and reproducibility claims must reflect that build choice.
 
 ## 12. References
@@ -1999,15 +1999,19 @@ model itself rather than current test coverage.
 Root application kernels and runtimes are maintained in `src/`; representation
 constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
 compile the same `.cu` files (ROCm uses `hipcc -x hip`).
-`inc/gpu_compat.cuh` maps runtime allocation/copy/error APIs and random sampling
+`inc/gpu.cuh` maps runtime allocation/copy/error APIs and random sampling
 to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
 does not alter stream initialization or make raw RNG checkpoints interchangeable.
 
 Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
-CFL synchronization, and collision RNG storage. The bundled KD-tree library remains
+and collision RNG storage. The bundled KD-tree library remains
 under backend directories, as do Morton backend type/ghost helpers. Model overrides
 retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
 
-Host diffusion/collision checks and preprocessed source comparisons are available
-under `val/tool/`. Migration evidence is saved in `val/temp/shared_gpu/`; it is
-not native GPU compilation or performance qualification.
+Standalone host sanity checks and migration snapshots were removed. Native accuracy
+validation is run through `val/run_all.py`; analytical references remain with the tests.
+
+The top-level CFL calculation is quiet on both backends: it retains the CFL-rate
+reduction and nonfinite-state checks, but skips the three diagnostic velocity
+copies, ring-velocity reduction, and limiting-cell printout. Explicit trace
+diagnostics remain available.
