@@ -1,3 +1,4 @@
+#include <cstdlib>
 // compare the device hierarchy with an independent serial topology oracle
 #include <algorithm>
 #include <cassert>
@@ -7,7 +8,7 @@
 #include <random>
 #include <vector>
 #include <morton/morton_index.cuh>
-#include "../../src/device_api.cuh"
+#include <gpu.cuh>
 
 static std::uint64_t key_of(float3 point, int dim, int depth)
 {
@@ -24,15 +25,35 @@ static std::uint64_t key_of(float3 point, int dim, int depth)
 static void check(morton_index &index, const std::vector<float3> &points, int dim, int target, int depth)
 {
     float3 *device = nullptr;
-    val_malloc(&device, points.size(), "test input allocation");
-    val_copy_h2d(device, points.data(), points.size(), "test input copy");
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&device), sizeof(*device)*(points.size())); status != gpuSuccess)
+    {
+        std::cerr << "test input allocation" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(device, points.data(), sizeof(*(device))*(points.size()), gpuMemcpyHostToDevice); status != gpuSuccess)
+    {
+        std::cerr << "test input copy" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     index.build(device, int(points.size()), make_float3(0,0,0), 1, dim, target, depth);
-    val_free(device, "test input release");
+    if (gpuError_t status = gpuFree(device); status != gpuSuccess)
+    {
+        std::cerr << "test input release" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     auto view = index.view();
     std::vector<morton_point> sorted(points.size());
     std::vector<morton_node> actual(index.node_count());
-    val_copy_d2h(sorted.data(), view.dev_point, sorted.size(), "test points copy");
-    val_copy_d2h(actual.data(), view.dev_node, actual.size(), "test nodes copy");
+    if (gpuError_t status = gpuMemcpy(sorted.data(), view.dev_point, sizeof(*(sorted.data()))*(sorted.size()), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    {
+        std::cerr << "test points copy" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(actual.data(), view.dev_node, sizeof(*(actual.data()))*(actual.size()), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    {
+        std::cerr << "test nodes copy" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     std::vector<int> order(points.size());
     for (int i=0; i<int(order.size()); ++i) order[i]=i;
     std::stable_sort(order.begin(), order.end(), [&](int a,int b){return key_of(points[a],dim,depth)<key_of(points[b],dim,depth);});

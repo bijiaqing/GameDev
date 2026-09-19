@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cmath>      // acos, atan2, cos, sin, sqrt
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
@@ -7,7 +8,7 @@
 #include <vector>     // std::vector
 
 #include <_transport.cuh>
-#include <device_api.cuh>
+#include <gpu.cuh>
 #include <swarm_kern.cuh>
 
 // test-only driver for an inclined drag-free orbit
@@ -82,16 +83,37 @@ int main ()
     }
 
     swarm *dev_particle;
-    val_malloc(&dev_particle, N_P, "allocate inclined-orbit particles");
-    val_copy_h2d(dev_particle, particle.data(), N_P, "upload inclined-orbit particles");
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    {
+        std::cerr << "allocate inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    {
+        std::cerr << "upload inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     // refine only the transport timestep while preserving the same orbit and end time
     const real dt = time_end/static_cast<real>(VERIFY_RES);
     for (int step = 0; step < VERIFY_RES; step++)
     {
         ssa_transport <<< NB_P, TPB >>> (dev_particle, dt);
     }
-    val_kernel_check("inclined Kepler transport");
-    val_copy_d2h(particle.data(), dev_particle, N_P, "copy inclined-orbit particles");
+    if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
+    {
+        std::cerr << "inclined Kepler transport" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuDeviceSynchronize(); status != gpuSuccess)
+    {
+        std::cerr << "inclined Kepler transport" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    {
+        std::cerr << "copy inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 
     std::vector<real> state(6*N_P);
     for (int idx = 0; idx < N_P; idx++)
@@ -123,7 +145,11 @@ int main ()
          << "  \"transport_only_schedule\": true\n"
          << "}\n";
 
-    val_free(dev_particle, "free inclined-orbit particles");
+    if (gpuError_t status = gpuFree(dev_particle); status != gpuSuccess)
+    {
+        std::cerr << "free inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     std::cout << "swarm inclined orbit completed at N=" << VERIFY_RES << std::endl;
     return 0;
 }

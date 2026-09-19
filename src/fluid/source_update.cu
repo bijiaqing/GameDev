@@ -73,26 +73,9 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     // construct exact exponential drag relaxation coefficients
     real stokes = _get_stokes(R, Z, h_g);
     real ts = stokes / omega;
-    real tau = dt / ts;
 
-    real drag_relax = -expm1(-tau);
-    real drag_decay = 1.0 - drag_relax;
-
-    // evaluate drag-weighted force quadrature with a cancellation-safe small-step series
-    real force_weight_old, force_weight_new;
-    if (tau < 1.0e-4)
-    {
-        real tau_sq = tau*tau;
-        real tau_cb = tau_sq*tau;
-
-        force_weight_old = dt*(0.5 - tau/3.0 + tau_sq/8.0  - tau_cb/30.0);
-        force_weight_new = dt*(0.5 - tau/6.0 + tau_sq/24.0 - tau_cb/120.0);
-    }
-    else
-    {
-        force_weight_new = ts*(tau - drag_relax) / tau;
-        force_weight_old = ts*drag_relax - force_weight_new;
-    }
+    real drag_relax, drag_decay, force_weight_old, force_weight_new;
+    _get_drag_weights(dt, ts, drag_relax, drag_decay, force_weight_old, force_weight_new);
 
     // attenuate radiation pressure by the optical depth interpolated to the logarithmic cell center
     #ifdef RADIATION

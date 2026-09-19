@@ -557,7 +557,7 @@ int main ()
     save_array("optdepth_final", optdepth);
 #elif defined(VERIFY_SOURCE_DRAG)
     // apply exactly one full source step; the model-local source kernel prescribes gas velocities, stopping times, and
-    // linearly varying forces whose closed-form solution is evaluated independently in validate_case.py
+    // linearly varying forces; its weights come from the production helper and its reference uses high-precision integration
     source_update <<< NB_G, TPB >>> (
         dev_velx, dev_vely, dev_velz, dev_dustdens, VERIFY_TEND
     );

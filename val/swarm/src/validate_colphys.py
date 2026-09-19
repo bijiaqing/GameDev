@@ -92,7 +92,7 @@ def local_pair_velocity(
     size_i: float, size_j: float, radius: float, height: float,
     code_unit: bool,
 ) -> tuple[float, float]:
-    """Reconstruct one production relative speed at the pair's cylindrical location."""
+    """Reference the query-local drift, settling, turbulence and Brownian prescription."""
 
     h_g = ASPR_0
     sigma_g = SIGMA_0*radius**2
@@ -102,15 +102,25 @@ def local_pair_velocity(
     stokes_i = STOKES_0*size_i/(radius**2*gas_strat)
     stokes_j = STOKES_0*size_j/(radius**2*gas_strat)
     re_inv = 1.0/math.sqrt(
-        REYNOLDS_0*sigma_g/SIGMA_0 if code_unit
-        else 0.5*ALPHA*sigma_g*X_SEC/M_MOL
+        REYNOLDS_0*sigma_g*gas_strat/SIGMA_0 if code_unit
+        else 0.5*ALPHA*sigma_g*gas_strat*X_SEC/M_MOL
     )
     resolved = float(np.linalg.norm(velocity_i - velocity_j))
     turbulent = turbulent_velocity(
         max(stokes_i, stokes_j), min(stokes_i, stokes_j), re_inv, radius
     )
     brownian = 0.0 if code_unit else brownian_velocity(size_i, size_j, radius)
-    return resolved, math.sqrt(resolved**2 + turbulent**2 + brownian**2)
+    # Stored particle velocities are separately checked by the Cartesian diagnostic.
+    # Collision rates use equilibrium differential drift at the query location.
+    omega = radius**(-1.5)
+    eta = -0.5*((2.0 - 0.5 - 1.5)*h_g*h_g
+               - (1.0-radius/math.hypot(radius,height)))
+    vn = -eta*radius*omega
+    fi, fj = 1.0/(1.0+stokes_i**2), 1.0/(1.0+stokes_j**2)
+    radial = 2.0*vn*(stokes_i*fi-stokes_j*fj)
+    azimuthal = vn*(fi-fj)
+    vertical = height*omega*(min(stokes_i,0.5)-min(stokes_j,0.5))
+    return resolved, math.sqrt(radial**2+azimuthal**2+vertical**2+turbulent**2+brownian**2)
 
 
 def cartesian_velocity(
@@ -316,8 +326,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         branch_ids[:6] == [1, 2, 3, 4, 5, 6]
         and boundary_coverage
         and (code_unit or math.isclose(brownian[1], ASPR_0, rel_tol=0.0, abs_tol=0.0))
-        and values[24]/values[22] > 10.0
-        and values[22] < V_FRAG < values[24]
+        and math.isclose(values[24], values[22], rel_tol=2.0e-11)
+        and math.isclose(values[23], values[22], rel_tol=2.0e-11)
         and np.array_equal(values[27:30], expected[27:30])
         and cache_images
         and np.all(measured_measure > 0.0)
@@ -338,8 +348,8 @@ def analyze(out_dir: Path, resolution: int) -> dict:
             "brownian_sound_speed_cap": None if code_unit else brownian[1] == ASPR_0,
             "custom_kernel": True,
             "vertically_integrated_overlap": dimension == 2,
-            "periodic_image_velocity": bool(values[24]/values[22] > 10.0),
-            "fragmentation_branch_separated": bool(values[22] < V_FRAG < values[24]),
+            "query_local_image_invariance": bool(math.isclose(values[24], values[22], rel_tol=2.0e-11)),
+            "query_local_interior_equivalence": bool(math.isclose(values[23], values[22], rel_tol=2.0e-11)),
             "periodic_image_code": bool(np.array_equal(values[27:30], expected[27:30])),
             "search_cache_images": bool(cache_images),
             "cached_periodic_image_rate": bool(

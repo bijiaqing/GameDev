@@ -20,33 +20,12 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     #endif // IMPORTGAS
 )
 {
-    // grain size affects production drag only, so it is intentionally inactive in this drag-free specialization
     (void)size;
-    real R_1 = _get_cyl_R(y_1, z_1);
-    real grav_y1, cent_y1, torq_z1;
-    _get_force_term(y_1, z_1, R_1, lx_i, lz_i, beta, grav_y1, cent_y1, torq_z1);
-
-    real lx_1 = lx_i;
-    real vy_1 = vy_i + 0.5*dt*(grav_y1 + cent_y1);
-    real lz_1 = lz_i + 0.5*dt*torq_z1;
-
-    real grav_y2, cent_y2, torq_z2;
-    _get_force_term(y_1, z_1, R_1, lx_1, lz_1, beta, grav_y2, cent_y2, torq_z2);
-    lx_j = lx_i;
-    vy_j = vy_i + dt*(grav_y2 + cent_y2);
-    lz_j = lz_i + dt*torq_z2;
-
-    y_j = y_1 + 0.5*vy_j*dt;
-    if constexpr (N_Z == 1)
-    {
-        z_j = 0.5*M_PI;
-        lz_j = 0.0;
-        x_j = (N_X > 1) ? x_1 + 0.5*lx_j*dt / y_1 / y_j : 0.5*(X_MIN + X_MAX);
-        return;
-    }
-
-    z_j = z_1 + 0.5*lz_j*dt / y_1 / y_j;
-    x_j = x_1 + 0.5*lx_j*dt / y_1 / y_j / sin(z_1) / sin(z_j);
+    _ssa_advance<true>(dt, 1.0, 0.0, 0.0, 0.0, beta, lx_i, vy_i, lz_i,
+        x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j,
+        [] (real y, real z, real R, real lx, real lz, real b, real &g, real &c, real &t) {
+            _get_force_term(y,z,R,lx,lz,b,g,c,t);
+        });
 }
 
 #endif // VAL_ORBIT_ECC_TRANSPORT_CUH

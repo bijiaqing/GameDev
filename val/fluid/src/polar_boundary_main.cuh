@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cmath>      // cos, exp, fmin, pow, sin, sqrt
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories
@@ -8,7 +9,7 @@
 #include <string>     // std::string, std::to_string
 #include <vector>     // std::vector
 
-#include "device_api.cuh"
+#include <gpu.cuh>
 
 #include <fluid_host.cuh>
 #include <fluid_kern.cuh>
@@ -141,20 +142,20 @@ int main ()
     real *dev_dustmomy = nullptr;
     real *dev_dustmomz = nullptr;
     real *dev_ppm_weight_z = nullptr;
-    val_malloc(&dev_dustdens, N_G, "allocate density");
-    val_malloc(&dev_dustmomx, N_G, "allocate x momentum");
-    val_malloc(&dev_dustmomy, N_G, "allocate y momentum");
-    val_malloc(&dev_dustmomz, N_G, "allocate z momentum");
-    val_malloc(&dev_ppm_weight_z, ppm_weight_z.size(), "allocate polar PPM weights");
-    val_copy_h2d(dev_dustdens, dustdens.data(), N_G, "upload density");
-    val_copy_h2d(dev_dustmomx, dustmomx.data(), N_G, "upload x momentum");
-    val_copy_h2d(dev_dustmomy, dustmomy.data(), N_G, "upload y momentum");
-    val_copy_h2d(dev_dustmomz, dustmomz.data(), N_G, "upload z momentum");
-    val_copy_h2d(dev_ppm_weight_z, ppm_weight_z.data(), ppm_weight_z.size(), "upload polar PPM weights");
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustdens), sizeof(*dev_dustdens)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustmomx), sizeof(*dev_dustmomx)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustmomy), sizeof(*dev_dustmomy)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustmomz), sizeof(*dev_dustmomz)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_ppm_weight_z), sizeof(*dev_ppm_weight_z)*(ppm_weight_z.size())));
+    GPU_CHECK(gpuMemcpy(dev_dustdens, dustdens.data(), sizeof(*(dev_dustdens))*(N_G), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomx, dustmomx.data(), sizeof(*(dev_dustmomx))*(N_G), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomy, dustmomy.data(), sizeof(*(dev_dustmomy))*(N_G), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomz, dustmomz.data(), sizeof(*(dev_dustmomz))*(N_G), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()), gpuMemcpyHostToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
     real *dev_adv_work = nullptr;
-    val_malloc(&dev_adv_work, static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G, "allocate block advection workspace");
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work), sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
     #endif // FLUID_BLOCK_SWEEP
 
     real max_rate;
@@ -179,15 +180,16 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt
         );
         #endif // FLUID_BLOCK_SWEEP
-        val_kernel_check("polar boundary advection");
+        GPU_CHECK(gpuGetLastError());
+        GPU_CHECK(gpuDeviceSynchronize());
         clock += dt;
         steps++;
     }
 
-    val_copy_d2h(dustdens.data(), dev_dustdens, N_G, "download density");
-    val_copy_d2h(dustmomx.data(), dev_dustmomx, N_G, "download x momentum");
-    val_copy_d2h(dustmomy.data(), dev_dustmomy, N_G, "download y momentum");
-    val_copy_d2h(dustmomz.data(), dev_dustmomz, N_G, "download z momentum");
+    GPU_CHECK(gpuMemcpy(dustdens.data(), dev_dustdens, sizeof(*(dustdens.data()))*(N_G), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(dustmomx.data(), dev_dustmomx, sizeof(*(dustmomx.data()))*(N_G), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(dustmomy.data(), dev_dustmomy, sizeof(*(dustmomy.data()))*(N_G), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(dustmomz.data(), dev_dustmomz, sizeof(*(dustmomz.data()))*(N_G), gpuMemcpyDeviceToHost));
     write_binary("dustdens_initial", dustdens_initial);
     write_binary("dustdens_final", dustdens);
     write_binary("dustmomx_final", dustmomx);
@@ -212,13 +214,13 @@ int main ()
          << "  \"reflect_rate\": " << REFLECT_RATE << "\n"
          << "}\n";
 
-    val_free(dev_dustdens, "free density");
-    val_free(dev_dustmomx, "free x momentum");
-    val_free(dev_dustmomy, "free y momentum");
-    val_free(dev_dustmomz, "free z momentum");
-    val_free(dev_ppm_weight_z, "free polar PPM weights");
+    GPU_CHECK(gpuFree(dev_dustdens));
+    GPU_CHECK(gpuFree(dev_dustmomx));
+    GPU_CHECK(gpuFree(dev_dustmomy));
+    GPU_CHECK(gpuFree(dev_dustmomz));
+    GPU_CHECK(gpuFree(dev_ppm_weight_z));
     #ifdef FLUID_BLOCK_SWEEP
-    val_free(dev_adv_work, "free block advection workspace");
+    GPU_CHECK(gpuFree(dev_adv_work));
     #endif // FLUID_BLOCK_SWEEP
 
     std::cout << "fluid " << case_name() << " completed at N=" << VERIFY_RES

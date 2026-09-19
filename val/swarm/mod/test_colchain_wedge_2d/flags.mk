@@ -1,4 +1,6 @@
 DUST_REPR := swarm
-MODEL_INCLUDE_DIRS := $(VAL_ROOT)/swarm/src
 
 GPU_FLAGS += -DCOLLISION -DMULTISIZE -DCODE_UNIT
+
+# Audit the current production local collision controller during this short test.
+GPU_FLAGS += -DCOL_DIAGNOSTICS

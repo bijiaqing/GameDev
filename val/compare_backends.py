@@ -27,6 +27,8 @@ STOCHASTIC_SWARM_CASES = {
     "diffusion_1d",
     "diffusion_2d",
     "diffusion_3d",
+    "diffusion_wedge_2d",
+    "diffusion_wedge_3d",
 }
 
 # The production fluid initializer uses cuRAND or hipRAND for its azimuthal

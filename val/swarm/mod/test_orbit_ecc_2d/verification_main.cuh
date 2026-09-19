@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cmath>      // atan2, cos, sin, sqrt
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
@@ -7,7 +8,7 @@
 #include <vector>     // std::vector
 
 #include <_transport.cuh>
-#include <device_api.cuh>
+#include <gpu.cuh>
 #include <swarm_kern.cuh>
 
 // test-only driver for non-circular, drag-free production transport
@@ -62,16 +63,37 @@ int main ()
     }
 
     swarm *dev_particle;
-    val_malloc(&dev_particle, N_P, "allocate eccentric-orbit particles");
-    val_copy_h2d(dev_particle, particle.data(), N_P, "upload eccentric-orbit particles");
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    {
+        std::cerr << "allocate eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    {
+        std::cerr << "upload eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     real dt = time_end/static_cast<real>(VERIFY_RES);
     // treat VERIFY_RES as a temporal refinement count rather than a particle or mesh resolution
     for (int step = 0; step < VERIFY_RES; step++)
     {
         ssa_transport <<< NB_P, TPB >>> (dev_particle, dt);
     }
-    val_kernel_check("eccentric Kepler transport");
-    val_copy_d2h(particle.data(), dev_particle, N_P, "copy eccentric-orbit particles");
+    if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
+    {
+        std::cerr << "eccentric Kepler transport" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuDeviceSynchronize(); status != gpuSuccess)
+    {
+        std::cerr << "eccentric Kepler transport" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    {
+        std::cerr << "copy eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 
     std::vector<real> state(6*N_P);
     for (int idx = 0; idx < N_P; idx++)
@@ -99,7 +121,11 @@ int main ()
          << "  \"zero_drag_specialization\": " << (VAL_ZERO_DRAG_ACTIVE ? "true" : "false") << "\n"
          << "}\n";
 
-    val_free(dev_particle, "free eccentric-orbit particles");
+    if (gpuError_t status = gpuFree(dev_particle); status != gpuSuccess)
+    {
+        std::cerr << "free eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     std::cout << "swarm eccentric orbit completed at N=" << VERIFY_RES << std::endl;
     return 0;
 }

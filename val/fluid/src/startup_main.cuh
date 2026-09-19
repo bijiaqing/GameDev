@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories
 #include <fstream>    // std::ofstream
@@ -7,7 +8,7 @@
 #include <string>     // std::string, std::to_string
 #include <vector>     // std::vector
 
-#include "device_api.cuh"
+#include <gpu.cuh>
 
 #include <fluid_host.cuh>
 #include <fluid_kern.cuh>
@@ -53,42 +54,45 @@ int main ()
     real *dev_dustmomz = nullptr;
     real *dev_state_initial = nullptr;
     real *dev_ppm_weight_z = nullptr;
-    val_malloc(&dev_initdens, initdens.size(), "allocate convolved density");
-    val_malloc(&dev_dustdens, N_G, "allocate working density");
-    val_malloc(&dev_dustvelx, N_G, "allocate x velocity");
-    val_malloc(&dev_dustvely, N_G, "allocate y velocity");
-    val_malloc(&dev_dustvelz, N_G, "allocate z velocity");
-    val_malloc(&dev_dustmomx, N_G, "allocate x momentum");
-    val_malloc(&dev_dustmomy, N_G, "allocate y momentum");
-    val_malloc(&dev_dustmomz, N_G, "allocate z momentum");
-    val_malloc(&dev_state_initial, 4*N_G, "allocate initial conserved state");
-    val_malloc(&dev_ppm_weight_z, ppm_weight_z.size(), "allocate polar PPM weights");
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_initdens), sizeof(*dev_initdens)*(initdens.size())));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustdens), sizeof(*dev_dustdens)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustvelx), sizeof(*dev_dustvelx)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustvely), sizeof(*dev_dustvely)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustvelz), sizeof(*dev_dustvelz)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustmomx), sizeof(*dev_dustmomx)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustmomy), sizeof(*dev_dustmomy)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_dustmomz), sizeof(*dev_dustmomz)*(N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_state_initial), sizeof(*dev_state_initial)*(4*N_G)));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_ppm_weight_z), sizeof(*dev_ppm_weight_z)*(ppm_weight_z.size())));
 
     #ifdef FLUID_BLOCK_SWEEP
     real *dev_adv_work = nullptr;
-    val_malloc(&dev_adv_work, static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G, "allocate block advection workspace");
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work), sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
     #endif // FLUID_BLOCK_SWEEP
 
-    val_copy_h2d(dev_initdens, initdens.data(), initdens.size(), "upload convolved density");
-    val_copy_h2d(dev_ppm_weight_z, ppm_weight_z.data(), ppm_weight_z.size(), "upload polar PPM weights");
+    GPU_CHECK(gpuMemcpy(dev_initdens, initdens.data(), sizeof(*(dev_initdens))*(initdens.size()), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()), gpuMemcpyHostToDevice));
 
     // initialize density, its balancing polar velocity, and the conserved momenta through the production routines
     init_rho_calc <<< NB_G, TPB >>> (dev_dustdens, dev_initdens);
-    val_kernel_check("production density initialization");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
     init_vel_calc <<< NB_G, TPB >>> (dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens);
-    val_kernel_check("production velocity initialization");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
     momentum_setv <<< NB_G, TPB >>> (
         dev_dustdens, dev_dustvelx, dev_dustvely, dev_dustvelz,
         dev_dustmomx, dev_dustmomy, dev_dustmomz
     );
-    val_kernel_check("production momentum initialization");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
 
     // retain one immutable device copy so both directional operators receive bit-identical input
-    val_copy_d2d(dev_state_initial + 0*N_G, dev_dustdens, N_G, "save initial density");
-    val_copy_d2d(dev_state_initial + 1*N_G, dev_dustmomx, N_G, "save initial x momentum");
-    val_copy_d2d(dev_state_initial + 2*N_G, dev_dustmomy, N_G, "save initial y momentum");
-    val_copy_d2d(dev_state_initial + 3*N_G, dev_dustmomz, N_G, "save initial z momentum");
-    val_copy_d2h(dustdens_initial.data(), dev_dustdens, N_G, "copy initial density");
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 0*N_G, dev_dustdens, sizeof(*(dev_state_initial + 0*N_G))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 1*N_G, dev_dustmomx, sizeof(*(dev_state_initial + 1*N_G))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 2*N_G, dev_dustmomy, sizeof(*(dev_state_initial + 2*N_G))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 3*N_G, dev_dustmomz, sizeof(*(dev_state_initial + 3*N_G))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dustdens_initial.data(), dev_dustdens, sizeof(*(dustdens_initial.data()))*(N_G), gpuMemcpyDeviceToHost));
 
     // scale the probe interval with polar spacing; temporal differencing then remains at least as accurate as the expected
     // second-order spatial cancellation while retaining enough change to stay above roundoff
@@ -99,33 +103,37 @@ int main ()
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
         dev_ppm_weight_z, dev_adv_work, probe_dt
     );
-    val_kernel_check("polar advection tendency");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
     #else // !FLUID_BLOCK_SWEEP
     advection_zth <<< NB_Z, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, probe_dt
     );
-    val_kernel_check("polar advection tendency");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
     #endif // FLUID_BLOCK_SWEEP
-    val_copy_d2h(dustdens_advection.data(), dev_dustdens, N_G, "copy advected density");
+    GPU_CHECK(gpuMemcpy(dustdens_advection.data(), dev_dustdens, sizeof(*(dustdens_advection.data()))*(N_G), gpuMemcpyDeviceToHost));
 
     // restore the same initial state before evaluating the diffusion contribution
-    val_copy_d2d(dev_dustdens, dev_state_initial + 0*N_G, N_G, "restore initial density");
-    val_copy_d2d(dev_dustmomx, dev_state_initial + 1*N_G, N_G, "restore initial x momentum");
-    val_copy_d2d(dev_dustmomy, dev_state_initial + 2*N_G, N_G, "restore initial y momentum");
-    val_copy_d2d(dev_dustmomz, dev_state_initial + 3*N_G, N_G, "restore initial z momentum");
+    GPU_CHECK(gpuMemcpy(dev_dustdens, dev_state_initial + 0*N_G, sizeof(*(dev_dustdens))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomx, dev_state_initial + 1*N_G, sizeof(*(dev_dustmomx))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomy, dev_state_initial + 2*N_G, sizeof(*(dev_dustmomy))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomz, dev_state_initial + 3*N_G, sizeof(*(dev_dustmomz))*(N_G), gpuMemcpyDeviceToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
     diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, probe_dt
     );
-    val_kernel_check("polar diffusion tendency");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
     #else // !FLUID_BLOCK_SWEEP
     diffusion_zth <<< NB_Z, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, probe_dt
     );
-    val_kernel_check("polar diffusion tendency");
+    GPU_CHECK(gpuGetLastError());
+    GPU_CHECK(gpuDeviceSynchronize());
     #endif // FLUID_BLOCK_SWEEP
-    val_copy_d2h(dustdens_diffusion.data(), dev_dustdens, N_G, "copy diffused density");
+    GPU_CHECK(gpuMemcpy(dustdens_diffusion.data(), dev_dustdens, sizeof(*(dustdens_diffusion.data()))*(N_G), gpuMemcpyDeviceToHost));
 
     write_binary("dustdens_initial", dustdens_initial);
     write_binary("dustdens_advection", dustdens_advection);
@@ -146,18 +154,18 @@ int main ()
          << "  \"probe_dt\": " << probe_dt << "\n"
          << "}\n";
 
-    val_free(dev_initdens, "free convolved density");
-    val_free(dev_dustdens, "free working density");
-    val_free(dev_dustvelx, "free x velocity");
-    val_free(dev_dustvely, "free y velocity");
-    val_free(dev_dustvelz, "free z velocity");
-    val_free(dev_dustmomx, "free x momentum");
-    val_free(dev_dustmomy, "free y momentum");
-    val_free(dev_dustmomz, "free z momentum");
-    val_free(dev_state_initial, "free initial conserved state");
-    val_free(dev_ppm_weight_z, "free polar PPM weights");
+    GPU_CHECK(gpuFree(dev_initdens));
+    GPU_CHECK(gpuFree(dev_dustdens));
+    GPU_CHECK(gpuFree(dev_dustvelx));
+    GPU_CHECK(gpuFree(dev_dustvely));
+    GPU_CHECK(gpuFree(dev_dustvelz));
+    GPU_CHECK(gpuFree(dev_dustmomx));
+    GPU_CHECK(gpuFree(dev_dustmomy));
+    GPU_CHECK(gpuFree(dev_dustmomz));
+    GPU_CHECK(gpuFree(dev_state_initial));
+    GPU_CHECK(gpuFree(dev_ppm_weight_z));
     #ifdef FLUID_BLOCK_SWEEP
-    val_free(dev_adv_work, "free block advection workspace");
+    GPU_CHECK(gpuFree(dev_adv_work));
     #endif // FLUID_BLOCK_SWEEP
 
     std::cout << "fluid polar startup probe completed at N=" << VERIFY_RES << std::endl;

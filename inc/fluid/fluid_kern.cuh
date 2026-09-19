@@ -8,6 +8,32 @@
 
 #include <const_defs.cuh>
 
+// Frozen-coefficient drag quadrature shared by source_update and analytical tests.
+__device__ __forceinline__
+void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
+    real &force_weight_old, real &force_weight_new)
+{
+    real tau = dt / ts;
+    drag_relax = -expm1(-tau);
+    drag_decay = 1.0 - drag_relax;
+
+    // evaluate drag-weighted force quadrature with a cancellation-safe small-step series
+    if (tau < 1.0e-4)
+    {
+        real tau_sq = tau*tau;
+        real tau_cb = tau_sq*tau;
+
+        force_weight_old = dt*(0.5 - tau/3.0 + tau_sq/8.0  - tau_cb/30.0);
+        force_weight_new = dt*(0.5 - tau/6.0 + tau_sq/24.0 - tau_cb/120.0);
+    }
+    else
+    {
+        force_weight_new = ts*(tau - drag_relax) / tau;
+        force_weight_old = ts*drag_relax - force_weight_new;
+    }
+
+}
+
 // =========================================================================================================================
 // conservative directional transport
 

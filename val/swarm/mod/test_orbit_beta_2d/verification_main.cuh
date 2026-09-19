@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cmath>      // atan2, cos, sin, sqrt
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
@@ -7,7 +8,7 @@
 #include <vector>     // std::vector
 
 #include <_transport.cuh>
-#include <device_api.cuh>
+#include <gpu.cuh>
 #include <swarm_kern.cuh>
 
 // test-only driver for an unattenuated reduced-gravity orbit
@@ -68,11 +69,27 @@ int main ()
 
     swarm *dev_particle;
     real *dev_optdepth;
-    val_malloc(&dev_particle, N_P, "allocate reduced-gravity particles");
-    val_malloc(&dev_optdepth, N_G, "allocate zero optical depth");
-    val_copy_h2d(dev_particle, particle.data(), N_P, "upload reduced-gravity particles");
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    {
+        std::cerr << "allocate reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_optdepth), sizeof(*dev_optdepth)*(N_G)); status != gpuSuccess)
+    {
+        std::cerr << "allocate zero optical depth" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    {
+        std::cerr << "upload reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     std::vector<real> optdepth(N_G, 0.0);
-    val_copy_h2d(dev_optdepth, optdepth.data(), N_G, "upload zero optical depth");
+    if (gpuError_t status = gpuMemcpy(dev_optdepth, optdepth.data(), sizeof(*(dev_optdepth))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    {
+        std::cerr << "upload zero optical depth" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 
     // refine the split transport timestep while preserving the same orbit and end time
     const real dt = time_end/static_cast<real>(VERIFY_RES);
@@ -81,8 +98,21 @@ int main ()
         ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt);
         ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth, beta_taper, dt);
     }
-    val_kernel_check("reduced-gravity radiation transport");
-    val_copy_d2h(particle.data(), dev_particle, N_P, "copy reduced-gravity particles");
+    if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
+    {
+        std::cerr << "reduced-gravity radiation transport" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuDeviceSynchronize(); status != gpuSuccess)
+    {
+        std::cerr << "reduced-gravity radiation transport" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    {
+        std::cerr << "copy reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 
     std::vector<real> state(6*N_P);
     for (int idx = 0; idx < N_P; idx++)
@@ -114,8 +144,16 @@ int main ()
          << "  \"unit_radiation_taper\": true\n"
          << "}\n";
 
-    val_free(dev_optdepth, "free zero optical depth");
-    val_free(dev_particle, "free reduced-gravity particles");
+    if (gpuError_t status = gpuFree(dev_optdepth); status != gpuSuccess)
+    {
+        std::cerr << "free zero optical depth" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (gpuError_t status = gpuFree(dev_particle); status != gpuSuccess)
+    {
+        std::cerr << "free reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     std::cout << "swarm reduced-gravity orbit completed at N=" << VERIFY_RES << std::endl;
     return 0;
 }

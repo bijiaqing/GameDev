@@ -94,7 +94,6 @@ $(WEDGE_TARGET): $(TEST_DIR)/knn_wedge_benchmark.cu $(TEST_DIR)/knn_types.cuh \
 
 $(TOPOLOGY_TARGET): $(TEST_DIR)/knn_topology.cu \
 	$(ROOT_DIR)/val/swarm/mod/test_knn/topology.cuh \
-	$(ROOT_DIR)/val/swarm/src/device_api.cuh \
 	$(ROOT_DIR)/inc/swarm/morton/morton_index.cuh \
 	$(ROOT_DIR)/inc/swarm/morton/morton_types.cuh \
 	$(TEST_DIR)/morton/morton_index.cuh $(CONFIG_STAMP) $(ROOT_DIR)/inc/gpu.cuh

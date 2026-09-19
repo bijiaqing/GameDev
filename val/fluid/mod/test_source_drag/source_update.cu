@@ -3,7 +3,7 @@
 // test-local replacement for the production source kernel
 //
 // replace disk-dependent gas velocity, stopping time, and force that prevent an independent closed-form comparison while
-// retaining the production exponential drag integration and small-h series with fixed endpoint forces and eight prescribed
+// calling the production exponential drag quadrature with fixed endpoint forces and eight prescribed
 // stiffnesses so every coefficient can be checked analytically
 __global__
 void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
@@ -17,23 +17,8 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     const real stiffness[8] = {1.0e-6, 1.0e-3, 0.1, 1.0, 10.0, 1.0e2, 1.0e4, 1.0e6};
     real drag_h = stiffness[idx % 8];
     real ts = dt/drag_h;
-    real drag_relax = -expm1(-drag_h);
-    real drag_decay = 1.0 - drag_relax;
-
-    real force_weight_n, force_weight_new;
-    if (drag_h < 1.0e-4)
-    {
-        // match the production cancellation-safe series where direct exponential differences lose significant digits
-        real drag_h2 = drag_h*drag_h;
-        real drag_h3 = drag_h2*drag_h;
-        force_weight_n   = dt*(0.5 - drag_h/3.0 + drag_h2/8.0  - drag_h3/30.0);
-        force_weight_new = dt*(0.5 - drag_h/6.0 + drag_h2/24.0 - drag_h3/120.0);
-    }
-    else
-    {
-        force_weight_new = ts*(drag_h - drag_relax)/drag_h;
-        force_weight_n = ts*drag_relax - force_weight_new;
-    }
+    real drag_relax, drag_decay, force_weight_n, force_weight_new;
+    _get_drag_weights(dt, ts, drag_relax, drag_decay, force_weight_n, force_weight_new);
 
     // prescribe gas velocity and linearly varying force endpoints instead of evaluating disk-dependent helpers
     const real gas_x = 0.4,  gas_y = -0.2, gas_z = 0.1;

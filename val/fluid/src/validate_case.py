@@ -306,34 +306,21 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         # the eight x cells represent eight values of dt/ts spanning twelve
         # orders of magnitude; x is being used as a parameter index, not space
         stiffness = np.array([1.0e-6, 1.0e-3, 0.1, 1.0, 10.0, 1.0e2, 1.0e4, 1.0e6])
-        ts = time / stiffness
-        decay = np.exp(-stiffness)
-        drag_relax = -np.expm1(-stiffness)
-
         def source_exact(initial, gas, force0, force1):
-            # closed-form solution of dv/dt=-(v-v_g)/ts+F(t) for a force that
-            # varies linearly from force0 to force1 during the single step; the
-            # two endpoint weights mirror the CUDA branch: direct subtraction is
-            # safe for ordinary h=dt/ts, while a series avoids cancellation when
-            # h is small
-            weight_old = np.empty_like(stiffness)
-            weight_new = np.empty_like(stiffness)
-            small = stiffness < 1.0e-4
-
-            h = stiffness[small]
-            h2 = h*h
-            h3 = h2*h
-            weight_old[small] = time*(0.5 - h/3.0 + h2/8.0  - h3/30.0)
-            weight_new[small] = time*(0.5 - h/6.0 + h2/24.0 - h3/120.0)
-
-            regular = ~small
-            weight_new[regular] = (
-                ts[regular]*(stiffness[regular] - drag_relax[regular]) / stiffness[regular]
-            )
-            weight_old[regular] = ts[regular]*drag_relax[regular] - weight_new[regular]
-
-            return (gas + (initial - gas)*decay
-                    + force0*weight_old + force1*weight_new)
+            # High-precision closed-form integration, independent of the device's small-h series.
+            from decimal import Decimal, localcontext
+            with localcontext() as context:
+                context.prec = 60
+                duration = Decimal(str(time))
+                result = []
+                for value in stiffness:
+                    h = Decimal(str(value)); decay = (-h).exp(); relax = 1-decay
+                    ts = duration/h
+                    new = ts*(h-relax)/h
+                    old = ts*relax-new
+                    result.append(float(Decimal(str(gas))+(Decimal(str(initial))-Decimal(str(gas)))*decay
+                                        +Decimal(str(force0))*old+Decimal(str(force1))*new))
+            return np.array(result)
 
         vx = source_exact(1.3, 0.4, -0.3, 0.2)
         vy = source_exact(-0.8, -0.2, 0.7, -0.1)

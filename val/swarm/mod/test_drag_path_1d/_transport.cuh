@@ -12,7 +12,7 @@
 #define VAL_DRAG_FORCE_Y -0.08
 
 // replace disk-dependent forces and stopping times with constant coefficients that have an exact velocity and path solution
-// keep the velocity update exact while testing second-order convergence of the retained production staggered drift
+// call the production SSA stages with constant gas velocity, stopping time, and radial force
 __device__ __forceinline__
 void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i,
     real x_1, real y_1, real z_1, real &x_j, real &y_j, real &z_j,
@@ -22,18 +22,11 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     #endif // IMPORTGAS
 )
 {
-    (void)beta;
-    (void)lx_i;
-    (void)lz_i;
-    // reuse par_size as a controlled stopping-time label; no physical size-to-Stokes conversion is part of this test
-    real stopping_time = size;
-    real equilibrium = VAL_DRAG_GAS_VY + VAL_DRAG_FORCE_Y*stopping_time;
-    vy_j = equilibrium + (vy_i - equilibrium)*exp(-dt/stopping_time);
-    lx_j = 0.0;
-    lz_j = 0.0;
-    y_j = y_1 + 0.5*vy_j*dt;
-    x_j = 0.5*(X_MIN + X_MAX);
-    z_j = 0.5*M_PI;
+    _ssa_advance(dt, size, 0.0, VAL_DRAG_GAS_VY, 0.0, beta, lx_i, vy_i, lz_i,
+        x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j,
+        [] (real, real, real, real, real, real, real &g, real &c, real &t) {
+            g=VAL_DRAG_FORCE_Y; c=0.0; t=0.0;
+        });
 }
 
 #endif // VAL_DRAG_PATH_TRANSPORT_CUH
