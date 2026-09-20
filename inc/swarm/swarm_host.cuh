@@ -1073,8 +1073,8 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COL_CONTROLLER_BINS = " << COL_BIN_X << " " << COL_BIN_Y << " "
          << COL_BIN_Z << " " << COL_BIN_S                                           << std::endl;
     file << "COL_BIN_MIN    = " << COL_BIN_MIN                                            << std::endl;
-    file << "COL_SIZE_RANGE = " << std::scientific << std::setprecision(8)
-         << COL_SIZE_MIN << " " << COL_SIZE_MAX                                      << std::endl;
+    file << "COL_SIZE_BIN_POLICY = moving_per_group"                                    << std::endl;
+    file << "COL_SIZE_RANGE_FACTORS = 0.5 8"                                             << std::endl;
     #else  // BERNOULLI
     #ifdef KNN_CACHE
     file << "COLLISION_INTEGRATOR = bernoulli_cache"                                     << std::endl;

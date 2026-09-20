@@ -2084,6 +2084,15 @@ continuous-time chain. The spatial index and each owner's physical top-$K$ neigh
 KNN measure are fixed over one collision operator because positions do not change. At a local group refresh, that group publishes its current partner sizes and represented
 numbers; other groups retain their last published values. Each owner chain reads immutable
 reservoir arrays until the current launch and audit finish.
+
+The logarithmic size-bin bounds adapt independently within each spatial group.
+Immediately before rebuilding a refreshed group's bins, GPU reductions find its
+current minimum and maximum active grain diameters. The bin range becomes
+$[0.5s_{\min},8s_{\max}]$ and stays fixed through that collision interval and its
+audit. Groups not being refreshed retain their bounds. This adds three GPU
+launches per rate/bin refresh and no device-to-host copies; it does not invalidate
+the tree or neighbor cache. Output metadata records `COL_SIZE_BIN_POLICY =
+moving_per_group` and `COL_SIZE_RANGE_FACTORS = 0.5 8`.
 Within a bath, owner $i$ evolves by the Gillespie direct method against that immutable reservoir:
 
 $$
@@ -2188,7 +2197,7 @@ logarithmic activity. The bounded-increment terms use the largest $w_i/M_q$ for 
 the largest mass-weighted single-event logarithmic jump for $G$. The touched fraction is additionally
 bounded above by one.
 
-To measure how much represented mass moved between the fixed joint spatial-size bins, the code also
+To measure how much represented mass moved between the joint spatial-size bins held fixed during that interval, the code also
 records
 
 $$

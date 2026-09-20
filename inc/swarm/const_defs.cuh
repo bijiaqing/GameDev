@@ -159,8 +159,6 @@ const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle i
 #endif // MULTISIZE
 
 #if defined(COLLISION) && !defined(BERNOULLI)
-const real COL_SIZE_MIN = 0.5*INIT_SMIN;    // lower fixed edge of the logarithmic controller size axis
-const real COL_SIZE_MAX = 8.0*INIT_SMAX;    // upper fixed edge of the logarithmic controller size axis
 #endif // COLLISION && !BERNOULLI
 
 // =========================================================================================================================

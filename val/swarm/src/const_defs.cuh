@@ -224,8 +224,6 @@ constexpr int COL_BIN_MIN = 64;
 constexpr real COL_BATH_MAX = 0.05;
 constexpr real COL_BATH_EPS = 0.06;
 constexpr real COL_BATH_ALPHA = 1.0e-3;
-constexpr real COL_SIZE_MIN = 0.5*INIT_SMIN;
-constexpr real COL_SIZE_MAX = 8.0*INIT_SMAX;
 #endif
 #endif
 

@@ -60,8 +60,6 @@ static_assert(COL_BATH_EPS > 0.0 && COL_BATH_EPS < 1.0,
     "frozen-bath collisions require 0 < COL_BATH_EPS < 1");
 static_assert(COL_BATH_ALPHA > 0.0 && COL_BATH_ALPHA < 1.0,
     "frozen-bath collisions require 0 < COL_BATH_ALPHA < 1");
-static_assert(COL_SIZE_MIN > 0.0 && COL_SIZE_MAX > COL_SIZE_MIN,
-    "frozen-bath collisions require COL_SIZE_MAX > COL_SIZE_MIN > 0");
 #endif // COLLISION && !BERNOULLI
 
 #if !defined(TRANSPORT) && !defined(COLLISION)

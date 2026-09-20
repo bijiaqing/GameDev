@@ -329,15 +329,38 @@ struct col_controller_summary
     std::vector<col_bath_record> baths;
 };
 
-__host__ __device__ __forceinline__
-int _get_col_sizebin (real size)
-{
-    if (!isfinite(size) || !(size > 0.0)) return 0;
-    real fraction = log(size / COL_SIZE_MIN) / log(COL_SIZE_MAX / COL_SIZE_MIN);
-    int idx_bin = static_cast<int>(floor(fraction*COL_BIN_S));
-    if (idx_bin < 0) return 0;
-    if (idx_bin >= COL_BIN_S) return COL_BIN_S - 1;
-    return idx_bin;
+// Scratch extrema are reset globally; retained bounds change only for refreshed groups.
+constexpr int moving_groups = ((N_X>1)?COL_BIN_X:1)*COL_BIN_Y*((N_Z>1)?COL_BIN_Z:1);
+static __device__ unsigned long long moving_min[moving_groups], moving_max[moving_groups];
+static __device__ real moving_lower[moving_groups], moving_upper[moving_groups];
+
+static __global__ void reset_size_extrema() {
+    int g=threadIdx.x+blockIdx.x*blockDim.x;
+    if (g<moving_groups) { moving_min[g]=__double_as_longlong(INFINITY); moving_max[g]=0; }
+}
+static __global__ void reduce_size_extrema(const int *ids,int count,const swarm *particles,
+    const int *spatial,const unsigned char *active) {
+    int slot=threadIdx.x+blockIdx.x*blockDim.x;
+    if (slot>=count) return;
+    int i=ids[slot];
+    real size=particles[i].par_size;
+    if (!active[i] || !(size>0) || !isfinite(size)) return;
+    // Positive doubles have the same ordering as their unsigned bit patterns.
+    auto bits=static_cast<unsigned long long>(__double_as_longlong(size));
+    atomicMin(&moving_min[spatial[i]],bits);
+    atomicMax(&moving_max[spatial[i]],bits);
+}
+static __global__ void publish_size_bounds() {
+    int g=threadIdx.x+blockIdx.x*blockDim.x;
+    if (g<moving_groups && moving_max[g]!=0) {
+        moving_lower[g]=0.5*__longlong_as_double(moving_min[g]);
+        moving_upper[g]=8.0*__longlong_as_double(moving_max[g]);
+    }
+}
+__device__ __forceinline__ int _get_col_sizebin(real size,int group) {
+    if (!isfinite(size) || !(size>0)) return 0;
+    real fraction=log(size/moving_lower[group])/log(moving_upper[group]/moving_lower[group]);
+    return max(0,min(COL_BIN_S-1,static_cast<int>(floor(fraction*COL_BIN_S))));
 }
 
 __device__ __forceinline__
@@ -528,11 +551,6 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
     }
 }
 
-// Optional campaign mapping; ordinary production retains its fixed size axis.
-#ifndef COL_SIZEBIN
-#define COL_SIZEBIN(size, spatial) _get_col_sizebin(size)
-#endif
-
 // count occupied size bins before merging statistically undersampled tails
 __global__
 void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, const swarm *dev_particle,
@@ -542,7 +560,7 @@ void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, c
     if (slot >= owner_count) return;
     int idx = owner_ids[slot];
     if (dev_col_active[idx] == 0) return;
-    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + COL_SIZEBIN(dev_particle[idx].par_size, dev_col_spatial[idx]);
+    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size, dev_col_spatial[idx]);
     atomicAdd(dev_col_count + idx_raw, 1);
 }
 
@@ -556,7 +574,7 @@ void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col
     if (slot >= owner_count) return;
     int idx = owner_ids[slot];
     if (dev_col_active[idx] == 0) return;
-    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + COL_SIZEBIN(dev_particle[idx].par_size, dev_col_spatial[idx]);
+    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size, dev_col_spatial[idx]);
     int idx_bin = dev_col_binmap[idx_raw];
     real weight = dev_particle[idx].par_numr*_get_grain_mass(dev_particle[idx].par_size);
     atomicAdd(&dev_col_bin[idx_bin].owner_count, 1);
@@ -880,8 +898,8 @@ void col_audit_bin (const int *owner_ids, int owner_count, col_audit_accum *dev_
     if (dev_col_active[idx] == 0) return;
     int idx_spatial = dev_col_spatial[idx];
     real duration = group_step[idx_spatial];
-    int idx_start_raw = idx_spatial*COL_BIN_S + COL_SIZEBIN(dev_size_old[idx], idx_spatial);
-    int idx_end_raw = idx_spatial*COL_BIN_S + COL_SIZEBIN(dev_particle[idx].par_size, dev_col_spatial[idx]);
+    int idx_start_raw = idx_spatial*COL_BIN_S + _get_col_sizebin(dev_size_old[idx], idx_spatial);
+    int idx_end_raw = idx_spatial*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size, dev_col_spatial[idx]);
     int idx_start = dev_col_binmap[idx_start_raw];
     int idx_end = dev_col_binmap[idx_end_raw];
     real weight = dev_numr_old[idx]*_get_grain_mass(dev_size_old[idx]);
@@ -1494,9 +1512,13 @@ auto initialize = [&](int count) {
     LOCAL_KERNEL("local_reset");
 };
 auto rates_and_bins = [&](int count) {
-#ifdef COL_REFRESH_SIZE_BINS
-    COL_REFRESH_SIZE_BINS(local.ids, count, dev_particle, dev_col_spatial, dev_col_active);
-#endif
+    // Keep each refreshed group's bounds unchanged until its collision interval and audit finish.
+    reset_size_extrema<<<(moving_groups+TPB-1)/TPB,TPB>>>();
+    LOCAL_KERNEL("reset_size_extrema");
+    reduce_size_extrema<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_particle,dev_col_spatial,dev_col_active);
+    LOCAL_KERNEL("reduce_size_extrema");
+    publish_size_bounds<<<(moving_groups+TPB-1)/TPB,TPB>>>();
+    LOCAL_KERNEL("publish_size_bounds");
     #ifdef COL_PERF_VAL
     auto rate_start=col_perf_start();
     #endif

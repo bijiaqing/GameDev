@@ -211,7 +211,6 @@ const int N_T  = X_WEDGE ? 3*N_P : N_P;
 const int NB_T = N_T     / TPB + 1;
 #endif
 
-constexpr real COL_SIZE_MIN = 0.5, COL_SIZE_MAX = 8.0;
 constexpr real COL_BATH_MAX = 1.0e100;
 constexpr real BENCHMARK_MASS = 1.0e30;
 static_assert(SEED >= 0 && SEED < 10, "Campaign seeds are 0 through 9");

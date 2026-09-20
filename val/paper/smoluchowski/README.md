@@ -80,14 +80,9 @@ before the group's size-bin mapping is rebuilt and remain fixed through collisio
 execution and its audit. Groups not being refreshed retain their bounds. Extrema
 are reduced on the GPU; no new device-to-host copies are needed. This adds three
 kernel launches per rate/bin refresh. Tree and neighbor caching remain unchanged.
-The [0.5,8] constants retained for the production header interface describe only
-the initial monomer range; campaign bin assignments always use moving bounds.
-`CAMPAIGN.SIZE_BIN_POLICY` records this distinction in output metadata.
-
-The shared production header exposes two optional mapping/refresh hooks; only the
-campaign overrides them. Ordinary production keeps its previous fixed bins and
-launch sequence. The campaign header contains the extrema reduction and moving
-mapping, and includes the current root collision implementation.
+Moving size bins now come directly from the production collision header; no campaign
+collision-controller override is needed. `COL_SIZE_BIN_POLICY = moving_per_group`
+and `COL_SIZE_RANGE_FACTORS = 0.5 8` record the policy in production output metadata.
 
 Full production diagnostics are disabled to avoid large
 collision JSON/JSONL files.
