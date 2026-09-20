@@ -104,7 +104,7 @@ const real  SCHMIDT_Z   = 1.0;
 #endif
 
 #ifdef COLLISION
-const int   COAG_KERNEL = 2;
+const int   COAG_KERNEL = 1;
 #ifndef SWEEP_N_K
 #define SWEEP_N_K 16
 #endif
@@ -119,10 +119,9 @@ const real  CFL_COL     = 0.01;
 #ifndef BERNOULLI
 const int   COL_BATH_TPB  = 64;
 const int   COL_EVENT_CAP = 32;
-// Global partner mixing requires simultaneous publication of the whole population.
-const int   COL_BIN_X     = 1;
-const int   COL_BIN_Y     = 1;
-const int   COL_BIN_Z     = 1;
+const int   COL_BIN_X     = 8;
+const int   COL_BIN_Y     = 4;
+const int   COL_BIN_Z     = 2;
 const int   COL_BIN_S     = 64;
 const int   COL_BIN_MIN   = 64;
 #ifndef SWEEP_COL_BATH_EPS
@@ -130,7 +129,6 @@ const int   COL_BIN_MIN   = 64;
 #endif
 constexpr real COL_BATH_EPS   = SWEEP_COL_BATH_EPS;
 constexpr real COL_BATH_ALPHA = 1.0e-3;
-const unsigned int COL_PARTNER_SEED = 2;
 #endif
 #endif
 
@@ -153,9 +151,9 @@ const real INIT_SMAX    = 1.0e+00;
 
 #endif
 
-const int  SAVE_MAX     = 9;
+const int  SAVE_MAX     = 4;
 
-const real DT_OUT       = 0.1;
+const real DT_OUT       = 1.0;
 
 #ifdef TRANSPORT
 const real DT_MAX       = 0.1;

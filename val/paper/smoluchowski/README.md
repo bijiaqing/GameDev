@@ -1,5 +1,9 @@
 # Smoluchowski kernel benchmarks
 
+The reproduced additive-kernel campaign is documented in [linear/README.md](linear/README.md).
+It uses the same parameter grid and seed layout, an exponential physical initial
+mass distribution, and fixed partners without reshuffling.
+
 CUDA and KD-tree only. Each of `const/` and `product/` contains 25 models:
 `k{16,32,64,128,256}_eps0p{01,02,04,08,16}`. `SEED=0` through `9`
 selects the ten independent realizations; position and collision seeds are `SEED+1`.
@@ -66,13 +70,15 @@ neither dynamics nor diffusion enabled, geometry is not invalidated: tree build,
 neighbor search and neighbor-dependency graph construction occur once per fresh
 run. Grain properties, rates and collision refreshes continue to evolve.
 
-The local host header substitutes only the total mass, seeded jittered positions
-and appended campaign metadata. The collision header substitutes only unit-volume
-neighbor measures. The RNG kernel uses the campaign seed. No copied old runtime,
+The local host header substitutes total mass, seeded jittered positions
+and appended campaign metadata, and for product only supplies partner reshuffling.
+The collision header substitutes unit-volume neighbor measures.
+The RNG kernel uses the campaign seed. No copied old runtime,
 collision controller, physical velocity model or KD-tree implementation is retained.
 
 Controller settings use 64 collision threads, 32 events per continuation,
-8x4 spatial bins, 64 size bins, minimum merged population 64 and the selected eps.
+8x4 spatial bins for constant and one spatial group for product, 64 size bins,
+minimum merged population 64 and the selected eps.
 The absolute duration cap is effectively disabled (1e100), as in the old campaign.
 The campaign uses moving logarithmic size-bin bounds independently in each spatial
 group: [0.5*minimum_current_size, 8*maximum_current_size]. They update immediately
@@ -86,6 +92,27 @@ and `COL_SIZE_RANGE_FACTORS = 0.5 8` record the policy in production output meta
 
 Full production diagnostics are disabled to avoid large
 collision JSON/JSONL files.
+
+### Product-only partner mixing
+
+Before every collision refresh (including the first), a seeded global permutation
+relabels all cached neighbor indices. The tree and geometric neighbor search are
+still performed only once. The partner RNG uses `SEED + COL_PARTNER_SEED` (currently
+`SEED+2`), separately from the collision RNG. Negative sentinel entries and periodic
+image labels are preserved. This restores the old campaign's well-mixed sampling
+instead of keeping particles coupled to one fixed small partner population, which
+can amplify product-kernel growth artificially.
+
+One spatial controller group makes every refresh publish all particles together;
+64 adaptive size bins still control the interval. Mixing precedes publication and
+full cached-rate recalculation. It never occurs during continuations or audits.
+Thus the single-group dependency graph remains valid after relabeling. The idle
+continuation queue supplies GPU permutation storage. Each refresh adds one CPU
+shuffle, one N_P-integer host-to-device copy and one relabeling kernel, as a
+campaign-specific cost. Physical production models and the constant campaign do
+not enable the hook. `PARTNER_RESHUFFLE`, `PARTNER_SEED`, and `PARTNER_GROUPS` are
+recorded in `variables.txt`. A fresh CUDA run is required to confirm that the
+previous nonfinite-rate failure is resolved; reshuffling is not an overflow guard.
 
 ## Verification status
 

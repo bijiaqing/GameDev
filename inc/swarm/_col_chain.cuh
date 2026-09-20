@@ -1503,6 +1503,10 @@ std::vector<col_audit_accum> audit(col_raw_count);
 const real lambda0=N_P/static_cast<real>(N_K)/total_dust_mass;
 
 auto initialize = [&](int count) {
+#ifdef COL_PARTNER_REFRESH
+    // Campaign hook: only at refresh boundaries, before snapshots and cached rates.
+    COL_PARTNER_REFRESH(dev_col_neighbor,local.queue_a,count);
+#endif
     int blocks=(count+TPB-1)/TPB;
     col_bath_init<<<blocks,TPB>>>(local.ids,count,dev_size_old,dev_numr_old,
         dev_col_time,dev_col_events,dev_col_complete,dev_particle);
