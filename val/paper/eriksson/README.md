@@ -41,6 +41,14 @@ rates, sticking/erosion grouping, adaptive size bins, local refreshes, and optim
 KD-tree/Morton implementations. No old runtime, collision header, or backend tree
 is copied. No collision JSONL diagnostics are enabled.
 
+ROCm builds inherit the root parallel rate/chain reductions and 128-thread
+collision launches. KD-tree uses private heaps with 64 queries per block;
+Morton retains compacted queries. CUDA retains its existing implementation.
+The saved `COL_BATH_TPB` reports the effective launch width (128 on ROCm),
+even though this model's CUDA width is 64. `COL_BATH_EPS` remains 0.08 here;
+the root default is 0.02. ROCm tuning was measured on MI300A/gfx942 at N_K=256
+and epsilon=0.02; its speedup at this campaign's epsilon=0.08 is unmeasured.
+
 `src/swarm_host.cuh` includes the root host header and replaces only initmass_calc
 and rand_disk_poly. It samples dust proportional to the production hydrostatic gas
 density, rather than the root's settled distribution, and normalizes mass using a

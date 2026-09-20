@@ -531,6 +531,35 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         second_work[idx_neighbor]=pair_rate*second;
         rate_work[idx_neighbor] = pair_rate;
     }
+#ifdef GAMEDEV_ROCM
+    // Reduce rate moments cooperatively; pair calculations are unchanged.
+    __shared__ unsigned char valid_work[N_K];
+    for (int j = threadIdx.x; j < N_K; j += blockDim.x)
+        valid_work[j] = isfinite(rate_work[j]) && rate_work[j] >= 0.0;
+    __syncthreads();
+
+    // Fold the upper half into the lower half, including odd active counts.
+    for (int count = N_K; count > 1; count = (count + 1)/2)
+    {
+        int half = (count + 1)/2;
+        for (int j = threadIdx.x; j < count/2; j += blockDim.x)
+        {
+            rate_work[j] += rate_work[j + half];
+            change_work[j] += change_work[j + half];
+            second_work[j] += second_work[j + half];
+            maximum_work[j] = fmax(maximum_work[j], maximum_work[j + half]);
+            valid_work[j] = valid_work[j] && valid_work[j + half];
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0)
+    {
+        real rate = rate_work[0], change = change_work[0], second = second_work[0];
+        cached[idx_old_i] = {valid_work[0] ? rate : -1.0, change, second, maximum_work[0]};
+        dev_col_rate[idx_old_i] = rate;
+        change_rate[idx_old_i] = change; second_rate[idx_old_i] = second;
+    }
+#else
     __syncthreads();
 
     if (threadIdx.x == 0)
@@ -549,6 +578,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         dev_col_rate[idx_old_i] = rate;
         change_rate[idx_old_i]=change; second_rate[idx_old_i]=second;
     }
+#endif
 }
 
 // count occupied size bins before merging statistically undersampled tails
@@ -721,10 +751,52 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 pair_jumpmax[idx_neighbor] = (pair_value > 0.0) ? maximum : 0.0;
             }
         }
+#ifdef GAMEDEV_ROCM
+        // Parallel chain reduction: preserve pair_rate for serial partner sampling.
+        __shared__ real total_work[N_K];
+        __shared__ int last_work[N_K];
+        for (int j = threadIdx.x; j < N_K; j += blockDim.x)
+        {
+            total_work[j] = pair_rate[j];
+            // -2 propagates invalid input; -1 denotes no positive contribution.
+            last_work[j] = (!isfinite(pair_rate[j]) || pair_rate[j] < 0.0)
+                ? -2 : (pair_rate[j] > 0.0 ? j : -1);
+        }
         __syncthreads();
+        for (int count = N_K; count > 1; count = (count + 1)/2)
+        {
+            int half = (count + 1)/2;
+            for (int j = threadIdx.x; j < count/2; j += blockDim.x)
+            {
+                total_work[j] += total_work[j + half];
+                pair_jump1[j] += pair_jump1[j + half];
+                pair_jump2[j] += pair_jump2[j + half];
+                pair_jumpmax[j] = fmax(pair_jumpmax[j], pair_jumpmax[j + half]);
+                int left = last_work[j], right = last_work[j + half];
+                last_work[j] = (left == -2 || right == -2) ? -2
+                    : (left > right ? left : right);
+            }
+            __syncthreads();
+        }
+#else
+        __syncthreads();
+#endif
 
         if (threadIdx.x == 0)
         {
+#ifdef GAMEDEV_ROCM
+            real total_rate = total_work[0];
+            real total_jump1 = pair_jump1[0];
+            real total_jump2 = pair_jump2[0];
+            real total_jumpmax = pair_jumpmax[0];
+            int last_positive = last_work[0];
+            if (last_positive == -2)
+            {
+                dev_col_error[idx_old_i] = 1;
+                dev_col_complete[idx_old_i] = 1;
+                keep_running = false;
+            }
+#else
             real total_rate = 0.0;
             real total_jump1 = 0.0;
             real total_jump2 = 0.0;
@@ -745,6 +817,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 total_jump2 += pair_jump2[idx_neighbor];
                 total_jumpmax = fmax(total_jumpmax, pair_jumpmax[idx_neighbor]);
             }
+#endif
             if (keep_running && (!isfinite(total_rate) || total_rate < 0.0))
             {
                 dev_col_error[idx_old_i] = 2;
@@ -1526,7 +1599,7 @@ auto rates_and_bins = [&](int count) {
     #ifdef COL_PERF_VAL
     auto rate_start=col_perf_start();
     #endif
-    col_bath_rate<<<count,COL_BATH_TPB>>>(local.ids,count,dev_col_rate,local.change_rate,local.second_rate,
+    col_bath_rate<<<count,COL_BATH_THREADS>>>(local.ids,count,dev_col_rate,local.change_rate,local.second_rate,
         dev_particle,dev_col_neighbor,dev_col_measure,dev_col_active,
         dev_size_old,dev_numr_old,
         #ifdef IMPORTGAS
@@ -1663,7 +1736,7 @@ while (schedule.time()<schedule.end) {
 #ifdef COL_DIAGNOSTICS
         chain_blocks+=unfinished;
 #endif
-        col_chain_run<<<unfinished,COL_BATH_TPB>>>(input,unfinished,
+        col_chain_run<<<unfinished,COL_BATH_THREADS>>>(input,unfinished,
             dev_particle,dev_rngstate,dev_col_error,dev_col_unfinished,
             dev_col_time,dev_col_events,dev_col_complete,dev_col_hazard,
             dev_col_jump1_int,dev_col_jump2_int,dev_col_jumpmax_int,dev_col_neighbor,

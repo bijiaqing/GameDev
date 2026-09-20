@@ -1,11 +1,7 @@
 #ifndef GAMEDEV_KDTREE_INDEX_HEAP_CUH
 #define GAMEDEV_KDTREE_INDEX_HEAP_CUH
 
-#ifdef GAMEDEV_ROCM
 #include <gpu.cuh>
-#else
-#include <gpu.cuh>
-#endif
 
 // retain the exact top-K physical neighbors while filtering inactive particles and periodic duplicate images
 template<int K, typename Node>
@@ -13,14 +9,24 @@ struct idx_old_heap
 {
     const Node *kdtree_node;
     const unsigned char *dev_active;
+    static_assert(K > 0 && K <= 4096, "KD-tree requires 0 < K <= 4096");
+#ifdef GAMEDEV_ROCM
+    // MI300A tuning: private heaps and 64 queries per block are a paired choice.
+    static constexpr int threads = 64;
+    unsigned long long near_key[K];
+    __device__ __forceinline__ unsigned long long get_key(int slot) const
+    { return near_key[slot]; }
+    __device__ __forceinline__ void set_key(int slot, unsigned long long value)
+    { near_key[slot] = value; }
+#else
     // Keep per-block heap storage at or below 32 KiB as K increases.
-    static_assert(K > 0 && K <= 4096, "Shared heap exceeds its 32 KiB budget");
     static constexpr int threads = K <= 256 ? 16 : K <= 512 ? 8 : K <= 1024 ? 4 : K <= 2048 ? 2 : 1;
     unsigned long long *near_key;
     __device__ __forceinline__ unsigned long long get_key(int slot) const
     { return near_key[threads*slot]; }
     __device__ __forceinline__ void set_key(int slot, unsigned long long value)
     { near_key[threads*slot] = value; }
+#endif
     bool dedup_needed;
 
     __device__ explicit idx_old_heap (
@@ -28,9 +34,11 @@ struct idx_old_heap
         const unsigned char *dev_active = nullptr)
         : kdtree_node(tree_node), dev_active(dev_active), dedup_needed(dedup_needed)
     {
+#ifndef GAMEDEV_ROCM
         __shared__ unsigned long long shared_key[K*threads];
         near_key = shared_key + threadIdx.x;
         // No barrier: each thread initializes and accesses only its own column.
+#endif
         // initialize a finite max-heap whose invalid identifiers sort after every physical candidate
         unsigned long long empty = encode(search_dist*search_dist, 0xffffffffU);
         #pragma unroll
