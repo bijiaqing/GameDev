@@ -528,6 +528,11 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
     }
 }
 
+// Optional campaign mapping; ordinary production retains its fixed size axis.
+#ifndef COL_SIZEBIN
+#define COL_SIZEBIN(size, spatial) _get_col_sizebin(size)
+#endif
+
 // count occupied size bins before merging statistically undersampled tails
 __global__
 void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, const swarm *dev_particle,
@@ -537,7 +542,7 @@ void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, c
     if (slot >= owner_count) return;
     int idx = owner_ids[slot];
     if (dev_col_active[idx] == 0) return;
-    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size);
+    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + COL_SIZEBIN(dev_particle[idx].par_size, dev_col_spatial[idx]);
     atomicAdd(dev_col_count + idx_raw, 1);
 }
 
@@ -551,7 +556,7 @@ void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col
     if (slot >= owner_count) return;
     int idx = owner_ids[slot];
     if (dev_col_active[idx] == 0) return;
-    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size);
+    int idx_raw = dev_col_spatial[idx]*COL_BIN_S + COL_SIZEBIN(dev_particle[idx].par_size, dev_col_spatial[idx]);
     int idx_bin = dev_col_binmap[idx_raw];
     real weight = dev_particle[idx].par_numr*_get_grain_mass(dev_particle[idx].par_size);
     atomicAdd(&dev_col_bin[idx_bin].owner_count, 1);
@@ -875,8 +880,8 @@ void col_audit_bin (const int *owner_ids, int owner_count, col_audit_accum *dev_
     if (dev_col_active[idx] == 0) return;
     int idx_spatial = dev_col_spatial[idx];
     real duration = group_step[idx_spatial];
-    int idx_start_raw = idx_spatial*COL_BIN_S + _get_col_sizebin(dev_size_old[idx]);
-    int idx_end_raw = idx_spatial*COL_BIN_S + _get_col_sizebin(dev_particle[idx].par_size);
+    int idx_start_raw = idx_spatial*COL_BIN_S + COL_SIZEBIN(dev_size_old[idx], idx_spatial);
+    int idx_end_raw = idx_spatial*COL_BIN_S + COL_SIZEBIN(dev_particle[idx].par_size, dev_col_spatial[idx]);
     int idx_start = dev_col_binmap[idx_start_raw];
     int idx_end = dev_col_binmap[idx_end_raw];
     real weight = dev_numr_old[idx]*_get_grain_mass(dev_size_old[idx]);
@@ -1489,6 +1494,9 @@ auto initialize = [&](int count) {
     LOCAL_KERNEL("local_reset");
 };
 auto rates_and_bins = [&](int count) {
+#ifdef COL_REFRESH_SIZE_BINS
+    COL_REFRESH_SIZE_BINS(local.ids, count, dev_particle, dev_col_spatial, dev_col_active);
+#endif
     #ifdef COL_PERF_VAL
     auto rate_start=col_perf_start();
     #endif
