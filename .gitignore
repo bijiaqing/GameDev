@@ -3,11 +3,8 @@
 gamedev
 
 # build and runtime outputs
-/obj/
-/out/
-
-# local experiments
-/lab/
+obj/
+out/
 
 # unpublished model configurations; retain published fiducial models
 /mod/*
@@ -18,25 +15,3 @@ gamedev
 !/doc/*_numeric.md
 !/doc/*_testset.md
 !/doc/README.md
-
-# Representation-local validation artifacts
-/val/**/out/
-/val/**/obj/
-
-# generated validation artifacts
-/val/*.json
-/val/**/seed_*.json
-
-# Python caches
-__pycache__/
-*.py[cod]
-
-# Jupyter Notebooks
-*.ipynb
-*.ipynb_checkpoints
-
-# OS metadata
-.DS_Store
-
-val_stale
-
