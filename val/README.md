@@ -21,9 +21,11 @@ ROCm uses `thread` and `block`. Collision-chain records use `groups/chain/`.
 
 ## What is under test
 
-ROCm collision-chain cases inherit the root parallel rate/chain reductions and
-128-thread collision launches, including when test constants specify a different
-CUDA width. Saved `COL_BATH_TPB` is the actual launch width. Their N_K=200 exercises
+ROCm collision-chain cases inherit the root parallel rate/chain reductions.
+The root default is 128 threads on ROCm and 64 on CUDA; an explicit model
+`COL_BATH_TPB` takes precedence on either backend. These chain tests retain their
+explicit 256-thread width. Saved `COL_BATH_TPB` is the actual launch width.
+Their N_K=200 exercises
 non-power-of-two reductions. KNN tests inherit the root ROCm private KD-tree heap
 and its 64-query launch width; Morton retains compacted queries in the production
 runtime. No test-local copies of these optimizations are needed. Transport-only

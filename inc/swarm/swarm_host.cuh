@@ -20,7 +20,6 @@
 #include <const_defs.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
-#include <swarm_kern.cuh>
 
 // =========================================================================================================================
 // host-only mesh coordinates
@@ -1064,7 +1063,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
     #ifndef BERNOULLI
     file << "COLLISION_INTEGRATOR = frozen_bath"                                         << std::endl;
-    file << "COL_BATH_TPB  = " << COL_BATH_THREADS                                        << std::endl;
+    file << "COL_BATH_TPB  = " << COL_BATH_TPB                                            << std::endl;
     file << "COL_EVENT_CAP  = " << COL_EVENT_CAP                                          << std::endl;
     file << "COL_BATH_MAX   = " << std::scientific << std::setprecision(8) << COL_BATH_MAX << std::endl;
     file << "COL_BATH_EPS   = " << std::scientific << std::setprecision(8) << COL_BATH_EPS << std::endl;

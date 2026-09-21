@@ -44,8 +44,8 @@ is copied. No collision JSONL diagnostics are enabled.
 ROCm builds inherit the root parallel rate/chain reductions and 128-thread
 collision launches. KD-tree uses private heaps with 64 queries per block;
 Morton retains compacted queries. CUDA retains its existing implementation.
-The saved `COL_BATH_TPB` reports the effective launch width (128 on ROCm),
-even though this model's CUDA width is 64. `COL_BATH_EPS` remains 0.08 here;
+Model `COL_BATH_TPB` follows the root defaults: 128 on ROCm and 64 on CUDA.
+An explicit model width is honored by both launches and saved metadata. `COL_BATH_EPS` remains 0.08 here;
 the root default is 0.02. ROCm tuning was measured on MI300A/gfx942 at N_K=256
 and epsilon=0.02; its speedup at this campaign's epsilon=0.08 is unmeasured.
 

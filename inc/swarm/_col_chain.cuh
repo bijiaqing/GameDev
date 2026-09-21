@@ -1599,7 +1599,7 @@ auto rates_and_bins = [&](int count) {
     #ifdef COL_PERF_VAL
     auto rate_start=col_perf_start();
     #endif
-    col_bath_rate<<<count,COL_BATH_THREADS>>>(local.ids,count,dev_col_rate,local.change_rate,local.second_rate,
+    col_bath_rate<<<count,COL_BATH_TPB>>>(local.ids,count,dev_col_rate,local.change_rate,local.second_rate,
         dev_particle,dev_col_neighbor,dev_col_measure,dev_col_active,
         dev_size_old,dev_numr_old,
         #ifdef IMPORTGAS
@@ -1736,7 +1736,7 @@ while (schedule.time()<schedule.end) {
 #ifdef COL_DIAGNOSTICS
         chain_blocks+=unfinished;
 #endif
-        col_chain_run<<<unfinished,COL_BATH_THREADS>>>(input,unfinished,
+        col_chain_run<<<unfinished,COL_BATH_TPB>>>(input,unfinished,
             dev_particle,dev_rngstate,dev_col_error,dev_col_unfinished,
             dev_col_time,dev_col_events,dev_col_complete,dev_col_hazard,
             dev_col_jump1_int,dev_col_jump2_int,dev_col_jumpmax_int,dev_col_neighbor,

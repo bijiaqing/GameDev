@@ -126,7 +126,12 @@ const real  CFL_COL     = 0.01;             // maximum collision propensity per 
 #endif // BERNOULLI
 
 #ifndef BERNOULLI
-const int   COL_BATH_TPB  = 64;            // cooperative threads assigned to one frozen-bath owner
+// Backend default; model const_defs.cuh overrides may choose another width.
+#ifdef GAMEDEV_ROCM
+const int   COL_BATH_TPB  = 128;
+#else
+const int   COL_BATH_TPB  = 64;
+#endif
 const int   COL_EVENT_CAP = 32;              // accepted events permitted per representative and continuation launch
 const int   COL_BIN_X     = 8;               // azimuthal controller bins before reduced-dimension collapse
 const int   COL_BIN_Y     = 4;               // radial controller bins

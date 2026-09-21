@@ -35,7 +35,13 @@ constexpr real INIT_SMIN = 1.0e-4, INIT_SMAX = INIT_SMIN; // fixed 0.5-micron ra
 
 constexpr int COAG_KERNEL = 3, N_K = 256;
 constexpr real H_SEARCH = 1.0, V_FRAG = 100.0;
-constexpr int COL_BATH_TPB = 64, COL_EVENT_CAP = 32;
+// Use the production backend defaults.
+#ifdef GAMEDEV_ROCM
+constexpr int COL_BATH_TPB = 128;
+#else
+constexpr int COL_BATH_TPB = 64;
+#endif
+constexpr int COL_EVENT_CAP = 32;
 constexpr int COL_BIN_X = 1, COL_BIN_Y = 16, COL_BIN_Z = 8, COL_BIN_S = 32;
 constexpr int COL_BIN_MIN = 64;
 constexpr real COL_BATH_MAX = YEAR;

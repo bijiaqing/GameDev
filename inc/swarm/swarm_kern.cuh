@@ -49,14 +49,8 @@
 #endif // KNN_CACHE && !BERNOULLI
 
 #if defined(COLLISION) && !defined(BERNOULLI)
-// Effective launch width also applies to models overriding const_defs.cuh.
-#ifdef GAMEDEV_ROCM
-constexpr int COL_BATH_THREADS = 128;
-#else
-constexpr int COL_BATH_THREADS = COL_BATH_TPB;
-#endif
-static_assert(COL_BATH_THREADS > 0 && COL_BATH_THREADS <= 1024,
-    "frozen-bath collisions require 0 < COL_BATH_THREADS <= 1024");
+static_assert(COL_BATH_TPB > 0 && COL_BATH_TPB <= 1024,
+    "frozen-bath collisions require 0 < COL_BATH_TPB <= 1024");
 static_assert(COL_EVENT_CAP > 0, "frozen-bath collisions require COL_EVENT_CAP > 0");
 static_assert(COL_BIN_X > 0 && COL_BIN_Y > 0 && COL_BIN_Z > 0 && COL_BIN_S > 0,
     "frozen-bath controller-bin counts must be positive");
