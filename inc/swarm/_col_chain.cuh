@@ -531,7 +531,6 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         second_work[idx_neighbor]=pair_rate*second;
         rate_work[idx_neighbor] = pair_rate;
     }
-#ifdef GAMEDEV_ROCM
     // Reduce rate moments cooperatively; pair calculations are unchanged.
     __shared__ unsigned char valid_work[N_K];
     for (int j = threadIdx.x; j < N_K; j += blockDim.x)
@@ -559,26 +558,6 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         dev_col_rate[idx_old_i] = rate;
         change_rate[idx_old_i] = change; second_rate[idx_old_i] = second;
     }
-#else
-    __syncthreads();
-
-    if (threadIdx.x == 0)
-    {
-        real rate = 0.0, change=0.0, second=0.0, maximum=0.0;
-        bool valid=true;
-        for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
-        {
-            valid=valid && isfinite(rate_work[idx_neighbor]) && rate_work[idx_neighbor]>=0.0;
-            maximum=fmax(maximum,maximum_work[idx_neighbor]);
-            rate += rate_work[idx_neighbor];
-            change += change_work[idx_neighbor];
-            second += second_work[idx_neighbor];
-        }
-        cached[idx_old_i]={valid ? rate : -1.0,change,second,maximum};
-        dev_col_rate[idx_old_i] = rate;
-        change_rate[idx_old_i]=change; second_rate[idx_old_i]=second;
-    }
-#endif
 }
 
 // count occupied size bins before merging statistically undersampled tails
@@ -751,7 +730,6 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 pair_jumpmax[idx_neighbor] = (pair_value > 0.0) ? maximum : 0.0;
             }
         }
-#ifdef GAMEDEV_ROCM
         // Parallel chain reduction: preserve pair_rate for serial partner sampling.
         __shared__ real total_work[N_K];
         __shared__ int last_work[N_K];
@@ -778,13 +756,9 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
             }
             __syncthreads();
         }
-#else
-        __syncthreads();
-#endif
 
         if (threadIdx.x == 0)
         {
-#ifdef GAMEDEV_ROCM
             real total_rate = total_work[0];
             real total_jump1 = pair_jump1[0];
             real total_jump2 = pair_jump2[0];
@@ -796,28 +770,6 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 dev_col_complete[idx_old_i] = 1;
                 keep_running = false;
             }
-#else
-            real total_rate = 0.0;
-            real total_jump1 = 0.0;
-            real total_jump2 = 0.0;
-            real total_jumpmax = 0.0;
-            int last_positive = -1;
-            for (int idx_neighbor = 0; idx_neighbor < N_K; idx_neighbor++)
-            {
-                if (!isfinite(pair_rate[idx_neighbor]) || pair_rate[idx_neighbor] < 0.0)
-                {
-                    dev_col_error[idx_old_i] = 1;
-                    dev_col_complete[idx_old_i] = 1;
-                    keep_running = false;
-                    break;
-                }
-                if (pair_rate[idx_neighbor] > 0.0) last_positive = idx_neighbor;
-                total_rate += pair_rate[idx_neighbor];
-                total_jump1 += pair_jump1[idx_neighbor];
-                total_jump2 += pair_jump2[idx_neighbor];
-                total_jumpmax = fmax(total_jumpmax, pair_jumpmax[idx_neighbor]);
-            }
-#endif
             if (keep_running && (!isfinite(total_rate) || total_rate < 0.0))
             {
                 dev_col_error[idx_old_i] = 2;
