@@ -47,8 +47,16 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
 
     // deduplicate overlapping wedge images using the same physical-id heap as direct search
     bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*search_dist;
+#ifdef GAMEDEV_ROCM
+    // Keep mutable private keys in their own allocation so heap control fields can be scalarized.
+    unsigned long long private_keys[N_K];
+    using cache_heap = idx_old_heap<N_K,kdtree_node,true>;
+    cache_heap near_result(search_dist,dev_kdtree_node,!unique_ids,dev_col_active,private_keys);
+#else
+    using cache_heap = kdtree_heap;
     kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active);
-    kdtree::cct::knn <kdtree_heap, kdtree_node, kdtree_traits> (
+#endif
+    kdtree::cct::knn <cache_heap, kdtree_node, kdtree_traits> (
         near_result, dev_kdtree_node[idx_tree].cartesian,
         *dev_kdtree_box, dev_kdtree_node, N_T
     );
@@ -96,8 +104,16 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
+#ifdef GAMEDEV_ROCM
+    // No periodic images exist in a full disk. Compile only the required top-K path.
+    constexpr int fast_work = [] { int n=1; while(n<2*N_K || n<N_K+MORTON_TPB) n*=2; return n; }();
+    constexpr int query_work = X_WEDGE ? MORTON_WORK_SIZE : fast_work;
+    __shared__ float work_dist_sq[query_work];
+    __shared__ int work_idx_old[query_work];
+#else
     __shared__ float work_dist_sq[MORTON_WORK_SIZE];
     __shared__ int work_idx_old[MORTON_WORK_SIZE];
+#endif
     __shared__ int idx_node_stack[256];
     __shared__ int stack_count;
     __shared__ int idx_node;
@@ -106,11 +122,21 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     __shared__ unsigned int candidate_count;
     __shared__ unsigned int stack_overflow;
 
+#ifdef GAMEDEV_ROCM
+    if constexpr (!X_WEDGE) {
+        _morton_topk<N_K, MORTON_TPB, fast_work, 256>(
+            morton_data, dev_morton_point[idx_old_i], search_dist,
+            work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+            leaf_visit_count, candidate_count, stack_overflow, dev_col_active, COL_IMAGE_COUNT);
+    } else
+#endif
+    {
     _morton_ghost_topk<N_K, MORTON_TPB, MORTON_WORK_SIZE, 256>(
         morton_data, dev_morton_point[idx_old_i], search_dist, unique_ids,
         work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
         leaf_visit_count, candidate_count, stack_overflow, dev_col_active
     );
+    }
 
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
     {

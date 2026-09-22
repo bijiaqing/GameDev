@@ -531,6 +531,29 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         second_work[idx_neighbor]=pair_rate*second;
         rate_work[idx_neighbor] = pair_rate;
     }
+#if defined(GAMEDEV_ROCM) && defined(__gfx942__)
+    if constexpr(N_K==256 && COL_BATH_TPB==128) {
+        const int t=threadIdx.x;
+        __shared__ unsigned char validity[128];
+        __syncthreads();
+        validity[t]=isfinite(rate_work[t]) && rate_work[t]>=0.0 && isfinite(rate_work[t+128]) && rate_work[t+128]>=0.0;
+        rate_work[t]+=rate_work[t+128];change_work[t]+=change_work[t+128];
+        second_work[t]+=second_work[t+128];maximum_work[t]=fmax(maximum_work[t],maximum_work[t+128]);
+        __syncthreads();
+        if(t<64) {
+          real r=rate_work[t]+rate_work[t+64],a=change_work[t]+change_work[t+64];
+          real b=second_work[t]+second_work[t+64],m=fmax(maximum_work[t],maximum_work[t+64]);
+          int valid=validity[t]&&validity[t+64];
+          for(int delta=32;delta;delta/=2){
+            r+=__shfl_down(r,delta,64);a+=__shfl_down(a,delta,64);b+=__shfl_down(b,delta,64);
+            m=fmax(m,__shfl_down(m,delta,64));int other=__shfl_down(valid,delta,64);valid=valid&&other;
+          }
+          if(t==0){cached[idx_old_i]={valid?r:-1.0,a,b,m};dev_col_rate[idx_old_i]=r;change_rate[idx_old_i]=a;second_rate[idx_old_i]=b;}
+        }
+        return;
+    } else
+#endif
+    {
     // Reduce rate moments cooperatively; pair calculations are unchanged.
     __shared__ unsigned char valid_work[N_K];
     for (int j = threadIdx.x; j < N_K; j += blockDim.x)
@@ -557,6 +580,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         cached[idx_old_i] = {valid_work[0] ? rate : -1.0, change, second, maximum_work[0]};
         dev_col_rate[idx_old_i] = rate;
         change_rate[idx_old_i] = change; second_rate[idx_old_i] = second;
+    }
     }
 }
 
@@ -600,6 +624,39 @@ void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col
     atomicAdd(&dev_col_bin[idx_bin].weighted_change,weight*change_rate[idx]);
     atomicAdd(&dev_col_bin[idx_bin].weighted_second,weight*second_rate[idx]);
 }
+
+#ifdef GAMEDEV_ROCM
+// Evaluate the existing cached no-event path with one thread per owner.
+// Only unfinished owners enter the expensive cooperative event-chain kernel.
+__global__ void col_cached_screen(const int *ids,int count,curs *rng,
+    const unsigned char *active,const real *measure,const int *spatial,const real *steps,
+    const cached_rate_moments *cached,real *time,int *events,unsigned char *complete,
+    real *hazard,real *jump1,real *jump2,real *jumpmax,int *queue,int *queued) {
+    int slot=blockIdx.x*blockDim.x+threadIdx.x;
+    if(slot>=count) return;
+    int i=ids[slot];real end=steps[spatial[i]];
+    if(!active[i] || !(measure[i]>0.0)) {time[i]=end;complete[i]=1;return;}
+    if(complete[i]) return;
+    if(time[i]==0.0 && events[i]==0) {
+        const auto c=cached[i];
+        if(isfinite(c.rate) && c.rate>=0.0) {
+            if(c.rate==0.0) {time[i]=end;complete[i]=1;return;}
+            curs state=rng[i];
+            real wait=-log(_get_col_uniform(&state))/c.rate;
+            real remaining=end-time[i];
+            if(isfinite(wait) && wait>0.0 && wait>=remaining) {
+                hazard[i]+=c.rate*remaining;
+                jump1[i]+=c.first*remaining; jump2[i]+=c.second*remaining;
+                jumpmax[i]=fmax(jumpmax[i],c.maximum);
+                time[i]=end;complete[i]=1;rng[i]=state;return;
+            }
+            // Do not commit the trial RNG draw: normal chain takes the same draw.
+        }
+    }
+    queue[atomicAdd(queued,1)]=i;
+}
+
+#endif
 
 // evolve every owner against one frozen reservoir with bounded continuation
 __global__
@@ -730,9 +787,39 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 pair_jumpmax[idx_neighbor] = (pair_value > 0.0) ? maximum : 0.0;
             }
         }
+        constexpr bool wave_reduction_shape=N_K==256 && COL_BATH_TPB==128;
+        // Keep the generic allocation on other wave sizes; shape choice is compile-time.
+#if defined(GAMEDEV_ROCM) && defined(__gfx942__)
+        constexpr int total_slots=wave_reduction_shape?128:N_K;
+#else
+        constexpr int total_slots=N_K;
+#endif
+        __shared__ real total_work[total_slots];
+        __shared__ int last_work[total_slots];
+#if defined(GAMEDEV_ROCM) && defined(__gfx942__)
+        if constexpr(wave_reduction_shape) {
+          const int t=threadIdx.x;
+          __syncthreads();
+          real left=pair_rate[t],right=pair_rate[t+128];
+          total_work[t]=left+right;
+          last_work[t]=(!isfinite(left)||left<0.0||!isfinite(right)||right<0.0)?-2:(right>0.0?t+128:(left>0.0?t:-1));
+          pair_jump1[t]+=pair_jump1[t+128];pair_jump2[t]+=pair_jump2[t+128];
+          pair_jumpmax[t]=fmax(pair_jumpmax[t],pair_jumpmax[t+128]);
+          __syncthreads();
+          if(t<64){
+            real r=total_work[t]+total_work[t+64],a=pair_jump1[t]+pair_jump1[t+64];
+            real b=pair_jump2[t]+pair_jump2[t+64],m=fmax(pair_jumpmax[t],pair_jumpmax[t+64]);
+            int l=last_work[t],other=last_work[t+64];l=(l==-2||other==-2)?-2:max(l,other);
+            for(int delta=32;delta;delta/=2){
+              r+=__shfl_down(r,delta,64);a+=__shfl_down(a,delta,64);b+=__shfl_down(b,delta,64);
+              m=fmax(m,__shfl_down(m,delta,64));other=__shfl_down(l,delta,64);l=(l==-2||other==-2)?-2:max(l,other);
+            }
+            if(t==0){total_work[0]=r;pair_jump1[0]=a;pair_jump2[0]=b;pair_jumpmax[0]=m;last_work[0]=l;}
+          }
+        } else
+#endif
+        {
         // Parallel chain reduction: preserve pair_rate for serial partner sampling.
-        __shared__ real total_work[N_K];
-        __shared__ int last_work[N_K];
         for (int j = threadIdx.x; j < N_K; j += blockDim.x)
         {
             total_work[j] = pair_rate[j];
@@ -755,6 +842,8 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                     : (left > right ? left : right);
             }
             __syncthreads();
+        }
+
         }
 
         if (threadIdx.x == 0)
@@ -1357,6 +1446,26 @@ __global__ void cache_query_environments(query_environment *env,const swarm *par
 // before issuing atomics; no per-neighbor transfer to the CPU is needed.
 __global__ void local_graph(unsigned int *edges, const int *spatial,
     const int *neighbors, const unsigned char *active) {
+#ifdef GAMEDEV_ROCM
+    if constexpr(TPB%32==0) {
+    const int lane=threadIdx.x%32;
+    const int i=(blockIdx.x*blockDim.x+threadIdx.x)/32;
+    if(i>=N_P || !active[i]) return;
+    unsigned int bits[LOCAL_WORDS] = {};
+    for(int k=lane;k<N_K;k+=32){
+        int entry=neighbors[_get_col_offset(i,k)];
+        if(entry<0)continue;
+        int j=_get_col_idx_old(entry),c=spatial[j];
+        bits[c/32]|=1u<<(c%32);
+    }
+    for(int w=0;w<LOCAL_WORDS;++w){
+        unsigned int value=bits[w];
+        for(int delta=16;delta;delta/=2)value|=__shfl_down(value,delta,32);
+        if(lane==0 && value)atomicOr(edges+spatial[i]*LOCAL_WORDS+w,value);
+    }
+    } else
+#endif
+    {
     int i=blockIdx.x*blockDim.x+threadIdx.x;
     if (i>=N_P || !active[i]) return;
     unsigned int bits[LOCAL_WORDS] = {};
@@ -1368,6 +1477,7 @@ __global__ void local_graph(unsigned int *edges, const int *spatial,
     }
     for (int w=0;w<LOCAL_WORDS;++w)
         if (bits[w]) atomicOr(edges+spatial[i]*LOCAL_WORDS+w,bits[w]);
+    }
 }
 
 __global__ void local_reset(const int *ids, int count, real *hazard,
@@ -1513,7 +1623,13 @@ if (!local_geometry_valid) {
     for (auto &v:local.owners) v.clear();
     for (int i=0;i<N_P;++i) local.owners[spatial[i]].push_back(i);
     LOCAL_CHECK(localZero(local.graph,0,sizeof(unsigned int)*local.edges.size()));
-    local_graph<<<NB_P,TPB>>>(local.graph,dev_col_spatial,dev_col_neighbor,dev_col_active);
+    local_graph<<<
+#ifdef GAMEDEV_ROCM
+        (N_P*(TPB%32==0?32:1)+TPB-1)/TPB,TPB
+#else
+        NB_P,TPB
+#endif
+    >>>(local.graph,dev_col_spatial,dev_col_neighbor,dev_col_active);
     LOCAL_KERNEL("local_graph");
     LOCAL_CHECK(localCopy(local.edges.data(),local.graph,
         sizeof(unsigned int)*local.edges.size(),localD2H));
@@ -1678,9 +1794,22 @@ while (schedule.time()<schedule.end) {
     const auto chain_begin=local_clock::now();
 #endif
     LOCAL_CHECK(localZero(local.error,0,sizeof(int)));
+#ifdef GAMEDEV_ROCM
+    LOCAL_CHECK(localZero(dev_col_unfinished,0,sizeof(int)));
+    col_cached_screen<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_rngstate,
+        dev_col_active,dev_col_measure,dev_col_spatial,local.dt,local.cached,
+        dev_col_time,dev_col_events,dev_col_complete,dev_col_hazard,
+        dev_col_jump1_int,dev_col_jump2_int,dev_col_jumpmax_int,local.queue_a,dev_col_unfinished);
+    LOCAL_KERNEL("cached_screen");
+    int unfinished=0, continuations=0;
+    LOCAL_CHECK(localCopy(&unfinished,dev_col_unfinished,sizeof(int),localD2H));
+    const int *input=local.queue_a;
+    int *output=local.queue_b;
+#else
     int unfinished=count, continuations=0;
     const int *input=local.ids;
     int *output=local.queue_a;
+#endif
     while (unfinished>0) {
         if (++continuations>1000000)
             throw std::runtime_error("local collision continuation limit exceeded");

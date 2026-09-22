@@ -132,6 +132,23 @@ namespace kdtree {
     using scalar_t = typename point_traits::scalar_t;
     enum { num_dims = point_traits::num_dims };
     
+#ifdef GAMEDEV_ROCM
+    const int tid = threadIdx.x+blockIdx.x*blockDim.x;
+    // Pad the last wave with point zero. Its extrema were already published.
+    point_t point = data_traits::get_point(d_points[tid<numPoints ? tid : 0]);
+    #pragma unroll
+    for (int d=0;d<num_dims;d++) {
+      scalar_t lower=point_traits::get_coord(point,d), upper=lower;
+      for (int offset=warpSize/2;offset>0;offset/=2) {
+        lower=min(lower,__shfl_down(lower,offset));
+        upper=max(upper,__shfl_down(upper,offset));
+      }
+      if ((threadIdx.x%warpSize)==0) {
+        atomicMin(&point_traits::get_coord(d_bounds->lower,d),lower);
+        atomicMax(&point_traits::get_coord(d_bounds->upper,d),upper);
+      }
+    }
+#else
     const int tid = threadIdx.x+blockIdx.x*blockDim.x;
     if (tid >= numPoints) return;
     
@@ -148,6 +165,7 @@ namespace kdtree {
       atomicMin(&lo,f);
       atomicMax(&hi,f);
     }
+#endif
   }
 
   /*! host-side helper function to compute bounding box of the data set */
