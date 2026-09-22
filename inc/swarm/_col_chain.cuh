@@ -625,7 +625,6 @@ void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col
     atomicAdd(&dev_col_bin[idx_bin].weighted_second,weight*second_rate[idx]);
 }
 
-#ifdef GAMEDEV_ROCM
 // Evaluate the existing cached no-event path with one thread per owner.
 // Only unfinished owners enter the expensive cooperative event-chain kernel.
 __global__ void col_cached_screen(const int *ids,int count,curs *rng,
@@ -656,7 +655,6 @@ __global__ void col_cached_screen(const int *ids,int count,curs *rng,
     queue[atomicAdd(queued,1)]=i;
 }
 
-#endif
 
 // evolve every owner against one frozen reservoir with bounded continuation
 __global__
@@ -1794,7 +1792,6 @@ while (schedule.time()<schedule.end) {
     const auto chain_begin=local_clock::now();
 #endif
     LOCAL_CHECK(localZero(local.error,0,sizeof(int)));
-#ifdef GAMEDEV_ROCM
     LOCAL_CHECK(localZero(dev_col_unfinished,0,sizeof(int)));
     col_cached_screen<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_rngstate,
         dev_col_active,dev_col_measure,dev_col_spatial,local.dt,local.cached,
@@ -1805,11 +1802,6 @@ while (schedule.time()<schedule.end) {
     LOCAL_CHECK(localCopy(&unfinished,dev_col_unfinished,sizeof(int),localD2H));
     const int *input=local.queue_a;
     int *output=local.queue_b;
-#else
-    int unfinished=count, continuations=0;
-    const int *input=local.ids;
-    int *output=local.queue_a;
-#endif
     while (unfinished>0) {
         if (++continuations>1000000)
             throw std::runtime_error("local collision continuation limit exceeded");

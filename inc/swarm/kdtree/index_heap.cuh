@@ -142,7 +142,6 @@ struct idx_old_heap
             idx_slot = 0;
         }
 
-#ifdef GAMEDEV_ROCM
         // Retain the selected child value to avoid a dependent scratch reload.
         while (true)
         {
@@ -158,26 +157,6 @@ struct idx_old_heap
             set_key(idx_slot,child);
             idx_slot=idx_child;
         }
-#else
-        // restore max-heap order after replacing either the root or a duplicate-image slot
-        while (true)
-        {
-            int idx_child1 = 2*idx_slot + 1;
-            int idx_child_max = -1;
-            if (idx_child1 < K) idx_child_max = idx_child1;
-            int idx_child2 = idx_child1 + 1;
-            if (idx_child2 < K && get_key(idx_child2) > get_key(idx_child_max)) idx_child_max = idx_child2;
-
-            if (idx_child_max < 0 || get_key(idx_child_max) < candidate)
-            {
-                set_key(idx_slot, candidate);
-                break;
-            }
-
-            set_key(idx_slot, get_key(idx_child_max));
-            idx_slot = idx_child_max;
-        }
-#endif
         return expandedCullDist2();
     }
 };
