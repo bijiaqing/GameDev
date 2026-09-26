@@ -13,10 +13,11 @@ superseded test inventories are not part of the public documentation.
 | [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm equations, initialization, trajectories, diffusion, collisions, and limitations |
 | [`swarm_testset.md`](swarm_testset.md) | retained swarm publication cases, statistical references, KNN validation, and collision-chain criteria |
 
-The naming and commenting contract for production source is kept in the local, untracked
-`doc/MEMORY.md`. The untracked `doc/extension/`, `doc/proposal/`, and `doc/publication/`
-directories hold proposals, manuscript planning, and dated development records; they do not
-describe current behavior unless a statement is confirmed against the source.
+The code style, naming, and commenting rules are kept in the local, untracked
+`doc/code_style.md` and checked by `val/tools/check_style.py`. The untracked `doc/extension/`,
+`doc/proposal/`, and `doc/publication/` directories hold proposals, manuscript planning, and
+dated development records; they do not describe current behavior unless a statement is confirmed
+against the source.
 
 Physical equations and production algorithms belong in the numerical guides. Test definitions and
 evidence rules belong in the test guides. The paired fluid/swarm derivations remain independent even
@@ -78,10 +79,10 @@ These are paired scientific conventions, not shared-code interfaces.
 
 ## Maintenance rule
 
-Inspect live Git status, the relevant source, and `doc/MEMORY.md` before editing. Preserve existing
-dirty changes, including separate coagulation campaigns; an old checkout snapshot is not authority
-to reset files. If current native archives are missing locally, request the cluster outputs before
-updating qualification claims.
+Inspect live Git status, the relevant source, and `doc/code_style.md` before editing. Preserve
+existing dirty changes, including separate coagulation campaigns; an old checkout snapshot is not
+authority to reset files. If current native archives are missing locally, request the cluster
+outputs before updating qualification claims.
 
 When statements disagree, use this authority order:
 
