@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 
-"""Summarize ordinary KD-tree and Morton KNN benchmark output"""
+"""summarize ordinary KD-tree and Morton KNN benchmark output"""
 
 from __future__ import annotations
-
-import sys
-sys.dont_write_bytecode = True
 
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from val_config import model_output
 
 
-def load_records(test_root: Path, backend: str, include_all: bool, output_subdir: str = "") -> dict[str, dict]:
-    """Load the canonical matrix without mixing in stale experiments"""
+def load_records(
+    test_root: Path, backend: str, include_all: bool, output_subdir: str = ""
+) -> dict[str, dict]:
+    """load the canonical matrix without mixing in stale experiments"""
 
     project_root = test_root.parents[3]
     scope = os.environ.get("VAL_SCOPE", "manual")
-    result_root = model_output(project_root/"val", "swarm", "test_knn", backend, scope=scope)
+    result_root = model_output(project_root / "val", "swarm", "test_knn", backend, scope=scope)
     if output_subdir:
         result_root = result_root / output_subdir
     manifest_path = result_root / "manifest.json"
@@ -46,7 +49,7 @@ def load_records(test_root: Path, backend: str, include_all: bool, output_subdir
 
 
 def print_records(records: dict[str, dict]) -> None:
-    """Print the KD-tree and sorted-Morton comparison"""
+    """print the KD-tree and sorted-Morton comparison"""
 
     print(
         f"{'case':32s} {'pass':>5s} {'KD ms':>10s} {'Morton ms':>11s} "
@@ -76,7 +79,9 @@ def main() -> None:
     )
     parser.add_argument("--output-subdir", default="")
     args = parser.parse_args()
-    print_records(load_records(Path(__file__).resolve().parent, args.backend, args.all, args.output_subdir))
+    print_records(
+        load_records(Path(__file__).resolve().parent, args.backend, args.all, args.output_subdir)
+    )
 
 
 if __name__ == "__main__":

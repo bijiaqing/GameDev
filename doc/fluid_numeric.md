@@ -167,9 +167,9 @@ d=
 \end{array}\right.
 ```
 
-The polar measure is $\Delta V_z=\cos z_{\rm in}-\cos z_{\rm out}$ when the polar dimension is active.
-Consequently, `N_Z == 1` represents a vertically integrated disk and evolves dust surface density
-$\Sigma_d$; `N_Z > 1` evolves volume density $\rho_d$.
+The polar measure is $\Delta V_z=\cos z_{\rm in}-\cos z_{\rm out}$ when the polar dimension is
+active. Consequently, `N_Z == 1` represents a vertically integrated disk and evolves dust surface
+density $\Sigma_d$; `N_Z > 1` evolves volume density $\rho_d$.
 
 The complete cell measure can be written
 
@@ -697,7 +697,8 @@ $$
 Let $\varrho_d$ denote the evolved dust density: $\varrho_d=\Sigma_d$ in 2D and
 $\varrho_d=\rho_d$ in 3D.
 
-**Core fluid equations.** In coordinate-independent conservation form, the default density mode advances
+**Core fluid equations.** In coordinate-independent conservation form, the default density mode
+advances
 
 $$
 \frac{\partial\varrho_d}{\partial t}
@@ -1097,10 +1098,10 @@ supported edge case.
 
 ### 5.3 Radial and polar integration and boundaries
 
-The radial and polar method-of-lines operators use the three-stage TVD Runge–Kutta construction
-of [Shu & Osher (1988)](https://doi.org/10.1016/0021-9991(88)90177-5), commonly denoted
-SSPRK(3,3). PPM provides spatial reconstruction; SSPRK supplies temporal integration. The radial boundaries
-are outflow-only. A full polar disk is outflow-only at both polar edges; `HALF_DISK` reflects at the
+The radial and polar method-of-lines operators use the three-stage TVD Runge–Kutta construction of
+[Shu & Osher (1988)](https://doi.org/10.1016/0021-9991(88)90177-5), commonly denoted SSPRK(3,3). PPM
+provides spatial reconstruction; SSPRK supplies temporal integration. The radial boundaries are
+outflow-only. A full polar disk is outflow-only at both polar edges; `HALF_DISK` reflects at the
 midplane and remains outflow-only at its other polar edge.
 
 If $L(\boldsymbol U)$ is one spatial flux-divergence evaluation, the stages are
@@ -1608,10 +1609,11 @@ $$
 $$
 
 where $\varrho_d$ denotes $\Sigma_d$ in the vertically integrated model and $\rho_d$ in 3D.
-Concentration mode instead uses $\boldsymbol J=-w\boldsymbol D\cdot\nabla(\varrho_d/w)$;
-the same donor-momentum closure applies to either flux. The mass equation fixes the total transport flux $\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does
-not uniquely determine which momentum an unresolved diffusive exchange carries. GameDev closes
-that ambiguity by treating each stored generalized velocity
+Concentration mode instead uses $\boldsymbol J=-w\boldsymbol D\cdot\nabla(\varrho_d/w)$; the same
+donor-momentum closure applies to either flux. The mass equation fixes the total transport flux
+$\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does not uniquely determine which momentum an
+unresolved diffusive exchange carries. GameDev closes that ambiguity by treating each stored
+generalized velocity
 
 $$
 q_a\in\{\ell_\phi,v_r,\ell_\theta\}
@@ -1966,8 +1968,8 @@ model itself rather than current test coverage.
   momentum exchange at zero net mass flux is omitted. It must not be described as a complete
   Reynolds-averaged momentum tensor. A future Reynolds option would be a different physical model,
   not a correction term that can be added independently to the present kernels.
-- The 3D initializer balances polar advection and the selected diffusion flux only to discretization error. The
-  normalized instantaneous mismatch and its polar-resolution convergence are measured by
+- The 3D initializer balances polar advection and the selected diffusion flux only to discretization
+  error. The normalized instantaneous mismatch and its polar-resolution convergence are measured by
   `test_startup_3d`; later momentum relaxation can still produce a physical startup transient and is
   not assumed to vanish under mesh refinement.
 - The block diffusion kernels still execute each Thomas or Sherman–Morrison recurrence serially

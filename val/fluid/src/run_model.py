@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Compile, execute, and analyze one verification model at several resolutions
+"""compile, execute, and analyze one verification model at several resolutions
 
 Every model-local ``run.py`` imports :func:`run` from this file and supplies its
 own directory name.  This shared implementation keeps the build flags, output
@@ -10,31 +10,36 @@ across all verification models.
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-
 import argparse
 import json
+import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 from validate_case import analyze as default_analyze
 
 VAL_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND, TARGET_ENV, DEFAULT_TARGET, backend_environment, fluid_archive_sweep
-
-from val_config import fluid_case_tier, model_analyzer, model_executable
+from val_config import (
+    BACKEND,
+    DEFAULT_TARGET,
+    TARGET_ENV,
+    backend_environment,
+    fluid_archive_sweep,
+    fluid_case_tier,
+    model_analyzer,
+    model_executable,
+    model_output,
+)
 
 
 def observed_orders(errors: list[float]) -> list[float]:
-    """Return pairwise convergence orders for successive factor-of-two grids"""
+    """return pairwise convergence orders for successive factor-of-two grids"""
 
     import math
 
@@ -44,27 +49,36 @@ def observed_orders(errors: list[float]) -> list[float]:
 
 
 def capture(command: list[str], cwd: Path) -> str:
-    """Run a diagnostic command and return its combined standard output"""
+    """run a diagnostic command and return its combined standard output"""
 
     try:
         # check=False is intentional: missing GPU diagnostics must not prevent a
         # simulation from running; stderr is folded into stdout so the saved
         # environment file contains either version information or the error
-        result = subprocess.run(command, cwd=cwd, check=False, text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
         return result.stdout.strip()
     except OSError as error:
         return f"unavailable: {error}"
 
 
 def environment_record(project_root: Path) -> dict[str, str]:
-    """Record the CUDA toolchain and NVIDIA device used by one verification run"""
+    """record the CUDA toolchain and NVIDIA device used by one verification run"""
 
-    return {**backend_environment(capture, project_root), "gpu_target": os.environ.get(TARGET_ENV, DEFAULT_TARGET)}
+    return {
+        **backend_environment(capture, project_root),
+        "gpu_target": os.environ.get(TARGET_ENV, DEFAULT_TARGET),
+    }
 
 
 def output_tag(model: str, cfl: float, power: float, shift: float, direction: str) -> str:
-    """Name parameter variants that would otherwise overwrite one another"""
+    """name parameter variants that would otherwise overwrite one another"""
 
     # only parameters varied by run_suite.py enter directory and metric names
     # the empty string keeps single-configuration model outputs one level higher
@@ -80,7 +94,7 @@ def output_tag(model: str, cfl: float, power: float, shift: float, direction: st
 
 
 def selected_sweep() -> str:
-    """Return the fluid line-kernel implementation selected for this run"""
+    """return the fluid line-kernel implementation selected for this run"""
 
     sweep = os.environ.get("FLUID_SWEEP", "thread")
     if sweep not in {"thread", "block"}:
@@ -89,27 +103,32 @@ def selected_sweep() -> str:
 
 
 def clean_results(out_dir: Path, data_dir: Path, variant: str) -> None:
-    """Remove stale records owned by one model variant before rerunning it"""
+    """remove stale records owned by one model variant before rerunning it"""
 
     for path in data_dir.glob("*.dat"):
         path.unlink()
     for path in data_dir.glob("meta_N*.json"):
         path.unlink()
-    (data_dir/"environment.json").unlink(missing_ok=True)
+    (data_dir / "environment.json").unlink(missing_ok=True)
 
     for path in out_dir.glob("metrics_N*.json"):
-        owned = path.name.endswith(f"_{variant}.json") if variant else bool(
-            re.fullmatch(r"metrics_N\d+\.json", path.name)
+        owned = (
+            path.name.endswith(f"_{variant}.json")
+            if variant
+            else bool(re.fullmatch(r"metrics_N\d+\.json", path.name))
         )
         if owned:
             path.unlink()
-    (out_dir/f"manifest_{variant or 'default'}.json").unlink(missing_ok=True)
+    (out_dir / f"manifest_{variant or 'default'}.json").unlink(missing_ok=True)
 
 
 def assess_records(
-    model: str, records: list[dict], shift: float, power: float,
+    model: str,
+    records: list[dict],
+    shift: float,
+    power: float,
 ) -> dict[str, object]:
-    """Apply broad regression gates to one analytical convergence sequence"""
+    """apply broad regression gates to one analytical convergence sequence"""
 
     import math
 
@@ -128,8 +147,7 @@ def assess_records(
         minimum_order = float(records[0].get("minimum_order", 0.0))
         if convergence_field and len(records) > 1:
             convergence_errors = [
-                float(record["errors"][convergence_field]["l1"])
-                for record in records
+                float(record["errors"][convergence_field]["l1"]) for record in records
             ]
             if all(error > 0.0 for error in convergence_errors):
                 convergence_orders = observed_orders(convergence_errors)
@@ -142,34 +160,42 @@ def assess_records(
             field = str(requirement["field"])
             norm = str(requirement["norm"])
             values = [float(record["errors"][field][norm]) for record in records]
-            orders = observed_orders(values) \
-                if len(values) > 1 and all(value > 0.0 for value in values) else []
+            orders = (
+                observed_orders(values)
+                if len(values) > 1 and all(value > 0.0 for value in values)
+                else []
+            )
             maximum_final_error = requirement.get("maximum_final_error")
             minimum_final_order = requirement.get("minimum_final_order")
             require_monotonic = bool(requirement.get("require_monotonic", False))
-            accuracy_passed = maximum_final_error is None \
-                or values[-1] <= float(maximum_final_error)
-            order_passed = minimum_final_order is None or len(values) == 1 or (
-                bool(orders) and orders[-1] >= float(minimum_final_order)
+            accuracy_passed = maximum_final_error is None or values[-1] <= float(
+                maximum_final_error
+            )
+            order_passed = (
+                minimum_final_order is None
+                or len(values) == 1
+                or (bool(orders) and orders[-1] >= float(minimum_final_order))
             )
             monotonic_passed = not require_monotonic or all(
                 values[index + 1] < values[index] for index in range(len(values) - 1)
             )
             check_passed = accuracy_passed and order_passed and monotonic_passed
-            sequence_checks.append({
-                "name": requirement["name"],
-                "field": field,
-                "norm": norm,
-                "values": values,
-                "orders": orders,
-                "maximum_final_error": maximum_final_error,
-                "minimum_final_order": minimum_final_order,
-                "require_monotonic": require_monotonic,
-                "accuracy_passed": accuracy_passed,
-                "order_passed": order_passed,
-                "monotonic_passed": monotonic_passed,
-                "passed": check_passed,
-            })
+            sequence_checks.append(
+                {
+                    "name": requirement["name"],
+                    "field": field,
+                    "norm": norm,
+                    "values": values,
+                    "orders": orders,
+                    "maximum_final_error": maximum_final_error,
+                    "minimum_final_order": minimum_final_order,
+                    "require_monotonic": require_monotonic,
+                    "accuracy_passed": accuracy_passed,
+                    "order_passed": order_passed,
+                    "monotonic_passed": monotonic_passed,
+                    "passed": check_passed,
+                }
+            )
             sequence_passed = sequence_passed and check_passed
         return {
             "finite": finite,
@@ -180,22 +206,21 @@ def assess_records(
             "convergence_passed": convergence_passed,
             "sequence_checks": sequence_checks,
             "sequence_passed": sequence_passed,
-            "passed": finite and convergence_passed and sequence_passed
-                and all(record["passed"] is True for record in records),
+            "passed": finite
+            and convergence_passed
+            and sequence_passed
+            and all(record["passed"] is True for record in records),
         }
     mass_max = max((record.get("mass_relative_change", 0.0) for record in records), default=0.0)
     mass_passed = mass_max <= 1.0e-8
 
     primary = "optdepth" if records[0]["case"] == "optdepth" else "density"
     errors = [record["errors"][primary]["l1"] for record in records]
-    exact_case = (
-        (model == "test_x_transport_2d" and abs(shift - round(shift)) <= 1.0e-12)
-        or (model == "test_optdepth" and abs(power) <= 1.0e-12)
+    exact_case = (model == "test_x_transport_2d" and abs(shift - round(shift)) <= 1.0e-12) or (
+        model == "test_optdepth" and abs(power) <= 1.0e-12
     )
     if model == "test_source_drag":
-        accuracy_passed = max(
-            values["linf"] for values in records[0]["errors"].values()
-        ) <= 1.0e-12
+        accuracy_passed = max(values["linf"] for values in records[0]["errors"].values()) <= 1.0e-12
         convergence_orders: list[float] = []
         convergence_passed = True
     elif exact_case:
@@ -204,8 +229,11 @@ def assess_records(
         convergence_passed = True
     else:
         accuracy_passed = errors[-1] <= 2.0e-2
-        convergence_orders = observed_orders(errors) \
-            if len(errors) > 1 and all(error > 0.0 for error in errors) else []
+        convergence_orders = (
+            observed_orders(errors)
+            if len(errors) > 1 and all(error > 0.0 for error in errors)
+            else []
+        )
         minimum_order = 1.5 if len(records) >= 4 else 0.75
         convergence_passed = len(records) == 1 or (
             bool(convergence_orders) and convergence_orders[-1] >= minimum_order
@@ -218,7 +246,9 @@ def assess_records(
         "mass_passed": mass_passed,
         "primary_field": primary,
         "finest_l1": errors[-1],
-        "accuracy_tolerance": 1.0e-12 if model == "test_source_drag" else (1.0e-10 if exact_case else 2.0e-2),
+        "accuracy_tolerance": 1.0e-12
+        if model == "test_source_drag"
+        else (1.0e-10 if exact_case else 2.0e-2),
         "accuracy_passed": accuracy_passed,
         "orders": convergence_orders,
         "convergence_passed": convergence_passed,
@@ -227,7 +257,7 @@ def assess_records(
 
 
 def run(model: str) -> None:
-    """Build and run one named verification model for all requested resolutions"""
+    """build and run one named verification model for all requested resolutions"""
 
     parser = argparse.ArgumentParser()
     default_resolutions = [8] if model == "test_source_drag" else [32, 64, 128, 256]
@@ -247,7 +277,7 @@ def run(model: str) -> None:
     target = os.environ.get(TARGET_ENV, DEFAULT_TARGET)
     archive_sweep = fluid_archive_sweep(BACKEND, sweep)
     scope = os.environ.get("VAL_SCOPE", "manual")
-    out_dir = model_output(project_root/"val", "fluid", model, BACKEND, archive_sweep, scope)
+    out_dir = model_output(project_root / "val", "fluid", model, BACKEND, archive_sweep, scope)
     if not model_dir.is_dir():
         raise SystemExit(f"Unknown model directory: {model_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -283,19 +313,41 @@ def run(model: str) -> None:
         # grid sizes and verification parameters are compile-time constants in
         # the CUDA tests; cleaning before every resolution prevents an object
         # compiled with an earlier N or parameter value from being reused
-        subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", f"GPU_BACKEND={BACKEND}", f"FLUID_SWEEP={sweep}",
-            f"GPU_TARGET={target}",
-            f"VAL_SWEEP={archive_sweep}", f"VAL_SCOPE={scope}", "clean"
-        ], check=True)
-        subprocess.run([
-            "make", "-C", str(project_root), f"MODEL={model}", f"GPU_BACKEND={BACKEND}", f"FLUID_SWEEP={sweep}",
-            f"GPU_TARGET={target}", f"VAL_SWEEP={archive_sweep}",
-            f"VAL_SCOPE={scope}", f"RES={resolution}",
-            f"CFL={args.cfl:.17g}", f"POWER={args.power:.17g}", f"SHIFT={args.shift:.17g}",
-            f"DIRECTION={args.direction}",
-            f"OUT_TAG={variant}",
-        ], check=True)
+        subprocess.run(
+            [
+                "make",
+                "-C",
+                str(project_root),
+                f"MODEL={model}",
+                f"GPU_BACKEND={BACKEND}",
+                f"FLUID_SWEEP={sweep}",
+                f"GPU_TARGET={target}",
+                f"VAL_SWEEP={archive_sweep}",
+                f"VAL_SCOPE={scope}",
+                "clean",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "make",
+                "-C",
+                str(project_root),
+                f"MODEL={model}",
+                f"GPU_BACKEND={BACKEND}",
+                f"FLUID_SWEEP={sweep}",
+                f"GPU_TARGET={target}",
+                f"VAL_SWEEP={archive_sweep}",
+                f"VAL_SCOPE={scope}",
+                f"RES={resolution}",
+                f"CFL={args.cfl:.17g}",
+                f"POWER={args.power:.17g}",
+                f"SHIFT={args.shift:.17g}",
+                f"DIRECTION={args.direction}",
+                f"OUT_TAG={variant}",
+            ],
+            check=True,
+        )
         if args.build_only:
             continue
 
@@ -312,7 +364,9 @@ def run(model: str) -> None:
         tag = f"N{resolution}"
         if variant:
             tag += f"_{variant}"
-        (out_dir / f"metrics_{tag}.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+        (out_dir / f"metrics_{tag}.json").write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n"
+        )
         records.append(record)
 
     if args.build_only or not records:
@@ -337,7 +391,7 @@ def run(model: str) -> None:
         "assessment": assessment,
         "passed": passed,
     }
-    (out_dir/f"manifest_{variant or 'default'}.json").write_text(
+    (out_dir / f"manifest_{variant or 'default'}.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     )
 
@@ -358,7 +412,10 @@ def run(model: str) -> None:
     for record in records:
         error = record["errors"][field]
         l1_errors.append(error["l1"])
-        row = f"{record['resolution']:8d} {error['l1']:14.6e} {error['l2']:14.6e} {error['linf']:14.6e}"
+        row = (
+            f"{record['resolution']:8d} {error['l1']:14.6e} "
+            f"{error['l2']:14.6e} {error['linf']:14.6e}"
+        )
         if has_mass:
             row += f" {record['mass_relative_change']:14.6e}"
         print(row)

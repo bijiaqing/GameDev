@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Select verification cases and invoke each model-local runner in sequence
+"""select verification cases and invoke each model-local runner in sequence
 
 This is the top-level entry point used by ``--group all`` and the smaller
 physics groups.  It does not compile or validate results itself.  Instead, it
@@ -13,35 +13,40 @@ to the short ``run.py`` wrapper inside that model directory.
 # no effect on the numerical tests
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-
 import argparse
-from datetime import datetime, timezone
 import json
+import os
 import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 VAL_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND, TARGET_ENV, DEFAULT_TARGET, fluid_archive_sweep
-
-from val_config import FLUID_GROUPS, fluid_case_tier, fluid_cases, fluid_metric_tiers
+from val_config import (
+    BACKEND,
+    DEFAULT_TARGET,
+    FLUID_GROUPS,
+    TARGET_ENV,
+    fluid_archive_sweep,
+    fluid_case_tier,
+    fluid_cases,
+    fluid_metric_tiers,
+    model_output,
+)
 
 
 def utc_now() -> str:
-    """Return one ISO-formatted UTC timestamp for suite manifests"""
+    """return one ISO-formatted UTC timestamp for suite manifests"""
 
     return datetime.now(timezone.utc).isoformat()
 
 
 def write_json(path: Path, record: dict[str, object]) -> None:
-    """Atomically update one machine-readable suite record"""
+    """atomically update one machine-readable suite record"""
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -55,9 +60,12 @@ def main() -> None:
     # resolutions, which is useful for checking the workflow before a full run
     parser = argparse.ArgumentParser()
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
-    parser.add_argument("--quick", action="store_true", help="Use only the two coarsest requested resolutions")
     parser.add_argument(
-        "--group", choices=("all", *FLUID_GROUPS),
+        "--quick", action="store_true", help="Use only the two coarsest requested resolutions"
+    )
+    parser.add_argument(
+        "--group",
+        choices=("all", *FLUID_GROUPS),
         default="all",
     )
     parser.add_argument("--target", default=os.environ.get(TARGET_ENV, DEFAULT_TARGET))
@@ -71,14 +79,16 @@ def main() -> None:
     resolutions = args.res[:2] if args.quick else args.res
 
     common = Path(__file__).resolve().parent
-    model_root = common.parent/"mod"
+    model_root = common.parent / "mod"
     project_root = common.parents[2]
 
     commands = fluid_cases(args.group)
     selected_sweep = os.environ.get("FLUID_SWEEP", "thread")
     archive_sweep = fluid_archive_sweep(BACKEND, selected_sweep)
-    scope_root = model_output(project_root/"val", "fluid", "_suite", BACKEND, archive_sweep, args.group)
-    manifest_path = scope_root/("manifest_all.json" if args.group == "all" else "manifest.json")
+    scope_root = model_output(
+        project_root / "val", "fluid", "_suite", BACKEND, archive_sweep, args.group
+    )
+    manifest_path = scope_root / ("manifest_all.json" if args.group == "all" else "manifest.json")
     entries = [
         {
             "model": model,
@@ -117,7 +127,8 @@ def main() -> None:
         # sys.executable reuses the Python interpreter that launched this suite,
         # avoiding accidental changes of environment between the two scripts
         command = [
-            sys.executable, str(model_root/model/"run.py"),
+            sys.executable,
+            str(model_root / model / "run.py"),
         ]
 
         # fixed-resolution source cases override the suite-wide convergence grid
@@ -148,7 +159,9 @@ def main() -> None:
     manifest["passed"] = True
     manifest["finished_utc"] = utc_now()
     write_json(manifest_path, manifest)
-    print(f"\nFLUID TEST SUITE: PASS  cases={len(entries)}/{len(entries)}  manifest={manifest_path}")
+    print(
+        f"\nFLUID TEST SUITE: PASS  cases={len(entries)}/{len(entries)}  manifest={manifest_path}"
+    )
 
 
 if __name__ == "__main__":

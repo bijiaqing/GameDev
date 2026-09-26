@@ -2,15 +2,15 @@
 
 ## 1. Purpose
 
-The fluid validation suite supplies the numerical evidence needed to publish and use the Eulerian dust
-model. Every retained case tests a complete physical operator, a geometric boundary treatment, or a
-coupled evolution path against an independent reference. It deliberately omits micro-tests whose
-only claim is that one local expression returns the value written in the source.
+The fluid validation suite supplies the numerical evidence needed to publish and use the Eulerian
+dust model. Every retained case tests a complete physical operator, a geometric boundary treatment,
+or a coupled evolution path against an independent reference. It deliberately omits micro-tests
+whose only claim is that one local expression returns the value written in the source.
 
-The canonical matrix is defined in `val/val_config.py`. With resolutions
-$N=32,64,128,256$, it contains 19 models and 76 metric records. CUDA and ROCm use the same
-backend-neutral model definitions under `val/fluid/mod/` and shared drivers and validators
-under `val/fluid/src/`. The 19 models expand to 22 cases through the three fixed-grid limiter variants.
+The canonical matrix is defined in `val/val_config.py`. With resolutions $N=32,64,128,256$, it
+contains 19 models and 76 metric records. CUDA and ROCm use the same backend-neutral model
+definitions under `val/fluid/mod/` and shared drivers and validators under `val/fluid/src/`. The 19
+models expand to 22 cases through the three fixed-grid limiter variants.
 
 This document explains what the cases establish. The fluid equations and production algorithms are
 described in [fluid_numeric.md](fluid_numeric.md); archive commands are summarized in
@@ -179,9 +179,9 @@ The exact reference is integrated with the $\sin\theta$ cell measure and include
 angular momentum.
 
 `test_z_outflow_3d` uses a characteristic that leaves the polar domain and compares both the field
-and escaped mass with the exact open-boundary solution. `test_z_reflect_3d` launches a profile toward
-a reflecting boundary and compares with the exact reflected characteristic, including the sign
-change of normal momentum.
+and escaped mass with the exact open-boundary solution. `test_z_reflect_3d` launches a profile
+toward a reflecting boundary and compares with the exact reflected characteristic, including the
+sign change of normal momentum.
 
 ## 7. Diffusion
 
@@ -213,8 +213,9 @@ so passing density alone cannot hide an inconsistent diffusive momentum update.
 
 ### `test_diffusion_poslimit`
 
-The standard-resolution branch starts from a high-contrast mode that activates positivity subcycling. Its exact
-same-grid reference uses the eigenvalue of the discrete second-difference operator,
+The standard-resolution branch starts from a high-contrast mode that activates positivity
+subcycling. Its exact same-grid reference uses the eigenvalue of the discrete second-difference
+operator,
 
 $$
 \lambda_h=\frac{4}{\Delta x^2}\sin^2\!\left(\frac{k\Delta x}{2}\right),
@@ -300,21 +301,21 @@ motion. This case is intentionally retained even though its component operators 
 separately: it detects ordering, buffer, and conserved-to-primitive conversion errors that isolated
 operator tests cannot expose.
 
-It is a short controlled coupled test, not a claim that an arbitrary nonlinear disk has a closed-form
-solution.
+It is a short controlled coupled test, not a claim that an arbitrary nonlinear disk has a
+closed-form solution.
 
 The verification driver reproduces the operator composition while replacing the production runtime;
 its native pass does not qualify every production-runtime branch or output/restart path.
 
 ## 10. Running and interpreting the suite
 
-Run a native backend through `val/run_all.py` as shown in [`val/README.md`](../val/README.md).
-The canonical fluid archive is below
-`val/fluid/out/MODEL/BACKEND/SWEEP/`. Disposable validation executables and object files are isolated below
-`val/fluid/obj/MODEL/BACKEND/`, never in the source-model directories. A complete default campaign contains 76 records and a passing
-`val/fluid/out/_suite/BACKEND/SWEEP/manifest_all.json`. Here `SWEEP` is `thread_precise`
-or `block_precise` for CUDA and `thread` or `block` for ROCm, as defined by
-`fluid_archive_sweep()` in `val/val_config.py`.
+Run a native backend through `val/run_all.py` as shown in [`val/README.md`](../val/README.md). The
+canonical fluid archive is below `val/fluid/out/MODEL/BACKEND/SWEEP/`. Disposable validation
+executables and object files are isolated below `val/fluid/obj/MODEL/BACKEND/`, never in the
+source-model directories. A complete default campaign contains 76 records and a passing
+`val/fluid/out/_suite/BACKEND/SWEEP/manifest_all.json`. Here `SWEEP` is `thread_precise` or
+`block_precise` for CUDA and `thread` or `block` for ROCm, as defined by `fluid_archive_sweep()` in
+`val/val_config.py`.
 
 The most important evidence is the combination of:
 

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
-"""Reuse the shared non-full-disk periodic validator"""
+"""reuse the shared non-full-disk periodic validator"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-
 import importlib.util
+import sys
 from pathlib import Path
 
-_source = Path(__file__).resolve().parents[2]/"src"/"wedge_periodic_validate.py"
+sys.dont_write_bytecode = True
+
+_source = Path(__file__).resolve().parents[2] / "src" / "wedge_periodic_validate.py"
 _spec = importlib.util.spec_from_file_location("val_wedge_periodic_shared", _source)
 if _spec is None or _spec.loader is None:
     raise RuntimeError(f"cannot load wedge-periodic validator: {_source}")

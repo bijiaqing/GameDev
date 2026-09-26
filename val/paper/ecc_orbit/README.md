@@ -64,8 +64,8 @@ No postprocessing or reference solver is included in this model directory.
 
 ## Source and artifacts
 
-`mod/` selects model parameters; `src/` holds only test-specific overrides.
-Builds reuse root source and write executables to `obj/<model>/<backend>/gamedev`
-and results to `out/<model>/<backend>/`. Historical outputs, if retained in `val_stale/`, are not evidence for the current source.
-CUDA/ROCm build routing is checked locally; fresh native GPU runs are required
-before claiming accuracy for the current source.
+`mod/` selects model parameters; `src/` holds only test-specific overrides. Builds reuse root source
+and write executables to `obj/<model>/<backend>/gamedev` and results to `out/<model>/<backend>/`.
+Historical outputs, if retained in `val_stale/`, are not evidence for the current source. CUDA/ROCm
+build routing is checked locally; fresh native GPU runs are required before claiming accuracy for
+the current source.

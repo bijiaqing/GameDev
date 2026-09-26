@@ -1,6 +1,4 @@
 ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-empty :=
-space := $(empty) $(empty)
 
 .DEFAULT_GOAL := all
 

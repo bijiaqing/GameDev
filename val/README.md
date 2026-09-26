@@ -1,8 +1,9 @@
 # Numerical validation
 
-The numerical suites use current production operators. Any historical results retained separately as `val_stale/` are not dependencies or
-qualification records for this tree; that archive is not required in the checkout. Native runs generate results
-and disposable build products in the paths below.
+The numerical suites use current production operators. Any historical results retained separately as
+`val_stale/` are not dependencies or qualification records for this tree; that archive is not
+required in the checkout. Native runs generate results and disposable build products in the paths
+below.
 
 ## Layout
 
@@ -11,7 +12,8 @@ and disposable build products in the paths below.
 - `val_config.py`: case lists, output paths, and source fingerprints.
 - `run_all.py`: combined fluid + swarm campaign for one backend and fluid sweep.
 - `check_archive.py`: require complete, passing native numerical results.
-- `compare_backends.py`: compare CUDA/ROCm archives; stochastic diffusion is judged by each native analytical test.
+- `compare_backends.py`: compare CUDA/ROCm archives; stochastic diffusion is judged by each native
+  analytical test.
 
 Runs create `fluid/out/<model>/<backend>/<sweep>/` and
 `swarm/out/<model>/<backend>/`. Builds create `fluid/obj/` and `swarm/obj/`.
@@ -39,10 +41,10 @@ and four collision-chain models). Model constants and initial conditions are
 necessarily test-specific. The operators being validated come from current
 `inc/` and `src/`, with these explicit specializations:
 
-- Fluid transport/diffusion drivers prescribe fields and operator ordering and call production kernels.
-  Constant-D diffusion uses production `CONST_NU` and the tracer limit `St=0`;
-  the coupled ring retains finite-Stokes diffusivity. These are density-diffusion
-  tests, not complete coverage of concentration diffusion or imported gas.
+- Fluid transport/diffusion drivers prescribe fields and operator ordering and call production
+  kernels. Constant-D diffusion uses production `CONST_NU` and the tracer limit `St=0`; the coupled
+  ring retains finite-Stokes diffusivity. These are density-diffusion tests, not complete coverage
+  of concentration diffusion or imported gas.
 - Fluid drag prescribes gas velocity and force endpoints. It calls the production
   `_get_drag_weights` helper; Python integrates the forced drag equation with
   60-digit decimal arithmetic. This isolates drag quadrature, not the whole

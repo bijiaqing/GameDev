@@ -41,11 +41,11 @@ rates, sticking/erosion grouping, adaptive size bins, local refreshes, and the
 KD-tree/Morton implementations. `COL_DIAGNOSTICS` is not enabled, so no collision JSON
 or JSONL diagnostics are written.
 
-`COL_BATH_TPB` follows the root defaults: 128 on ROCm and 64 on CUDA. On ROCm, the root
-also uses wavefront rate/chain reductions for this N_K=256, 128-thread shape and private
-KD-tree heaps with 64 queries per block. The Morton backend uses the same compacted query on
-both GPU backends. `COL_BATH_EPS` is 0.08 here; the root default is 0.02. ROCm tuning was measured on MI300A/gfx942 at N_K=256
-and epsilon=0.02; its speedup at this campaign's epsilon=0.08 is unmeasured.
+`COL_BATH_TPB` follows the root defaults: 128 on ROCm and 64 on CUDA. On ROCm, the root also uses
+wavefront rate/chain reductions for this N_K=256, 128-thread shape and private KD-tree heaps with 64
+queries per block. The Morton backend uses the same compacted query on both GPU backends.
+`COL_BATH_EPS` is 0.08 here; the root default is 0.02. ROCm tuning was measured on MI300A/gfx942 at
+N_K=256 and epsilon=0.02; its speedup at this campaign's epsilon=0.08 is unmeasured.
 
 `src/swarm_host.cuh` includes the root host header and replaces only initmass_calc
 and rand_disk_poly. It samples dust proportional to the production hydrostatic gas

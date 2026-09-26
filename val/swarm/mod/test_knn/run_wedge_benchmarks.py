@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 
-"""Run the periodic-wedge comparison between KD-tree and Morton methods"""
+"""run the periodic-wedge comparison between KD-tree and Morton methods"""
 
 from __future__ import annotations
-
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 import argparse
 import json
 import math
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 VAL_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND, TARGET_ENV, DEFAULT_TARGET
+from val_config import BACKEND, DEFAULT_TARGET, TARGET_ENV, model_output
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--particles", nargs="+", type=int,
+        "--particles",
+        nargs="+",
+        type=int,
         default=[100_000, 1_000_000, 10_000_000],
     )
     parser.add_argument("--dim", nargs="+", type=int, choices=(2, 3), default=[2, 3])
@@ -46,23 +46,33 @@ def main() -> None:
 
     test_root = Path(__file__).resolve().parent
     project_root = test_root.parents[3]
-    executable = project_root/"val"/"swarm"/"obj"/"test_knn"/BACKEND/"knn_wedge_benchmark"
+    executable = (
+        project_root / "val" / "swarm" / "obj" / "test_knn" / BACKEND / "knn_wedge_benchmark"
+    )
     scope = os.environ.get("VAL_SCOPE", "manual")
-    result_root = model_output(project_root/"val", "swarm", "test_knn", BACKEND, scope=scope)/"wedge"
+    result_root = (
+        model_output(project_root / "val", "swarm", "test_knn", BACKEND, scope=scope) / "wedge"
+    )
     result_root.mkdir(parents=True, exist_ok=True)
     distributions = args.distribution or ["smooth", "ring", "interior_clump", "seam_clump"]
 
     # k is compiled into the candidate-list types used by both search backends
     subprocess.run(
         [
-            "make", "-C", str(test_root), "wedge", f"GPU_TARGET={args.target}", f"GPU_BACKEND={BACKEND}", f"K={args.k}",
+            "make",
+            "-C",
+            str(test_root),
+            "wedge",
+            f"GPU_TARGET={args.target}",
+            f"GPU_BACKEND={BACKEND}",
+            f"K={args.k}",
         ],
         check=True,
     )
 
     cases = [(distribution, None, "") for distribution in distributions]
     cases.append(("seam_clump", 0.2, "narrow_"))
-    cases.append(("seam_clump", 2.0*math.pi - 0.1, "wide_"))
+    cases.append(("seam_clump", 2.0 * math.pi - 0.1, "wide_"))
     completed = []
     for dimension in args.dim:
         for distribution, wedge_width, prefix in cases:
@@ -71,18 +81,29 @@ def main() -> None:
                 output = result_root / f"{name}.json"
                 command = [
                     str(executable),
-                    "--particles", str(particles),
-                    "--queries", str(min(args.queries, particles)),
-                    "--brute-queries", str(min(args.brute_queries, args.queries, particles)),
-                    "--repeat", str(args.repeat),
-                    "--dim", str(dimension),
-                    "--distribution", distribution,
-                    "--radius", str(args.radius),
-                    "--leaf-target", str(args.leaf_target),
-                    "--output", str(output),
+                    "--particles",
+                    str(particles),
+                    "--queries",
+                    str(min(args.queries, particles)),
+                    "--brute-queries",
+                    str(min(args.brute_queries, args.queries, particles)),
+                    "--repeat",
+                    str(args.repeat),
+                    "--dim",
+                    str(dimension),
+                    "--distribution",
+                    distribution,
+                    "--radius",
+                    str(args.radius),
+                    "--leaf-target",
+                    str(args.leaf_target),
+                    "--output",
+                    str(output),
                 ]
                 if wedge_width is not None:
-                    command.extend(("--x-min", str(-0.5*wedge_width), "--x-max", str(0.5*wedge_width)))
+                    command.extend(
+                        ("--x-min", str(-0.5 * wedge_width), "--x-max", str(0.5 * wedge_width))
+                    )
                 print(f"\n=== {name} ===", flush=True)
                 output.unlink(missing_ok=True)
                 result = subprocess.run(command, cwd=test_root.parent, check=False)
@@ -125,16 +146,18 @@ def main() -> None:
     manifest = {
         "component": "wedge",
         "tier": "publication",
-        "extended_tier": "qualification" if any(
-            particles != 100_000 for particles in args.particles
-        ) else None,
+        "extended_tier": "qualification"
+        if any(particles != 100_000 for particles in args.particles)
+        else None,
         "cases": len(completed),
         "all_quality_passed": passed,
         "passed": passed,
         "environment": "../environment.json",
         "files": [f"{name}.json" for name, _ in completed],
     }
-    (result_root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    (result_root / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
 
 
 if __name__ == "__main__":

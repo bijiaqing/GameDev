@@ -16,10 +16,12 @@ Constant and product together define 500 runs; adding the 250 linear-kernel runs
 Within each kernel directory:
 
 - `mod/<model>/`: neighbor count and collision-refresh tolerance.
-- `src/`: common constants, thin normalization/initialization overrides, RNG seed selection, and analytical scorer.
+- `src/`: common constants, thin normalization/initialization overrides, RNG seed selection, and
+  analytical scorer.
 - `out/<model>/seed0/`: retained seed-0 snapshots and metadata.
 - `out/<model>/seed<N>.json`: intended compact per-seed distributions and scores.
-- `obj/seed<N>/<model>/`: executable and build products; nonzero-seed raw outputs are staged in `out/` here.
+- `obj/seed<N>/<model>/`: executable and build products; nonzero-seed raw outputs are staged in
+  `out/` here.
 
 Separate seed build/output paths permit independent jobs later. No raw outputs
 are deleted automatically. Reduce nonzero-seed snapshots to JSON before removing
@@ -96,12 +98,12 @@ collision JSON/JSONL files.
 
 ### Product-only partner mixing
 
-Before every collision refresh (including the first), a seeded global permutation
-relabels all cached neighbor indices. The tree and geometric neighbor search are
-still performed only once. The partner RNG uses `SEED + COL_PARTNER_SEED` (currently
-`SEED+2`), separately from the collision RNG. Negative sentinel entries and periodic
-image labels are preserved. This gives well-mixed partner sampling instead of keeping particles coupled to one fixed small partner population, which
-can amplify product-kernel growth artificially.
+Before every collision refresh (including the first), a seeded global permutation relabels all
+cached neighbor indices. The tree and geometric neighbor search are still performed only once. The
+partner RNG uses `SEED + COL_PARTNER_SEED` (currently `SEED+2`), separately from the collision RNG.
+Negative sentinel entries and periodic image labels are preserved. This gives well-mixed partner
+sampling instead of keeping particles coupled to one fixed small partner population, which can
+amplify product-kernel growth artificially.
 
 One spatial controller group makes every refresh publish all particles together;
 64 adaptive size bins still control the interval. Mixing precedes publication and

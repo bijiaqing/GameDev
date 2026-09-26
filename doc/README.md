@@ -26,7 +26,8 @@ where their gas-disk assumptions are physically identical.
 ## Source and validation layout
 
 - `inc/fluid/`, `inc/swarm/`, `src/fluid/`, and `src/swarm/` own the two numerical representations.
-- `inc/gpu.cuh` maps GPU APIs and execution policies; CUDA and ROCm compile the same numerical sources.
+- `inc/gpu.cuh` maps GPU APIs and execution policies; CUDA and ROCm compile the same numerical
+  sources.
 - `mod/` contains production model configurations.
 - `val/{fluid,swarm}/mod/` contains test definitions; `src/` contains shared drivers and validators.
 - `val/*.py` contains native campaign, archive, and cross-backend utilities.
@@ -36,9 +37,9 @@ where their gas-disk assumptions are physically identical.
 Fluid and swarm retain separate physical operators even though they use the same GPU API mappings.
 
 Production models select one GPU backend, one fluid sweep implementation where applicable, and one
-collision-search backend. Their executable is written beside the model flags. Validation archives retain
-explicit CUDA/ROCm paths because completed native results must coexist for comparison. Checkpoints
-are not portable across backends.
+collision-search backend. Their executable is written beside the model flags. Validation archives
+retain explicit CUDA/ROCm paths because completed native results must coexist for comparison.
+Checkpoints are not portable across backends.
 
 ## Publication validation state
 

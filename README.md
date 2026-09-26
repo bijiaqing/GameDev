@@ -10,9 +10,10 @@ representations:
 - a Lagrangian dust-swarm solver for particle trajectories, stochastic diffusion, and optional
   representative-particle collisions
 
-Both representations use prescribed gas disks and one-way gas-to-dust coupling. They share coordinate
-and physical conventions, but own separate headers, kernels, runtimes, and optical-depth pipelines.
-CUDA and ROCm compile the same representation sources through `inc/gpu.cuh`. A build selects exactly one representation through the model's `flags.mk` file.
+Both representations use prescribed gas disks and one-way gas-to-dust coupling. They share
+coordinate and physical conventions, but own separate headers, kernels, runtimes, and optical-depth
+pipelines. CUDA and ROCm compile the same representation sources through `inc/gpu.cuh`. A build
+selects exactly one representation through the model's `flags.mk` file.
 
 GameDev is an actively developed scientific code rather than a packaged application. Simulation
 setups, units, resolutions, physical switches, and output cadence are compile-time model choices.
@@ -233,13 +234,14 @@ make MODEL=swarm_fiducial GPU_BACKEND=rocm GPU_TARGET=gfx942
 mod/swarm_fiducial/gamedev
 ```
 
-Each production model selects one backend, sweep implementation, and collision-search method for
-its build. When a model or command line leaves them unset, the Makefile uses `FLUID_SWEEP=thread`
-and `COLLISION_SEARCH=kdtree` on CUDA, and `FLUID_SWEEP=block` and `COLLISION_SEARCH=morton` on
-ROCm. Command-line values override assignments in `flags.mk`. Rebuilding that model replaces its single `gamedev` executable, while internal object
-directories retain enough configuration detail to prevent incompatible objects from being reused.
-The block sweep is explicit above because the production-scale fiducial azimuthal line exceeds the
-validated gfx942 linker limit of the thread sweep at `N_X = 1024`.
+Each production model selects one backend, sweep implementation, and collision-search method for its
+build. When a model or command line leaves them unset, the Makefile uses `FLUID_SWEEP=thread` and
+`COLLISION_SEARCH=kdtree` on CUDA, and `FLUID_SWEEP=block` and `COLLISION_SEARCH=morton` on ROCm.
+Command-line values override assignments in `flags.mk`. Rebuilding that model replaces its single
+`gamedev` executable, while internal object directories retain enough configuration detail to
+prevent incompatible objects from being reused. The block sweep is explicit above because the
+production-scale fiducial azimuthal line exceeds the validated gfx942 linker limit of the thread
+sweep at `N_X = 1024`.
 
 The supplied fiducial models are production-scale examples, not lightweight demonstrations. In
 particular, the default fluid grid is large and the default swarm model contains many
@@ -349,9 +351,10 @@ GPU_FLAGS += -DCODE_UNIT
 
 A collision-enabled build uses exactly one search backend. The Makefile translates
 `COLLISION_SEARCH` into the internal `COLLISION_KDTREE` or `COLLISION_MORTON` macro and, when the
-setting is absent, chooses the backend default given in [Building and running](#building-and-running).
-`COAG_KERNEL` is selected in `const_defs.cuh`: values `0`-`2` are normalized synthetic kernels,
-while value `3` enables the physical cross-section and relative-velocity prescription.
+setting is absent, chooses the backend default given in [Building and
+running](#building-and-running). `COAG_KERNEL` is selected in `const_defs.cuh`: values `0`-`2` are
+normalized synthetic kernels, while value `3` enables the physical cross-section and
+relative-velocity prescription.
 
 ### Constants
 

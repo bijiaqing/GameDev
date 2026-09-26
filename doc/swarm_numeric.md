@@ -132,10 +132,11 @@ $$
 =(Rv_\phi,v_r,rv_\theta).
 $$
 
-When `N_Z == 1`, the code evaluates $R=y$ and $Z=0$ directly and keeps every particle at
-$z=\pi/2$ with $\ell_\theta=0$. When `N_X == 1`, one stored azimuthal cell represents the complete
+When `N_Z == 1`, the code evaluates $R=y$ and $Z=0$ directly and keeps every particle at $z=\pi/2$
+with $\ell_\theta=0$. When `N_X == 1`, one stored azimuthal cell represents the complete
 axisymmetric ring and particles are centered exactly in the inactive coordinate. The radial-only
-model retains $v_R$ and $\ell_\phi$ as dynamical variables even though azimuth is spatially inactive.
+model retains $v_R$ and $\ell_\phi$ as dynamical variables even though azimuth is spatially
+inactive.
 
 The mesh measure uses $d=2$ for a vertically integrated disk and $d=3$ when the polar dimension is
 active:
@@ -358,8 +359,8 @@ The swarm executable is likewise a compile-time specialization:
 `DIFFUSION` and `RADIATION` require `TRANSPORT`, `PR_EFFECT` requires `RADIATION`, and `COLLISION`
 requires `MULTISIZE` plus exactly one search backend. `BERNOULLI` requires `COLLISION`, and
 `KNN_CACHE` requires both. `COLLISION` without `BERNOULLI` selects the frozen-bath chain; the
-obsolete `COL_CHAIN` selector is rejected at compile time. These dependencies specify which equations exist in an executable; they do not dynamically
-turn operators on or off during a run.
+obsolete `COL_CHAIN` selector is rejected at compile time. These dependencies specify which
+equations exist in an executable; they do not dynamically turn operators on or off during a run.
 
 ## 3. Disk model, mass normalization, and initialization
 
@@ -1853,8 +1854,8 @@ $$
 
 where $V_{K,i}$ is the accessible measure of the ball whose radius is the farthest retained KNN
 distance. The retained set $\mathcal N_i$ includes the owner's own swarm, using $N_i-1\simeq N_i$.
-Every $j$ in these sums is an active particle. In a vertically integrated model, the neighborhood measure is an area $A_{K,i}$ and the
-assumed Gaussian vertical overlap gives
+Every $j$ in these sums is an active particle. In a vertically integrated model, the neighborhood
+measure is an area $A_{K,i}$ and the assumed Gaussian vertical overlap gives
 
 $$
 \lambda_{ij}
@@ -1865,23 +1866,23 @@ $$
 This physical prescription is selected by `COAG_KERNEL = 3`. The other three values are
 normalized synthetic kernel shapes intended for controlled coagulation studies:
 
-```math
+$$
 \kappa_0(m_i,m_j)=1,
 \qquad
 \kappa_1(m_i,m_j)=m_i+m_j,
 \qquad
 \kappa_2(m_i,m_j)=m_im_j.
-```
+$$
 
 For `COAG_KERNEL = 0`, `1`, or `2`, the implemented pair propensity is
 
-```math
+$$
 \lambda_{ij}^{(q)}
 =\frac{\lambda_0N_j\kappa_q(m_i,m_j)}{V_{K,i}},
 \qquad
 \lambda_0=\frac{N_P}{N_KM_{\rm dust}},
 \qquad q\in\{0,1,2\},
-```
+$$
 
 where $V_{K,i}$ denotes the active KNN measure; in a vertically integrated calculation it is the
 KNN area. The retained set includes the owner's own swarm, using $N_i-1\simeq N_i$ under the
@@ -1980,9 +1981,9 @@ S\left[2y_s-(1+\epsilon)+\dfrac{2}{1+\epsilon}\left(\dfrac{1}{1+y_s}+\dfrac{\eps
 
 where the transition coefficient is
 
-```math
+$$
 B_3=\frac{S-s}{S+s}\left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
-```
+$$
 
 ### 8.2 Optional frozen Bernoulli collision batches
 
@@ -2095,9 +2096,10 @@ not impose the publication suite's 100 cm/s threshold or disk parameters.
 
 When `COLLISION` is enabled without `BERNOULLI`, both GPU backends use the frozen-bath
 continuous-time chain. The spatial index and each owner's physical top-$K$ neighbor identities and
-KNN measure are fixed over one collision operator because positions do not change. At a local group refresh, that group publishes its current partner sizes and represented
-numbers; other groups retain their last published values. Each owner chain reads immutable
-reservoir arrays until the current launch and audit finish.
+KNN measure are fixed over one collision operator because positions do not change. At a local group
+refresh, that group publishes its current partner sizes and represented numbers; other groups retain
+their last published values. Each owner chain reads immutable reservoir arrays until the current
+launch and audit finish.
 
 The logarithmic size-bin bounds adapt independently within each spatial group.
 Immediately before rebuilding a refreshed group's bins, GPU reductions find its
@@ -2209,14 +2211,13 @@ $$
 U_{X,q}=X_q^{\rm pred}+\sqrt{2V_{X,q}L}+\frac{b_{X,q}L}{3}.
 $$
 
-Here the mass-normalized variances are assembled from
-$w_i^2p_i(1-p_i)$ for touched owners, $w_i^2H_i$ for event activity, and $w_i^2J_{2,i}$ for
-logarithmic activity. The bounded-increment terms use the largest $w_i/M_q$ for $F$ and $E$, and
-the largest mass-weighted single-event logarithmic jump for $G$. The touched fraction is additionally
-bounded above by one.
+Here the mass-normalized variances are assembled from $w_i^2p_i(1-p_i)$ for touched owners,
+$w_i^2H_i$ for event activity, and $w_i^2J_{2,i}$ for logarithmic activity. The bounded-increment
+terms use the largest $w_i/M_q$ for $F$ and $E$, and the largest mass-weighted single-event
+logarithmic jump for $G$. The touched fraction is additionally bounded above by one.
 
-To measure how much represented mass moved between the joint spatial-size bins held fixed during that interval, the code also
-records
+To measure how much represented mass moved between the joint spatial-size bins held fixed during
+that interval, the code also records
 
 $$
 D_{\rm bath}=\frac{1}{2M_{\rm tot}}
@@ -2232,9 +2233,10 @@ The next bath's safety factor is reduced after persistent activity or distributi
 relaxed only after three quiet baths. Completed baths are not rejected and replayed, because
 conditioning acceptance on a random post-bath fluctuation would bias the stochastic process.
 Controller memory persists across split collision operators within one checkpoint interval.
-Persistent overshoots at the minimum safety factor are recorded but do not abort the run. Invalid particle states, rates and event-clock progress still
-produce errors. Evolution can therefore continue outside the requested audit tolerance.
-Controller memory resets at output boundaries so particle restart files remain sufficient.
+Persistent overshoots at the minimum safety factor are recorded but do not abort the run. Invalid
+particle states, rates and event-clock progress still produce errors. Evolution can therefore
+continue outside the requested audit tolerance. Controller memory resets at output boundaries so
+particle restart files remain sufficient.
 
 Production builds omit collision diagnostic files and event-category bookkeeping. The
 validation runtimes enable `COL_DIAGNOSTICS`: this retains the per-group schedule in
@@ -2263,10 +2265,10 @@ provided. Cache storage is 32 bytes per owner for rates, plus 64 bytes per owner
 query-environment cache is active.
 
 Both search backends populate the same full physical-neighbor cache on CUDA and ROCm. The KD-tree
-path performs one exact heap query for each physical tree record and deduplicates overlapping wedge images by
-original particle identifier. The Morton path constructs the same physical top-$K$ contract with
-one cooperative query block per owner. Subsequent bath selection, local chains, controller audits,
-and RNG handling are independent of the search backend.
+path performs one exact heap query for each physical tree record and deduplicates overlapping wedge
+images by original particle identifier. The Morton path constructs the same physical top-$K$
+contract with one cooperative query block per owner. Subsequent bath selection, local chains,
+controller audits, and RNG handling are independent of the search backend.
 
 With 32-bit neighbor identifiers and one double-precision KNN measure per owner, the principal
 cache requires
@@ -2326,10 +2328,11 @@ Morton queries use ordinary identifiers; their active filtering uses the explici
 
 For equivalent candidate geometries, the contract fixes the selected set, not its storage order.
 Morton returns a sorted list, whereas the KD-tree retains that set in heap order. Ordered rate sums
-are reproducible within each backend, but an identical random target can therefore select a different
-partner after switching backends. Backend trajectories and RNG states need not remain byte-equal;
-mass conservation and analytical/statistical acceptance are the cross-backend invariants. Neighbor
-sets and rates should agree where the admitted candidate geometries are equivalent.
+are reproducible within each backend, but an identical random target can therefore select a
+different partner after switching backends. Backend trajectories and RNG states need not remain
+byte-equal; mass conservation and analytical/statistical acceptance are the cross-backend
+invariants. Neighbor sets and rates should agree where the admitted candidate geometries are
+equivalent.
 
 The KD-tree candidate heap uses the packed neighbor code as its equal-distance tie breaker and
 expands its squared culling distance by one floating-point unit,
@@ -2604,10 +2607,10 @@ is exact conditional on the frozen bath; convergence under halving $\tau_{\mathr
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
 chain lengths without truncating a stochastic path. The Bernoulli method remains available through
 `BERNOULLI` for controlled comparisons or configurations that explicitly require that older
-discretization; `KNN_CACHE` selects its cached-neighbor variant. The retained publication validation group
-contains four production frozen-bath cases covering coagulation, fragmentation, an azimuthal wedge,
-and three-dimensional geometry with both Morton and KD-tree search. CUDA and ROCm define the same
-group. Its generated native evidence is intentionally not tracked with the source and must be
+discretization; `KNN_CACHE` selects its cached-neighbor variant. The retained publication validation
+group contains four production frozen-bath cases covering coagulation, fragmentation, an azimuthal
+wedge, and three-dimensional geometry with both Morton and KD-tree search. CUDA and ROCm define the
+same group. Its generated native evidence is intentionally not tracked with the source and must be
 repopulated after relevant code changes. Direct and cached Bernoulli execution, geometry-reuse
 microbenchmarks, and collision-checkpoint campaigns used during development are not part of the
 retained publication suite and must not be cited as current qualification evidence.
@@ -2911,9 +2914,9 @@ correctness and archive criteria are documented in [`swarm_testset.md`](swarm_te
 
 Initialization uses a fixed host random seed and stochastic evolution uses one persistent backend
 RNG stream per representative. Saving and restoring those states preserves an interrupted run for
-the same executable and backend RNG-state layout. Changing the KNN backend can change partner ordering and RNG
-consumption even when the neighbor set is identical, so cross-backend trajectories are not expected
-to remain bytewise synchronized.
+the same executable and backend RNG-state layout. Changing the KNN backend can change partner
+ordering and RNG consumption even when the neighbor set is identical, so cross-backend trajectories
+are not expected to remain bytewise synchronized.
 
 The corresponding ROCm stream is an opaque `hiprandState`. Neither vendor state is a portable file
 format: CUDA RNG checkpoints must be resumed with CUDA and HIP RNG checkpoints with ROCm. Search

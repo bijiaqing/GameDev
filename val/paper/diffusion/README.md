@@ -35,14 +35,14 @@ The surface density per total dust mass is
 
     Σd/Md = exp[-(u-mean)²/(2*variance)] / [2*pi*R²*sqrt(2*pi*variance)].
 
-No analysis script is included in this directory. Compare empirical CDFs, log-radius
-moments, and area-averaged density bins with this solution, choosing chi to match the
-`DIFFUSE_CONCENTRATION` setting of the model. Each particle record contains six doubles
-(position and physical velocity; no size fields). This is an unbounded-domain reference; the simulation reflects at exp(±3).
-At the final diffusion age a*t=0.1, boundary tails are tiny, but timestep and
-particle-number convergence remain necessary for a publication accuracy claim.
-These cases test constant-St suppression and the gas-density-gradient term;
-they do not test spatial derivatives of St or three-dimensional diffusion.
+No analysis script is included in this directory. Compare empirical CDFs, log-radius moments, and
+area-averaged density bins with this solution, choosing chi to match the `DIFFUSE_CONCENTRATION`
+setting of the model. Each particle record contains six doubles (position and physical velocity; no
+size fields). This is an unbounded-domain reference; the simulation reflects at exp(±3). At the
+final diffusion age a*t=0.1, boundary tails are tiny, but timestep and particle-number convergence
+remain necessary for a publication accuracy claim. These cases test constant-St suppression and the
+gas-density-gradient term; they do not test spatial derivatives of St or three-dimensional
+diffusion.
 
 ## Duration and commands
 

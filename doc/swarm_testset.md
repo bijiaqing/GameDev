@@ -2,19 +2,19 @@
 
 ## 1. Purpose
 
-The swarm validation suite verifies the scientific behavior of the Lagrangian dust model: deterministic
-trajectories, stochastic diffusion, continuous finite-domain initialization, physical collision
-rates, nearest-neighbor geometry, the production frozen-bath collision integrator, and idealized
-coagulation against analytical Smoluchowski solutions. The retained tests compare complete algorithms
-with closed-form, statistical, or brute-force references.
+The swarm validation suite verifies the scientific behavior of the Lagrangian dust model:
+deterministic trajectories, stochastic diffusion, continuous finite-domain initialization, physical
+collision rates, nearest-neighbor geometry, the production frozen-bath collision integrator, and
+idealized coagulation against analytical Smoluchowski solutions. The retained tests compare complete
+algorithms with closed-form, statistical, or brute-force references.
 
-The common matrix is defined in `val/val_config.py`. For the standard resolutions
-$N=32,64,128,256$, it contains 15 named entries: 14 analytical or statistical models producing
-42 metric records, plus the standalone KNN matrix. The all-in-one campaign also runs four native
-collision-chain models. CUDA and ROCm use the same
-backend-neutral definitions under `val/swarm/mod/` and shared drivers and validators under
-`val/swarm/src/`. The analytical coagulation campaigns under `val/paper/smoluchowski/` are CUDA-only scientific campaigns
-and deliberately remain outside this routine matrix.
+The common matrix is defined in `val/val_config.py`. For the standard resolutions $N=32,64,128,256$,
+it contains 15 named entries: 14 analytical or statistical models producing 42 metric records, plus
+the standalone KNN matrix. The all-in-one campaign also runs four native collision-chain models.
+CUDA and ROCm use the same backend-neutral definitions under `val/swarm/mod/` and shared drivers and
+validators under `val/swarm/src/`. The analytical coagulation campaigns under
+`val/paper/smoluchowski/` are CUDA-only scientific campaigns and deliberately remain outside this
+routine matrix.
 
 The production equations and numerical methods are documented in
 [swarm_numeric.md](swarm_numeric.md). Archive layout and commands are in
@@ -58,7 +58,8 @@ Stochastic diffusion is not required to match the same realization on CUDA and R
 backend must independently satisfy sampling limits derived from the expected mean and variance.
 Continuous initialization uses probability-integral transforms and Kolmogorov--Smirnov statistics.
 
-For represented particle number $N_p$ and grain size $s_p$, the mass proxy used by collision tests is
+For represented particle number $N_p$ and grain size $s_p$, the mass proxy used by collision tests
+is
 
 $$
 M_{\rm rep}\propto\sum_p N_p s_p^3.
@@ -198,9 +199,10 @@ $$
 \le 6(2D\Delta t)\sqrt{\frac{2}{N_P-1}}.
 $$
 
-It separately requires particle velocities to remain unchanged to roundoff. In the radial cases, the expected mean includes both the cylindrical $D/R$ term and the
-Stokes-dependent diffusivity gradient. These one-step density-mode tests do not establish
-concentration-mode equilibria or long-time convergence in arbitrary imported gas fields.
+It separately requires particle velocities to remain unchanged to roundoff. In the radial cases, the
+expected mean includes both the cylindrical $D/R$ term and the Stokes-dependent diffusivity
+gradient. These one-step density-mode tests do not establish concentration-mode equilibria or
+long-time convergence in arbitrary imported gas fields.
 
 These are distributional tests: differing random-number streams across GPU backends are acceptable
 when both ensembles satisfy the same law.
@@ -383,11 +385,11 @@ publication KNN matrix; it does not replace the neighbor or collision tests.
 
 ## 10. Production frozen-bath collision chain
 
-The four `test_colchain_*` cases compile `src/swarm/swarm_runtime.cu` and the production
-frozen-bath algorithm with validation constants. They exercise complete event
-histories, covering coagulation in a planar disk, fragmentation, a periodic wedge, and full 3D.
-Each case runs both KD-tree and Morton searches. The planar coagulation case also compares event caps
-1 and 32, forcing the continuation path.
+The four `test_colchain_*` cases compile `src/swarm/swarm_runtime.cu` and the production frozen-bath
+algorithm with validation constants. They exercise complete event histories, covering coagulation in
+a planar disk, fragmentation, a periodic wedge, and full 3D. Each case runs both KD-tree and Morton
+searches. The planar coagulation case also compares event caps 1 and 32, forcing the continuation
+path.
 
 For every realization, the validator requires:
 
@@ -403,12 +405,14 @@ For every realization, the validator requires:
 The controller divides a collision operator interval into frozen baths. Within each bath the
 positions and KNN geometry are fixed, while the event chain updates particle properties. The
 post-interval audit flags activity or distribution overshoots and adjusts later refreshes; it does
-not reject and replay the stochastic path. The validation criteria require no persistent overshoot. The wedge chain must report `COAG_KERNEL=3`, ensuring that it exercises the physical
-collision kernel rather than a synthetic rate. These tests establish conservation, deterministic
-continuation, search-backend coverage, and production-path integrity. They do not constitute a convergence proof for arbitrary physical
-coagulation histories. When a publication depends on such a history, its model-specific evidence
-must add bath-tolerance refinement and independent-seed comparisons at equal physical time; those
-campaign outputs are scientific results, not additional permanent validation records.
+not reject and replay the stochastic path. The validation criteria require no persistent overshoot.
+The wedge chain must report `COAG_KERNEL=3`, ensuring that it exercises the physical collision
+kernel rather than a synthetic rate. These tests establish conservation, deterministic continuation,
+search-backend coverage, and production-path integrity. They do not constitute a convergence proof
+for arbitrary physical coagulation histories. When a publication depends on such a history, its
+model-specific evidence must add bath-tolerance refinement and independent-seed comparisons at equal
+physical time; those campaign outputs are scientific results, not additional permanent validation
+records.
 
 ## 11. Analytical coagulation distributions
 
@@ -445,12 +449,12 @@ restart behavior, or performance scaling. They are not registered with `val/run_
 
 ## 12. Running and interpreting the suite
 
-The canonical common archive is below `val/swarm/out/MODEL/BACKEND/`; disposable executables, objects,
-KNN binaries, and compiler stamps are isolated below `val/swarm/obj/MODEL/BACKEND/`. The collision-chain publication
-records are below `groups/chain/`. A complete standard campaign reports 42 analytical/statistical metrics, a
-passing KNN suite manifest, and four passing collision-chain manifests.
-The analytical coagulation campaigns are run and interpreted separately from
-those standard archive counts.
+The canonical common archive is below `val/swarm/out/MODEL/BACKEND/`; disposable executables,
+objects, KNN binaries, and compiler stamps are isolated below `val/swarm/obj/MODEL/BACKEND/`. The
+collision-chain publication records are below `groups/chain/`. A complete standard campaign reports
+42 analytical/statistical metrics, a passing KNN suite manifest, and four passing collision-chain
+manifests. The analytical coagulation campaigns are run and interpreted separately from those
+standard archive counts.
 
 Source inspection, backend build routing, Makefile dry runs, and static checks establish code
 structure and routing but do not constitute native numerical qualification. Publication evidence

@@ -76,15 +76,15 @@ Outputs go to `<formulation>/out/<backend>/`. Objects and executables go to
 `<formulation>/obj/<backend>/<target>/`. Runs with the same formulation and
 backend share an output directory, even when compiled for different GPU targets.
 
-At one billion particles, particle state alone occupies 48 GB on the device and 48 GB
-in pinned host memory; the dynamics-rate array adds 8 GB on the device. Enabled diffusion
-also allocates one backend RNG state per particle on the device, so the earlier
-non-diffusive device-memory estimates do not apply. RNG checkpoint I/O uses a bounded
-64 MiB host staging buffer rather than a second complete RNG-state array. Initialization scratch, mesh fields, and
-reduction workspaces add further storage. Each particle snapshot contains 48 GB.
-Density and optical depth are saved at every output; particles are saved initially
-and every tenth output (indices 0, 10, and 20), requiring 144 GB for particle
-records alone, plus matching RNG checkpoints and mesh outputs. These are array-size estimates in decimal GB, not measured peak usage.
+At one billion particles, particle state alone occupies 48 GB on the device and 48 GB in pinned host
+memory; the dynamics-rate array adds 8 GB on the device. Enabled diffusion also allocates one
+backend RNG state per particle on the device, so the earlier non-diffusive device-memory estimates
+do not apply. RNG checkpoint I/O uses a bounded 64 MiB host staging buffer rather than a second
+complete RNG-state array. Initialization scratch, mesh fields, and reduction workspaces add further
+storage. Each particle snapshot contains 48 GB. Density and optical depth are saved at every output;
+particles are saved initially and every tenth output (indices 0, 10, and 20), requiring 144 GB for
+particle records alone, plus matching RNG checkpoints and mesh outputs. These are array-size
+estimates in decimal GB, not measured peak usage.
 
 Build routing has been checked with CUDA and ROCm dry runs. Native execution of both
 formulations has been reported, including the timestep values above. Matched-source

@@ -1,37 +1,39 @@
 #!/usr/bin/env python3
 
-"""Summarize production KD-tree and compact-ghost Morton wedge benchmarks"""
+"""summarize production KD-tree and compact-ghost Morton wedge benchmarks"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-
 import json
 import os
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from val_config import model_output
 
 
 def load_records(test_root: Path, backend: str) -> dict[str, dict]:
-    """Load the completed periodic-wedge matrix"""
+    """load the completed periodic-wedge matrix"""
 
     project_root = test_root.parents[3]
     scope = os.environ.get("VAL_SCOPE", "manual")
-    result_root = model_output(project_root/"val", "swarm", "test_knn", backend, scope=scope)/"wedge"
+    result_root = (
+        model_output(project_root / "val", "swarm", "test_knn", backend, scope=scope) / "wedge"
+    )
     manifest_path = result_root / "manifest.json"
     if not manifest_path.exists():
         raise SystemExit("missing wedge manifest")
     manifest = json.loads(manifest_path.read_text())
     return {
-        Path(name).stem: json.loads((result_root / name).read_text())
-        for name in manifest["files"]
+        Path(name).stem: json.loads((result_root / name).read_text()) for name in manifest["files"]
     }
 
 
 def print_records(records: dict[str, dict]) -> None:
-    """Print the compact-ghost Morton comparison against the KD-tree reference"""
+    """print the compact-ghost Morton comparison against the KD-tree reference"""
 
     print(
         f"{'case':34s} {'pass':>5s} {'KD ms':>9s} {'Morton ms':>10s} "

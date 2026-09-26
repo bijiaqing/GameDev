@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
 
-"""Run one complete native validation matrix and prepare or compare its archive"""
+"""run one complete native validation matrix and prepare or compare its archive"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
+import os
 import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
-from val_config import source_fingerprint, fluid_archive_sweep, model_output
+from val_config import fluid_archive_sweep, model_output, source_fingerprint
 
 
 def utc_now() -> str:
-    """Return one ISO-formatted UTC timestamp for the campaign record"""
+    """return one ISO-formatted UTC timestamp for the campaign record"""
 
     return datetime.now(timezone.utc).isoformat()
 
 
 def write_json(path: Path, record: dict[str, Any]) -> None:
-    """Atomically update the campaign record after each command"""
+    """atomically update the campaign record after each command"""
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -43,7 +42,7 @@ def run_stage(
     campaign: dict[str, Any],
     campaign_path: Path,
 ) -> None:
-    """Stream one child command while preserving its complete output in JSON"""
+    """stream one child command while preserving its complete output in JSON"""
 
     stage: dict[str, Any] = {
         "name": name,
@@ -96,16 +95,22 @@ def main() -> None:
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--target", help="GPU target; defaults to sm_80 or gfx942")
     parser.add_argument(
-        "--fluid-sweep", choices=("thread", "block"), default="thread",
+        "--fluid-sweep",
+        choices=("thread", "block"),
+        default="thread",
         help="fluid line solver used consistently by the native and cross-backend stages",
     )
     comparison = parser.add_mutually_exclusive_group()
     comparison.add_argument(
-        "--compare", action="store_true",
+        "--compare",
+        action="store_true",
         help="require the copied counterpart archive and run cross-backend comparison",
     )
     comparison.add_argument(
-        "--native-only", dest="compare", action="store_false", help=argparse.SUPPRESS,
+        "--native-only",
+        dest="compare",
+        action="store_false",
+        help=argparse.SUPPRESS,
     )
     parser.set_defaults(compare=False)
     args = parser.parse_args()
@@ -113,14 +118,17 @@ def main() -> None:
     target = args.target or ("sm_80" if args.backend == "cuda" else "gfx942")
     fingerprint, source_files = source_fingerprint(project_root)
     counterpart = "rocm" if args.backend == "cuda" else "cuda"
-    counterpart_archive = model_output(val_root, "fluid", "_suite", counterpart, fluid_archive_sweep(counterpart, args.fluid_sweep))
+    counterpart_archive = model_output(
+        val_root, "fluid", "_suite", counterpart, fluid_archive_sweep(counterpart, args.fluid_sweep)
+    )
     if args.compare and not counterpart_archive.is_dir():
         parser.error(
             f"copied {counterpart.upper()} archive does not exist: {counterpart_archive}; "
-            f"copy val/fluid/out, val/swarm/out and val/*.json from the {counterpart.upper()} system or omit --compare"
+            f"copy val/fluid/out, val/swarm/out and val/*.json from the {counterpart.upper()} "
+            "system or omit --compare"
         )
     if args.compare:
-        counterpart_campaign_path = val_root/f"run_all_{counterpart}_{args.fluid_sweep}.json"
+        counterpart_campaign_path = val_root / f"run_all_{counterpart}_{args.fluid_sweep}.json"
         try:
             counterpart_campaign = json.loads(counterpart_campaign_path.read_text())
         except (OSError, json.JSONDecodeError) as error:
@@ -144,7 +152,7 @@ def main() -> None:
     environment["FLUID_SWEEP"] = args.fluid_sweep
     environment["GPU_BACKEND"] = args.backend
     environment["VAL_SCOPE"] = "all"
-    campaign_path = val_root/f"run_all_{args.backend}_{args.fluid_sweep}.json"
+    campaign_path = val_root / f"run_all_{args.backend}_{args.fluid_sweep}.json"
     campaign: dict[str, Any] = {
         "schema": 1,
         "backend": args.backend,
@@ -174,61 +182,99 @@ def main() -> None:
 
     stages: list[tuple[str, list[str]]] = []
     if args.compare:
-        stages.append((
-            f"copied {counterpart.upper()} archive completeness",
+        stages.append(
+            (
+                f"copied {counterpart.upper()} archive completeness",
+                [
+                    sys.executable,
+                    str(val_root / "check_archive.py"),
+                    "--backend",
+                    counterpart,
+                    "--component",
+                    "all",
+                    "--fluid-sweep",
+                    fluid_archive_sweep(counterpart, args.fluid_sweep),
+                    *(["--allow-partial"] if args.quick else []),
+                ],
+            )
+        )
+    stages.extend(
+        [
+            (
+                "fluid common matrix",
+                [
+                    sys.executable,
+                    str(backend_root / "fluid" / "src" / "run_suite.py"),
+                    "--group",
+                    "all",
+                    *resolution_arguments,
+                    *quick_argument,
+                    *target_argument,
+                ],
+            ),
+            (
+                "swarm common matrix",
+                [
+                    sys.executable,
+                    str(backend_root / "swarm" / "src" / "run_suite.py"),
+                    "--group",
+                    "all",
+                    *resolution_arguments,
+                    *quick_argument,
+                    *target_argument,
+                ],
+            ),
+            (
+                "swarm collision chain",
+                [
+                    sys.executable,
+                    str(backend_root / "swarm" / "src" / "run_suite.py"),
+                    "--group",
+                    "chain",
+                    *target_argument,
+                ],
+            ),
+        ]
+    )
+
+    stages.append(
+        (
+            "archive completeness",
             [
-                sys.executable, str(val_root/"check_archive.py"),
-                "--backend", counterpart, "--component", "all",
-                "--fluid-sweep", fluid_archive_sweep(counterpart, args.fluid_sweep),
+                sys.executable,
+                str(val_root / "check_archive.py"),
+                "--backend",
+                args.backend,
+                "--component",
+                "all",
+                "--fluid-sweep",
+                fluid_archive_sweep(args.backend, args.fluid_sweep),
                 *(["--allow-partial"] if args.quick else []),
             ],
-        ))
-    stages.extend([
-        (
-            "fluid common matrix",
-            [
-                sys.executable, str(backend_root/"fluid"/"src"/"run_suite.py"),
-                "--group", "all", *resolution_arguments, *quick_argument, *target_argument,
-            ],
-        ),
-        (
-            "swarm common matrix",
-            [
-                sys.executable, str(backend_root/"swarm"/"src"/"run_suite.py"),
-                "--group", "all", *resolution_arguments, *quick_argument, *target_argument,
-            ],
-        ),
-        (
-            "swarm collision chain",
-            [
-                sys.executable, str(backend_root/"swarm"/"src"/"run_suite.py"),
-                "--group", "chain", *target_argument,
-            ],
-        ),
-    ])
-
-    stages.append((
-        "archive completeness",
-        [
-            sys.executable, str(val_root/"check_archive.py"),
-            "--backend", args.backend, "--component", "all",
-            "--fluid-sweep", fluid_archive_sweep(args.backend, args.fluid_sweep),
-            *(["--allow-partial"] if args.quick else []),
-        ],
-    ))
+        )
+    )
 
     if args.compare:
-        stages.append((
-            "complete backend comparison",
-            [
-                sys.executable, str(val_root/"compare_backends.py"),
-                "--cuda-root", str(val_root),
-                "--rocm-root", str(val_root),
-                "--cuda-sweep", fluid_archive_sweep("cuda", args.fluid_sweep),
-                "--rocm-sweep", args.fluid_sweep,
-                "--component", "all", *(["--allow-partial"] if args.quick else []),
-            ],
-        ))
+        stages.append(
+            (
+                "complete backend comparison",
+                [
+                    sys.executable,
+                    str(val_root / "compare_backends.py"),
+                    "--cuda-root",
+                    str(val_root),
+                    "--rocm-root",
+                    str(val_root),
+                    "--cuda-sweep",
+                    fluid_archive_sweep("cuda", args.fluid_sweep),
+                    "--rocm-sweep",
+                    args.fluid_sweep,
+                    "--component",
+                    "all",
+                    *(["--allow-partial"] if args.quick else []),
+                ],
+            )
+        )
 
     try:
         for name, command in stages:
@@ -240,7 +286,7 @@ def main() -> None:
         write_json(campaign_path, campaign)
         if isinstance(error, KeyboardInterrupt):
             raise
-        raise SystemExit(error.returncode)
+        raise SystemExit(error.returncode) from error
 
     final_fingerprint, final_source_files = source_fingerprint(project_root)
     campaign["final_source_sha256"] = final_fingerprint
