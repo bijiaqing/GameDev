@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_image.cuh>
 #include <_col_types.cuh>
 #include <swarm_kern.cuh>
@@ -60,4 +59,4 @@ void col_dep_graph (unsigned int *edges, const int *spatial,
     }
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

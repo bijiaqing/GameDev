@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_rates.cuh>
 #include <swarm_kern.cuh>
 
@@ -59,4 +58,4 @@ void col_skip_scan (const int *ids, int count, curs *rng,
     queue[atomicAdd(queued, 1)] = i;
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

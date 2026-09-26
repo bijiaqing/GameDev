@@ -327,7 +327,10 @@ exactly, because it determines the selected neighbor and its search distance.
 
 The cache regression does not insert this code manually. It launches the production site
 initialization, builds the selected KD-tree or Morton/ghost index, launches the production KNN cache
-query, and then launches the cached production rate kernel. Each of the three physical-collision
+query, and then launches the production frozen-bath rate kernel `col_bath_rate` on both owners as
+one bath, after caching their gas environments where the model uses that cache. At the probe grain
+sizes, sticking packets contain one projectile, so the bath-start rate equals the physical pair
+rate. Each of the three physical-collision
 models is compiled and validated with both searches while retaining one aggregate metric record per
 resolution. The validator requires the expected
 physical-index/image sets for both owners, compares the cached physical rates with independent
@@ -446,7 +449,7 @@ instructions are in their adjacent READMEs. Results from removed campaign layout
 controllers must not be used as measurements of these configurations.
 
 These campaigns do not establish convergence with representative count, Morton or ROCm
-accuracy, Bernoulli evolution, post-gelation product behavior, physical-kernel accuracy,
+accuracy, post-gelation product behavior, physical-kernel accuracy,
 restart behavior, or performance scaling. They are not registered with `val/run_all.py`.
 
 ## 12. Running and interpreting the suite

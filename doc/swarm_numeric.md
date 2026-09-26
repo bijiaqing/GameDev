@@ -318,7 +318,6 @@ dimensional formula consistently.
 | `N_P`, `N_K`, `H_SEARCH` | representative count, retained KNN count, and local search cap in $H_g$ units |
 | `CFL_DYN`, `DT_MAX` | dynamics Courant factor and timestep ceiling |
 | `V_FRAG` | fragmentation threshold speed |
-| `CFL_COL` | Bernoulli collision-leap control; defined only with `BERNOULLI` |
 | `COL_BATH_MAX`, `COL_BATH_EPS`, `COL_BATH_ALPHA` | frozen-bath duration cap, refresh tolerance, and audit confidence tail |
 | `COL_BIN_X/Y/Z/S`, `COL_BIN_MIN` | frozen-bath spatial and size controller bins and minimum bin occupancy |
 | `COL_BATH_TPB`, `COL_EVENT_CAP` | threads per owner chain block and accepted events per continuation launch |
@@ -341,8 +340,6 @@ The swarm executable is likewise a compile-time specialization:
 | `RADIATION` | deposit and accumulate optical depth and add radiation pressure |
 | `PR_EFFECT` | add first-order Poynting–Robertson drag; requires `RADIATION` |
 | `COLLISION` | evolve representative-particle coagulation and fragmentation |
-| `BERNOULLI` | replace the default frozen-bath chain with the globally stepped Bernoulli reference integrator; requires `COLLISION` |
-| `KNN_CACHE` | retain physical top-$K$ neighbors for Bernoulli batches; requires `COLLISION` and `BERNOULLI` |
 | `MULTISIZE` | store sampled grain size and represented grain count for every swarm |
 | `IMPORTGAS` | interpolate density and velocity from external gas snapshots |
 | `VISC_FLOW` | prescribe viscous analytical gas motion; requires `DIFFUSION` and excludes imported gas velocity |
@@ -357,10 +354,10 @@ The swarm executable is likewise a compile-time specialization:
 | `COLLISION_SEARCH=kdtree` or `morton` | select the exact KNN implementation used by collisions |
 
 `DIFFUSION` and `RADIATION` require `TRANSPORT`, `PR_EFFECT` requires `RADIATION`, and `COLLISION`
-requires `MULTISIZE` plus exactly one search backend. `BERNOULLI` requires `COLLISION`, and
-`KNN_CACHE` requires both. `COLLISION` without `BERNOULLI` selects the frozen-bath chain; the
-obsolete `COL_CHAIN` selector is rejected at compile time. These dependencies specify which
-equations exist in an executable; they do not dynamically turn operators on or off during a run.
+requires `MULTISIZE` plus exactly one search backend; `COLLISION` always selects the frozen-bath
+chain, and the obsolete `COL_CHAIN` selector is rejected at compile time. These dependencies specify
+which equations exist in an executable; they do not dynamically turn operators on or off during a
+run.
 
 ## 3. Disk model, mass normalization, and initialization
 
@@ -1985,105 +1982,10 @@ $$
 B_3=\frac{S-s}{S+s}\left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
 $$
 
-### 8.2 Optional frozen Bernoulli collision batches
+### 8.2 Frozen-bath continuous-time collision chain
 
-Defining `BERNOULLI` replaces the default frozen-bath chain with a controlled parallel Bernoulli
-leap. It is not the exact serial stochastic
-simulation algorithm of [Gillespie (1977)](https://doi.org/10.1021/j100540a008). It is closer in
-spirit to an explicit tau leap, as discussed by
-[Cao, Gillespie & Petzold (2005)](https://people.cs.vt.edu/~ycao/publication/JChemPhys_123_054104.pdf),
-but restricts each representative to at most one event per frozen batch. During each batch:
-
-1. freeze particle size and represented grain number
-2. evaluate each representative's total propensity and cumulative partner weights
-3. choose
-   $\Delta t_{\rm col}\le\mathrm{CFL}_{\rm col}/\max_i\lambda_i$
-4. give each representative probability
-   $1-\exp(-\lambda_i\Delta t_{\rm col})$
-   of at most one event
-5. sample its partner from the frozen pair propensities
-
-The frozen species snapshot prevents concurrent partner reads from observing partially updated
-sizes or grain counts. Accuracy still depends on convergence with decreasing `CFL_COL`.
-
-The actual batch length is
-
-$$
-\Delta t_{\rm col}
-=\min\left(
-\frac{\mathrm{CFL\_COL}}{\max_i\lambda_i},
-t_{\rm collision\ interval}-t_{\rm elapsed}
-\right).
-$$
-
-For one uniform deviate $U_i$, representative $i$ undergoes an event when
-
-$$
-U_i\le P_i,
-\qquad
-P_i=1-e^{-\lambda_i\Delta t_{\rm col}}.
-$$
-
-Conditional on an event, a second uniform deviate selects partner $j$ from
-
-$$
-P(j\mid i)=\frac{\lambda_{ij}}{\lambda_i},
-$$
-
-implemented by walking the cumulative pair propensities in the backend's retained-neighbor order.
-The exponential event probability is exact for one frozen Poisson clock; the approximation is the
-restriction to at most one event for each representative during the batch and the use of frozen
-partner properties.
-
-Without `KNN_CACHE`, each Bernoulli batch performs its own neighbor query. Adding `KNN_CACHE`
-retains the physical top-$K$ identities and KNN measure across the complete fixed-position
-collision operator, while recomputing current pair propensities every batch. For the Morton
-backend, one block evaluates the individual pair propensities cooperatively. Thread zero then
-accumulates the stored values and samples the partner in retained-neighbor order.
-
-Both Bernoulli variants require every accepted batch to advance the collision-operator clock
-strictly in floating-point arithmetic. A positive mathematical timestep that rounds away at the
-current elapsed time is treated as a runtime error rather than retried indefinitely.
-
-Coagulation uses
-
-$$
-s_{\rm new}=(s_i^3+s_j^3)^{1/3}
-$$
-
-and adjusts the represented grain number to conserve the representative mass. The fragmentation
-law is a configured modeling choice rather than a universal fragment distribution.
-
-Specifically, coagulation constructs
-
-$$
-s_k=(s_i^3+s_j^3)^{1/3},
-\qquad
-N_i'=N_i\frac{s_i^3}{s_k^3},
-$$
-
-so
-
-$$
-N_i'm_g(s_k)=N_im_g(s_i).
-$$
-
-Only representative $i$ is changed; representative $j$ describes the sampled background swarm
-and is not consumed. If $\Delta v_{ij}>V_{\rm frag}$, the configured fragment draw is
-
-$$
-s_k=\max\left[s_{\min},(s_i^3+s_j^3)^{1/3}U^2\right],
-\qquad
-N_i'=N_i\frac{s_i^3}{s_k^3},
-$$
-
-which preserves the mass represented by $i$ but is a model-specific one-fragment sampling law.
-
-#### Default GPU continuous-time collision chain
-
-The default chain uses local, change-based refresh durations, cached bath-start rates, and the
-sticking/erosion outcome law below. The Bernoulli reference above retains its own
-sticking/fragmentation law. For the default chain, let q=m_j/m_i and let G=1,
+The chain uses local, change-based refresh durations, cached bath-start rates, and the
+sticking/erosion outcome law below. Let q=m_j/m_i and let G=1,
 except for q<=1e-6 where G=max(1,floor(1e-4/q)). Low-speed sticking uses rate
 lambda/G and target mass m_i+G*m_j. At speed >= V_FRAG and q<=0.1, erosion uses
 remnant rate lambda*(1-q)/G with mass m_i-G*m_j, and debris rate lambda*q with
@@ -2094,7 +1996,7 @@ These thresholds use each model's existing physical units and V_FRAG; root does
 not impose the publication suite's 100 cm/s threshold or disk parameters.
 
 
-When `COLLISION` is enabled without `BERNOULLI`, both GPU backends use the frozen-bath
+When `COLLISION` is enabled, both GPU backends use the frozen-bath
 continuous-time chain. The spatial index and each owner's physical top-$K$ neighbor identities and
 KNN measure are fixed over one collision operator because positions do not change. At a local group
 refresh, that group publishes its current partner sizes and represented numbers; other groups retain
@@ -2284,8 +2186,8 @@ which is approximately $0.808$ GB for $N_P=10^6$ and $8.08$ GB for $N_P=10^7$ at
 before the selected search index and other particle/controller arrays. No per-neighbor pair-rate
 array is retained because rates become stale when the owner changes size. This initial policy is
 explicit rather than a production-scale memory recommendation. Both GPU backends accept either
-`COLLISION_KDTREE` or `COLLISION_MORTON`. `variables.txt` records one of
-`frozen_bath`, `bernoulli_direct`, or `bernoulli_cache`, together with the controller constants,
+`COLLISION_KDTREE` or `COLLISION_MORTON`. `variables.txt` records the `frozen_bath` integrator
+together with the controller constants,
 search method, cache allocation, backend, and shared per-particle RNG-stream policy.
 
 ### 8.3 Exact neighbor-search contract
@@ -2521,8 +2423,7 @@ entry, so retaining image orientation adds no cache array or per-neighbor memory
 
 Collision searches retain partner image codes for spatial neighbor selection. The physical
 relative-speed closure uses only the query environment and the two grain sizes, so it does not
-reconstruct or subtract partner image velocities. This applies to direct
-Bernoulli queries, cached Bernoulli queries and frozen-neighbor chains.
+reconstruct or subtract partner image velocities.
 
 The two search representations need not admit identical image sets. KD-tree stores both adjacent
 images for every particle, while Morton stores only ghosts admitted by its seam cutoff. In a
@@ -2582,9 +2483,9 @@ been examined and either $d_{K,i}$ or $q_i$ is below the conservative distance t
 remote cells. Particle migration, halo exchange, and collision-property synchronization are not yet
 implemented.
 
-### 8.7 Guarded removal of the global collision timestep
+### 8.7 Local event clocks instead of a global collision timestep
 
-The present batch step
+A globally stepped collision leap with batch step
 
 $$
 \Delta t_{\mathrm{col}}=
@@ -2592,11 +2493,11 @@ $$
 \Delta t_{\mathrm{remaining}}\right)
 $$
 
-is controlled by the fastest representative. Raising `CFL_COL` does not solve this bottleneck: if
-$\lambda_i\Delta t$ is large, collapsing several expected physical events into one Bernoulli trial
-changes the stochastic process.
+would be controlled by the fastest representative. Raising the Courant factor does not solve this
+bottleneck: if $\lambda_i\Delta t$ is large, collapsing several expected physical events into one
+trial changes the stochastic process.
 
-The default GPU implementation is a frozen-bath local continuous-time event chain. Over a larger
+The GPU implementation is therefore a frozen-bath local continuous-time event chain. Over a larger
 bath interval $\tau_{\mathrm{bath}}$, each representative keeps a local clock, draws exact waiting
 times
 
@@ -2608,15 +2509,13 @@ and processes zero, one, or many events against immutable partner properties. Af
 own rate and partner weights are recomputed. This removes the fastest-particle global microstep and
 is exact conditional on the frozen bath; convergence under halving $\tau_{\mathrm{bath}}$ controls
 the bath-freezing error. Rate-binned work queues and continuation launches can mitigate divergent
-chain lengths without truncating a stochastic path. The Bernoulli method remains available through
-`BERNOULLI` for controlled comparisons or configurations that explicitly require that older
-discretization; `KNN_CACHE` selects its cached-neighbor variant. The retained publication validation
-group contains four production frozen-bath cases covering coagulation, fragmentation, an azimuthal
-wedge, and three-dimensional geometry with both Morton and KD-tree search. CUDA and ROCm define the
-same group. Its generated native evidence is intentionally not tracked with the source and must be
-repopulated after relevant code changes. Direct and cached Bernoulli execution, geometry-reuse
-microbenchmarks, and collision-checkpoint campaigns used during development are not part of the
-retained publication suite and must not be cited as current qualification evidence.
+chain lengths without truncating a stochastic path. The retained publication validation group
+contains four production frozen-bath cases covering coagulation, fragmentation, an azimuthal wedge,
+and three-dimensional geometry with both Morton and KD-tree search. CUDA and ROCm define the same
+group. Its generated native evidence is intentionally not tracked with the source and must be
+repopulated after relevant code changes. Geometry-reuse microbenchmarks and collision-checkpoint
+campaigns used during development are not part of the retained publication suite and must not be
+cited as current qualification evidence.
 
 Finite-bath convergence is a separate scientific requirement. Exploratory compact-population
 refinements are not retained as publication qualification evidence and do not define a universal
@@ -2644,8 +2543,8 @@ C^{1/2}D^{1/2}T D^{1/2}C^{1/2},
 $$
 
 where $C$ is collision, $D$ positional diffusion, and $T$ transport. This removes first-order Lie
-splitting between enabled modules, but it does not make the stochastic diffusion or Bernoulli
-collision leap deterministically second order.
+splitting between enabled modules, but it does not make the stochastic diffusion or the
+collision chain deterministically second order.
 
 One dynamics step is executed as
 
@@ -2790,8 +2689,7 @@ notions of convergence:
 | deterministic transport and drag | second order for smooth frozen-coefficient variation | endpoint boundary handling and coefficient variation |
 | imported-gas interpolation | second-order linear interpolation between bracketing snapshots | accuracy of the supplied gas cadence |
 | Euler–Maruyama diffusion | strong order $1/2$, weak order $1$ | finite diffusion step and boundary folding |
-| symmetric operator composition | second order for deterministic smooth operators | does not raise the intrinsic stochastic or collision-leap order |
-| frozen Bernoulli collisions | exact zero/one-event probability for a frozen clock | omitted multiple events give an error of order $(\lambda\Delta t_{\rm col})^2$ per batch |
+| symmetric operator composition | second order for deterministic smooth operators | does not raise the intrinsic stochastic or collision-chain order |
 | frozen-bath continuous-time chain | exact local Gillespie path conditional on the frozen partner reservoir | finite bath duration and fixed top-$K$ reservoir introduce the controlled approximation |
 | exact KNN selection | no neighbor-approximation error under the stated search contract | finite-$N_P$ sampling and approximate boundary volume |
 | initialization and deposition | deterministic quadrature plus Monte Carlo sampling | quadrature error and sampling noise |
@@ -2827,7 +2725,6 @@ The main numerical components map to the production source as follows:
 | density and opacity deposition | `src/swarm/dustdens_*.cu`, `src/swarm/optdepth_*.cu` |
 | pairwise collision physics | `inc/swarm/_collision.cuh` |
 | neighbor caching and frozen-bath chain | `inc/swarm/_col_cache.cuh`, `inc/swarm/_col_*.cuh`, `src/swarm/col_*.cu` |
-| collision rates and events | `src/swarm/col_rate_calc.cu`, `src/swarm/col_event_run.cu` |
 | KD-tree and Morton search | `inc/swarm/{kdtree,morton}/` |
 | operator driver and output clock | `src/swarm/swarm_runtime.cu` |
 
@@ -2864,9 +2761,8 @@ the imported pointer-free tree implementation, with a query associated with each
 record. Morton construction sorts compact keys and assigns one cooperative GPU block to each
 physical query. In both search backends, particle positions remain fixed across the complete opening
 or closing collision interval, so one spatial index is reused across all internal batches. The
-default frozen-bath integrator keeps neighbor identities fixed while refreshing partner species at
-every controlled bath boundary. The optional Bernoulli integrator freezes collision species once
-per global batch and may either query neighbors directly or retain them with `KNN_CACHE`.
+frozen-bath integrator keeps neighbor identities fixed while refreshing partner species at every
+controlled bath boundary.
 
 A collision **geometry epoch** is the maximal interval during which particle positions, active
 identities, and the mapping between particle identity and array index remain unchanged. Search
@@ -2896,9 +2792,8 @@ N_{\rm invalidate}=M.
 $$
 
 Thus hierarchy construction approaches a factor-two reduction for long transported runs, but this
-must not be described as a factor-two reduction in total collision time. Frozen bath always retains
-the complete topology cache. Bernoulli retains only the hierarchy by default and adds the full
-top-$K$ cache only under `KNN_CACHE`, preserving a deliberate VRAM-versus-traversal choice.
+must not be described as a factor-two reduction in total collision time. The frozen bath always
+retains the complete topology cache.
 
 Ignoring allocator and alignment overhead, the persistent particle-state storage is approximately
 

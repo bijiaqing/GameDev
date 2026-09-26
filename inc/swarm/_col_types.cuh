@@ -3,8 +3,7 @@
 
 // plain records shared by the collision-chain kernels and their host controller
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <limits> // std::numeric_limits
 #include <vector> // std::vector
 
@@ -125,6 +124,6 @@ constexpr int LOCAL_GROUPS = ((N_X > 1) ? COL_BIN_X : 1)*COL_BIN_Y*((N_Z > 1) ? 
 constexpr int LOCAL_WORDS = (LOCAL_GROUPS + 31) / 32;
 constexpr int moving_groups = LOCAL_GROUPS;
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_TYPES_CUH

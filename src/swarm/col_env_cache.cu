@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_rates.cuh>
 #include <swarm_kern.cuh>
 
@@ -21,4 +20,4 @@ void col_env_cache (query_environment *env, const swarm *particle)
 }
 
 #endif // COL_QUERY_ENV_CACHE
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

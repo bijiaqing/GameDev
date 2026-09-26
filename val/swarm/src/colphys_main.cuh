@@ -416,24 +416,38 @@ int main ()
     }
     if (bad_part != 0) throw std::runtime_error("collision-physics search rejected a particle");
 
-    #ifdef COLLISION_KDTREE
-    col_rate_calc <<< NB_P, TPB >>> (
-    #else  // COLLISION_MORTON
-    col_rate_calc <<< N_P, MORTON_TPB >>> (
-    #endif // COLLISION_KDTREE
-        dev_result + 30, dev_cache_particle, dev_col_neighbor, dev_col_measure,
-        dev_col_active, dev_size, dev_number, 0.3
-    );
-    if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
+    // evaluate the cached periodic-image rate through the production frozen-bath rate kernel; both probe owners
+    // form one bath whose partner reservoir is the cache just built, and packet grouping is inactive at these sizes
+    std::array<int, N_P> owner_ids;
+    for (int idx = 0; idx < N_P; idx++)
     {
-        std::cerr << "cached collision-rate probe" << ": " << gpuGetErrorString(status) << std::endl;
-        std::exit(EXIT_FAILURE);
+        owner_ids[idx] = idx;
     }
-    if (gpuError_t status = gpuDeviceSynchronize(); status != gpuSuccess)
-    {
-        std::cerr << "cached collision-rate probe" << ": " << gpuGetErrorString(status) << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
+    int *dev_owner_ids;
+    real *dev_change_rate;
+    real *dev_second_rate;
+    cached_rate_moments *dev_cached;
+    query_environment *dev_environment = nullptr;
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_owner_ids), sizeof(int)*N_P));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_change_rate), sizeof(real)*N_P));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_second_rate), sizeof(real)*N_P));
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_cached), sizeof(cached_rate_moments)*N_P));
+    GPU_CHECK(gpuMemcpy(dev_owner_ids, owner_ids.data(), sizeof(int)*N_P, gpuMemcpyHostToDevice));
+    #ifdef COL_QUERY_ENV_CACHE
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_environment), sizeof(query_environment)*N_P));
+    col_env_cache <<< NB_P, TPB >>> (dev_environment, dev_cache_particle);
+    GPU_KERNEL_CHECK("col_env_cache");
+    #endif // COL_QUERY_ENV_CACHE
+    col_bath_rate <<< N_P, COL_BATH_TPB >>> (dev_owner_ids, N_P, dev_result + 30, dev_change_rate,
+        dev_second_rate, dev_cache_particle, dev_col_neighbor, dev_col_measure, dev_col_active, dev_size,
+        dev_number, 0.3, dev_environment, dev_cached);
+    GPU_KERNEL_CHECK("col_bath_rate");
+    GPU_CHECK(gpuDeviceSynchronize());
+    if (dev_environment) GPU_CHECK(gpuFree(dev_environment));
+    GPU_CHECK(gpuFree(dev_cached));
+    GPU_CHECK(gpuFree(dev_second_rate));
+    GPU_CHECK(gpuFree(dev_change_rate));
+    GPU_CHECK(gpuFree(dev_owner_ids));
 
     std::vector<real> result(result_count);
     if (gpuError_t status = gpuMemcpy(result.data(), dev_result, sizeof(*(result.data()))*(device_result_count),

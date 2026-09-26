@@ -210,16 +210,13 @@ _OBJ_SWARM = \
     col_count_bin.o \
     col_dep_graph.o \
     col_env_cache.o \
-    col_event_run.o \
     col_event_sum.o \
     col_rate_bins.o \
-    col_rate_calc.o \
     col_site_init.o \
     col_size_bnds.o \
     col_size_scan.o \
     col_size_zero.o \
     col_skip_scan.o \
-    col_snap_save.o \
     col_space_bin.o \
     diffusion_pos.o \
     dustdens_calc.o \

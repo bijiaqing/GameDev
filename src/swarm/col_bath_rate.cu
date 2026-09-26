@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_event.cuh>
 #include <_col_rates.cuh>
 #include <swarm_kern.cuh>
@@ -130,4 +129,4 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
     }
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

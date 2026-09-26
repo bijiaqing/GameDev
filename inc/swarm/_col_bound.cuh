@@ -3,8 +3,7 @@
 
 // host bath controller: size-bin merging, bath durations, post-bath audit, and archives
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <algorithm> // std::max, std::min
 #include <cmath>     // std::abs, std::isfinite, std::log, std::sqrt
 #include <cstddef>   // std::size_t
@@ -299,6 +298,6 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
     return static_cast<bool>(file);
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_BOUND_CUH

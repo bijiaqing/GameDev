@@ -2,8 +2,7 @@
 #ifndef GAMEDEV_SWARM_COL_CHAIN_CUH
 #define GAMEDEV_SWARM_COL_CHAIN_CUH
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <algorithm> // std::max, std::min, std::min_element
 #include <chrono>    // std::chrono clocks and durations
 #include <cmath>     // std::abs, std::isfinite, std::log, std::sqrt
@@ -539,6 +538,6 @@ if (!local.log) throw std::runtime_error("cannot write local collision diagnosti
 #endif // COL_DIAGNOSTICS
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_CHAIN_CUH

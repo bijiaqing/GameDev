@@ -3,8 +3,7 @@
 
 // host power-of-two scheduler for spatial collision-controller groups
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <cmath>     // std::isfinite
 #include <cstdint>   // std::uint64_t
 #include <stdexcept> // std::runtime_error
@@ -183,6 +182,6 @@ struct local_schedule
     }
 };
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_SCHED_CUH

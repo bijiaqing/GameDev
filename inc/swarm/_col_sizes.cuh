@@ -3,8 +3,7 @@
 
 // moving logarithmic size-bin bounds per spatial controller group
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_types.cuh>
 
 // moving log-size bin bounds per spatial group
@@ -21,6 +20,6 @@ __device__ __forceinline__ int _get_col_sizebin (real size, int group)
     return max(0, min(COL_BIN_S - 1, static_cast<int>(floor(fraction*COL_BIN_S))));
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_SIZES_CUH

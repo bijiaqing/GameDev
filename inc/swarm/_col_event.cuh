@@ -3,8 +3,7 @@
 
 // collision outcome sampling and per-category event bookkeeping for the collision chain
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_types.cuh>
 
 __host__ __device__ inline void _record_event_work (event_work &work, int category, real log_mass)
@@ -109,6 +108,6 @@ __host__ __device__ inline real _sample_erosion_outcome (real si, real sj,
     return size;
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_EVENT_CUH

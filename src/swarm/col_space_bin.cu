@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <swarm_kern.cuh>
 
 // =====================================================================================================================
@@ -35,4 +34,4 @@ void col_space_bin (int *dev_col_spatial, const swarm *dev_particle)
     dev_col_spatial[idx] = bin_x + count_x*(bin_y + count_y*bin_z);
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

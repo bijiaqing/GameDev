@@ -18,13 +18,10 @@
 #include <swarm_host.cuh>
 #include <swarm_kern.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
+#ifdef COLLISION
 #include <_col_chain.cuh>
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
-#ifdef KNN_CACHE
-#include <_col_cache.cuh>
-#endif // KNN_CACHE
 
 #ifdef COLLISION_MORTON
 #include <morton/morton_ghost.cuh>
@@ -150,16 +147,12 @@ int main (int argc, char **argv)
     GPU_CHECK(gpuMalloc((void**)&dev_numr_old, sizeof(real)*N_P));
     GPU_CHECK(gpuMalloc((void**)&dev_col_rate, sizeof(real)*N_P));
 
-    #if !defined(BERNOULLI) || defined(KNN_CACHE)
     const std::size_t col_neighbor_count = static_cast<std::size_t>(N_P)*N_K;
     int *dev_col_neighbor;
     real *dev_col_measure;
     GPU_CHECK(gpuMalloc((void**)&dev_col_neighbor, sizeof(int)*col_neighbor_count));
     GPU_CHECK(gpuMalloc((void**)&dev_col_measure, sizeof(real)*N_P));
 
-    #endif // FROZEN_BATH || KNN_CACHE
-
-    #ifndef BERNOULLI
     const int col_raw_count = _get_col_raw_count();
     int *dev_col_events, *dev_col_spatial;
     int *dev_col_count, *dev_col_binmap, *dev_col_error, *dev_col_unfinished;
@@ -183,10 +176,6 @@ int main (int argc, char **argv)
     GPU_CHECK(gpuMalloc((void**)&dev_col_ratebin, sizeof(col_rate_bin)*col_raw_count));
     GPU_CHECK(gpuMalloc((void**)&dev_col_audit, sizeof(col_audit_accum)*col_raw_count));
     GPU_CHECK(gpuMemset(dev_col_error, 0, sizeof(int)*N_P));
-    #elif !defined(KNN_CACHE)  // DIRECT_BERNOULLI
-    real *dev_col_dist;
-    GPU_CHECK(gpuMalloc((void**)&dev_col_dist, sizeof(real)*N_P));
-    #endif // FROZEN_BATH / KNN_CACHE / DIRECT_BERNOULLI
     #endif // COLLISION
 
     #if defined(COLLISION) || defined(DIFFUSION)
@@ -349,13 +338,13 @@ int main (int argc, char **argv)
             static_cast<float>(Z_MIN), static_cast<float>(Z_MAX)
         );
     }
-    #if defined(COLLISION) && !defined(BERNOULLI)
+    #ifdef COLLISION
     local_workspace local(PATH);
     bool local_geometry_valid = false;
     #ifdef COL_DIAGNOSTICS
     col_controller_summary col_summary;
     #endif // COL_DIAGNOSTICS
-    #endif // COLLISION && !BERNOULLI
+    #endif // COLLISION
 
     // size/weight changes refresh collision rates without rebuilding spatial neighbors
     // collision-only runs keep this geometry across output intervals; transport or diffusion invalidates it
@@ -363,9 +352,7 @@ int main (int argc, char **argv)
     auto invalidate_col_geometry = [&]()
     {
         col_geom_valid = false;
-        #ifndef BERNOULLI
         local_geometry_valid = false;
-        #endif // !BERNOULLI
     };
 
     // evolve collisions over a fixed-position interval with the configured collision integrator
@@ -436,7 +423,6 @@ int main (int argc, char **argv)
             );
             #endif // COLLISION_KDTREE
 
-            #if !defined(BERNOULLI) || defined(KNN_CACHE)
             // retain fixed physical neighbors while collision properties continue to evolve
             #ifdef COLLISION_KDTREE
             col_cache_get <<< (N_T + kdtree_heap::threads - 1) / kdtree_heap::threads, kdtree_heap::threads >>> (
@@ -459,18 +445,14 @@ int main (int argc, char **argv)
                 throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
             }
             #endif // COLLISION_KDTREE
-            #endif // FROZEN_BATH || KNN_CACHE
 
-            #ifndef BERNOULLI
             col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
             GPU_KERNEL_CHECK("col_space_bin");
-            #endif // FROZEN_BATH
 
             // publish validity only after every required hierarchy, cache, and guard has completed
             col_geom_valid = true;
         }
 
-        #ifndef BERNOULLI
         evolve_local_collisions(
             local, local_geometry_valid, duration, total_dust_mass,
             clock_dyn, dt_col, count_col, col_raw_count,
@@ -487,160 +469,6 @@ int main (int argc, char **argv)
             , clock_sim, col_summary
             #endif // COL_DIAGNOSTICS
         );
-        #else  // BERNOULLI
-        real elapsed = 0.0;
-        while (elapsed < duration)
-        {
-
-            // freeze only the species fields changed by collisions while positions and velocities remain fixed
-            col_snap_save <<< NB_P, TPB >>> (dev_size_old, dev_numr_old, dev_particle);
-            GPU_KERNEL_CHECK("col_snap_save");
-            #ifdef KNN_CACHE
-            #ifdef COLLISION_KDTREE
-            col_rate_calc <<< NB_P, TPB >>> (
-            #else  // COLLISION_MORTON
-            col_rate_calc <<< N_P, MORTON_TPB >>> (
-            #endif // COLLISION_KDTREE
-                dev_col_rate, dev_particle, dev_col_neighbor, dev_col_measure,
-                dev_col_active, dev_size_old, dev_numr_old,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                N_P / static_cast<real>(N_K) / total_dust_mass
-            );
-            #else  // DIRECT_BERNOULLI
-            #ifdef COLLISION_KDTREE
-            col_rate_calc <<< (N_T + kdtree_heap::threads - 1)
-                / kdtree_heap::threads, kdtree_heap::threads >>> (dev_col_rate, dev_col_dist, dev_particle,
-                dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                image_dist_min,
-                N_P / static_cast<real>(N_K) / total_dust_mass
-            );
-            #else  // COLLISION_MORTON
-            col_rate_calc <<< N_P, MORTON_TPB >>> (
-                dev_col_rate, dev_col_dist, dev_morton_overflow, dev_particle,
-                dev_col_active, dev_size_old, dev_numr_old, dev_morton_point,
-                morton_owner.view(), morton_owner.unique_ids(),
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                N_P / static_cast<real>(N_K) / total_dust_mass
-            );
-            #endif // COLLISION_KDTREE
-            #endif // KNN_CACHE
-            GPU_KERNEL_CHECK("col_rate_calc");
-
-            GPU_CHECK(gpuMemset(dev_bad_part, 0, sizeof(int)));
-            inf_rate_flag <<< NB_P, TPB >>> (dev_col_rate,
-                #ifdef KNN_CACHE
-                dev_col_measure,
-                #else  // DIRECT_BERNOULLI
-                dev_col_dist,
-                #endif // KNN_CACHE
-                dev_bad_part
-            );
-            GPU_KERNEL_CHECK("inf_rate_flag");
-            int bad_result = 0;
-            GPU_CHECK(gpuMemcpy(&bad_result, dev_bad_part, sizeof(int), gpuMemcpyDeviceToHost));
-            if (bad_result != 0)
-            {
-                std::cerr << "Error: non-finite collision result at particle "
-                    << bad_result - 1 << std::endl;
-                std::exit(EXIT_FAILURE);
-            }
-
-            #if defined(COLLISION_MORTON) && !defined(KNN_CACHE)
-            thrust::device_ptr <const unsigned int> morton_overflow_ptr(dev_morton_overflow);
-            unsigned int max_morton_overflow = *thrust::max_element(
-                morton_overflow_ptr, morton_overflow_ptr + N_P
-            );
-            if (max_morton_overflow != 0)
-            {
-                throw std::runtime_error("Morton traversal stack overflow in col_rate_calc");
-            }
-            #endif // COLLISION_MORTON && !KNN_CACHE
-
-            // use the largest total propensity to control every representative's event probability
-            thrust::device_ptr <const real> col_rate_ptr(dev_col_rate);
-            real max_col_rate = *thrust::max_element(col_rate_ptr, col_rate_ptr + N_P);
-            real remaining = duration - elapsed;
-
-            if (!(max_col_rate > 0.0))
-            {
-                // consume the remaining interval when no collision channel is active
-                dt_col = remaining;
-                elapsed = duration;
-                break;
-            }
-
-            // keep the fastest frozen propensity below CFL_COL before sampling one event at most
-            dt_col = std::fmin(CFL_COL / max_col_rate, remaining);
-            #ifdef KNN_CACHE
-            #ifdef COLLISION_KDTREE
-            col_event_run <<< NB_P, TPB >>> (
-            #else  // COLLISION_MORTON
-            col_event_run <<< N_P, MORTON_TPB >>> (
-            #endif // COLLISION_KDTREE
-                dev_particle, dev_rngstate, dev_col_rate, dev_col_neighbor, dev_col_measure,
-                dev_col_active, dev_size_old, dev_numr_old,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                N_P / static_cast<real>(N_K) / total_dust_mass,
-                dt_col
-            );
-            #else  // DIRECT_BERNOULLI
-            #ifdef COLLISION_KDTREE
-            col_event_run <<< (N_T + kdtree_heap::threads - 1)
-                / kdtree_heap::threads, kdtree_heap::threads >>> (dev_particle, dev_rngstate, dev_col_rate,
-                dev_col_dist,
-                dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                image_dist_min,
-                N_P / static_cast<real>(N_K) / total_dust_mass,
-                dt_col
-            );
-            #else  // COLLISION_MORTON
-            col_event_run <<< N_P, MORTON_TPB >>> (
-                dev_particle, dev_rngstate, dev_col_rate, dev_col_dist, dev_morton_overflow,
-                dev_col_active, dev_size_old, dev_numr_old, dev_morton_point,
-                morton_owner.view(), morton_owner.unique_ids(),
-                #ifdef IMPORTGAS
-                dev_gas_dens,
-                #endif // IMPORTGAS
-                N_P / static_cast<real>(N_K) / total_dust_mass,
-                dt_col
-            );
-            #endif // COLLISION_KDTREE
-            #endif // KNN_CACHE
-            GPU_KERNEL_CHECK("col_event_run");
-            GPU_CHECK(gpuDeviceSynchronize());
-
-            #if defined(COLLISION_MORTON) && !defined(KNN_CACHE)
-            max_morton_overflow = *thrust::max_element(
-                morton_overflow_ptr, morton_overflow_ptr + N_P
-            );
-            if (max_morton_overflow != 0)
-            {
-                throw std::runtime_error("Morton traversal stack overflow in col_event_run");
-            }
-            #endif // COLLISION_MORTON && !KNN_CACHE
-
-            real elapsed_old = elapsed;
-            elapsed += dt_col;
-            if (!(elapsed > elapsed_old))
-            {
-                throw std::runtime_error("collision timestep cannot advance the operator clock");
-            }
-            clock_dyn = elapsed;
-            count_col++;
-        }
-        #endif // FROZEN_BATH
 
     };
     #endif // COLLISION
@@ -661,13 +489,13 @@ int main (int argc, char **argv)
         count_dyn = 0;
         #endif // TRANSPORT
 
-        #if defined(COLLISION) && !defined(BERNOULLI)
+        #ifdef COLLISION
         // restart controller memory at checkpoint boundaries while retaining it across split operators
         std::fill(local.state.begin(), local.state.end(), col_bath_state{});
         #ifdef COL_DIAGNOSTICS
         col_summary = col_controller_summary{};
         #endif // COL_DIAGNOSTICS
-        #endif // COLLISION && !BERNOULLI
+        #endif // COLLISION
 
         PRINT_TITLE_TO_SCREEN();
 
@@ -838,7 +666,7 @@ int main (int argc, char **argv)
         if (idx_file % LIN_BASE == 0) SAVE_PARTICLE_TO_FILE(idx_file);
         #endif // LOGTIMING / LOGOUTPUT / LINEAR_OUTPUT
 
-        #if defined(COLLISION) && !defined(BERNOULLI)
+        #ifdef COLLISION
         #ifdef COL_DIAGNOSTICS
         std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
         if (!save_col_controller(controller_file, col_summary))
@@ -847,7 +675,7 @@ int main (int argc, char **argv)
             std::exit(EXIT_FAILURE);
         }
         #endif // COL_DIAGNOSTICS
-        #endif // COLLISION && !BERNOULLI
+        #endif // COLLISION
 
         msg_output(idx_file);
     }
@@ -858,7 +686,6 @@ int main (int argc, char **argv)
     #endif // COLLISION || DIFFUSION
 
     #ifdef COLLISION
-    #ifndef BERNOULLI
     GPU_CHECK(gpuFree(dev_col_audit));
     GPU_CHECK(gpuFree(dev_col_ratebin));
     GPU_CHECK(gpuFree(dev_col_complete));
@@ -873,14 +700,9 @@ int main (int argc, char **argv)
     GPU_CHECK(gpuFree(dev_col_count));
     GPU_CHECK(gpuFree(dev_col_spatial));
     GPU_CHECK(gpuFree(dev_col_events));
-    #elif !defined(KNN_CACHE)  // DIRECT_BERNOULLI
-    GPU_CHECK(gpuFree(dev_col_dist));
-    #endif // FROZEN_BATH / KNN_CACHE / DIRECT_BERNOULLI
 
-    #if !defined(BERNOULLI) || defined(KNN_CACHE)
     GPU_CHECK(gpuFree(dev_col_measure));
     GPU_CHECK(gpuFree(dev_col_neighbor));
-    #endif // FROZEN_BATH || KNN_CACHE
 
     GPU_CHECK(gpuFree(dev_col_rate));
     GPU_CHECK(gpuFree(dev_numr_old));

@@ -112,11 +112,7 @@ constexpr int   N_K         = SWEEP_N_K;
 
 constexpr real  H_SEARCH    = 128.0;
 constexpr real  V_FRAG      = 1.0;
-#ifdef BERNOULLI
-constexpr real  CFL_COL     = 0.01;
-#endif // BERNOULLI
 
-#ifndef BERNOULLI
 constexpr int   COL_BATH_TPB  = 64;
 constexpr int   COL_EVENT_CAP = 32;
 // global partner mixing requires simultaneous publication of the whole population
@@ -131,7 +127,6 @@ constexpr int   COL_BIN_MIN   = 64;
 constexpr real COL_BATH_EPS   = SWEEP_COL_BATH_EPS;
 constexpr real COL_BATH_ALPHA = 1.0e-03;
 const unsigned int COL_PARTNER_SEED = 2;
-#endif // !BERNOULLI
 #endif // COLLISION
 
 #ifdef COLLISION_MORTON
@@ -149,9 +144,6 @@ constexpr real INIT_SMIN    = 1.0e+00;
 constexpr real INIT_SMAX    = 1.0e+00;
 #endif // MULTISIZE
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
-#endif // COLLISION && !BERNOULLI
 
 constexpr int  SAVE_MAX     = 9;
 

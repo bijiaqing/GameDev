@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_types.cuh>
 #include <swarm_kern.cuh>
 
@@ -44,4 +43,4 @@ void col_event_sum (const event_work *work, event_work *sum)
 }
 static_assert(TPB > 0 && (TPB & (TPB - 1)) == 0, "event reduction needs power-of-two TPB");
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

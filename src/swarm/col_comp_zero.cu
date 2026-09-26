@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <swarm_kern.cuh>
 
 // =====================================================================================================================
@@ -19,4 +18,4 @@ void col_comp_zero (const int *ids, int count, real *hazard,
     hazard[i] = jump1[i] = jump2[i] = jumpmax[i] = 0;
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

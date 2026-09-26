@@ -3,8 +3,7 @@
 
 // device pair-rate evaluation, uniform draws, and atomic maxima for the collision chain
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_image.cuh>
 #include <_col_types.cuh>
 #include <_collision.cuh>
@@ -223,6 +222,6 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     }
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #endif // GAMEDEV_SWARM_COL_RATES_CUH

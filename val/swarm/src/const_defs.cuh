@@ -206,15 +206,7 @@ constexpr real V_FRAG = 0.0;
 #else  // !TEST_COLCHAIN_FRAG_2D
 constexpr real V_FRAG = 1.0;
 #endif // TEST_COLCHAIN_FRAG_2D
-#ifdef BERNOULLI
-#ifdef TEST_CFL_COL
-constexpr real CFL_COL = TEST_CFL_COL;
-#else  // !TEST_CFL_COL
-constexpr real CFL_COL = 0.01;
-#endif // TEST_CFL_COL
-#endif // BERNOULLI
 
-#ifndef BERNOULLI
 constexpr int COL_BATH_TPB = 256;
 #ifdef TEST_CHAIN_CAP
 constexpr int COL_EVENT_CAP = TEST_CHAIN_CAP;
@@ -229,7 +221,6 @@ constexpr int COL_BIN_MIN = 64;
 constexpr real COL_BATH_MAX = 0.05;
 constexpr real COL_BATH_EPS = 0.06;
 constexpr real COL_BATH_ALPHA = 1.0e-03;
-#endif // !BERNOULLI
 #endif // COLLISION
 
 #ifdef COLLISION_MORTON

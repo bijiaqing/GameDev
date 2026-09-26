@@ -41,15 +41,8 @@
 #error "COL_CHAIN is obsolete; COLLISION now selects frozen-bath collisions by default"
 #endif // COL_CHAIN
 
-#if defined(BERNOULLI) && !defined(COLLISION)
-#error "BERNOULLI requires COLLISION"
-#endif // BERNOULLI && !COLLISION
 
-#if defined(KNN_CACHE) && !defined(BERNOULLI)
-#error "KNN_CACHE requires BERNOULLI"
-#endif // KNN_CACHE && !BERNOULLI
-
-#if defined(COLLISION) && !defined(BERNOULLI)
+#ifdef COLLISION
 static_assert(COL_BATH_TPB > 0 && COL_BATH_TPB <= 1024,
     "frozen-bath collisions require 0 < COL_BATH_TPB <= 1024");
 static_assert(COL_EVENT_CAP > 0, "frozen-bath collisions require COL_EVENT_CAP > 0");
@@ -61,7 +54,7 @@ static_assert(COL_BATH_EPS > 0.0 && COL_BATH_EPS < 1.0,
     "frozen-bath collisions require 0 < COL_BATH_EPS < 1");
 static_assert(COL_BATH_ALPHA > 0.0 && COL_BATH_ALPHA < 1.0,
     "frozen-bath collisions require 0 < COL_BATH_ALPHA < 1");
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 #if !defined(TRANSPORT) && !defined(COLLISION)
 #error "No evolution module is enabled"
@@ -122,76 +115,16 @@ __global__ void dustdens_calc (real *dev_dustdens);
 // =====================================================================================================================
 
 #ifdef COLLISION
-__global__ void col_snap_save (real *dev_size_old, real *dev_numr_old, const swarm *dev_particle);
 __global__ void colstate_flag (const swarm *dev_particle, int *dev_bad_part);
-__global__ void inf_rate_flag (const real *dev_col_rate, const real *dev_col_dist, int *dev_bad_part);
 
 #ifdef COLLISION_KDTREE
-__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_particle,
-    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
-    const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    float image_dist_min,
-    real lambda_0
-);
-__global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col_rate,
-    const real *dev_col_dist, const unsigned char *dev_col_active,
-    const real *dev_size_old, const real *dev_numr_old,
-    const kdtree_node *dev_kdtree_node, const kdtree_boxf *dev_kdtree_box,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    float image_dist_min,
-    real lambda_0,
-    real dt_col
-);
 __global__ void col_site_init (kdtree_node *dev_kdtree_node, unsigned char *dev_col_active,
     const swarm *dev_particle, int *dev_bad_part);
 #else  // COLLISION_MORTON
-__global__ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_morton_overflow,
-    const swarm *dev_particle, const unsigned char *dev_col_active,
-    const real *dev_size_old, const real *dev_numr_old,
-    const float3 *dev_morton_point, morton_view morton_data, bool unique_ids,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    real lambda_0
-);
-__global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
-    const real *dev_col_rate, const real *dev_col_dist, unsigned int *dev_morton_overflow,
-    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
-    const float3 *dev_morton_point, morton_view morton_data, bool unique_ids,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    real lambda_0,
-    real dt_col
-);
 __global__ void col_site_init (float3 *dev_morton_point, float *dev_morton_posx, float *dev_search_dist,
     unsigned char *dev_col_active, const swarm *dev_particle, int *dev_bad_part);
 #endif // COLLISION_KDTREE
 
-#ifdef KNN_CACHE
-__global__ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
-    const int *dev_col_neighbor, const real *dev_col_measure,
-    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    real lambda_0
-);
-__global__ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
-    const real *dev_col_rate, const int *dev_col_neighbor, const real *dev_col_measure,
-    const unsigned char *dev_col_active, const real *dev_size_old, const real *dev_numr_old,
-    #ifdef IMPORTGAS
-    const real *dev_gas_dens,
-    #endif // IMPORTGAS
-    real lambda_0,
-    real dt_col
-);
-#endif // KNN_CACHE
 #endif // COLLISION
 
 #if defined(COLLISION) || defined(DIFFUSION)
@@ -251,8 +184,7 @@ __global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
 // collision chain: bath controller, local scheduler, and frozen-bath event chain
 // =====================================================================================================================
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_types.cuh>
 
 __global__
@@ -337,7 +269,7 @@ void col_comp_zero (const int *ids, int count, real *hazard,
 __global__
 void col_event_sum (const event_work *work, event_work *sum);
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
 
 // =====================================================================================================================
 

@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_sizes.cuh>
 #include <swarm_kern.cuh>
 
@@ -25,4 +24,4 @@ void col_size_zero ()
     }
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

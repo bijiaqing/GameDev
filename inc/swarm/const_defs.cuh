@@ -121,11 +121,7 @@ constexpr int   N_K         = 200;              // number of candidate slots ret
 
 constexpr real  H_SEARCH    = 1.0;              // KNN search radius in units of the local gas scale height
 constexpr real  V_FRAG      = 1.0;              // the fragmentation velocity for dust collision
-#ifdef BERNOULLI
-constexpr real  CFL_COL     = 0.01;             // maximum collision propensity per representative and batch
-#endif // BERNOULLI
 
-#ifndef BERNOULLI
 // backend default threads per owner chain; a model const_defs.cuh may choose another width
 #ifdef GAMEDEV_ROCM
 constexpr int   COL_BATH_TPB  = 128;
@@ -141,7 +137,6 @@ constexpr int   COL_BIN_MIN   = 64;              // target minimum representativ
 constexpr real  COL_BATH_MAX  = 0.05;            // maximum frozen-reservoir bath duration
 constexpr real  COL_BATH_EPS  = 0.02;            // log-size refresh and distribution-audit tolerance
 constexpr real  COL_BATH_ALPHA = 1.0e-03;         // family-wise confidence-tail probability for realized audits
-#endif // FROZEN_BATH
 #endif // COLLISION
 
 #ifdef COLLISION_MORTON
@@ -172,8 +167,6 @@ constexpr real INIT_SMIN    = 1.0e+00;          // minimum grain size for partic
 constexpr real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle initialization
 #endif // MULTISIZE
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-#endif // COLLISION && !BERNOULLI
 
 // =====================================================================================================================
 // time step and output parameters

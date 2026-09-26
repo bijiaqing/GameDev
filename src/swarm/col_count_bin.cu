@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_sizes.cuh>
 #include <swarm_kern.cuh>
 
@@ -22,4 +21,4 @@ void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, c
     atomicAdd(dev_col_count + idx_raw, 1);
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION

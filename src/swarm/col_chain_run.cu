@@ -1,7 +1,6 @@
 #include <gpu.cuh>
 
-#if defined(COLLISION) && !defined(BERNOULLI)
-
+#ifdef COLLISION
 #include <_col_event.cuh>
 #include <_col_rates.cuh>
 #include <swarm_kern.cuh>
@@ -404,4 +403,4 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
     }
 }
 
-#endif // COLLISION && !BERNOULLI
+#endif // COLLISION
