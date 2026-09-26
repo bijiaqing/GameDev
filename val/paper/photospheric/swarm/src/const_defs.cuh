@@ -191,7 +191,7 @@ struct swarm                                // representative-particle state
 {
     real3   position;                       // x = azimuth, y = spherical radius, z = polar angle
     real3   velocity;                       // x = l_phi, y = v_r, z = l_theta
-    
+
     #ifdef MULTISIZE
     real    par_size;                       // diameter of one physical grain in the represented species
     real    par_numr;                       // number of physical grains represented by this particle
@@ -211,7 +211,7 @@ struct kdtree_traits                        // traits for kdtree::builder
 {
     using point_t = float3;
     enum { has_explicit_dim = true };
-    
+
     // expose point coordinates and split dimensions through the KD-tree traits interface
     static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
     static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }

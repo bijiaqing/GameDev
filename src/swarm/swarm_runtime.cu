@@ -65,13 +65,13 @@ int main (int argc, char **argv)
     int count_dyn;    // dynamics steps completed in the current output interval
     real dt_dyn;      // current dynamics timestep
     #endif // TRANSPORT
-    
+
     #ifdef COLLISION
     int count_col;    // collision batches completed in the current dynamics interval
     real clock_dyn;   // elapsed collision time in the current dynamics interval
     real dt_col;      // current collision-batch timestep
     #endif // COLLISION
-    
+
     // allocate the particle state and feature-dependent work arrays
     swarm *particle, *dev_particle;
     GPU_CHECK(gpuMallocHost((void**)&particle, sizeof(swarm)*N_P));
@@ -81,13 +81,13 @@ int main (int argc, char **argv)
     real *dev_dyn_rate;
     GPU_CHECK(gpuMalloc((void**)&dev_dyn_rate, sizeof(real)*N_P));
     #endif // TRANSPORT
-    
+
     #ifdef SAVE_DENS
     real *dustdens, *dev_dustdens;
     GPU_CHECK(gpuMallocHost((void**)&dustdens, sizeof(real)*N_G));
     GPU_CHECK(gpuMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
     #endif // SAVE_DENS
-    
+
     #ifdef IMPORTGAS
     real *gas_dens, *dev_gas_dens;
     GPU_CHECK(gpuMallocHost((void**)&gas_dens,  sizeof(real)*N_G));
@@ -111,7 +111,7 @@ int main (int argc, char **argv)
     GPU_CHECK(gpuMalloc((void**)&dev_gas_vely_next, sizeof(real)*N_G));
     GPU_CHECK(gpuMalloc((void**)&dev_gas_velz_next, sizeof(real)*N_G));
     #endif // IMPORTGAS
-    
+
     #ifdef RADIATION
     real *optdepth, *dev_optdepth;
     GPU_CHECK(gpuMallocHost((void**)&optdepth, sizeof(real)*N_G));
@@ -192,9 +192,9 @@ int main (int argc, char **argv)
     #endif // COLLISION || DIFFUSION
 
     if (argc <= 1)
-	{
+    {
         // construct a fresh realization from the configured analytic or imported distribution
-        
+
         idx_from = 0;
 
         real *randposx, *dev_randposx;
@@ -238,7 +238,7 @@ int main (int argc, char **argv)
 
         real *epsilon;
         GPU_CHECK(gpuMallocHost((void**)&epsilon,  sizeof(real)*N_G));
-        
+
         if (!load_epsilon(PATH, idx_from, epsilon))
         {
             std::cerr << "Error: Failed to load gas data files for frame " << idx_from << std::endl;
@@ -247,7 +247,7 @@ int main (int argc, char **argv)
 
         // use one imported total-dust spatial distribution for all previously sampled grain species
         rand_from_file(randposx, randposy, randposz, N_P, gas_dens, epsilon);
-        
+
         GPU_CHECK(gpuFreeHost(epsilon));
         #else  // NO IMPORTGAS
         #if defined(MULTISIZE) && defined(DIFFUSION)
@@ -288,12 +288,12 @@ int main (int argc, char **argv)
         GPU_CHECK(gpuFree(dev_randsize));
         GPU_CHECK(gpuFree(dev_mass_bank));
         #endif // MULTISIZE
-        
+
         #if defined(COLLISION) || defined(DIFFUSION)
         rngstate_init <<< NB_P, TPB >>> (dev_rngstate);
         GPU_KERNEL_CHECK("rngstate_init");
         #endif // COLLISION || DIFFUSION
-        
+
         // write the initial state and active configuration before evolution
         std::filesystem::create_directories(PATH);
         save_variable(PATH + "variables.txt", total_dust_mass);
@@ -326,7 +326,7 @@ int main (int argc, char **argv)
         #ifdef IMPORTGAS
         LOAD_GAS_DATA_TO_VRAM(idx_from);
         #endif // IMPORTGAS
-        
+
         msg_output(idx_from);
     }
 
@@ -368,8 +368,6 @@ int main (int argc, char **argv)
     // evolve collisions over a fixed-position interval with the configured collision integrator
     auto evolve_collisions = [&] (real duration)
     {
-
-
 
         // geometry reuse must not suppress the per-operator nonfinite-state failure path
         if (col_geom_valid)
@@ -457,7 +455,6 @@ int main (int argc, char **argv)
                 throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
             #endif // COLLISION_KDTREE
             #endif // FROZEN_BATH || KNN_CACHE
-
 
             #ifndef BERNOULLI
             col_space_bin <<< NB_P, TPB >>> (dev_col_spatial, dev_particle);
@@ -622,7 +619,6 @@ int main (int argc, char **argv)
                 throw std::runtime_error("Morton traversal stack overflow in col_event_run");
             #endif // COLLISION_MORTON && !KNN_CACHE
 
-
             real elapsed_old = elapsed;
             elapsed += dt_col;
             if (!(elapsed > elapsed_old))
@@ -644,9 +640,9 @@ int main (int argc, char **argv)
         LOAD_GAS_NEXT_TO_VRAM(idx_file);
         real gas_frac = 0.0;
         #endif // IMPORTGAS
-        
+
         clock_out = 0.0;
-        
+
         #ifdef TRANSPORT
         count_dyn = 0;
         #endif // TRANSPORT
@@ -660,7 +656,7 @@ int main (int argc, char **argv)
         #endif // COLLISION && !BERNOULLI
 
         PRINT_TITLE_TO_SCREEN();
-        
+
         do
         {
             #ifdef TRANSPORT
@@ -784,7 +780,7 @@ int main (int argc, char **argv)
             count_col = 0;
             clock_dyn = 0.0;
             real duration = dt_out - clock_out;
-            
+
             #ifdef IMPORTGAS
             real gas_target = (clock_out + 0.5*duration) / dt_out;
             real gas_blend = (gas_target - gas_frac) / (1.0 - gas_frac);
@@ -795,7 +791,7 @@ int main (int argc, char **argv)
             GPU_KERNEL_CHECK("gas_lerp_calc");
             gas_frac = gas_target;
             #endif // IMPORTGAS
-            
+
             evolve_collisions(duration);
             clock_out += duration;
             clock_sim += duration;
@@ -815,7 +811,7 @@ int main (int argc, char **argv)
         #ifdef RADIATION
         SAVE_OPTDEPTH_TO_FILE(idx_file, false);
         #endif // RADIATION
-    
+
         #ifdef SAVE_DENS
         SAVE_DUSTDENS_TO_FILE(idx_file);
         #endif // SAVE_DENS
@@ -838,8 +834,6 @@ int main (int argc, char **argv)
         }
 #endif
         #endif // COLLISION && !BERNOULLI
-
-
 
         msg_output(idx_file);
     }

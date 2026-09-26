@@ -617,13 +617,13 @@ inline __host__
 void rand_from_file (real *randposx, real *randposy, real *randposz, int count, const real *gas_dens, const real *epsilon)
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
-    
+
     real mesh_dim = _get_mesh_dim();
-    
+
     // integrate the imported dust density with the same exact disk cell measure
     std::vector <real> cell_mass(N_G);
     real total_mass = 0.0;
-    
+
     for (int iz = 0; iz < N_Z; iz++)
     {
         real vol_z = _get_vol_z(iz);
@@ -653,16 +653,16 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 
     if (!std::isfinite(total_mass) || total_mass <= 0.0)
         throw std::runtime_error("imported dust profile has zero or nonfinite total mass");
-    
+
     // build the cell-mass cumulative distribution
     std::vector <real> cdf(N_G + 1);
     cdf[0] = 0.0;
-    
+
     for (int idx = 0; idx < N_G; idx++)
     {
         cdf[idx + 1] = cdf[idx] + cell_mass[idx];
     }
-    
+
     // normalize the CDF to unit total probability
     for (int idx = 0; idx <= N_G; idx++)
     {
@@ -680,20 +680,20 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
     {
         z_face_s[iz] = _get_sz(_get_zface(iz));
     }
-    
+
     // select cells by inverse transform sampling
     for (int idx = 0; idx < count; idx++)
     {
         real cdf_sample = random(rand_generator);
-        
+
         // locate the cell containing the sampled cumulative probability
         auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), cdf_sample);
         int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
-        
+
         int ix = idx_cell % N_X;
         int iy = (idx_cell / N_X) % N_Y;
         int iz = idx_cell / (N_X*N_Y);
-        
+
         // sample logarithmic radial cells uniformly in the exact radial volume coordinate
         real s_y0 = y_face_s[iy];
         real s_y1 = y_face_s[iy + 1];
@@ -707,7 +707,7 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
             real s_z0 = z_face_s[iz];
             real s_z1 = z_face_s[iz + 1];
             real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
-            
+
             randposz[idx] = std::acos(-s_z);
         }
         else
@@ -728,9 +728,9 @@ void cuda_fail (gpuError_t status, const char *operation, const char *file, int 
     std::cerr
     << GPU_BACKEND_NAME " error at " << file << ":" << line
     << " during " << operation << ": " << gpuGetErrorString(status)
-    << " (" << static_cast<int>(status) << ")" 
+    << " (" << static_cast<int>(status) << ")"
     << std::endl;
-    
+
     std::exit(EXIT_FAILURE);
 }
 
@@ -762,7 +762,7 @@ real int_pow (int base, int power)
     {
         result *= static_cast<real>(base);
     }
-    
+
     return result;
 }
 
@@ -933,7 +933,7 @@ void msg_output (int idx_file)
 {
     std::time_t time_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     int width = std::max(3, static_cast<int>(std::to_string(SAVE_MAX).length()));
-    std::cout   
+    std::cout
     << std::endl << std::setfill('0')
     << std::setw(width) << idx_file << "/"
     << std::setw(width) << SAVE_MAX << " finished on " << std::ctime(&time_now)
@@ -981,19 +981,19 @@ bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real 
 {
     std::string file_name;
     bool success = true;
-    
+
     file_name = path + "gasdens_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_dens, N_G);
-    
+
     file_name = path + "gasvelx_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_velx, N_G);
-    
+
     file_name = path + "gasvely_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_vely, N_G);
-    
+
     file_name = path + "gasvelz_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_velz, N_G);
-    
+
     return success;
 }
 #endif // IMPORTGAS
@@ -1004,7 +1004,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
 {
     std::ofstream file(file_name);
     if (!file) return false;
-    
+
     file << "[PARAMETERS]"                                                                  << std::endl;
     file                                                                                    << std::endl;
 
@@ -1033,7 +1033,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     #endif // CODE_UNIT
     #endif // COLLISION
     file                                                                                    << std::endl;
-    
+
     // dust parameters
     file << "STOKES_0    = " << std::scientific     << std::setprecision(8) << STOKES_0     << std::endl;
     file << "TOTAL_DUST_MASS = " << std::scientific << std::setprecision(8) << total_dust_mass << std::endl;
@@ -1165,7 +1165,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "par_size   = f8"                                                               << std::endl;
     file << "par_numr   = f8"                                                               << std::endl;
     #endif // MULTISIZE
-    
+
     return file.good();
 }
 

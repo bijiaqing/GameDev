@@ -110,7 +110,7 @@ void advection_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             face_work_x[iy] = flux_mx[iy] - flux_mx_low;
             face_work_y[iy] = flux_my[iy] - flux_my_low;
             face_work_z[iy] = flux_mz[iy] - flux_mz_low;
-            
+
             flux_rhod[iy] = flux_rhod_low;
             flux_mx[iy] = flux_mx_low;
             flux_my[iy] = flux_my_low;

@@ -149,7 +149,7 @@ void _apply_diffusion_boundary (real &x, real &y, real &z)
 
 // drift the spherical position through the first half-step with the initial velocity
 __device__ __forceinline__
-void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i, real lz_i, 
+void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i, real lz_i,
     real &x_1, real &y_1, real &z_1)
 {
     // advance from the initial state i to the staggered midpoint position 1
@@ -272,7 +272,7 @@ void _ssa_advance(real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
 
 // integrate gas and optional P-R drag analytically at the midpoint and complete the velocity and position update
 __device__ __forceinline__
-void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1, 
+void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1,
     real &x_j, real &y_j, real &z_j, real &lx_j, real &vy_j, real &lz_j
     #ifdef IMPORTGAS
     , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz, const real *dev_gas_dens
@@ -281,13 +281,13 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 {
     real R_1 = _get_cyl_R(y_1, z_1);
     real Z_1 = _get_cyl_Z(y_1, z_1);
-    
+
     real h_g = _get_hg(R_1);
     real omega = _get_omegaK(R_1);
-    
+
     // evaluate the gas velocity used by the midpoint drag solve
     real lx_g1, vy_g1, lz_g1;
-    
+
     #ifdef IMPORTGAS
     if ((dev_gas_velx != nullptr) && (dev_gas_vely != nullptr) && (dev_gas_velz != nullptr))
     {
@@ -295,7 +295,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         real loc_x = _get_loc_x(x_1);
         real loc_y = _get_loc_y(y_1);
         real loc_z = _get_loc_z(z_1);
-        
+
         lx_g1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*R_1;
         vy_g1 = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
         lz_g1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;

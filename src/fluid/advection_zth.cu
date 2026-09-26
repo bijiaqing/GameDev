@@ -116,7 +116,7 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             face_work_x[iz] = flux_mx[iz] - flux_mx_low;
             face_work_y[iz] = flux_my[iz] - flux_my_low;
             face_work_z[iz] = flux_mz[iz] - flux_mz_low;
-            
+
             flux_rhod[iz] = flux_rhod_low;
             flux_mx[iz] = flux_mx_low;
             flux_my[iz] = flux_my_low;

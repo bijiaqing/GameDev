@@ -11,4 +11,3 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]/"src"))
 from run_model import run
 
 run(Path(__file__).resolve().parent.name)
-

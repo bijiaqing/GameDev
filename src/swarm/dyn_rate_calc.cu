@@ -82,7 +82,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     vx_g = fmax(abs(vx_g), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
     vy_g = fmax(abs(vy_g), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
     vz_g = fmax(abs(vz_g), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
-    
+
     if (N_X > 1) rate = fmax(rate, abs(vx_g) / (R*dx*CFL_DYN));
     if (N_Y > 1) rate = fmax(rate, abs(vy_g) / (dr*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(vz_g) / (y*dz*CFL_DYN));
@@ -114,7 +114,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     accel_y = fmax(accel_y, abs(grav_y + cent_y_min));
     accel_y = fmax(accel_y, abs(grav_y + cent_y_max));
     #endif // IMPORTGAS
-    
+
     rate = fmax(rate, sqrt(accel_y / (2.0*CFL_DYN*dr)));
     if (N_Z > 1)
     {
@@ -164,7 +164,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     real cos_z = (N_Z > 1) ? cos(z) : 0.0;
     real diff_y = diff_R*sin_z*sin_z + diff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
-    
+
     // bound RMS displacement, not every Gaussian draw; diffusion tails remain unbounded
     rate = fmax(rate, 2.0*diff_y / (CFL_DYN*CFL_DYN*dr*dr));
     rate = fmax(rate, abs(drift_y) / (CFL_DYN*dr));
@@ -172,7 +172,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     if (N_X > 1)
     {
         real cell_x = R*dx;
-        
+
         rate = fmax(rate, 2.0*diff_x / (CFL_DYN*CFL_DYN*cell_x*cell_x));
         rate = fmax(rate, abs(drift_x) / (CFL_DYN*dx));
     }
@@ -182,7 +182,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
         real cell_z = y*dz;
         real diff_z = diff_R*cos_z*cos_z + diff_Z*sin_z*sin_z;
         real drift_z = drift_R*cos_z - drift_Z*sin_z;
-        
+
         rate = fmax(rate, 2.0*diff_z / (CFL_DYN*CFL_DYN*cell_z*cell_z));
         rate = fmax(rate, abs(drift_z) / (CFL_DYN*cell_z));
     }

@@ -156,7 +156,7 @@ void advection_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         work_x[ix] = flux_mx[ix] - flux_mx_low;
         work_y[ix] = flux_my[ix] - flux_my_low;
         work_z[ix] = flux_mz[ix] - flux_mz_low;
-        
+
         flux_rhod[ix] = flux_rhod_low;
         flux_mx[ix] = flux_mx_low;
         flux_my[ix] = flux_my_low;

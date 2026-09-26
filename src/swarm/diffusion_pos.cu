@@ -137,7 +137,7 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
     {
         // include the cylindrical Ito drift and variable-diffusivity drift
         real diff_R = nu / SCHMIDT_R;
-        
+
         real avg_R = dt*diff_R*diffusion.drift_R_per_D;
         real std_R = sqrt(2.0*dt*diff_R);
 

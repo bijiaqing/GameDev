@@ -40,7 +40,7 @@ void cuda_fail (gpuError_t status, const char *operation, const char *file, int 
     << GPU_BACKEND_NAME " error at " << file << ":" << line
     << " during " << operation << ": " << gpuGetErrorString(status)
     << " (" << static_cast<int>(status) << ")\n";
-    
+
     std::exit(EXIT_FAILURE);
 }
 

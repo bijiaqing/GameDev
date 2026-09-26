@@ -118,7 +118,7 @@ bool _is_in_bounds (real loc_x, real loc_y, real loc_z)
     bool in_x = loc_x >= 0.0 && loc_x < static_cast<real>(N_X);
     bool in_y = loc_y >= 0.0 && loc_y < static_cast<real>(N_Y);
     bool in_z = loc_z >= 0.0 && loc_z < static_cast<real>(N_Z);
-    
+
     return in_x && in_y && in_z;
 }
 

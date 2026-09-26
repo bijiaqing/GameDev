@@ -463,8 +463,6 @@ def analyze_initialization(out_dir: Path, resolution: int, meta: dict[str, str])
     }
 
 
-
-
 def analyze(out_dir: Path, resolution: int) -> dict:
     """Dispatch one retained publication case and reject failed criteria"""
 
