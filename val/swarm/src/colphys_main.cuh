@@ -26,7 +26,7 @@ namespace
 constexpr int turbulence_count = 16;
 constexpr int device_result_count = 32;
 constexpr int result_count = device_result_count + N_P*N_K + N_P;
-constexpr real seam_offset = 1.0e-3;
+constexpr real seam_offset = 1.0e-03;
 const std::string output_path = PATH_OUT;
 
 // evaluate every physical-rate branch at fixed inputs without running a stochastic collision history
@@ -60,8 +60,8 @@ __global__ void collision_physics (real *result, const swarm *particle, const re
     };
     for (int idx = 0; idx < 5; idx++)
     {
-        stokes_large[6 + 2*idx] = boundary[idx]*(1.0 - 1.0e-6);
-        stokes_large[7 + 2*idx] = boundary[idx]*(1.0 + 1.0e-6);
+        stokes_large[6 + 2*idx] = boundary[idx]*(1.0 - 1.0e-06);
+        stokes_large[7 + 2*idx] = boundary[idx]*(1.0 + 1.0e-06);
     }
     for (int idx = 0; idx < turbulence_count; idx++)
     {

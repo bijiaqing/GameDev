@@ -15,7 +15,7 @@
 __host__ __device__ constexpr
 bool _is_periodic_wedge (float x_min, float x_max)
 {
-    return x_max - x_min < 6.28318530717958647692f - 1.0e-6f;
+    return x_max - x_min < 6.28318530717958647692f - 1.0e-06f;
 }
 
 // rotate one Cartesian query into an adjacent azimuthal wedge image

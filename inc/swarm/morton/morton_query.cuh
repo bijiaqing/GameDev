@@ -70,7 +70,15 @@ void _morton_ghost_topk (
 {
     static_assert(3*K + BLOCK_SIZE <= WORK_SIZE,
         "Morton ghost work array cannot hold the duplicate-safe candidate set");
-    constexpr int FAST_SIZE = [] { int n = 1; while (n < 2*K || n < K + BLOCK_SIZE) n *= 2; return n; }();
+    constexpr int FAST_SIZE = []()
+    {
+        int n = 1;
+        while (n < 2*K || n < K + BLOCK_SIZE)
+        {
+            n *= 2;
+        }
+        return n;
+    }();
     static_assert(FAST_SIZE <= WORK_SIZE, "Morton work array cannot hold the padded top-K merge");
 
     if (unique_ids)

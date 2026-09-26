@@ -119,11 +119,11 @@ constexpr int N_G = N_X*N_Y*N_Z;
 
 #ifdef COLLISION
 constexpr bool X_WEDGE = N_X > 1
-    && static_cast<float>(X_MAX) - static_cast<float>(X_MIN) < 6.28318530717958647692f - 1.0e-6f;
+    && static_cast<float>(X_MAX) - static_cast<float>(X_MIN) < 6.28318530717958647692f - 1.0e-06f;
 #endif // COLLISION
 
 constexpr real SIGMA_0 = 1.0;
-constexpr real METAL_Z = 1.0e-2;
+constexpr real METAL_Z = 1.0e-02;
 constexpr real ASPR_0 = 0.05;
 constexpr real IDX_P = 2.0;
 constexpr real IDX_Q = -1.0;
@@ -135,31 +135,31 @@ constexpr real RHO_0 = 1.0;
 #ifdef TEST_ORBIT_INC_3D
 constexpr real NU = 0.0;
 #else  // !TEST_ORBIT_INC_3D
-constexpr real NU = 2.0e-2;
+constexpr real NU = 2.0e-02;
 #endif // TEST_ORBIT_INC_3D
 #else  // !CONST_NU
-constexpr real ALPHA = 1.0e-4;
+constexpr real ALPHA = 1.0e-04;
 #endif // CONST_NU
 #endif // DIFFUSION || COLLISION
 
 #ifdef DIFFUSION
 #ifdef TEST_DIFFUSION_1D
-constexpr real SCHMIDT_X = 1.0e300;
+constexpr real SCHMIDT_X = 1.0e+300;
 constexpr real SCHMIDT_R = 1.0;
 #elif defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_WEDGE_2D)  || defined(TEST_DIFFUSION_WEDGE_3D)
 constexpr real SCHMIDT_X = 1.0;
-constexpr real SCHMIDT_R = 1.0e300;
+constexpr real SCHMIDT_R = 1.0e+300;
 #elif defined(TEST_DIFFUSION_3D)
-constexpr real SCHMIDT_X = 1.0e300;
+constexpr real SCHMIDT_X = 1.0e+300;
 constexpr real SCHMIDT_R = 1.0;
 #else  // other TEST_* cases
-constexpr real SCHMIDT_X = 1.0e300;
-constexpr real SCHMIDT_R = 1.0e300;
+constexpr real SCHMIDT_X = 1.0e+300;
+constexpr real SCHMIDT_R = 1.0e+300;
 #endif // TEST_* case selection
 #if defined(TEST_DIFFUSION_3D) || defined(TEST_INITIAL_3D)
 constexpr real SCHMIDT_Z = 1.0;
 #else  // !(TEST_DIFFUSION_3D || TEST_INITIAL_3D)
-constexpr real SCHMIDT_Z = 1.0e300;
+constexpr real SCHMIDT_Z = 1.0e+300;
 #endif // TEST_DIFFUSION_3D || TEST_INITIAL_3D
 #endif // DIFFUSION
 
@@ -183,7 +183,7 @@ constexpr real INIT_SMAX = 6.4;
 
 #ifdef COLLISION
 #ifdef CODE_UNIT
-constexpr real REYNOLDS_0 = 1.0e8;
+constexpr real REYNOLDS_0 = 1.0e+08;
 #else  // !CODE_UNIT
 constexpr real M_MOL = 2.3*1.66054e-24;
 constexpr real X_SEC = 2.0e-15;
@@ -228,7 +228,7 @@ constexpr int COL_BIN_S = 8;
 constexpr int COL_BIN_MIN = 64;
 constexpr real COL_BATH_MAX = 0.05;
 constexpr real COL_BATH_EPS = 0.06;
-constexpr real COL_BATH_ALPHA = 1.0e-3;
+constexpr real COL_BATH_ALPHA = 1.0e-03;
 #endif // !BERNOULLI
 #endif // COLLISION
 
@@ -243,12 +243,12 @@ constexpr int SAVE_MAX = 1;
 #ifdef TEST_DT_OUT
 constexpr real DT_OUT = TEST_DT_OUT;
 #elif defined(TEST_COLCHAIN_3D)
-constexpr real DT_OUT = 1.0e-2;
+constexpr real DT_OUT = 1.0e-02;
 #elif defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_FRAG_2D)
 // the query-local physical kernel needs more time than the synthetic-kernel chain test to produce events
 constexpr real DT_OUT = 1.0;
 #elif defined(TEST_COLCHAIN_2D)
-constexpr real DT_OUT = 1.0e-3;
+constexpr real DT_OUT = 1.0e-03;
 #else  // !(TEST_DT_OUT || TEST_COLCHAIN_3D || TEST_COLCHAIN_WEDGE_2D || TEST_COLCHAIN_FRAG_2D || TEST_COLCHAIN_2D)
 constexpr real DT_OUT = 1.0;
 #endif // TEST_DT_OUT / TEST_COLCHAIN_3D / (TEST_COLCHAIN_WEDGE_2D || TEST_COLCHAIN_FRAG_2D) / TEST_COLCHAIN_2D

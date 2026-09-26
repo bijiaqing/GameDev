@@ -107,7 +107,15 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
     // a full disk has no periodic images, so compile only the required top-K path
-    constexpr int fast_work = [] { int n = 1; while (n < 2*N_K || n < N_K + MORTON_TPB) n *= 2; return n; }();
+    constexpr int fast_work = []()
+    {
+        int n = 1;
+        while (n < 2*N_K || n < N_K + MORTON_TPB)
+        {
+            n *= 2;
+        }
+        return n;
+    }();
     constexpr int query_work = X_WEDGE ? MORTON_WORK_SIZE : fast_work;
     __shared__ float work_dist_sq[query_work];
     __shared__ int work_idx_old[query_work];

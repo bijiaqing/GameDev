@@ -205,7 +205,7 @@ periodic_case make_full_disk (int dim)
 
 periodic_case make_period_limit (int dim, bool use_images)
 {
-    float deficit = (use_images ? 2.0f : 0.5f)*1.0e-6f;
+    float deficit = (use_images ? 2.0f : 0.5f)*1.0e-06f;
     float width = 2.0f*static_cast<float>(M_PI) - deficit;
     float x_min = -0.5f*width;
     float x_max =  0.5f*width;
@@ -316,7 +316,7 @@ bool run_case (const periodic_case &test)
         for (std::size_t idx_neighbor = 0; idx_neighbor < common; idx_neighbor++)
         {
             float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
-            bool distance_matches = error <= 2.0e-6f
+            bool distance_matches = error <= 2.0e-06f
                 *std::max(1.0f, std::fabs(expected[idx_neighbor].first));
             if (actual[idx_neighbor].second == expected[idx_neighbor].second && distance_matches) continue;
 

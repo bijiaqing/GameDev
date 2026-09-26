@@ -577,7 +577,7 @@ int main (int argc, char **argv)
             }
 
             // keep the fastest frozen propensity below CFL_COL before sampling one event at most
-            dt_col = fmin(CFL_COL / max_col_rate, remaining);
+            dt_col = std::fmin(CFL_COL / max_col_rate, remaining);
             #ifdef KNN_CACHE
             #ifdef COLLISION_KDTREE
             col_event_run <<< NB_P, TPB >>> (
@@ -685,7 +685,7 @@ int main (int argc, char **argv)
             GPU_KERNEL_CHECK("dyn_rate_calc");
             thrust::device_ptr <const real> dt_rate_ptr(dev_dyn_rate);
             real max_dt_rate = *thrust::max_element(dt_rate_ptr, dt_rate_ptr + N_P);
-            dt_dyn = fmin(DT_MAX, fmin(1.0 / max_dt_rate, dt_out - clock_out));
+            dt_dyn = std::fmin(DT_MAX, std::fmin(1.0 / max_dt_rate, dt_out - clock_out));
 
             #ifdef IMPORTGAS
             // interpolate the working gas fields to the midpoint time of this dynamics step
@@ -736,7 +736,7 @@ int main (int argc, char **argv)
             GPU_KERNEL_CHECK("optdepth_csum");
 
             real taper = (T_BETA > 0.0) ? (clock_sim + 0.5*dt_dyn) / T_BETA : 1.0;
-            taper = fmin(fmax(taper, 0.0), 1.0);
+            taper = std::fmin(std::fmax(taper, 0.0), 1.0);
             real beta_taper = taper*taper*(3.0 - 2.0*taper);
 
             ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth,

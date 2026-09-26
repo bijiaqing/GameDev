@@ -19,7 +19,7 @@ void _get_drag_weights (real dt, real ts, real &drag_relax, real &drag_decay,
     drag_decay = 1.0 - drag_relax;
 
     // evaluate drag-weighted force quadrature with a cancellation-safe small-step series
-    if (tau < 1.0e-4)
+    if (tau < 1.0e-04)
     {
         real tau_sq = tau*tau;
         real tau_cb = tau_sq*tau;
@@ -41,9 +41,9 @@ void _get_drag_weights (real dt, real ts, real &drag_relax, real &drag_decay,
 #ifdef FLUID_BLOCK_SWEEP
 
 #ifdef GAMEDEV_ROCM
-const int TPB_BLOCK = 64;
+constexpr int TPB_BLOCK = 64;
 #else  // !GAMEDEV_ROCM
-const int TPB_BLOCK = 32;
+constexpr int TPB_BLOCK = 32;
 #endif // GAMEDEV_ROCM
 
 // index the explicit full-grid planes shared by every block-owned advection sweep

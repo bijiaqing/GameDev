@@ -191,7 +191,8 @@ public:
         morton_origin <<< 1, 1 >>> (dev_node_, point_count, origin, width);
         _morton_gpu_check(gpuGetLastError(), "launch morton_origin");
         node_count_ = 1;
-        int first = 0, count = 1;
+        int first = 0;
+        int count = 1;
         thrust::device_vector<int> children;
         thrust::device_vector<std::uint64_t> offsets;
         for (int level = 0; level <= max_level && count; ++level)

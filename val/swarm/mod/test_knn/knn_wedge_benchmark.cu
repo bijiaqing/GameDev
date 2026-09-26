@@ -240,7 +240,7 @@ options parse_options (int argc, char **argv)
     }
     if (result.dim != 2 && result.dim != 3) throw std::invalid_argument("--dim must be 2 or 3");
     if (result.x_max <= result.x_min
-        || result.x_max - result.x_min >= 6.28318530717958647692f - 1.0e-6f)
+        || result.x_max - result.x_min >= 6.28318530717958647692f - 1.0e-06f)
         throw std::invalid_argument("wedge must satisfy 0 < x_max-x_min < 2*pi-1e-6");
     if (result.distribution != "smooth" && result.distribution != "ring"
         && result.distribution != "interior_clump" && result.distribution != "seam_clump")
@@ -382,7 +382,7 @@ int count_image_geometry_mismatches (const std::vector<int> &neighbor,
             float dy = query[idx_query].y - image_point.y;
             float dz = query[idx_query].z - image_point.z;
             float expected = dx*dx + dy*dy + dz*dz;
-            float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(expected));
+            float tolerance = 2.0e-06f*std::max(1.0f, std::fabs(expected));
             if (std::fabs(dist_sq[idx_out] - expected) > tolerance) mismatches++;
         }
     }
@@ -397,7 +397,7 @@ bool lists_differ (const std::vector<std::pair<float, int>> &a,
     {
         float error = std::fabs(a[idx].first - b[idx].first);
         maximum_error = std::max(maximum_error, error);
-        if (a[idx].second != b[idx].second || error > 2.0e-6f) return true;
+        if (a[idx].second != b[idx].second || error > 2.0e-06f) return true;
     }
     return false;
 }
@@ -436,7 +436,7 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
         {
             float error = std::fabs(actual_by_idx[idx].second - expected_by_idx[idx].second);
             maximum_error = std::max(maximum_error, error);
-            if (error > 2.0e-6f) return true;
+            if (error > 2.0e-06f) return true;
         }
         return false;
     }
@@ -445,12 +445,12 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
     {
         float error = std::fabs(actual[idx].first - expected[idx].first);
         maximum_error = std::max(maximum_error, error);
-        if (error > 2.0e-6f) return true;
+        if (error > 2.0e-06f) return true;
         if (actual[idx].second == expected[idx].second) continue;
 
         // host and GPU rotations may reverse candidates whose squared distances differ below
         // single-precision resolution; record these substitutions without treating them as errors
-        if (error <= 1.0e-7f)
+        if (error <= 1.0e-07f)
         {
             tie_equivalent_neighbors++;
             continue;

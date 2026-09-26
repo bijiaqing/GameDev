@@ -79,7 +79,7 @@ real _get_ball_measure (real y, real z, real radius)
     int dim = 1 + static_cast<int>(N_X > 1) + static_cast<int>(N_Z > 1);
     real measure = (dim == 1) ? 2.0*radius : (dim == 2) ? M_PI*radius*radius : 4.0*M_PI*radius*radius*radius / 3.0;
 
-    real distances[4] = {y - Y_MIN, Y_MAX - y, 1.0e100, 1.0e100};
+    real distances[4] = {y - Y_MIN, Y_MAX - y, 1.0e+100, 1.0e+100};
     if (N_Z > 1)
     {
         distances[2] = y*(z - Z_MIN);
@@ -284,8 +284,10 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
 {
     real y = dev_particle[idx_old_i].position.y;
     real z = dev_particle[idx_old_i].position.z;
-    real R = _get_cyl_R(y, z), Z = _get_cyl_Z(y, z);
-    real h = _get_hg(R), omega = _get_omegaK(R);
+    real R = _get_cyl_R(y, z);
+    real Z = _get_cyl_Z(y, z);
+    real h = _get_hg(R);
+    real omega = _get_omegaK(R);
     real si = _get_stokes(R, Z, h, size_i
         #ifdef IMPORTGAS
         , dev_particle[idx_old_i].position.x, y, z, dev_gas_dens
@@ -298,7 +300,8 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     );
     // use the analytic pressure-drift speed vn = (dP/dR)/(2 rho Omega), as in mcdust
     real vn = -_get_eta(R, Z, h)*R*omega;
-    real fi = 1.0 / (1.0 + si*si), fj = 1.0 / (1.0 + sj*sj);
+    real fi = 1.0 / (1.0 + si*si);
+    real fj = 1.0 / (1.0 + sj*sj);
     real dvr = 2.0*vn*(si*fi - sj*fj); // benchmark gas radial velocity is zero
     real dvphi = vn*(fi - fj);
     // cap the terminal settling speed at St = 0.5, beyond which grains oscillate about the midplane

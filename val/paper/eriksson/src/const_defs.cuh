@@ -14,9 +14,9 @@ using real = double;
 using real3 = double3;
 
 // all dimensional values are CGS; CODE_UNIT must remain disabled for Brownian motion
-constexpr real AU = 1.495978707e13, YEAR = 31557600.0;
-constexpr real G = 6.67430e-8, M_S = 1.98847e33, R_0 = AU;
-constexpr real S_0 = 1.0e-4; // diameter, not the radius used by Eriksson et al.
+constexpr real AU = 1.495978707e+13, YEAR = 31557600.0;
+constexpr real G = 6.67430e-08, M_S = 1.98847e+33, R_0 = AU;
+constexpr real S_0 = 1.0e-04; // diameter, not the radius used by Eriksson et al.
 constexpr int N_P = 1048576;
 constexpr int N_X = 1, N_Y = 128, N_Z = 64;
 constexpr real X_MIN = -M_PI, X_MAX = M_PI;
@@ -33,7 +33,7 @@ constexpr real M_MOL = 2.34*1.67262192369e-24, X_SEC = 2.0e-15;
 constexpr real RHO_0 = 1.0;
 constexpr real STOKES_0 = M_PI*RHO_0*S_0 / (4.0*SIGMA_0);
 constexpr real SCHMIDT_X = 1.0, SCHMIDT_R = 1.0, SCHMIDT_Z = 1.0;
-constexpr real INIT_SMIN = 1.0e-4, INIT_SMAX = INIT_SMIN; // fixed 0.5-micron radius monomers
+constexpr real INIT_SMIN = 1.0e-04, INIT_SMAX = INIT_SMIN; // fixed 0.5-micron radius monomers
 
 constexpr int COAG_KERNEL = 3, N_K = 256;
 constexpr real H_SEARCH = 1.0, V_FRAG = 100.0;
@@ -47,7 +47,7 @@ constexpr int COL_EVENT_CAP = 32;
 constexpr int COL_BIN_X = 1, COL_BIN_Y = 16, COL_BIN_Z = 8, COL_BIN_S = 32;
 constexpr int COL_BIN_MIN = 64;
 constexpr real COL_BATH_MAX = YEAR;
-constexpr real COL_BATH_EPS = 0.08, COL_BATH_ALPHA = 1.0e-3;
+constexpr real COL_BATH_EPS = 0.08, COL_BATH_ALPHA = 1.0e-03;
 static_assert(N_K == 256 && COL_BATH_EPS == 0.08, "Benchmark settings must match across variants");
 constexpr int MORTON_TPB = 64, MORTON_LEAF_TARGET = 128;
 constexpr int neighbor_pow2 (int n)

@@ -38,9 +38,11 @@ real _get_diff_gradlnrho_Z (real R, real Z, real h)
 __device__ __forceinline__
 real3 _get_diff_import_gradient (real x, real y, real z, const real *gas)
 {
-    real lx = _get_loc_x(x), ly = _get_loc_y(y), lz = _get_loc_z(z);
+    real lx = _get_loc_x(x);
+    real ly = _get_loc_y(y);
+    real lz = _get_loc_z(z);
     #ifdef HALF_DISK
-    lz = fmin(lz, static_cast<real>(N_Z) - 1.e-6);
+    lz = fmin(lz, static_cast<real>(N_Z) - 1.0e-06);
     #endif // HALF_DISK
     int cell = static_cast<int>(lx) + N_X*static_cast<int>(ly) + N_X*N_Y*static_cast<int>(lz);
     auto t = _3d_interp(lx, ly, lz);
@@ -49,11 +51,16 @@ real3 _get_diff_import_gradient (real x, real y, real z, const real *gas)
     real step = t.next_y > 0 ? _get_dy() - 1.0 : 1.0 / _get_dy() - 1.0;
     real dy = t.next_y ? (1.0 + t.frac_y*step) / (y*step) : 0.0;
     real dz = t.next_z ? (t.next_z > 0 ? 1.0 : -1.0) / _get_dz() : 0.0;
-    real rho = 0.0, gx = 0.0, gy = 0.0, gz = 0.0;
+    real rho = 0.0;
+    real gx = 0.0;
+    real gy = 0.0;
+    real gz = 0.0;
     for (int k = 0; k < 2; ++k)for (int j = 0; j < 2; ++j)for (int i = 0; i < 2; ++i)
     {
         real v = gas[cell + i*t.next_x + j*t.next_y + k*t.next_z];
-        real wx = i ? t.frac_x : 1.0 - t.frac_x, wy = j ? t.frac_y : 1.0 - t.frac_y, wz = k ? t.frac_z : 1.0 - t.frac_z;
+        real wx = i ? t.frac_x : 1.0 - t.frac_x;
+        real wy = j ? t.frac_y : 1.0 - t.frac_y;
+        real wz = k ? t.frac_z : 1.0 - t.frac_z;
         rho += v*wx*wy*wz;
         gx += v*(i ? dx : -dx)*wy*wz;
         gy += v*wx*(j ? dy : -dy)*wz;
@@ -75,7 +82,9 @@ dust_diffusion _get_dust_diffusion (real x, real y, real z, real size
 #endif // IMPORTGAS
 )
 {
-    real R = _get_cyl_R(y, z), Z = _get_cyl_Z(y, z), h = _get_hg(R);
+    real R = _get_cyl_R(y, z);
+    real Z = _get_cyl_Z(y, z);
+    real h = _get_hg(R);
     real st = _get_stokes(R, Z, h, size
         #ifdef IMPORTGAS
         , x, y, z, gas
@@ -90,7 +99,8 @@ dust_diffusion _get_dust_diffusion (real x, real y, real z, real size
     #endif // IMPORTGAS
     // Epstein St is proportional to 1/(rho_g H_g), or 1/Sigma_g in 2D; the 3D radial term adds the H_g gradient
     real st_R = (N_Z > 1) ? -g.y - (IDX_Q + 3.0) / (2.0*R) : -g.y;
-    real st_Z = -g.z, st_phi = -g.x;
+    real st_Z = -g.z;
+    real st_phi = -g.x;
     #if defined(CONST_ST) && !defined(IMPORTGAS)
     st_R = st_Z = st_phi = 0.0;
     #endif // CONST_ST && !IMPORTGAS

@@ -207,7 +207,7 @@ __device__ __forceinline__
 real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z, bool outer_face = false)
 {
     #ifdef HALF_DISK
-    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-6);
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-06);
     #endif // HALF_DISK
 
     if (outer_face) // optical depth is defined on radial outer faces
@@ -255,7 +255,7 @@ void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, rea
     real loc_z = _get_loc_z(dev_particle[idx].position.z);
 
     #ifdef HALF_DISK
-    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1e-6);
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-06);
     #endif // HALF_DISK
 
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;

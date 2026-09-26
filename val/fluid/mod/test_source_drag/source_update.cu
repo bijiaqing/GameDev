@@ -15,7 +15,7 @@ void source_update (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
 
     // use x as a parameter index rather than a spatial coordinate to cover non-stiff through strongly stiff drag in one
     // launch
-    const real stiffness[8] = {1.0e-6, 1.0e-3, 0.1, 1.0, 10.0, 1.0e2, 1.0e4, 1.0e6};
+    const real stiffness[8] = {1.0e-06, 1.0e-03, 0.1, 1.0, 10.0, 1.0e+02, 1.0e+04, 1.0e+06};
     real drag_h = stiffness[idx % 8];
     real ts = dt / drag_h;
     real drag_relax, drag_decay, force_weight_n, force_weight_new;

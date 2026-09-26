@@ -301,7 +301,7 @@ bool run_kdtree_filter_case (const edge_case &test)
     {
         float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
         passed = actual[idx_neighbor].second == expected[idx_neighbor].second
-            && error <= 2.0e-6f*std::max(1.0f, std::fabs(expected[idx_neighbor].first));
+            && error <= 2.0e-06f*std::max(1.0f, std::fabs(expected[idx_neighbor].first));
     }
 
     #ifdef GAMEDEV_ROCM
@@ -411,7 +411,7 @@ bool run_case (const edge_case &test)
         for (std::size_t idx_neighbor = 0; idx_neighbor < common; idx_neighbor++)
         {
             float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
-            bool distance_matches = error <= 2.0e-6f
+            bool distance_matches = error <= 2.0e-06f
                 *std::max(1.0f, std::fabs(expected[idx_neighbor].first));
             if (actual[idx_neighbor].second == expected[idx_neighbor].second && distance_matches) continue;
 

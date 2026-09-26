@@ -382,7 +382,7 @@ inline __host__
 void msg_output (int idx_file)
 {
     std::time_t time_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    int width = std::max(3, (int)std::to_string(SAVE_MAX).length());
+    int width = std::max(3, static_cast<int>(std::to_string(SAVE_MAX).length()));
 
     std::cout
     << std::endl
@@ -425,9 +425,9 @@ inline __host__
 std::string frame_num (int idx_file)
 {
     std::string num_str = std::to_string(idx_file);
-    int width = std::max(5, (int)std::to_string(SAVE_MAX).length());
+    int width = std::max(5, static_cast<int>(std::to_string(SAVE_MAX).length()));
 
-    if ((int)num_str.length() < width)
+    if (static_cast<int>(num_str.length()) < width)
     {
         num_str.insert(0, width - num_str.length(), '0');
     }

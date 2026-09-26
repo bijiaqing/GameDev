@@ -356,7 +356,7 @@ quality_stats compare_neighbors (const std::vector<int> &kdtree_idx_old, const s
         {
             float distance_error = std::fabs(kdtree_neighbors[idx].first - morton_neighbors[idx].first);
             result.maximum_distance_error = std::max(result.maximum_distance_error, distance_error);
-            float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(kdtree_neighbors[idx].first));
+            float tolerance = 2.0e-06f*std::max(1.0f, std::fabs(kdtree_neighbors[idx].first));
             if (kdtree_neighbors[idx].second != morton_neighbors[idx].second || distance_error > tolerance)
             {
                 query_mismatch = true;
@@ -412,10 +412,10 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
         #endif // GAMEDEV_ROCM
         maximum_distance_error = std::max(maximum_distance_error, distance_error);
         #ifdef GAMEDEV_ROCM
-        float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(expected_by_id[idx].first));
+        float tolerance = 2.0e-06f*std::max(1.0f, std::fabs(expected_by_id[idx].first));
         if (actual_by_id[idx].second != expected_by_id[idx].second || distance_error > tolerance) return true;
         #else  // !GAMEDEV_ROCM
-        float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(expected[idx].first));
+        float tolerance = 2.0e-06f*std::max(1.0f, std::fabs(expected[idx].first));
         if (actual[idx].second != expected[idx].second || distance_error > tolerance) return true;
         #endif // GAMEDEV_ROCM
     }

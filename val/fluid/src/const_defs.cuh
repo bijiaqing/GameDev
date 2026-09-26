@@ -30,9 +30,9 @@ constexpr real VERIFY_SHIFT = TEST_SHIFT;
 constexpr real VERIFY_SHIFT = 3.25;
 #endif // TEST_SHIFT
 
-const real G   = 1.0;
-const real M_S = 1.0;
-const real R_0 = 1.0;
+constexpr real G   = 1.0;
+constexpr real M_S = 1.0;
+constexpr real R_0 = 1.0;
 
 // test constants deliberately replace a production model's physical setup with the smallest grid that isolates one
 // claim
@@ -128,49 +128,49 @@ constexpr real Z_MAX = 0.5*M_PI;
 #endif // VERIFY_* case selection
 
 #ifdef VERIFY_STARTUP_3D
-const real SIGMA_0 = 1.3;
-const real ASPR_0  = 0.12;
+constexpr real SIGMA_0 = 1.3;
+constexpr real ASPR_0  = 0.12;
 #else  // !VERIFY_STARTUP_3D
-const real SIGMA_0 = 1.0;
-const real ASPR_0  = 0.5;
+constexpr real SIGMA_0 = 1.0;
+constexpr real ASPR_0  = 0.5;
 #endif // VERIFY_STARTUP_3D
 
 // radiation-supported ring equilibria require a gas profile consistent with the chosen beta; the remaining tests use
 // the simpler non-radiative exponent
 #ifdef VERIFY_STARTUP_3D
 // p=3/2 and q=0 remove pressure-supported radial drift, isolating the polar advection-diffusion balance
-const real IDX_P = 1.5;
+constexpr real IDX_P = 1.5;
 #elif defined(VERIFY_RING_RADIATION)
-const real IDX_P = 1.2;
+constexpr real IDX_P = 1.2;
 #else  // !(VERIFY_STARTUP_3D || VERIFY_RING_RADIATION)
-const real IDX_P = 2.0;
+constexpr real IDX_P = 2.0;
 #endif // VERIFY_STARTUP_3D / VERIFY_RING_RADIATION
 
 #ifdef VERIFY_STARTUP_3D
-const real IDX_Q = 0.0;
+constexpr real IDX_Q = 0.0;
 #else  // !VERIFY_STARTUP_3D
-const real IDX_Q = -1.0;
+constexpr real IDX_Q = -1.0;
 #endif // VERIFY_STARTUP_3D
 
 #ifdef DIFFUSION
 #ifdef VERIFY_STARTUP_3D
-const real ALPHA = 4.0e-3;
+constexpr real ALPHA = 4.0e-03;
 #else  // !VERIFY_STARTUP_3D
-const real NU = 5.0e-2;
+constexpr real NU = 5.0e-02;
 #endif // VERIFY_STARTUP_3D
 #endif // DIFFUSION
 
 #ifdef VERIFY_STARTUP_3D
-const real METAL_Z = 1.7e-2;
-const real STOKES_0 = 3.0e-2;
+constexpr real METAL_Z = 1.7e-02;
+constexpr real STOKES_0 = 3.0e-02;
 #else  // !VERIFY_STARTUP_3D
-const real METAL_Z = 1.0e-2;
+constexpr real METAL_Z = 1.0e-02;
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION) || defined(VERIFY_Y_DIFFUSION_CYL) \
     || defined(VERIFY_Y_DIFFUSION_SPH) || defined(VERIFY_Z_DIFFUSION) || defined(VERIFY_DIFFUSION_POSLIMIT)
 // the tracer limit keeps the isolated Fourier/Bessel/Legendre references at constant D=nu/Sc
-const real STOKES_0 = 0.0;
+constexpr real STOKES_0 = 0.0;
 #else  // other VERIFY_* cases
-const real STOKES_0 = 1.0e-1;
+constexpr real STOKES_0 = 1.0e-01;
 #endif // VERIFY_* case selection
 #endif // VERIFY_STARTUP_3D
 
@@ -178,13 +178,13 @@ const real STOKES_0 = 1.0e-1;
 #ifdef VERIFY_RING_RADIATION
 // ring tests isolate a known unattenuated radiation force by setting opacity to zero; the standalone optical-depth test
 // uses unit opacity and beta only to satisfy the shared production parameter interface
-const real BETA_0 = 2.0e-1;
-const real KAPPA_0 = 0.0;
+constexpr real BETA_0 = 2.0e-01;
+constexpr real KAPPA_0 = 0.0;
 #else  // !VERIFY_RING_RADIATION
-const real BETA_0 = 1.0;
-const real KAPPA_0 = 1.0;
+constexpr real BETA_0 = 1.0;
+constexpr real KAPPA_0 = 1.0;
 #endif // VERIFY_RING_RADIATION
-const real T_BETA = 1.0;
+constexpr real T_BETA = 1.0;
 #endif // RADIATION
 
 #ifdef DIFFUSION
@@ -192,69 +192,69 @@ const real T_BETA = 1.0;
 // diffusion negligible in every other direction while preserving the same production kernel interface
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION) || defined(VERIFY_RING_DIFFUSION) \
     || (defined(VERIFY_DIFFUSION_POSLIMIT) && !defined(TEST_DIRECTION_Y) && !defined(TEST_DIRECTION_Z))
-const real SCHMIDT_X = 1.0;
+constexpr real SCHMIDT_X = 1.0;
 #else  // other VERIFY_* cases
-const real SCHMIDT_X = 1.0e300;
+constexpr real SCHMIDT_X = 1.0e+300;
 #endif // VERIFY_* case selection
 
 #if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH) \
     || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Y))
-const real SCHMIDT_Y = 1.0;
+constexpr real SCHMIDT_Y = 1.0;
 #else  // !(VERIFY_Y_DIFFUSION_CYL || VERIFY_Y_DIFFUSION_SPH || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Y))
-const real SCHMIDT_Y = 1.0e300;
+constexpr real SCHMIDT_Y = 1.0e+300;
 #endif // VERIFY_Y_DIFFUSION_CYL || VERIFY_Y_DIFFUSION_SPH || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Y)
 
 #ifdef VERIFY_STARTUP_3D
-const real SCHMIDT_Z = 2.0;
+constexpr real SCHMIDT_Z = 2.0;
 #elif defined(VERIFY_Z_DIFFUSION)  || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Z))
-const real SCHMIDT_Z = 1.0;
+constexpr real SCHMIDT_Z = 1.0;
 #else  // !(VERIFY_STARTUP_3D || (VERIFY_Z_DIFFUSION || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Z)))
-const real SCHMIDT_Z = 1.0e300;
+constexpr real SCHMIDT_Z = 1.0e+300;
 #endif // VERIFY_STARTUP_3D / (VERIFY_Z_DIFFUSION || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Z))
 
-const real POS_LIMIT = 0.9;
+constexpr real POS_LIMIT = 0.9;
 #endif // DIFFUSION
 
-const int SAVE_MAX = 1;
-const real DT_OUT  = 1.0;
-const real DT_MAX  = 1.0;
+constexpr int SAVE_MAX = 1;
+constexpr real DT_OUT  = 1.0;
+constexpr real DT_MAX  = 1.0;
 constexpr real CFL_DYN = VERIFY_CFL;
-const real RHO_VAC = 1.0e-15;
+constexpr real RHO_VAC = 1.0e-15;
 
 // kernel launch counts correspond to one thread per cell, x ring, y column, or z column; the extra block is harmless
 // because every kernel begins with an out-of-range return
-const int TPB  = 64;
-const int N_G  = N_X*N_Y*N_Z;
-const int NB_G = N_G     / TPB + 1;
-const int NB_X = N_Y*N_Z / TPB + 1;
-const int NB_Y = N_X*N_Z / TPB + 1;
-const int NB_Z = N_X*N_Y / TPB + 1;
+constexpr int TPB  = 64;
+constexpr int N_G  = N_X*N_Y*N_Z;
+constexpr int NB_G = N_G     / TPB + 1;
+constexpr int NB_X = N_Y*N_Z / TPB + 1;
+constexpr int NB_Y = N_X*N_Z / TPB + 1;
+constexpr int NB_Z = N_X*N_Y / TPB + 1;
 
-const real VERIFY_Q0  = 1.0;
-const real VERIFY_EPS = 0.1;
-const int  VERIFY_M   = 2;
-const real VERIFY_A   = 0.2;
-const real VERIFY_RATE_Z = 0.15;
-const real VERIFY_D   = 5.0e-2;
+constexpr real VERIFY_Q0  = 1.0;
+constexpr real VERIFY_EPS = 0.1;
+constexpr int  VERIFY_M   = 2;
+constexpr real VERIFY_A   = 0.2;
+constexpr real VERIFY_RATE_Z = 0.15;
+constexpr real VERIFY_D   = 5.0e-02;
 
 // final times are long enough to produce measurable translation or decay but short enough to keep fine-grid suites
 // practical
 #if defined(VERIFY_X_TRANSPORT)
-const real VERIFY_TEND = 2.0*M_PI;
+constexpr real VERIFY_TEND = 2.0*M_PI;
 #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
-const real VERIFY_TEND = 0.25;
+constexpr real VERIFY_TEND = 0.25;
 #elif defined(VERIFY_Y_OUTFLOW_2D)
-const real VERIFY_TEND = 1.0;
+constexpr real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_Z_TRANSPORT)
-const real VERIFY_TEND = 0.30;
+constexpr real VERIFY_TEND = 0.30;
 #elif defined(VERIFY_Z_OUTFLOW) || defined(VERIFY_Z_REFLECT)
-const real VERIFY_TEND = 1.0;
+constexpr real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_SOURCE_DRAG)
-const real VERIFY_TEND = 1.0;
+constexpr real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_RING)
-const real VERIFY_TEND = 1.0;
+constexpr real VERIFY_TEND = 1.0;
 #else  // other VERIFY_* cases
-const real VERIFY_TEND = 0.5;
+constexpr real VERIFY_TEND = 0.5;
 #endif // VERIFY_* case selection
 
 // fail during compilation when a test configuration violates assumptions made by the production grid helpers or kernels

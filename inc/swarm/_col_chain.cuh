@@ -32,8 +32,11 @@ struct query_environment
 __device__ __forceinline__ query_environment _cache_query_environment (const swarm &p)
 {
     real R = _get_cyl_R(p.position.y, p.position.z);
-    real Z = _get_cyl_Z(p.position.y, p.position.z), h = _get_hg(R);
-    real omega = _get_omegaK(R), cs = _get_cs(R, h), alpha = _get_alpha(R, h);
+    real Z = _get_cyl_Z(p.position.y, p.position.z);
+    real h = _get_hg(R);
+    real omega = _get_omegaK(R);
+    real cs = _get_cs(R, h);
+    real alpha = _get_alpha(R, h);
     real strat = _get_gas_strat(R, Z, h);
     return {Z, omega, -_get_eta(R, Z, h)*R*omega, pow(R / R_0, IDX_P), strat, cs,
         _get_re_inv_sqrt(R, alpha, _get_sigma_g(R)*strat), 1.5*alpha*cs*cs};
@@ -49,7 +52,8 @@ __device__ __forceinline__ real _cached_stokes (const query_environment &e, real
 // reproduce the _get_vrel_t regime algebra with precomputed gas coefficients
 __device__ __forceinline__ real _cached_turbulence (const query_environment &e, real stokes_i, real stokes_j)
 {
-    real re_inv_sqrt = e.re_inv_sqrt, vg_sq = e.vg_sq;
+    real re_inv_sqrt = e.re_inv_sqrt;
+    real vg_sq = e.vg_sq;
     real stokes_large, stokes_small, eps;
 
     if (stokes_i >= stokes_j)
@@ -142,12 +146,16 @@ __device__ __forceinline__ real _cached_turbulence (const query_environment &e, 
 // reproduce _get_vrel_pair with drift, settling, turbulence, and Brownian terms from the cached environment
 __device__ __forceinline__ real _cached_pair_velocity (const query_environment &e, real size_i, real size_j)
 {
-    real si = _cached_stokes(e, size_i), sj = _cached_stokes(e, size_j);
-    real fi = 1.0 / (1.0 + si*si), fj = 1.0 / (1.0 + sj*sj);
-    real dvr = 2.0*e.vn*(si*fi - sj*fj), dvphi = e.vn*(fi - fj);
+    real si = _cached_stokes(e, size_i);
+    real sj = _cached_stokes(e, size_j);
+    real fi = 1.0 / (1.0 + si*si);
+    real fj = 1.0 / (1.0 + sj*sj);
+    real dvr = 2.0*e.vn*(si*fi - sj*fj);
+    real dvphi = e.vn*(fi - fj);
     real dvz = e.Z*e.omega*(fmin(si, 0.5) - fmin(sj, 0.5));
     real vt = _cached_turbulence(e, si, sj);
-    real mi = _get_grain_mass(size_i), mj = _get_grain_mass(size_j);
+    real mi = _get_grain_mass(size_i);
+    real mj = _get_grain_mass(size_j);
     real vb = fmin(sqrt(8.0*e.cs*e.cs*M_MOL*(mi + mj) / (M_PI*mi*mj)), e.cs);
     return sqrt(dvr*dvr + dvphi*dvphi + dvz*dvz + vt*vt + vb*vb);
 }
@@ -189,8 +197,8 @@ __host__ __device__ inline void _record_event_work (event_work &work, int catego
 // group G identical tiny sticking projectiles into one event so each packet adds at most 0.01% target mass
 __host__ __device__ inline real _sticking_packet (real q, bool fragmentation)
 {
-    return !fragmentation && q > 0.0 && q <= 1.e-6
-        ? fmax(1.0, floor(1.e-4 / q)) : 1.0;
+    return !fragmentation && q > 0.0 && q <= 1.0e-06
+        ? fmax(1.0, floor(1.0e-04 / q)) : 1.0;
 }
 // projectile-to-target grain mass ratio q for compact grains of equal material density
 __host__ __device__ inline real _sticking_mass_ratio (real size_i, real size_j)
@@ -220,8 +228,11 @@ __host__ __device__ inline real _erosion_outcome_moments (real si, real sj,
     // high-speed erosion of a much larger target: remnant loses G*q of its mass or the owner becomes debris
     if (q <= 0.1)
     {
-        real remnant = (1.0 - q) / G, debris = q, factor = remnant + debris;
-        real jr = -log1p(-G*q) / 3.0, jd = -log(q) / 3.0;
+        real remnant = (1.0 - q) / G;
+        real debris = q;
+        real factor = remnant + debris;
+        real jr = -log1p(-G*q) / 3.0;
+        real jd = -log(q) / 3.0;
         mean = (remnant*jr + debris*jd) / factor;
         second = (remnant*jr*jr + debris*jd*jd) / factor;
         maximum = fmax(jr, jd);
@@ -230,7 +241,7 @@ __host__ __device__ inline real _erosion_outcome_moments (real si, real sj,
     // catastrophic fragmentation draws diameter [sqrt(s_min)+U*(sqrt(si)-sqrt(s_min))]^2
     // with L=log(si/s_min)/2, the moments integrate -2*log(y) over y in [exp(-L),1]
     real L = 0.5*log(si / INIT_SMIN);
-    if (L < 1.e-3)
+    if (L < 1.0e-03)
     {
         // use series to avoid cancellation when the target is near the monomer floor
         mean = L - L*L / 6.0 + L*L*L*L / 360.0;
@@ -256,7 +267,7 @@ __host__ __device__ inline real _sample_erosion_outcome (real si, real sj,
     real G = _sticking_packet(q, false);
     if (!high_speed)
     {
-        category = q <= 1.e-6 ? 0 : q <= 1.e-4 ? 1 : q <= 1.e-2 ? 2 : 3;
+        category = q <= 1.0e-06 ? 0 : q <= 1.0e-04 ? 1 : q <= 1.0e-02 ? 2 : 3;
         log_mass = log1p(G*q);
         return cbrt(si*si*si + G*sj*sj*sj);
     }
@@ -582,7 +593,9 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
             #endif // IMPORTGAS
             idx_old_i, idx_old_j, image_j, lambda_0, vrel, environment
         ) / dev_col_measure[idx_old_i];
-        real mean = 0, second = 0, maximum = 0;
+        real mean = 0.0;
+        real second = 0.0;
+        real maximum = 0.0;
         pair_rate *= _erosion_outcome_moments(size_i, size_j, vrel >= V_FRAG, mean, second, maximum);
         maximum_work[idx_neighbor] = pair_rate > 0.0 ? maximum : 0.0;
         change_work[idx_neighbor] = pair_rate*mean;
@@ -605,8 +618,10 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         __syncthreads();
         if (t < 64)
         {
-          real r = rate_work[t] + rate_work[t + 64], a = change_work[t] + change_work[t + 64];
-          real b = second_work[t] + second_work[t + 64], m = fmax(maximum_work[t], maximum_work[t + 64]);
+          real r = rate_work[t] + rate_work[t + 64];
+          real a = change_work[t] + change_work[t + 64];
+          real b = second_work[t] + second_work[t + 64];
+          real m = fmax(maximum_work[t], maximum_work[t + 64]);
           int valid = validity[t] && validity[t + 64];
           for (int delta = 32; delta; delta /= 2)
           {
@@ -649,7 +664,9 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
     }
     if (threadIdx.x == 0)
     {
-        real rate = rate_work[0], change = change_work[0], second = second_work[0];
+        real rate = rate_work[0];
+        real change = change_work[0];
+        real second = second_work[0];
         cached[idx_old_i] = {valid_work[0] ? rate : -1.0, change, second, maximum_work[0]};
         dev_col_rate[idx_old_i] = rate;
         change_rate[idx_old_i] = change;
@@ -894,7 +911,9 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                     #endif // IMPORTGAS
                     idx_old_i, idx_old_j, image_j, lambda_0, vrel, environment
                 ) / dev_col_measure[idx_old_i];
-                real mean = 0.0, second = 0.0, maximum = 0.0;
+                real mean = 0.0;
+                real second = 0.0;
+                real maximum = 0.0;
                 pair_value *= _erosion_outcome_moments(size_i, size_j, vrel >= V_FRAG, mean, second, maximum);
                 pair_rate[idx_neighbor] = pair_value;
                 pair_jump1[idx_neighbor] = pair_value*mean;
@@ -917,7 +936,8 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
         {
           const int t = threadIdx.x;
           __syncthreads();
-          real left = pair_rate[t], right = pair_rate[t + 128];
+          real left = pair_rate[t];
+          real right = pair_rate[t + 128];
           total_work[t] = left + right;
           last_work[t] = (!isfinite(left) || left < 0.0 || !isfinite(right) || right < 0.0)
               ? -2 : (right > 0.0 ? t + 128 : (left > 0.0 ? t : -1));
@@ -927,9 +947,12 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
           __syncthreads();
           if (t < 64)
           {
-            real r = total_work[t] + total_work[t + 64], a = pair_jump1[t] + pair_jump1[t + 64];
-            real b = pair_jump2[t] + pair_jump2[t + 64], m = fmax(pair_jumpmax[t], pair_jumpmax[t + 64]);
-            int l = last_work[t], other = last_work[t + 64];
+            real r = total_work[t] + total_work[t + 64];
+            real a = pair_jump1[t] + pair_jump1[t + 64];
+            real b = pair_jump2[t] + pair_jump2[t + 64];
+            real m = fmax(pair_jumpmax[t], pair_jumpmax[t + 64]);
+            int l = last_work[t];
+            int other = last_work[t + 64];
             l = (l == -2 || other == -2) ? -2 : max(l, other);
             for (int delta = 32; delta; delta /= 2)
             {
@@ -971,7 +994,8 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 pair_jump1[j] += pair_jump1[j + half];
                 pair_jump2[j] += pair_jump2[j + half];
                 pair_jumpmax[j] = fmax(pair_jumpmax[j], pair_jumpmax[j + half]);
-                int left = last_work[j], right = last_work[j + half];
+                int left = last_work[j];
+                int right = last_work[j + half];
                 last_work[j] = (left == -2 || right == -2) ? -2
                     : (left > right ? left : right);
             }
@@ -1299,7 +1323,7 @@ col_bath_result _finish_col_bath (const std::vector<col_audit_accum> &bin,
     {
         throw std::runtime_error("collision bath controller found no active represented mass");
     }
-    real confidence_log = log(2.0*static_cast<real>(active_count) / COL_BATH_ALPHA);
+    real confidence_log = std::log(2.0*static_cast<real>(active_count) / COL_BATH_ALPHA);
     real mass_difference = 0.0;
     for (int idx_bin = 0; idx_bin < bin_count; idx_bin++)
     {
@@ -1481,7 +1505,8 @@ struct local_schedule
         {
             throw std::runtime_error("invalid local collision horizon");
         }
-        const int n = static_cast<int>(level.size()), words = (n + 31) / 32;
+        const int n = static_cast<int>(level.size());
+        const int words = (n + 31) / 32;
         // choose the coarsest power-of-two level not exceeding each requested duration
         for (int c = 0; c < n; ++c)
         {
@@ -1565,7 +1590,8 @@ struct local_schedule
             changed = false;
             for (const auto &edge : links)
             {
-                int c = edge.first, d = edge.second;
+                int c = edge.first;
+                int d = edge.second;
                 if (active[c] && cap[c] > cap[d] + 4)
                 {
                     cap[c] = cap[d] + 4;
@@ -1603,7 +1629,8 @@ struct local_schedule
             changed = false;
             for (const auto &edge : links)
             {
-                int c = edge.first, d = edge.second;
+                int c = edge.first;
+                int d = edge.second;
                 if (active[c] && candidate[c] < candidate[d] - 4)
                 {
                     candidate[c] = candidate[d] - 4;
@@ -1683,7 +1710,8 @@ __global__ void col_dep_graph (unsigned int *edges, const int *spatial,
     {
         int entry = neighbors[_get_col_offset(i, k)];
         if (entry < 0)continue;
-        int j = _get_col_idx_old(entry), c = spatial[j];
+        int j = _get_col_idx_old(entry);
+        int c = spatial[j];
         bits[c / 32] |= 1u << (c % 32);
     }
     for (int w = 0; w < LOCAL_WORDS; ++w)
@@ -1703,7 +1731,8 @@ __global__ void col_dep_graph (unsigned int *edges, const int *spatial,
     {
         int entry = neighbors[_get_col_offset(i, k)];
         if (entry < 0) continue;
-        int j = _get_col_idx_old(entry), c = spatial[j];
+        int j = _get_col_idx_old(entry);
+        int c = spatial[j];
         bits[c / 32] |= 1u << (c % 32);
     }
     for (int w = 0; w < LOCAL_WORDS; ++w)
@@ -1726,11 +1755,12 @@ __global__ void col_comp_zero (const int *ids, int count, real *hazard,
 // reduce per-owner diagnostics once per collision half-step with one block per event category
 __global__ void col_event_sum (const event_work *work, event_work *sum)
 {
-    const int k = blockIdx.x, t = threadIdx.x;
+    const int k = blockIdx.x;
+    const int t = threadIdx.x;
     __shared__ unsigned long long counts[TPB];
     __shared__ real growth[TPB];
     unsigned long long n = 0;
-    real g = 0;
+    real g = 0.0;
     for (int i = t; i < N_P; i += TPB)
     {
         n += work[i].count[k];
@@ -1981,7 +2011,8 @@ auto bin_end = [&](int c, int merged)
 };
 auto requested_step = [&](int c, int merged, int *binding = nullptr)
 {
-    int first = binmap[c*COL_BIN_S], last = bin_end(c, merged);
+    int first = binmap[c*COL_BIN_S];
+    int last = bin_end(c, merged);
     std::vector<col_rate_bin> slice(ratebin.begin() + first, ratebin.begin() + last);
     return _choose_col_bath(slice, int(slice.size()), duration, local.state[c].limit_scale, binding);
 };
@@ -2012,7 +2043,8 @@ std::vector<std::uint64_t> coarsened(LOCAL_GROUPS, 0), refined(LOCAL_GROUPS, 0),
     constrained(LOCAL_GROUPS, 0);
 std::vector<double> min_request = requested, max_request = requested;
 std::uint64_t owner_updates = 0, chain_blocks = 0, waves = 0, launches = 0;
-double chain_seconds = 0, audit_seconds = 0;
+double chain_seconds = 0.0;
+double audit_seconds = 0.0;
 col_summary.operator_count++;
 int operator_index = col_summary.operator_count;
 int batch_index = 0;
@@ -2102,7 +2134,8 @@ while (schedule.time() < schedule.end)
         dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
         dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, local.queue_a, dev_col_unfinished);
     LOCAL_KERNEL("cached_screen");
-    int unfinished = 0, continuations = 0;
+    int unfinished = 0;
+    int continuations = 0;
     LOCAL_CHECK(localCopy(&unfinished, dev_col_unfinished, sizeof(int), localD2H));
     const int *input = local.queue_a;
     int *output = local.queue_b;
@@ -2156,8 +2189,9 @@ while (schedule.time() < schedule.end)
     for (int c : groups)
     {
         if (local.owners[c].empty()) continue;
-        int first = binmap[c*COL_BIN_S], last = bin_end(c, merged);
-        real mass = 0;
+        int first = binmap[c*COL_BIN_S];
+        int last = bin_end(c, merged);
+        real mass = 0.0;
         for (int b = first; b < last; ++b)
         {
             if (audit[b].invalid_count) throw std::runtime_error("invalid local audit state");
