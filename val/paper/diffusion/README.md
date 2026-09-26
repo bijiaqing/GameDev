@@ -1,64 +1,142 @@
 # Particle diffusion: density and concentration
 
-Eight models use the production diffusion kernel, coordinate drift, Stokes-dependent
-coefficient, boundaries, random-number generator, and two half-steps per runtime step.
-`src/` overrides only constants, the initial ring, the fixed
-timestep, and deterministic transport (a no-op to isolate diffusion).
+## Purpose
 
-| Mode | St=0 | St=0.1 | St=1 | St=10 |
+This campaign tests the production swarm diffusion operator against an analytical log-normal
+solution for radial density and concentration diffusion at four constant Stokes numbers. It
+exercises the production `diffusion_pos` kernel, its cylindrical Itô drift, the Stokes-suppressed
+diffusion coefficient, the gas-density-gradient term of concentration diffusion, the reflecting
+radial boundaries, the backend random-number streams, and the runtime composition that applies
+diffusion as two half-steps of $\Delta t/2$ around the transport stage of each runtime step.
+
+## Models
+
+| Mode | $\mathrm{St}=0$ | $\mathrm{St}=0.1$ | $\mathrm{St}=1$ | $\mathrm{St}=10$ |
 |---|---|---|---|---|
 | Density | `density_st0` | `density_st0p1` | `density_st1` | `density_st10` |
 | Concentration | `concentration_st0` | `concentration_st0p1` | `concentration_st1` | `concentration_st10` |
 
-`CONST_ST` holds St fixed in space. Only concentration models define
-`DIFFUSE_CONCENTRATION`. Each model has 2^20 equal-mass particles, initially
-ln(R/R0) ~ Normal(0, 0.05²), with zero velocity. GM=R0=1.
-The gas surface density is proportional to R^p with p=-1. Alpha=0.04,
-h0=0.05, q=0.5 and Schmidt_R=1 give
+Each `mod/<model>/const_defs.cuh` sets only `DIFFUSION_STOKES` and includes the shared
+`src/const_defs.cuh`. Every `flags.mk` selects `DUST_REPR := swarm`, `MODEL_PARENT := ../src`,
+`TRANSPORT`, `DIFFUSION`, `CONST_ST`, and `CODE_UNIT`; only the concentration models add
+`DIFFUSE_CONCENTRATION`. `TRANSPORT` is required because `DIFFUSION` without it is rejected at
+compile time.
 
-    D(R) = a R²,   a = 1e-4/(1+St²).
+| Parameter | Value |
+|---|---|
+| Units | $G=M_\star=R_0=1$, so $\Omega_K(R_0)=1$ |
+| Representatives | `N_P = 1048576` ($2^{20}$), equal represented mass, single size `S_0 = 1` |
+| Mesh | `(N_X, N_Y, N_Z) = (1, 128, 1)`, radial-only |
+| Radial domain | $e^{-3}\le R\le e^{3}$ (`Y_MIN`, `Y_MAX`), reflecting |
+| Gas | $\Sigma_g\propto R^{p}$ with $p=-1$ (`IDX_P`); `ASPR_0 = 0.05`, `IDX_Q = 0.5` |
+| Viscosity and Schmidt number | `ALPHA = 0.04`, `SCHMIDT_R = 1` |
+| Stokes number | `STOKES_0 = DIFFUSION_STOKES`, held fixed in space by `CONST_ST` |
+| Initial ring | $\ln(R/R_0)\sim\mathcal N(0,0.05^2)$ (`RING_LOG_WIDTH`), zero velocity |
+| Random streams | ring drawn with `RING_INIT_SEED = 17`; evolution uses the production seed 1 |
+| Timestep | fixed `DT_MAX` $=1+\mathrm{St}^2$ |
+| Output | `DT_OUT` $=100(1+\mathrm{St}^2)$, `SAVE_MAX = 10` |
 
-## Analytical reference
+With $h=h_0(R/R_0)^{(q+1)/2}$ and $\nu=\alpha h^2R^2\Omega_K$, these constants give
+$\nu=\alpha h_0^2R^2=10^{-4}R^2$ and the radial dust diffusivity
 
-Let chi=0 for density diffusion and chi=1 for concentration diffusion. Both obey
+$$
+D(R)=aR^2,\qquad a=\frac{10^{-4}}{1+\mathrm{St}^2}.
+$$
 
-    ∂t Σd = (1/R) ∂R [R D (∂R Σd - chi Σd ∂R ln Σg)].
+Every model takes 1,000 nominal steps to a final time $1000(1+\mathrm{St}^2)$ in code units and
+saves the initial state plus ten outputs. Scaling the step and output interval by $1+\mathrm{St}^2$
+keeps the diffusion age $at$ and the number of steps per diffusion age equal across Stokes numbers;
+the final age is $at=0.1$.
 
-The production radial stochastic drift is (3+chi*p)*a*R; its noise amplitude is
-sqrt(2*a)*R. Ito's formula therefore gives a Gaussian log radius:
+## Production code and overrides
 
-    u = ln(R/R0)
-    mean(u) = (2+chi*p)*a*t
-    variance(u) = 0.05² + 2*a*t.
+All runtime, diffusion, boundary, RNG, and output code comes from the root `src/swarm/` and
+`inc/swarm/`. The campaign `src/` directory contains only:
 
-The surface density per total dust mass is
+- `const_defs.cuh`: the constants above.
+- `particle_init.cu`: the initial log-normal ring, drawn from independent streams.
+- `dyn_rate_calc.cu`: a fixed step `DT_MAX` in place of the dynamics CFL policy; the runtime still
+  shortens the last step to reach each output time.
+- `ssa_transport.cu`: a no-op deterministic transport kernel, which isolates diffusion while keeping
+  the production operator composition.
 
-    Σd/Md = exp[-(u-mean)²/(2*variance)] / [2*pi*R²*sqrt(2*pi*variance)].
+## Build and run
 
-No analysis script is included in this directory. Compare empirical CDFs, log-radius moments, and
-area-averaged density bins with this solution, choosing chi to match the `DIFFUSE_CONCENTRATION`
-setting of the model. Each particle record contains six doubles (position and physical velocity; no
-size fields). This is an unbounded-domain reference; the simulation reflects at exp(±3). At the
-final diffusion age a*t=0.1, boundary tails are tiny, but timestep and particle-number convergence
-remain necessary for a publication accuracy claim. These cases test constant-St suppression and the
-gas-density-gradient term; they do not test spatial derivatives of St or three-dimensional
-diffusion.
-
-## Duration and commands
-
-All models take 1,000 nominal steps and save the initial state plus ten outputs.
-DT_MAX=1+St²; DT_OUT=100*(1+St²); final time=1000*(1+St²), in code time units.
-This keeps the diffusion age and numerical resolution equal across St.
+From the repository root:
 
 ```sh
 make -C val/paper/diffusion -j8 MODEL=concentration_st1 GPU_BACKEND=rocm GPU_TARGET=gfx942
 val/paper/diffusion/obj/concentration_st1/rocm/gamedev
 ```
 
-For CUDA use `GPU_BACKEND=cuda GPU_TARGET=sm_80` and the `cuda` executable/output directory.
-Models live in `mod/`, shared overrides in `src/`, results in `out/<model>/<backend>/`,
-and build products in `obj/<model>/`. Results from a different source snapshot must be
-kept separate from fresh runs.
+For CUDA use `GPU_BACKEND=cuda GPU_TARGET=sm_80` (or the actual architecture) and the `cuda`
+executable. All eight models can be run sequentially:
 
-Native CUDA and ROCm compilation and fresh numerical results are required before claiming
-accuracy for the current source.
+```sh
+(
+  set -e
+  for model_dir in val/paper/diffusion/mod/*; do
+    model="${model_dir##*/}"
+    make -C val/paper/diffusion -j8 MODEL="$model" GPU_BACKEND=cuda GPU_TARGET=sm_80
+    "val/paper/diffusion/obj/$model/cuda/gamedev"
+  done
+)
+```
+
+The campaign `Makefile` includes the root `Makefile` with these paths:
+
+| Item | Path under `val/paper/diffusion/` |
+|---|---|
+| Executable | `obj/<model>/<backend>/gamedev` |
+| Objects | `obj/<model>/swarm/<backend>/<target>/` |
+| Output | `out/<model>/<backend>/` |
+
+The executable and output paths do not include the GPU target, so builds for different targets of
+one backend replace the same executable and write to the same output directory. A run without
+arguments starts fresh and replaces existing frames; `gamedev <frame>` resumes from a saved frame as
+described in [Restarting a simulation](../../../README.md#restarting-a-simulation).
+
+## Outputs
+
+Each output directory contains `variables.txt`, `particle_00000.dat` through `particle_00010.dat`,
+and a matching `rngstate_<frame>.dat` for every particle frame. No mesh fields are written. Each
+particle record holds six doubles, 48 bytes: position (azimuth, radius, polar angle) and physical
+velocity, with no size fields; one particle file is about 50 MB. The record layout is written in
+the `[SWARM_DTYPE]` section of `variables.txt`; see [Output files](../../../README.md#output-files)
+and [Reading output with Python](../../../README.md#reading-output-with-python).
+
+## Analysis
+
+Let $\chi=0$ for density diffusion and $\chi=1$ for concentration diffusion. Both models obey
+
+$$
+\partial_t\Sigma_d=\frac{1}{R}\,\partial_R\left[RD\left(\partial_R\Sigma_d-\chi\,\Sigma_d\,\partial_R\ln\Sigma_g\right)\right].
+$$
+
+The production radial stochastic drift is $(3+\chi p)aR$ and its noise amplitude is $\sqrt{2a}\,R$.
+Itô's formula therefore gives a Gaussian log radius $u=\ln(R/R_0)$ with
+
+$$
+\bar u(t)=(2+\chi p)\,at,\qquad \sigma_u^2(t)=0.05^2+2at .
+$$
+
+The surface density per total dust mass $M_d$ is
+
+$$
+\frac{\Sigma_d}{M_d}=\frac{1}{2\pi R^2\sqrt{2\pi\sigma_u^2}}\exp\left[-\frac{(u-\bar u)^2}{2\sigma_u^2}\right].
+$$
+
+No analysis script is included in this directory. Compare empirical CDFs, log-radius moments, and
+area-averaged density bins with this solution, choosing $\chi$ from the model's
+`DIFFUSE_CONCENTRATION` setting.
+
+## Evidence boundary
+
+The reference solution is for an unbounded domain, while the simulation reflects at $R=e^{\pm3}$.
+At the final age $at=0.1$ the log-radius standard deviation is about 0.45, so the boundaries lie
+more than six standard deviations from the mean and their effect is small. Timestep and
+particle-number convergence are still required for a publication accuracy claim. These cases test
+constant-St suppression and the gas-density-gradient term; they do not test spatial derivatives of
+St, azimuthal or vertical diffusion, or three-dimensional diffusion. Native CUDA and ROCm builds and
+fresh results from the current source are required before claiming accuracy; results from a
+different source snapshot must be kept separate.

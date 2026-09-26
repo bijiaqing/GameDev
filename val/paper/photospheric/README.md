@@ -1,56 +1,82 @@
 # Photospheric dust transport
 
-Both formulations evolve a single dust species under stellar gravity, gas drag,
-attenuated radiation pressure, and density diffusion with Stokes-dependent diffusivity.
-Collisions, imported gas, viscous gas flow, concentration diffusion, and
-Poynting–Robertson drag are disabled.
+## Purpose
 
-`STOKES_0=1e-3`, `BETA_0=10`, and `KAPPA_0=5e4` are shared. These are code-unit
-values; opacity has dimensions area/mass. `STOKES_0` is the reference midplane
-value at `R_0`, not a spatially constant Stokes number:
-`St(R)=STOKES_0*(R/R_0)^0.5`. Radiation ramps on over `T_BETA=2*pi` time units.
+This campaign runs the same photospheric transport problem with the Eulerian fluid and the
+Lagrangian swarm representations so that the two formulations can be compared. Both evolve a single
+dust species under stellar gravity, gas drag, attenuated radiation pressure, and density diffusion
+with Stokes-dependent diffusivity. Collisions, imported gas, viscous gas flow, concentration
+diffusion, and Poynting–Robertson drag are not enabled.
 
-## Initialization and comparison
+## Models
 
-The root fluid and particle host initializers construct the same Gaussian-smoothed
-dust surface density: `METAL_Z*SIGMA_0*(R/R_0)^IDX_P` on `0.6<R/R_0<1.4`,
-convolved with a Gaussian of standard deviation `0.025*R_0`. Both use the same
-gas surface-density and pressure-support prescriptions (`IDX_P=-0.5`, `IDX_Q=0`,
-`ASPR_0=0.05`) and initial steady drag-coupled velocities.
+Each formulation directory treats its own `src/` as the model directory, so no `MODEL` argument is
+needed.
 
-The fluid override retains azimuthal Gaussian density perturbations of amplitude
-`1e-10`. The particle model reuses the root initializer, sampling radius with
-probability proportional to `R*Sigma_d(R)` and uniform azimuth, with equal
-represented masses. It uses `N_P=1000000000`; no size distribution is enabled.
+| Formulation | Directory | `flags.mk` selections |
+|---|---|---|
+| Fluid | `fluid/` | `DUST_REPR := fluid`, `FLUID_SWEEP := block`, `DIFFUSION`, `RADIATION` |
+| Swarm | `swarm/` | `DUST_REPR := swarm`, `TRANSPORT`, `DIFFUSION`, `RADIATION`, `SAVE_DENS`, `CODE_UNIT` |
 
-Both optical-depth calculations use the 2D closure
-`rho_d=Sigma_d/(sqrt(2*pi)*H_g)` and integrate `KAPPA_0*rho_d` radially from
-the inner boundary. Particle extinction is deposited using each particle's gas
-scale height; fluid extinction uses cell-center scale heights. Agreement is
-therefore statistical and subject to mesh discretization. Compare initial
-azimuthally averaged surface density, enclosed mass, optical depth, and radiation
-acceleration. Matching mean optical depth alone does not guarantee matching mean
-attenuation, since `mean(exp(-tau)) != exp(-mean(tau))`.
+Shared parameters, in code units with $G=M_\star=R_0=1$:
 
-## Resolution and timestep
+| Parameter | Value |
+|---|---|
+| Domain | $0.5\le R\le1.5$, azimuthal wedge $0\le\phi\le\pi/2$, vertically integrated (`N_Z = 1`) |
+| Gas | `SIGMA_0 = 1e-2`, `IDX_P = -0.5`, `IDX_Q = 0`, `ASPR_0 = 0.05` |
+| Turbulence | `ALPHA = 1e-4`, all Schmidt numbers 1 |
+| Dust | `METAL_Z = 1e-2`, `STOKES_0 = 1e-3` |
+| Radiation | `BETA_0 = 10`, `KAPPA_0 = 5e4`, ramp time `T_BETA` $=2\pi$ |
+| Timestep limits | `DT_MAX = 0.1`, `CFL_DYN = 0.45` |
+| Output | `DT_OUT` $=2\pi$, `SAVE_MAX = 20`, final time $40\pi$ |
 
-The current fluid mesh is `(4096,3072,1)`; the swarm deposition mesh is `(1536,1024,1)`.
-Both cover `0.5<R<1.5` and an azimuthal wedge of width `pi/2`. `DT_MAX=0.1` and
-`CFL_DYN=0.45` are shared, but their timestep criteria differ. Fluid FARGO uses residual
-azimuthal motion. Swarm retains absolute orbital/cell-crossing bounds and explicit
-stochastic-displacement bounds; its particle drift has no FARGO residual-step policy.
+`KAPPA_0` is an opacity with dimensions of area per mass. `STOKES_0` is the reference midplane
+value at `R_0`, not a spatially constant Stokes number: $\mathrm{St}(R)=\mathrm{St}_0(R/R_0)^{1/2}$.
+Radiation ramps on over `T_BETA`.
 
-For the current swarm mesh, `0.45*((pi/2)/1536)/Omega_K(0.5)=1.62703e-4`.
-This explains the reported swarm step of `1.627e-4`, compared with the reported fluid
-step of `1.0365e-2`; these are run observations, not convergence evidence. Relaxing
-this restriction requires checking force/opacity sampling and radial transport accuracy.
-Both schemes evaluate radiation at their intermediate state; larger orbital advances
-must not bypass that coupling. No such timestep change is implemented here.
+| Parameter | Fluid | Swarm |
+|---|---|---|
+| Mesh | `(4096, 3072, 1)` | `(1536, 1024, 1)` deposition mesh |
+| Representatives | not applicable | `N_P = 1000000000`, equal represented masses, one size |
+| Fluid limiter | `POS_LIMIT = 0.9`, `RHO_VAC = 1e-30` | not applicable |
+| Particle output | not applicable | every tenth frame (`LIN_BASE = 10`) |
+
+## Initialization
+
+The root fluid and swarm host initializers construct the same Gaussian-smoothed dust surface
+density: $Z\Sigma_0(R/R_0)^{p}$ on $0.6\lt R/R_0\lt 1.4$, convolved with a Gaussian of standard
+deviation $0.025R_0$. Both use the same gas surface-density and pressure-support prescriptions and
+initial steady drag-coupled velocities.
+
+The fluid override `fluid/src/init_rho_calc.cu` interpolates this profile onto the mesh and adds
+azimuthal Gaussian density perturbations of relative amplitude $10^{-10}$. The swarm model reuses
+the root initializer, sampling radius with probability proportional to $R\,\Sigma_d(R)$ and uniform
+azimuth, with equal represented masses and no size distribution.
+
+Both optical-depth calculations use the 2D closure $\rho_d=\Sigma_d/(\sqrt{2\pi}\,H_g)$ and
+integrate $\kappa_0\rho_d$ radially from the inner boundary. Swarm extinction is deposited using
+each particle's gas scale height; fluid extinction uses cell-center scale heights. Agreement is
+therefore statistical and subject to mesh discretization.
+
+## Timestep policies
+
+`DT_MAX` and `CFL_DYN` are shared, but the timestep criteria differ. Fluid FARGO advection limits
+the step by the residual azimuthal motion. The swarm retains absolute orbital and cell-crossing
+bounds and explicit stochastic-displacement bounds; its particle drift has no FARGO residual-step
+policy. For the swarm mesh the orbital bound at the inner edge is
+
+$$
+\Delta t=0.45\,\frac{(\pi/2)/1536}{\Omega_K(0.5)}=1.62703\times10^{-4}.
+$$
+
+Relaxing this restriction requires checking force and opacity sampling and radial transport
+accuracy. Both schemes evaluate radiation at their intermediate state; larger orbital advances must
+not bypass that coupling.
 
 ## Build and run
 
-Run from the repository root. The root Makefile selects local `src/` overrides
-and otherwise compiles production sources. No `MODEL` argument is needed.
+Run from the repository root. Each formulation `Makefile` includes the root `Makefile`, selects its
+local `src/` overrides, and otherwise compiles production sources.
 
 CUDA (A100 target; use `sm_90` for H200 and its executable path):
 
@@ -72,21 +98,49 @@ make -C val/paper/photospheric/swarm -j8 GPU_BACKEND=rocm GPU_TARGET=gfx942
 val/paper/photospheric/swarm/obj/rocm/gfx942/gamedev
 ```
 
-Outputs go to `<formulation>/out/<backend>/`. Objects and executables go to
-`<formulation>/obj/<backend>/<target>/`. Runs with the same formulation and
-backend share an output directory, even when compiled for different GPU targets.
+| Item | Path under `val/paper/photospheric/` |
+|---|---|
+| Executable and objects | `<formulation>/obj/<backend>/<target>/` |
+| Output | `<formulation>/out/<backend>/` |
 
-At one billion particles, particle state alone occupies 48 GB on the device and 48 GB in pinned host
-memory; the dynamics-rate array adds 8 GB on the device. Enabled diffusion also allocates one
-backend RNG state per particle on the device, so the earlier non-diffusive device-memory estimates
-do not apply. RNG checkpoint I/O uses a bounded 64 MiB host staging buffer rather than a second
-complete RNG-state array. Initialization scratch, mesh fields, and reduction workspaces add further
-storage. Each particle snapshot contains 48 GB. Density and optical depth are saved at every output;
-particles are saved initially and every tenth output (indices 0, 10, and 20), requiring 144 GB for
-particle records alone, plus matching RNG checkpoints and mesh outputs. These are array-size
-estimates in decimal GB, not measured peak usage.
+Runs with the same formulation and backend share an output directory, even when compiled for
+different GPU targets. A saved frame index passed to the executable resumes a run as described in
+[Restarting a simulation](../../../README.md#restarting-a-simulation); the swarm can resume only
+from a frame with a particle checkpoint (0, 10, or 20).
 
-Build routing has been checked with CUDA and ROCm dry runs. Native execution of both
-formulations has been reported, including the timestep values above. Matched-source
-outputs and timestep/resolution convergence are still required to establish accuracy;
-the run reports alone are not a completed validation campaign.
+## Outputs
+
+The fluid writes `dustdens`, `dustvelx`, `dustvely`, `dustvelz`, and `optdepth` at every frame
+0–20, plus `variables.txt`. Each field holds one double per cell, about 101 MB, so a complete fluid
+run writes about 10.6 GB.
+
+The swarm writes `dustdens` and `optdepth` at every frame (about 12.6 MB each) and `particle` and
+`rngstate` checkpoints at frames 0, 10, and 20. File formats are described in
+[Output files](../../../README.md#output-files).
+
+Estimated swarm array sizes at one billion particles, in decimal GB and not measured peak usage:
+
+| Storage | Size |
+|---|---|
+| Particle state (six doubles per particle) | 48 GB on the device and 48 GB in pinned host memory |
+| Dynamics-rate array | 8 GB on the device |
+| RNG state, enabled by `DIFFUSION` | one backend state per particle on the device (48 GB with CUDA's 48-byte `curandState`) |
+| Fresh-start coordinate scratch | three coordinate arrays, 24 GB on the device and 24 GB pinned, freed before evolution |
+| One particle snapshot | 48 GB; 144 GB for the three snapshots, plus matching RNG checkpoints |
+
+RNG checkpoint I/O uses a bounded 64 MiB host staging buffer rather than a second complete RNG-state
+array. Mesh fields and reduction workspaces add further, smaller storage.
+
+## Analysis
+
+No analysis script is included. Compare the initial azimuthally averaged surface density, enclosed
+mass, optical depth, and radiation acceleration, then their evolution at matching output times.
+Matching mean optical depth alone does not guarantee matching mean attenuation, since
+$\langle e^{-\tau}\rangle\ne e^{-\langle\tau\rangle}$.
+
+## Evidence boundary
+
+Native runs of both formulations report a swarm step of $1.627\times10^{-4}$, consistent with the
+orbital bound above, and a fluid step of $1.0365\times10^{-2}$. These are run observations, not
+convergence evidence. Matched-source outputs and timestep and resolution convergence are required to
+establish accuracy.
