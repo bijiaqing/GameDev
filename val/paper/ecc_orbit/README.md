@@ -56,11 +56,11 @@ From the repository root, on a CUDA machine:
 ```bash
 make -C val/paper/ecc_orbit -j8 MODEL=orbit_dt_p80 \
   GPU_BACKEND=cuda GPU_TARGET=sm_80
-./val/paper/ecc_orbit/obj/orbit_dt_p80/cuda/gamedev
+./val/paper/ecc_orbit/obj/orbit_dt_p80/cuda/sm_80/gamedev
 ```
 
 Use your actual GPU architecture. For ROCm use `GPU_BACKEND=rocm`, the matching `GPU_TARGET`, and
-the `rocm` executable. All four models can be run sequentially:
+the `rocm/<target>` executable. All four models can be run sequentially:
 
 ```bash
 (
@@ -69,7 +69,7 @@ the `rocm` executable. All four models can be run sequentially:
     model_name="${model_dir##*/}"
     make -C val/paper/ecc_orbit -j8 MODEL="$model_name" \
       GPU_BACKEND=cuda GPU_TARGET=sm_80
-    "val/paper/ecc_orbit/obj/$model_name/cuda/gamedev"
+    "val/paper/ecc_orbit/obj/$model_name/cuda/sm_80/gamedev"
   done
 )
 ```
@@ -78,12 +78,12 @@ The campaign `Makefile` includes the root `Makefile` with these paths:
 
 | Item | Path under `val/paper/ecc_orbit/` |
 |---|---|
-| Executable | `obj/<model>/<backend>/gamedev` |
+| Executable | `obj/<model>/<backend>/<target>/gamedev` |
 | Objects | `obj/<model>/swarm/<backend>/<target>/` |
-| Output | `out/<model>/<backend>/` |
+| Output | `out/<model>/<backend>/<target>/` |
 
-Both `obj/` and `out/` are ignored by Git. Builds for different GPU targets of one backend share the
-executable and output paths.
+Both `obj/` and `out/` are ignored by Git. Builds for different GPU targets keep separate
+executables and outputs.
 
 ## Outputs
 

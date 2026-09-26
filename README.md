@@ -217,7 +217,7 @@ Transport and the local drag, gravity, and geometric sources are always active i
 | Flag | Effect |
 |---|---|
 | `DIFFUSION` | spherical dust diffusion with Stokes-dependent diffusivity; required in 3D |
-| `DIFFUSE_CONCENTRATION` | diffuse the dust-to-gas concentration instead of the dust density; takes effect only with `DIFFUSION` |
+| `DIFFUSE_CONCENTRATION` | diffuse the dust-to-gas concentration instead of the dust density; requires `DIFFUSION` |
 | `RADIATION` | attenuated radiation pressure |
 | `VISC_FLOW` | prescribed viscous gas radial flow; requires `DIFFUSION` |
 | `CONST_NU` | constant kinematic viscosity instead of constant $\alpha$ |
@@ -229,7 +229,7 @@ Transport and the local drag, gravity, and geometric sources are always active i
 |---|---|
 | `TRANSPORT` | particle dynamics |
 | `DIFFUSION` | stochastic position diffusion with Stokes-dependent diffusivity; requires `TRANSPORT`, required in 3D |
-| `DIFFUSE_CONCENTRATION` | add the gas-density-gradient drift of concentration diffusion; takes effect only with `DIFFUSION` |
+| `DIFFUSE_CONCENTRATION` | add the gas-density-gradient drift of concentration diffusion; requires `DIFFUSION` |
 | `RADIATION` | attenuated radiation pressure; requires `TRANSPORT` |
 | `PR_EFFECT` | first-order Poynting–Robertson drag; requires `RADIATION` |
 | `VISC_FLOW` | viscous gas radial flow; requires `DIFFUSION`, excludes `IMPORTGAS` |
@@ -298,9 +298,9 @@ each frame.
 
 The runtimes check the evolved state for non-finite values: the fluid branch after its operators,
 the swarm branch before every collision-neighbor search. A non-finite cell or particle, a failed
-file read, a failed swarm write, or any GPU runtime or kernel error prints a message beginning with
-`Error:` and exits with a nonzero status, so a batch job fails visibly instead of writing corrupted
-frames. A failed fluid frame write prints `Error:` and the run continues. Internal consistency
+file read or write, or any GPU runtime or kernel error prints a message beginning with `Error:` and
+exits with a nonzero status, so a batch job fails visibly instead of writing corrupted frames.
+Internal consistency
 failures of the collision chain, the Morton index, the controller, and initialization throw a C++
 exception instead; the runtime then terminates with the exception's message and a nonzero status.
 [`doc/swarm_numeric.md`](doc/swarm_numeric.md#116-failure-behavior) and

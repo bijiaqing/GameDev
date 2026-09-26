@@ -66,11 +66,11 @@ From the repository root:
 
 ```sh
 make -C val/paper/diffusion -j8 MODEL=concentration_st1 GPU_BACKEND=rocm GPU_TARGET=gfx942
-val/paper/diffusion/obj/concentration_st1/rocm/gamedev
+val/paper/diffusion/obj/concentration_st1/rocm/gfx942/gamedev
 ```
 
-For CUDA use `GPU_BACKEND=cuda GPU_TARGET=sm_80` (or the actual architecture) and the `cuda`
-executable. All eight models can be run sequentially:
+For CUDA use `GPU_BACKEND=cuda GPU_TARGET=sm_80` (or the actual architecture) and the
+`cuda/<target>` executable. All eight models can be run sequentially:
 
 ```sh
 (
@@ -78,7 +78,7 @@ executable. All eight models can be run sequentially:
   for model_dir in val/paper/diffusion/mod/*; do
     model="${model_dir##*/}"
     make -C val/paper/diffusion -j8 MODEL="$model" GPU_BACKEND=cuda GPU_TARGET=sm_80
-    "val/paper/diffusion/obj/$model/cuda/gamedev"
+    "val/paper/diffusion/obj/$model/cuda/sm_80/gamedev"
   done
 )
 ```
@@ -87,12 +87,11 @@ The campaign `Makefile` includes the root `Makefile` with these paths:
 
 | Item | Path under `val/paper/diffusion/` |
 |---|---|
-| Executable | `obj/<model>/<backend>/gamedev` |
+| Executable | `obj/<model>/<backend>/<target>/gamedev` |
 | Objects | `obj/<model>/swarm/<backend>/<target>/` |
-| Output | `out/<model>/<backend>/` |
+| Output | `out/<model>/<backend>/<target>/` |
 
-The executable and output paths do not include the GPU target, so builds for different targets of
-one backend replace the same executable and write to the same output directory. A run without
+Builds for different GPU targets keep separate executables and output directories. A run without
 arguments starts fresh and replaces existing frames; `gamedev <frame>` resumes from a saved frame as
 described in [Restarting a simulation](../../../README.md#restarting-a-simulation).
 

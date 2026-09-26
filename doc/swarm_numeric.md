@@ -347,7 +347,7 @@ model's `flags.mk` as `-D<FLAG>`; the collision search is a Makefile variable:
 |---|---|
 | `TRANSPORT` | integrate deterministic trajectories, drag, gravity, and enabled radiative forces |
 | `DIFFUSION` | add cylindrical stochastic diffusion |
-| `DIFFUSE_CONCENTRATION` | with `DIFFUSION`, diffuse dust-to-gas concentration; otherwise density diffuses |
+| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration instead of density; requires `DIFFUSION` |
 | `RADIATION` | deposit and accumulate optical depth and add radiation pressure |
 | `PR_EFFECT` | add first-order Poynting–Robertson drag |
 | `COLLISION` | evolve representative-particle coagulation and fragmentation with the frozen-bath chain |
@@ -379,7 +379,8 @@ The headers reject the following combinations with a compile-time `#error`:
 | `LOGTIMING` excludes `LOGOUTPUT`, `TRANSPORT`, and `SAVE_DENS` | logarithmic timing is for collision-only runs |
 | `N_Z > 1` requires `DIFFUSION` | a resolved vertical layer needs vertical mixing (a `static_assert` in `const_defs.cuh`) |
 
-`DIFFUSE_CONCENTRATION`, `CONST_NU`, and `CODE_UNIT` have no effect when no operator uses them.
+`DIFFUSE_CONCENTRATION` without `DIFFUSION` is rejected at compile time; `CONST_NU` and `CODE_UNIT`
+have no effect when no operator uses them.
 These selections specify which equations exist in an executable; they do not turn operators on or
 off during a run.
 

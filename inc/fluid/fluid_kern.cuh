@@ -3,6 +3,10 @@
 
 #include <gpu.cuh>
 
+#if defined(DIFFUSE_CONCENTRATION) && !defined(DIFFUSION)
+#error "DIFFUSE_CONCENTRATION requires DIFFUSION"
+#endif // DIFFUSE_CONCENTRATION && !DIFFUSION
+
 #if defined(VISC_FLOW) && !defined(DIFFUSION)
 #error "VISC_FLOW requires DIFFUSION"
 #endif // VISC_FLOW && !DIFFUSION

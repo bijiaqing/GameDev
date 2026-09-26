@@ -104,11 +104,10 @@ GPU_BACKEND=cuda python3 -B val/swarm/src/run_suite.py --group chain --target sm
 
 The swarm `all` group does not include `chain`; `run_all.py` runs both. A single model runs through
 its own runner, for example `GPU_BACKEND=cuda python3 -B val/fluid/mod/test_x_diffusion_2d/run.py`.
-`val/check_archive.py --backend <backend> --component fluid|swarm|all --fluid-sweep <sweep>` checks
-an existing archive; `<sweep>` is the archive directory name, `thread_precise` or `block_precise`
-for CUDA and `thread` or `block` for ROCm (the default, `thread`, suits only ROCm fluid archives),
-and `val/swarm/src/run_suite.py --rebuild-manifest` rebuilds the swarm suite manifest from
-downloaded component manifests without rerunning.
+`val/check_archive.py --backend <backend> --component fluid|swarm|all --fluid-sweep thread|block`
+checks an existing archive (the sweep maps to the backend's archive directory, `thread_precise` or
+`block_precise` on CUDA), and `val/swarm/src/run_suite.py --rebuild-manifest` rebuilds the swarm
+suite manifest from downloaded component manifests without rerunning.
 
 Standalone suite runs do not write the `run_all` campaign records, so a cross-backend comparison
 of their results needs `--ignore-source-fingerprint` and does not certify a common source.

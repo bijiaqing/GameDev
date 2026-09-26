@@ -335,7 +335,7 @@ The production fluid branch is specialized at compilation rather than switched a
 | Selection | Effect | Requirement or interaction |
 |---|---|---|
 | `DIFFUSION` | add the three directional diffusion operators and their momentum closure; use the diffusion balance in the initial polar velocity | required for `N_Z > 1` |
-| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration; omit for density diffusion | acts only with `DIFFUSION`; otherwise ignored |
+| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration; omit for density diffusion | requires `DIFFUSION` (`#error` in `fluid_kern.cuh`) |
 | `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required | acts only with `DIFFUSION`; otherwise ignored |
 | `VISC_FLOW` | use the viscous gas radial target velocity in the source update, initialization, and CFL rate | requires `DIFFUSION` |
 | `RADIATION` | construct optical depth, add attenuated radiation pressure, and write `optdepth` frames | none |
@@ -1869,8 +1869,9 @@ $$
 
 ### 8.4 Finite-state checks and failure behavior
 
-The driver does not retry or roll back a step. Two checks abort the run with an `Error: ...`
-message on standard error and exit status `EXIT_FAILURE`:
+The driver does not retry or roll back a step. A failed read or write of a frame file, and two
+state checks, abort the run with an `Error: ...` message on standard error and exit status
+`EXIT_FAILURE`. The state checks are:
 
 - every CFL evaluation, before each global step and before every advection launch, marks a complete
   azimuthal ring with infinite rate if any of its densities, conserved momenta, or primitives is

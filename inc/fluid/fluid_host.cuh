@@ -486,33 +486,48 @@ void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 }
 
 #ifdef RADIATION
-#define SAVE_OPTDEPTH_TO_FILE(idx_file)                                                        \
-do {                                                                                           \
-    GPU_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
-    if (!save_host_binary(PATH + "optdepth_" + frame_num(idx_file) + ".dat", optdepth, N_G))   \
-    { std::cerr << "Error: failed to save optdepth frame " << idx_file << std::endl; }         \
+#define SAVE_OPTDEPTH_TO_FILE(idx_file)                                                      \
+do {                                                                                         \
+    GPU_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));   \
+    if (!save_host_binary(PATH + "optdepth_" + frame_num(idx_file) + ".dat", optdepth, N_G)) \
+    {                                                                                        \
+        std::cerr << "Error: failed to save optdepth frame " << idx_file << std::endl;       \
+        std::exit(EXIT_FAILURE);                                                             \
+    }                                                                                        \
 } while (0)
 #endif // RADIATION
 
-#define SAVE_DUSTDENS_TO_FILE(idx_file)                                                        \
-do {                                                                                           \
-    GPU_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
-    if (!save_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G))   \
-    { std::cerr << "Error: failed to save dustdens frame " << idx_file << std::endl; }         \
+#define SAVE_DUSTDENS_TO_FILE(idx_file)                                                      \
+do {                                                                                         \
+    GPU_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));   \
+    if (!save_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G)) \
+    {                                                                                        \
+        std::cerr << "Error: failed to save dustdens frame " << idx_file << std::endl;       \
+        std::exit(EXIT_FAILURE);                                                             \
+    }                                                                                        \
 } while (0)
 
-#define SAVE_DUST_VEL_TO_FILE(idx_file)                                                        \
-do {                                                                                           \
-    GPU_CHECK(gpuMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
-    GPU_CHECK(gpuMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
-    GPU_CHECK(gpuMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
-    save_sam_as_velocity(dustvelx, dustvelz);                                                  \
-    if (!save_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G))   \
-    { std::cerr << "Error: failed to save dustvelx frame " << idx_file << std::endl; }         \
-    if (!save_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G))   \
-    { std::cerr << "Error: failed to save dustvely frame " << idx_file << std::endl; }         \
-    if (!save_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G))   \
-    { std::cerr << "Error: failed to save dustvelz frame " << idx_file << std::endl; }         \
+#define SAVE_DUST_VEL_TO_FILE(idx_file)                                                      \
+do {                                                                                         \
+    GPU_CHECK(gpuMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));   \
+    GPU_CHECK(gpuMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, gpuMemcpyDeviceToHost));   \
+    GPU_CHECK(gpuMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));   \
+    save_sam_as_velocity(dustvelx, dustvelz);                                                \
+    if (!save_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G)) \
+    {                                                                                        \
+        std::cerr << "Error: failed to save dustvelx frame " << idx_file << std::endl;       \
+        std::exit(EXIT_FAILURE);                                                             \
+    }                                                                                        \
+    if (!save_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G)) \
+    {                                                                                        \
+        std::cerr << "Error: failed to save dustvely frame " << idx_file << std::endl;       \
+        std::exit(EXIT_FAILURE);                                                             \
+    }                                                                                        \
+    if (!save_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G)) \
+    {                                                                                        \
+        std::cerr << "Error: failed to save dustvelz frame " << idx_file << std::endl;       \
+        std::exit(EXIT_FAILURE);                                                             \
+    }                                                                                        \
 } while (0)
 
 #define LOAD_DUSTDATA_TO_VRAM(idx_file)                                                                         \

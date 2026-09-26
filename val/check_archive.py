@@ -21,6 +21,7 @@ from val_config import (
     EXPECTED_SWARM_METRICS,
     SWARM_CHAIN_MODELS,
     VAL_TIERS,
+    fluid_archive_sweep,
     fluid_cases,
     model_output,
     swarm_models,
@@ -368,6 +369,7 @@ def main() -> None:
         "--fluid-sweep",
         choices=("thread", "block", "thread_precise", "block_precise"),
         default="thread",
+        help="fluid line solver or archive directory; CUDA solvers map to their _precise archives",
     )
     parser.add_argument("--val-root", type=Path, default=val_root)
     parser.add_argument(
@@ -377,6 +379,10 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if not args.fluid_sweep.endswith("_precise"):
+        args.fluid_sweep = fluid_archive_sweep(args.backend, args.fluid_sweep)
+    elif args.backend != "cuda":
+        parser.error(f"--fluid-sweep {args.fluid_sweep} names a CUDA archive")
 
     selected = ("fluid", "swarm") if args.component == "all" else (args.component,)
     components = [

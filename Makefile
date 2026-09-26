@@ -406,7 +406,7 @@ ifdef MODEL
 else
 	@printf "%-12s %s\n" "Cleaning" "all object and model executable files"
 	@rm -rf $(OBJ_ROOT)/*
-	@rm -rf $(VAL_ROOT)/fluid/obj $(VAL_ROOT)/swarm/obj $(VAL_ROOT)/paper/*/obj $(VAL_ROOT)/paper/coagulation/*/obj
+	@rm -rf $(VAL_ROOT)/fluid/obj $(VAL_ROOT)/swarm/obj $(VAL_ROOT)/paper/*/obj $(VAL_ROOT)/paper/*/*/obj
 	@rm -f $(MODEL_EXECUTABLES)
 endif
 
