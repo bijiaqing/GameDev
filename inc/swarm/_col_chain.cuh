@@ -432,11 +432,7 @@ __device__ __forceinline__ int _get_col_sizebin (real size, int group)
 __device__ __forceinline__
 real _get_col_uniform (curs *rngstate)
 {
-    #ifdef GAMEDEV_CUDA
-    return fmin(curand_uniform_double(rngstate), nextafter(1.0, 0.0));
-    #else  // GAMEDEV_ROCM
-    return fmin(hiprand_uniform_double(rngstate), nextafter(1.0, 0.0));
-    #endif // GAMEDEV_CUDA
+    return fmin(gpuRandUniformDouble(rngstate), nextafter(1.0, 0.0));
 }
 
 // atomically raise a double to value with a compare-and-swap loop
@@ -1658,27 +1654,6 @@ struct local_schedule
 #include <chrono>  // std::chrono clocks and durations
 #include <numeric> // std::iota
 
-// map the host workflow's runtime calls to the selected backend
-#ifdef GAMEDEV_CUDA
-#define LOCAL_CHECK CUDA_CHECK
-#define LOCAL_KERNEL CUDA_KERNEL_CHECK
-#define localMalloc cudaMalloc
-#define localFree cudaFree
-#define localCopy cudaMemcpy
-#define localZero cudaMemset
-#define localH2D cudaMemcpyHostToDevice
-#define localD2H cudaMemcpyDeviceToHost
-#else  // !GAMEDEV_CUDA
-#define LOCAL_CHECK HIP_CHECK
-#define LOCAL_KERNEL HIP_KERNEL_CHECK
-#define localMalloc hipMalloc
-#define localFree hipFree
-#define localCopy hipMemcpy
-#define localZero hipMemset
-#define localH2D hipMemcpyHostToDevice
-#define localD2H hipMemcpyDeviceToHost
-#endif // GAMEDEV_CUDA
-
 // spatial controller groups and the 32-bit words of one bit-packed group dependency row
 constexpr int LOCAL_GROUPS = ((N_X > 1) ? COL_BIN_X : 1)*COL_BIN_Y*((N_Z > 1) ? COL_BIN_Z : 1);
 constexpr int LOCAL_WORDS = (LOCAL_GROUPS + 31) / 32;
@@ -1816,21 +1791,21 @@ struct local_workspace
         state(LOCAL_GROUPS)
     {
         #ifdef COL_QUERY_ENV_CACHE
-        LOCAL_CHECK(localMalloc((void**)&environment, sizeof(query_environment)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&environment, sizeof(query_environment)*N_P));
         #endif // COL_QUERY_ENV_CACHE
-        LOCAL_CHECK(localMalloc((void**)&cached, sizeof(cached_rate_moments)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&cached, sizeof(cached_rate_moments)*N_P));
         #ifdef COL_DIAGNOSTICS
-        LOCAL_CHECK(localMalloc((void**)&work, sizeof(event_work)*N_P));
-        LOCAL_CHECK(localMalloc((void**)&work_sum, sizeof(event_work)));
+        GPU_CHECK(gpuMalloc((void**)&work, sizeof(event_work)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&work_sum, sizeof(event_work)));
         #endif // COL_DIAGNOSTICS
-        LOCAL_CHECK(localMalloc((void**)&ids, sizeof(int)*N_P));
-        LOCAL_CHECK(localMalloc((void**)&queue_a, sizeof(int)*N_P));
-        LOCAL_CHECK(localMalloc((void**)&queue_b, sizeof(int)*N_P));
-        LOCAL_CHECK(localMalloc((void**)&error, sizeof(int)));
-        LOCAL_CHECK(localMalloc((void**)&dt, sizeof(real)*LOCAL_GROUPS));
-        LOCAL_CHECK(localMalloc((void**)&change_rate, sizeof(real)*N_P));
-        LOCAL_CHECK(localMalloc((void**)&second_rate, sizeof(real)*N_P));
-        LOCAL_CHECK(localMalloc((void**)&graph, sizeof(unsigned int)*edges.size()));
+        GPU_CHECK(gpuMalloc((void**)&ids, sizeof(int)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&queue_a, sizeof(int)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&queue_b, sizeof(int)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&error, sizeof(int)));
+        GPU_CHECK(gpuMalloc((void**)&dt, sizeof(real)*LOCAL_GROUPS));
+        GPU_CHECK(gpuMalloc((void**)&change_rate, sizeof(real)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&second_rate, sizeof(real)*N_P));
+        GPU_CHECK(gpuMalloc((void**)&graph, sizeof(unsigned int)*edges.size()));
         #ifdef COL_DIAGNOSTICS
         auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
@@ -1841,20 +1816,20 @@ struct local_workspace
     }
     ~local_workspace ()
     {
-        if (environment) localFree(environment);
-        localFree(cached);
+        if (environment) gpuFree(environment);
+        gpuFree(cached);
         #ifdef COL_DIAGNOSTICS
-        localFree(work);
-        localFree(work_sum);
+        gpuFree(work);
+        gpuFree(work_sum);
         #endif // COL_DIAGNOSTICS
-        localFree(ids);
-        localFree(queue_a);
-        localFree(queue_b);
-        localFree(error);
-        localFree(dt);
-        localFree(graph);
-        localFree(change_rate);
-        localFree(second_rate);
+        gpuFree(ids);
+        gpuFree(queue_a);
+        gpuFree(queue_b);
+        gpuFree(error);
+        gpuFree(dt);
+        gpuFree(graph);
+        gpuFree(change_rate);
+        gpuFree(second_rate);
     }
 };
 
@@ -1916,19 +1891,19 @@ const auto local_begin = local_clock::now();
 #endif // COL_DIAGNOSTICS
 #ifdef COL_QUERY_ENV_CACHE
 col_env_cache <<< NB_P, TPB >>> (local.environment, dev_particle);
-LOCAL_KERNEL("col_env_cache");
+GPU_KERNEL_CHECK("col_env_cache");
 #endif // COL_QUERY_ENV_CACHE
 #ifdef COL_DIAGNOSTICS
-LOCAL_CHECK(localZero(local.work, 0, sizeof(event_work)*N_P));
+GPU_CHECK(gpuMemset(local.work, 0, sizeof(event_work)*N_P));
 #endif // COL_DIAGNOSTICS
 // rebuild owner lists and the group dependency graph only after positions change
 if (!local_geometry_valid)
 {
     std::vector<int> spatial(N_P);
-    LOCAL_CHECK(localCopy(spatial.data(), dev_col_spatial, sizeof(int)*N_P, localD2H));
+    GPU_CHECK(gpuMemcpy(spatial.data(), dev_col_spatial, sizeof(int)*N_P, gpuMemcpyDeviceToHost));
     for (auto &v : local.owners) v.clear();
     for (int i = 0; i < N_P; ++i) local.owners[spatial[i]].push_back(i);
-    LOCAL_CHECK(localZero(local.graph, 0, sizeof(unsigned int)*local.edges.size()));
+    GPU_CHECK(gpuMemset(local.graph, 0, sizeof(unsigned int)*local.edges.size()));
     col_dep_graph <<<
         #ifdef GAMEDEV_ROCM
         (N_P*(TPB % 32 == 0 ? 32 : 1) + TPB - 1) / TPB, TPB
@@ -1936,15 +1911,15 @@ if (!local_geometry_valid)
         NB_P, TPB
         #endif // GAMEDEV_ROCM
     >>> (local.graph, dev_col_spatial, dev_col_neighbor, dev_col_active);
-    LOCAL_KERNEL("col_dep_graph");
-    LOCAL_CHECK(localCopy(local.edges.data(), local.graph,
-        sizeof(unsigned int)*local.edges.size(), localD2H));
+    GPU_KERNEL_CHECK("col_dep_graph");
+    GPU_CHECK(gpuMemcpy(local.edges.data(), local.graph,
+        sizeof(unsigned int)*local.edges.size(), gpuMemcpyDeviceToHost));
     local_geometry_valid = true;
 }
 
 std::vector<int> ids(N_P), counts(col_raw_count), binmap(col_raw_count);
 std::iota(ids.begin(), ids.end(), 0);
-LOCAL_CHECK(localCopy(local.ids, ids.data(), sizeof(int)*N_P, localH2D));
+GPU_CHECK(gpuMemcpy(local.ids, ids.data(), sizeof(int)*N_P, gpuMemcpyHostToDevice));
 std::vector<col_rate_bin> ratebin(col_raw_count);
 std::vector<col_audit_accum> audit(col_raw_count);
 const real lambda0 = N_P / static_cast<real>(N_K) / total_dust_mass;
@@ -1959,22 +1934,22 @@ auto initialize = [&](int count)
     int blocks = (count + TPB - 1) / TPB;
     col_bath_init <<< blocks, TPB >>> (local.ids, count, dev_size_old, dev_numr_old,
         dev_col_time, dev_col_events, dev_col_complete, dev_particle);
-    LOCAL_KERNEL("local_publish_and_init");
+    GPU_KERNEL_CHECK("col_bath_init");
     col_comp_zero <<< blocks, TPB >>> (local.ids, count, dev_col_hazard, dev_col_jump1_int,
         dev_col_jump2_int, dev_col_jumpmax_int);
-    LOCAL_KERNEL("col_comp_zero");
+    GPU_KERNEL_CHECK("col_comp_zero");
 };
 // recompute bath-start rates, merge sparse size bins, and copy mass-weighted rate moments to the host
 auto rates_and_bins = [&](int count)
 {
     // keep each refreshed group's bounds unchanged until its collision interval and audit finish
     col_size_zero <<< (moving_groups + TPB - 1) / TPB, TPB >>> ();
-    LOCAL_KERNEL("col_size_zero");
+    GPU_KERNEL_CHECK("col_size_zero");
     col_size_scan <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_particle, dev_col_spatial,
         dev_col_active);
-    LOCAL_KERNEL("col_size_scan");
+    GPU_KERNEL_CHECK("col_size_scan");
     col_size_bnds <<< (moving_groups + TPB - 1) / TPB, TPB >>> ();
-    LOCAL_KERNEL("col_size_bnds");
+    GPU_KERNEL_CHECK("col_size_bnds");
     #ifdef COL_PERF_VAL
     auto rate_start = col_perf_start();
     #endif // COL_PERF_VAL
@@ -1985,20 +1960,20 @@ auto rates_and_bins = [&](int count)
         dev_gas_dens,
         #endif // IMPORTGAS
         lambda0, local.environment, local.cached);
-    LOCAL_KERNEL("local_rates");
-    LOCAL_CHECK(localZero(dev_col_count, 0, sizeof(int)*col_raw_count));
+    GPU_KERNEL_CHECK("col_bath_rate");
+    GPU_CHECK(gpuMemset(dev_col_count, 0, sizeof(int)*col_raw_count));
     col_count_bin <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_col_count,
         dev_particle, dev_col_spatial, dev_col_active);
-    LOCAL_KERNEL("local_count");
-    LOCAL_CHECK(localCopy(counts.data(), dev_col_count, sizeof(int)*col_raw_count, localD2H));
+    GPU_KERNEL_CHECK("col_count_bin");
+    GPU_CHECK(gpuMemcpy(counts.data(), dev_col_count, sizeof(int)*col_raw_count, gpuMemcpyDeviceToHost));
     int merged = _build_col_binmap(counts, binmap);
-    LOCAL_CHECK(localCopy(dev_col_binmap, binmap.data(), sizeof(int)*col_raw_count, localH2D));
-    LOCAL_CHECK(localZero(dev_col_ratebin, 0, sizeof(col_rate_bin)*col_raw_count));
+    GPU_CHECK(gpuMemcpy(dev_col_binmap, binmap.data(), sizeof(int)*col_raw_count, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemset(dev_col_ratebin, 0, sizeof(col_rate_bin)*col_raw_count));
     col_rate_bins <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_col_ratebin,
         dev_particle, dev_col_rate, local.change_rate, local.second_rate, dev_col_spatial, dev_col_binmap,
         dev_col_active);
-    LOCAL_KERNEL("local_rate_bins");
-    LOCAL_CHECK(localCopy(ratebin.data(), dev_col_ratebin, sizeof(col_rate_bin)*merged, localD2H));
+    GPU_KERNEL_CHECK("col_rate_bins");
+    GPU_CHECK(gpuMemcpy(ratebin.data(), dev_col_ratebin, sizeof(col_rate_bin)*merged, gpuMemcpyDeviceToHost));
     #ifdef COL_PERF_VAL
     col_perf_rate_ms += col_perf_stop(rate_start);
     #endif // COL_PERF_VAL
@@ -2033,7 +2008,7 @@ std::vector<real> steps(LOCAL_GROUPS);
 std::vector<real> published(LOCAL_GROUPS, 0);
 #endif // COL_DIAGNOSTICS
 for (int c = 0; c < LOCAL_GROUPS; ++c) steps[c] = schedule.seconds(schedule.step[c]);
-LOCAL_CHECK(localCopy(local.dt, steps.data(), sizeof(real)*LOCAL_GROUPS, localH2D));
+GPU_CHECK(gpuMemcpy(local.dt, steps.data(), sizeof(real)*LOCAL_GROUPS, gpuMemcpyHostToDevice));
 std::vector<bool> passed(LOCAL_GROUPS, true);
 std::vector<double> current_request = requested;
 #ifdef COL_DIAGNOSTICS
@@ -2073,7 +2048,7 @@ while (schedule.time() < schedule.end)
     // at tick zero the complete population was already initialized and rated
     if (tick != 0)
     {
-        LOCAL_CHECK(localCopy(local.ids, ids.data(), sizeof(int)*count, localH2D));
+        GPU_CHECK(gpuMemcpy(local.ids, ids.data(), sizeof(int)*count, gpuMemcpyHostToDevice));
         initialize(count);
         merged = rates_and_bins(count);
     }
@@ -2102,7 +2077,7 @@ while (schedule.time() < schedule.end)
             constrained[c] += steps[c] > current_request[c];
             #endif // COL_DIAGNOSTICS
         }
-        LOCAL_CHECK(localCopy(local.dt, steps.data(), sizeof(real)*LOCAL_GROUPS, localH2D));
+        GPU_CHECK(gpuMemcpy(local.dt, steps.data(), sizeof(real)*LOCAL_GROUPS, gpuMemcpyHostToDevice));
     }
     #ifdef COL_DIAGNOSTICS
     for (int c : groups)
@@ -2127,16 +2102,16 @@ while (schedule.time() < schedule.end)
     const auto chain_begin = local_clock::now();
     #endif // COL_DIAGNOSTICS
     // screen owners with no event in the interval, then relaunch the chain on the shrinking unfinished queue
-    LOCAL_CHECK(localZero(local.error, 0, sizeof(int)));
-    LOCAL_CHECK(localZero(dev_col_unfinished, 0, sizeof(int)));
+    GPU_CHECK(gpuMemset(local.error, 0, sizeof(int)));
+    GPU_CHECK(gpuMemset(dev_col_unfinished, 0, sizeof(int)));
     col_skip_scan <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_rngstate,
         dev_col_active, dev_col_measure, dev_col_spatial, local.dt, local.cached,
         dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
         dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, local.queue_a, dev_col_unfinished);
-    LOCAL_KERNEL("cached_screen");
+    GPU_KERNEL_CHECK("col_skip_scan");
     int unfinished = 0;
     int continuations = 0;
-    LOCAL_CHECK(localCopy(&unfinished, dev_col_unfinished, sizeof(int), localD2H));
+    GPU_CHECK(gpuMemcpy(&unfinished, dev_col_unfinished, sizeof(int), gpuMemcpyDeviceToHost));
     const int *input = local.queue_a;
     int *output = local.queue_b;
     while (unfinished > 0)
@@ -2145,7 +2120,7 @@ while (schedule.time() < schedule.end)
         {
             throw std::runtime_error("local collision continuation limit exceeded");
         }
-        LOCAL_CHECK(localZero(dev_col_unfinished, 0, sizeof(int)));
+        GPU_CHECK(gpuMemset(dev_col_unfinished, 0, sizeof(int)));
         #ifdef COL_DIAGNOSTICS
         chain_blocks += unfinished;
         #endif // COL_DIAGNOSTICS
@@ -2158,13 +2133,13 @@ while (schedule.time() < schedule.end)
             dev_gas_dens,
             #endif // IMPORTGAS
             lambda0, local.dt, dev_col_spatial, output, local.error, local.work, local.environment, local.cached);
-        LOCAL_KERNEL("local_chain");
-        LOCAL_CHECK(localCopy(&unfinished, dev_col_unfinished, sizeof(int), localD2H));
+        GPU_KERNEL_CHECK("col_chain_run");
+        GPU_CHECK(gpuMemcpy(&unfinished, dev_col_unfinished, sizeof(int), gpuMemcpyDeviceToHost));
         input = output;
         output = (output == local.queue_a) ? local.queue_b : local.queue_a;
     }
     int error = 0;
-    LOCAL_CHECK(localCopy(&error, local.error, sizeof(int), localD2H));
+    GPU_CHECK(gpuMemcpy(&error, local.error, sizeof(int), gpuMemcpyDeviceToHost));
     if (error) throw std::runtime_error("local collision chain error "+std::to_string(error));
     #ifdef COL_DIAGNOSTICS
     chain_seconds += std::chrono::duration<double>(local_clock::now() - chain_begin).count();
@@ -2178,14 +2153,14 @@ while (schedule.time() < schedule.end)
     const auto audit_begin = local_clock::now();
     #endif // COL_DIAGNOSTICS
     // compare realized activity and size change with the predicted envelopes and adapt each group's safety factor
-    LOCAL_CHECK(localZero(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
+    GPU_CHECK(gpuMemset(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
     col_audit_bin <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_col_audit,
         dev_particle, dev_size_old, dev_numr_old, dev_col_rate, dev_col_hazard,
         dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, dev_col_events,
         dev_col_spatial, dev_col_binmap, dev_col_active, local.dt);
-    LOCAL_KERNEL("local_audit");
-    LOCAL_CHECK(localCopy(audit.data(), dev_col_audit,
-        sizeof(col_audit_accum)*merged, localD2H));
+    GPU_KERNEL_CHECK("col_audit_bin");
+    GPU_CHECK(gpuMemcpy(audit.data(), dev_col_audit,
+        sizeof(col_audit_accum)*merged, gpuMemcpyDeviceToHost));
     for (int c : groups)
     {
         if (local.owners[c].empty()) continue;
@@ -2281,9 +2256,9 @@ for (int c = 0; c < LOCAL_GROUPS; ++c)
 }
 local.log << "],\"event_counts\":[";
 col_event_sum <<< EVENT_CATEGORIES, TPB >>> (local.work, local.work_sum);
-LOCAL_KERNEL("col_event_sum");
+GPU_KERNEL_CHECK("col_event_sum");
 event_work totals;
-LOCAL_CHECK(localCopy(&totals, local.work_sum, sizeof(event_work), localD2H));
+GPU_CHECK(gpuMemcpy(&totals, local.work_sum, sizeof(event_work), gpuMemcpyDeviceToHost));
 for (int k = 0; k < EVENT_CATEGORIES; ++k)
 {
     if (k) local.log<<',';

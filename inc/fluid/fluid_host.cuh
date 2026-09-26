@@ -32,47 +32,6 @@ inline __host__
 real _get_sz (real z) { return -std::cos(z); }
 
 // =====================================================================================================================
-// cuda error handling
-
-inline __host__
-void cuda_fail (gpuError_t status, const char *operation, const char *file, int line)
-{
-    std::cerr
-    << GPU_BACKEND_NAME " error at " << file << ":" << line
-    << " during " << operation << ": " << gpuGetErrorString(status)
-    << " (" << static_cast<int>(status) << ")\n";
-
-    std::exit(EXIT_FAILURE);
-}
-
-#define CUDA_CHECK(OPERATION)                                                       \
-do {                                                                                \
-    gpuError_t cuda_status_ = (OPERATION);                                         \
-    if (cuda_status_ != gpuSuccess)                                                \
-    { cuda_fail(cuda_status_, #OPERATION, __FILE__, __LINE__); }                    \
-} while (0)
-
-#ifdef GPU_SYNC_TRACE
-#define CUDA_KERNEL_CHECK(KERNEL_NAME)                                                \
-do {                                                                                  \
-    gpuError_t cuda_status_ = gpuGetLastError();                                    \
-    if (cuda_status_ != gpuSuccess)                                                  \
-    { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }    \
-    cuda_status_ = gpuDeviceSynchronize();                                           \
-    if (cuda_status_ != gpuSuccess)                                                  \
-    { cuda_fail(cuda_status_, KERNEL_NAME " kernel execution", __FILE__, __LINE__); } \
-    std::cout << "  [" GPU_BACKEND_NAME "] completed " << KERNEL_NAME << std::endl;                   \
-} while (0)
-#else  // !GPU_SYNC_TRACE
-#define CUDA_KERNEL_CHECK(KERNEL_NAME)                                              \
-do {                                                                                \
-    gpuError_t cuda_status_ = gpuGetLastError();                                  \
-    if (cuda_status_ != gpuSuccess)                                                \
-    { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
-} while (0)
-#endif // GPU_SYNC_TRACE
-
-// =====================================================================================================================
 #ifdef GAMEDEV_ROCM
 struct lds_usage
 {
@@ -91,11 +50,11 @@ lds_usage get_lds_usage (const void *kernel, std::size_t requested_dynamic)
     int idx_device = 0;
     int device_limit = 0;
     hipFuncAttributes attributes = {};
-    CUDA_CHECK(hipGetDevice(&idx_device));
-    CUDA_CHECK(hipDeviceGetAttribute(
+    GPU_CHECK(hipGetDevice(&idx_device));
+    GPU_CHECK(hipDeviceGetAttribute(
         &device_limit, hipDeviceAttributeMaxSharedMemoryPerBlock, idx_device
     ));
-    CUDA_CHECK(hipFuncGetAttributes(&attributes, kernel));
+    GPU_CHECK(hipFuncGetAttributes(&attributes, kernel));
 
     std::size_t kernel_static = attributes.sharedSizeBytes;
     bool kernel_limit_reported = attributes.maxDynamicSharedSizeBytes > 0;
@@ -344,9 +303,9 @@ real get_dt_cfl (const real *dev_cfl_rate, const real *dev_dustvelx, const real 
     int iz = idx_cfl_max / (N_X*N_Y);
 
     real lx, vy, lz;
-    CUDA_CHECK(gpuMemcpy(&lx, dev_dustvelx + idx_cfl_max, sizeof(real), gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(&vy, dev_dustvely + idx_cfl_max, sizeof(real), gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(&lz, dev_dustvelz + idx_cfl_max, sizeof(real), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(&lx, dev_dustvelx + idx_cfl_max, sizeof(real), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(&vy, dev_dustvely + idx_cfl_max, sizeof(real), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(&lz, dev_dustvelz + idx_cfl_max, sizeof(real), gpuMemcpyDeviceToHost));
 
     real y = _get_ycent(iy);
     real z = _get_zcent(iz);
@@ -529,49 +488,49 @@ void load_velocity_as_sam (real *dustvelx, real *dustvelz)
 #ifdef RADIATION
 #define SAVE_OPTDEPTH_TO_FILE(idx_file)                                                        \
 do {                                                                                           \
-    CUDA_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
-    if (!save_host_binary(PATH + "optdepth_" + frame_num(idx_file) + ".dat", optdepth, N_G)) \
+    GPU_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
+    if (!save_host_binary(PATH + "optdepth_" + frame_num(idx_file) + ".dat", optdepth, N_G))   \
     { std::cerr << "Error: failed to save optdepth frame " << idx_file << std::endl; }         \
-} while(0)
+} while (0)
 #endif // RADIATION
 
 #define SAVE_DUSTDENS_TO_FILE(idx_file)                                                        \
 do {                                                                                           \
-    CUDA_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
-    if (!save_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G)) \
+    GPU_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
+    if (!save_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G))   \
     { std::cerr << "Error: failed to save dustdens frame " << idx_file << std::endl; }         \
-} while(0)
+} while (0)
 
 #define SAVE_DUST_VEL_TO_FILE(idx_file)                                                        \
 do {                                                                                           \
-    CUDA_CHECK(gpuMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
-    CUDA_CHECK(gpuMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
-    CUDA_CHECK(gpuMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
+    GPU_CHECK(gpuMemcpy(dustvelx, dev_dustvelx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
+    GPU_CHECK(gpuMemcpy(dustvely, dev_dustvely, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
+    GPU_CHECK(gpuMemcpy(dustvelz, dev_dustvelz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));     \
     save_sam_as_velocity(dustvelx, dustvelz);                                                  \
-    if (!save_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G)) \
+    if (!save_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G))   \
     { std::cerr << "Error: failed to save dustvelx frame " << idx_file << std::endl; }         \
-    if (!save_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G)) \
+    if (!save_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G))   \
     { std::cerr << "Error: failed to save dustvely frame " << idx_file << std::endl; }         \
-    if (!save_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G)) \
+    if (!save_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G))   \
     { std::cerr << "Error: failed to save dustvelz frame " << idx_file << std::endl; }         \
-} while(0)
+} while (0)
 
-#define LOAD_DUSTDATA_TO_VRAM(idx_file)                                                        \
-do {                                                                                           \
-    if (!load_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G)) \
-    { std::cerr << "Error: failed to load dustdens frame " << idx_file << std::endl; return 1; } \
-    if (!load_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G)) \
-    { std::cerr << "Error: failed to load dustvelx frame " << idx_file << std::endl; return 1; } \
-    if (!load_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G)) \
-    { std::cerr << "Error: failed to load dustvely frame " << idx_file << std::endl; return 1; } \
-    if (!load_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G)) \
-    { std::cerr << "Error: failed to load dustvelz frame " << idx_file << std::endl; return 1; } \
-    load_velocity_as_sam(dustvelx, dustvelz);                                                  \
-    CUDA_CHECK(gpuMemcpy(dev_dustdens, dustdens, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
-    CUDA_CHECK(gpuMemcpy(dev_dustvelx, dustvelx, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
-    CUDA_CHECK(gpuMemcpy(dev_dustvely, dustvely, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
-    CUDA_CHECK(gpuMemcpy(dev_dustvelz, dustvelz, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
-} while(0)
+#define LOAD_DUSTDATA_TO_VRAM(idx_file)                                                                         \
+do {                                                                                                            \
+    if (!load_host_binary(PATH + "dustdens_" + frame_num(idx_file) + ".dat", dustdens, N_G))                    \
+    { std::cerr << "Error: failed to load dustdens frame " << idx_file << std::endl; std::exit(EXIT_FAILURE); } \
+    if (!load_host_binary(PATH + "dustvelx_" + frame_num(idx_file) + ".dat", dustvelx, N_G))                    \
+    { std::cerr << "Error: failed to load dustvelx frame " << idx_file << std::endl; std::exit(EXIT_FAILURE); } \
+    if (!load_host_binary(PATH + "dustvely_" + frame_num(idx_file) + ".dat", dustvely, N_G))                    \
+    { std::cerr << "Error: failed to load dustvely frame " << idx_file << std::endl; std::exit(EXIT_FAILURE); } \
+    if (!load_host_binary(PATH + "dustvelz_" + frame_num(idx_file) + ".dat", dustvelz, N_G))                    \
+    { std::cerr << "Error: failed to load dustvelz frame " << idx_file << std::endl; std::exit(EXIT_FAILURE); } \
+    load_velocity_as_sam(dustvelx, dustvelz);                                                                   \
+    GPU_CHECK(gpuMemcpy(dev_dustdens, dustdens, sizeof(real)*N_G, gpuMemcpyHostToDevice));                      \
+    GPU_CHECK(gpuMemcpy(dev_dustvelx, dustvelx, sizeof(real)*N_G, gpuMemcpyHostToDevice));                      \
+    GPU_CHECK(gpuMemcpy(dev_dustvely, dustvely, sizeof(real)*N_G, gpuMemcpyHostToDevice));                      \
+    GPU_CHECK(gpuMemcpy(dev_dustvelz, dustvelz, sizeof(real)*N_G, gpuMemcpyHostToDevice));                      \
+} while (0)
 
 // =====================================================================================================================
 // runtime field transfers
@@ -640,10 +599,4 @@ bool save_variable (const std::string &file_name)
 }
 
 // =====================================================================================================================
-
-
-#ifndef HIP_CHECK
-#define HIP_CHECK CUDA_CHECK
-#define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
-#endif // !HIP_CHECK
 #endif // GAMEDEV_FLUID_HOST_CUH

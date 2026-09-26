@@ -245,7 +245,7 @@ int main (int argc, char **argv)
         if (!load_epsilon(PATH, idx_from, epsilon))
         {
             std::cerr << "Error: Failed to load gas data files for frame " << idx_from << std::endl;
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
 
         // use one imported total-dust spatial distribution for all previously sampled grain species
@@ -321,7 +321,7 @@ int main (int argc, char **argv)
         if (!(frame_stream >> idx_from))
         {
             std::cerr << "Error: Invalid resume file number: " << argv[1] << std::endl;
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
 
         LOAD_PARTICLE_TO_VRAM(idx_from);
@@ -844,13 +844,93 @@ int main (int argc, char **argv)
         if (!save_col_controller(controller_file, col_summary))
         {
             std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
         #endif // COL_DIAGNOSTICS
         #endif // COLLISION && !BERNOULLI
 
         msg_output(idx_file);
     }
+
+    // release the driver allocations in reverse order of acquisition
+    #if defined(COLLISION) || defined(DIFFUSION)
+    GPU_CHECK(gpuFree(dev_rngstate));
+    #endif // COLLISION || DIFFUSION
+
+    #ifdef COLLISION
+    #ifndef BERNOULLI
+    GPU_CHECK(gpuFree(dev_col_audit));
+    GPU_CHECK(gpuFree(dev_col_ratebin));
+    GPU_CHECK(gpuFree(dev_col_complete));
+    GPU_CHECK(gpuFree(dev_col_jumpmax_int));
+    GPU_CHECK(gpuFree(dev_col_jump2_int));
+    GPU_CHECK(gpuFree(dev_col_jump1_int));
+    GPU_CHECK(gpuFree(dev_col_hazard));
+    GPU_CHECK(gpuFree(dev_col_time));
+    GPU_CHECK(gpuFree(dev_col_unfinished));
+    GPU_CHECK(gpuFree(dev_col_error));
+    GPU_CHECK(gpuFree(dev_col_binmap));
+    GPU_CHECK(gpuFree(dev_col_count));
+    GPU_CHECK(gpuFree(dev_col_spatial));
+    GPU_CHECK(gpuFree(dev_col_events));
+    #elif !defined(KNN_CACHE)  // DIRECT_BERNOULLI
+    GPU_CHECK(gpuFree(dev_col_dist));
+    #endif // FROZEN_BATH / KNN_CACHE / DIRECT_BERNOULLI
+
+    #if !defined(BERNOULLI) || defined(KNN_CACHE)
+    GPU_CHECK(gpuFree(dev_col_measure));
+    GPU_CHECK(gpuFree(dev_col_neighbor));
+    #endif // FROZEN_BATH || KNN_CACHE
+
+    GPU_CHECK(gpuFree(dev_col_rate));
+    GPU_CHECK(gpuFree(dev_numr_old));
+    GPU_CHECK(gpuFree(dev_size_old));
+
+    #ifdef COLLISION_KDTREE
+    GPU_CHECK(gpuFree(dev_kdtree_node));
+    GPU_CHECK(gpuFree(dev_kdtree_box));
+    #else  // COLLISION_MORTON
+    GPU_CHECK(gpuFree(dev_morton_overflow));
+    GPU_CHECK(gpuFree(dev_search_dist));
+    GPU_CHECK(gpuFree(dev_morton_posx));
+    GPU_CHECK(gpuFree(dev_morton_point));
+    #endif // COLLISION_KDTREE
+
+    GPU_CHECK(gpuFree(dev_bad_part));
+    GPU_CHECK(gpuFree(dev_col_active));
+    #endif // COLLISION
+
+    #ifdef RADIATION
+    GPU_CHECK(gpuFree(dev_optdepth));
+    GPU_CHECK(gpuFreeHost(optdepth));
+    #endif // RADIATION
+
+    #ifdef IMPORTGAS
+    GPU_CHECK(gpuFree(dev_gas_velz_next));
+    GPU_CHECK(gpuFree(dev_gas_vely_next));
+    GPU_CHECK(gpuFree(dev_gas_velx_next));
+    GPU_CHECK(gpuFree(dev_gas_dens_next));
+    GPU_CHECK(gpuFree(dev_gas_velz));
+    GPU_CHECK(gpuFreeHost(gas_velz));
+    GPU_CHECK(gpuFree(dev_gas_vely));
+    GPU_CHECK(gpuFreeHost(gas_vely));
+    GPU_CHECK(gpuFree(dev_gas_velx));
+    GPU_CHECK(gpuFreeHost(gas_velx));
+    GPU_CHECK(gpuFree(dev_gas_dens));
+    GPU_CHECK(gpuFreeHost(gas_dens));
+    #endif // IMPORTGAS
+
+    #ifdef SAVE_DENS
+    GPU_CHECK(gpuFree(dev_dustdens));
+    GPU_CHECK(gpuFreeHost(dustdens));
+    #endif // SAVE_DENS
+
+    #ifdef TRANSPORT
+    GPU_CHECK(gpuFree(dev_dyn_rate));
+    #endif // TRANSPORT
+
+    GPU_CHECK(gpuFree(dev_particle));
+    GPU_CHECK(gpuFreeHost(particle));
 
     return 0;
 }

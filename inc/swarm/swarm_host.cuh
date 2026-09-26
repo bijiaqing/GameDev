@@ -734,36 +734,6 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 #endif // IMPORTGAS
 
 // =====================================================================================================================
-// cuda error handling
-// =====================================================================================================================
-
-inline __host__
-void cuda_fail (gpuError_t status, const char *operation, const char *file, int line)
-{
-    std::cerr
-    << GPU_BACKEND_NAME " error at " << file << ":" << line
-    << " during " << operation << ": " << gpuGetErrorString(status)
-    << " (" << static_cast<int>(status) << ")"
-    << std::endl;
-
-    std::exit(EXIT_FAILURE);
-}
-
-#define CUDA_CHECK(OPERATION)                                                       \
-do {                                                                                \
-    gpuError_t cuda_status_ = (OPERATION);                                         \
-    if (cuda_status_ != gpuSuccess)                                                \
-    { cuda_fail(cuda_status_, #OPERATION, __FILE__, __LINE__); }                    \
-} while (0)
-
-#define CUDA_KERNEL_CHECK(KERNEL_NAME)                                              \
-do {                                                                                \
-    gpuError_t cuda_status_ = gpuGetLastError();                                  \
-    if (cuda_status_ != gpuSuccess)                                                \
-    { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
-} while (0)
-
-// =====================================================================================================================
 // output timing
 // =====================================================================================================================
 
@@ -859,7 +829,7 @@ bool save_device_binary (const std::string &file_name, const DataType *dev_data,
     for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
         std::size_t chunk = std::min(chunk_max, count - offset);
-        CUDA_CHECK(gpuMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, gpuMemcpyDeviceToHost));
+        GPU_CHECK(gpuMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, gpuMemcpyDeviceToHost));
         file.write(reinterpret_cast<const char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
     }
@@ -887,7 +857,7 @@ bool load_device_binary (const std::string &file_name, DataType *dev_data, std::
         std::size_t chunk = std::min(chunk_max, count - offset);
         file.read(reinterpret_cast<char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
-        CUDA_CHECK(gpuMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, gpuMemcpyHostToDevice));
+        GPU_CHECK(gpuMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, gpuMemcpyHostToDevice));
     }
 
     return true;
@@ -1197,7 +1167,7 @@ bool save_particle_data (const std::string &path, int idx_file, swarm *particle,
     #endif // COLLISION || DIFFUSION
 )
 {
-    CUDA_CHECK(gpuMemcpy(particle, dev_particle, sizeof(swarm)*N_P, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(particle, dev_particle, sizeof(swarm)*N_P, gpuMemcpyDeviceToHost));
     save_sam_as_velocity(particle);
 
     std::string file_name = path + "particle_" + frame_num(idx_file) + ".dat";
@@ -1235,7 +1205,7 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
     }
 
     load_velocity_as_sam(particle);
-    CUDA_CHECK(gpuMemcpy(dev_particle, particle, sizeof(swarm)*N_P, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_particle, particle, sizeof(swarm)*N_P, gpuMemcpyHostToDevice));
 
     #if defined(COLLISION) || defined(DIFFUSION)
     file_name = path + "rngstate_" + frame_num(idx_file) + ".dat";
@@ -1250,96 +1220,96 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
 }
 
 #if defined(COLLISION) || defined(DIFFUSION)
-#define SAVE_PARTICLE_TO_FILE(idx_file)                                                     \
-do {                                                                                        \
-    if (!save_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) return 1; \
-} while(0)
-#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) return 1; \
-} while(0)
+#define SAVE_PARTICLE_TO_FILE(idx_file)                                                                     \
+do {                                                                                                        \
+    if (!save_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) std::exit(EXIT_FAILURE); \
+} while (0)
+#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                                     \
+do {                                                                                                        \
+    if (!load_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) std::exit(EXIT_FAILURE); \
+} while (0)
 #else  // NO COLLISION OR DIFFUSION
-#define SAVE_PARTICLE_TO_FILE(idx_file)                                                     \
-do {                                                                                        \
-    if (!save_particle_data(PATH, idx_file, particle, dev_particle)) return 1;              \
-} while(0)
-#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_particle_data(PATH, idx_file, particle, dev_particle)) return 1;              \
-} while(0)
+#define SAVE_PARTICLE_TO_FILE(idx_file)                                                       \
+do {                                                                                          \
+    if (!save_particle_data(PATH, idx_file, particle, dev_particle)) std::exit(EXIT_FAILURE); \
+} while (0)
+#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                       \
+do {                                                                                          \
+    if (!load_particle_data(PATH, idx_file, particle, dev_particle)) std::exit(EXIT_FAILURE); \
+} while (0)
 #endif // COLLISION || DIFFUSION
 
 #ifdef IMPORTGAS
-#define LOAD_GAS_DATA_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))             \
-    {                                                                                       \
+#define LOAD_GAS_DATA_TO_VRAM(idx_file)                                                          \
+do {                                                                                             \
+    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))                  \
+    {                                                                                            \
         std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
-        return 1;                                                                           \
-    }                                                                                       \
-    CUDA_CHECK(gpuMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velx, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-    CUDA_CHECK(gpuMemcpy(dev_gas_vely, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-} while(0)
+        std::exit(EXIT_FAILURE);                                                                 \
+    }                                                                                            \
+    GPU_CHECK(gpuMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+    GPU_CHECK(gpuMemcpy(dev_gas_velx, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+    GPU_CHECK(gpuMemcpy(dev_gas_vely, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+    GPU_CHECK(gpuMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+} while (0)
 
-#define LOAD_GAS_NEXT_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))             \
-    {                                                                                       \
+#define LOAD_GAS_NEXT_TO_VRAM(idx_file)                                                          \
+do {                                                                                             \
+    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))                  \
+    {                                                                                            \
         std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
-        return 1;                                                                           \
-    }                                                                                       \
-    CUDA_CHECK(gpuMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velx_next, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-    CUDA_CHECK(gpuMemcpy(dev_gas_vely_next, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velz_next, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-} while(0)
+        std::exit(EXIT_FAILURE);                                                                 \
+    }                                                                                            \
+    GPU_CHECK(gpuMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+    GPU_CHECK(gpuMemcpy(dev_gas_velx_next, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+    GPU_CHECK(gpuMemcpy(dev_gas_vely_next, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+    GPU_CHECK(gpuMemcpy(dev_gas_velz_next, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+} while (0)
 #endif // IMPORTGAS
 
 #ifdef SAVE_DENS
 #define SAVE_DUSTDENS_TO_FILE(idx_file)                                                     \
 do {                                                                                        \
     dustdens_init <<< NB_G, TPB >>> (dev_dustdens);                                         \
-    CUDA_KERNEL_CHECK("dustdens_init");                                                     \
+    GPU_KERNEL_CHECK("dustdens_init");                                                      \
     dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, total_dust_mass);          \
-    CUDA_KERNEL_CHECK("dustdens_depo");                                                     \
+    GPU_KERNEL_CHECK("dustdens_depo");                                                      \
     dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);                                         \
-    CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
-    CUDA_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));           \
+    GPU_KERNEL_CHECK("dustdens_calc");                                                      \
+    GPU_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
     std::string file_name = PATH + "dustdens_" + frame_num(idx_file) + ".dat";              \
     if (!save_host_binary(file_name, dustdens, N_G))                                        \
     {                                                                                       \
         std::cerr << "Error: Failed to save file: " << file_name << std::endl;              \
-        return 1;                                                                           \
+        std::exit(EXIT_FAILURE);                                                            \
     }                                                                                       \
-} while(0)
+} while (0)
 #endif // SAVE_DENS
 
 #ifdef RADIATION
 #define SAVE_OPTDEPTH_TO_FILE(idx_file, do_avg)                                             \
 do {                                                                                        \
     optdepth_init <<< NB_G, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_init");                                                     \
+    GPU_KERNEL_CHECK("optdepth_init");                                                      \
     optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);          \
-    CUDA_KERNEL_CHECK("optdepth_depo");                                                     \
+    GPU_KERNEL_CHECK("optdepth_depo");                                                      \
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_calc");                                                     \
+    GPU_KERNEL_CHECK("optdepth_calc");                                                      \
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_csum");                                                     \
+    GPU_KERNEL_CHECK("optdepth_csum");                                                      \
     if (do_avg)                                                                             \
     {                                                                                       \
         optdepth_mean <<< NB_X, TPB >>> (dev_optdepth);                                     \
-        CUDA_KERNEL_CHECK("optdepth_mean");                                                 \
+        GPU_KERNEL_CHECK("optdepth_mean");                                                  \
     }                                                                                       \
-    CUDA_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));           \
+    GPU_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
     std::string file_name = PATH + "optdepth_" + frame_num(idx_file) + ".dat";              \
     if (!save_host_binary(file_name, optdepth, N_G))                                        \
     {                                                                                       \
         std::cerr << "Error: Failed to save file: " << file_name << std::endl;              \
-        return 1;                                                                           \
+        std::exit(EXIT_FAILURE);                                                            \
     }                                                                                       \
-} while(0)
+} while (0)
 #endif // RADIATION
 
 // =====================================================================================================================
@@ -1414,10 +1384,4 @@ PRINT_VALUE_COLLISION();                    \
 std::cout << std::endl;
 
 // =====================================================================================================================
-
-
-#ifndef HIP_CHECK
-#define HIP_CHECK CUDA_CHECK
-#define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
-#endif // !HIP_CHECK
 #endif // GAMEDEV_SWARM_HOST_CUH

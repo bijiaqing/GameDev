@@ -179,7 +179,7 @@ int main (int argc, char **argv)
         if (!save_variable(PATH + "variables.txt"))
         {
             std::cerr << "Error: failed to save simulation parameters" << std::endl;
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
 
         SAVE_DUSTDENS_TO_FILE(idx_from);
@@ -197,7 +197,7 @@ int main (int argc, char **argv)
         if (!(frame_stream >> idx_from))
         {
             std::cerr << "Error: invalid resume frame number: " << argv[1] << "\n";
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
 
         LOAD_DUSTDATA_TO_VRAM(idx_from);

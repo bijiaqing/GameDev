@@ -1,6 +1,9 @@
 #ifndef GAMEDEV_GPU_CUH
 #define GAMEDEV_GPU_CUH
 
+#include <cstdlib>  // std::exit, EXIT_FAILURE
+#include <iostream> // std::cerr, std::cout, std::endl
+
 #if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #define GAMEDEV_GPU_DEVICE
 #endif // __CUDA_ARCH__ || __HIP_DEVICE_COMPILE__
@@ -11,8 +14,6 @@
 #include <hiprand/hiprand_kernel.h> // hiprandState, hiprand_init, hiprand_normal_double, hiprand_uniform_double
 #define GPU_BACKEND_NAME "HIP"
 #define GPU_BACKEND_ID "rocm"
-#define GPU_CHECK HIP_CHECK
-#define GPU_KERNEL_CHECK HIP_KERNEL_CHECK
 #define gpuDeviceSynchronize hipDeviceSynchronize
 #define gpuError_t hipError_t
 #define gpuFree hipFree
@@ -56,8 +57,6 @@
 #include <curand_kernel.h> // curandState, curand_init, curand_normal_double, curand_uniform_double
 #define GPU_BACKEND_NAME "CUDA"
 #define GPU_BACKEND_ID "cuda"
-#define GPU_CHECK CUDA_CHECK
-#define GPU_KERNEL_CHECK CUDA_KERNEL_CHECK
 #define gpuDeviceSynchronize cudaDeviceSynchronize
 #define gpuError_t cudaError_t
 #define gpuFree cudaFree
@@ -97,4 +96,47 @@
 #define GPU_SYNC_TRACE
 #endif // CUDA_SYNC_TRACE
 #endif // GAMEDEV_ROCM
+
+// =====================================================================================================================
+// host error handling: report the failing call with its location and stop the run
+
+inline __host__
+void gpu_fail (gpuError_t status, const char *operation, const char *file, int line)
+{
+    std::cerr
+    << "Error: " GPU_BACKEND_NAME " failure at " << file << ":" << line
+    << " during " << operation << ": " << gpuGetErrorString(status)
+    << " (" << static_cast<int>(status) << ")"
+    << std::endl;
+
+    std::exit(EXIT_FAILURE);
+}
+
+#define GPU_CHECK(OPERATION)                                                        \
+do {                                                                                \
+    gpuError_t gpu_status_ = (OPERATION);                                           \
+    if (gpu_status_ != gpuSuccess)                                                  \
+    { gpu_fail(gpu_status_, #OPERATION, __FILE__, __LINE__); }                      \
+} while (0)
+
+#ifdef GPU_SYNC_TRACE
+#define GPU_KERNEL_CHECK(KERNEL_NAME)                                               \
+do {                                                                                \
+    gpuError_t gpu_status_ = gpuGetLastError();                                     \
+    if (gpu_status_ != gpuSuccess)                                                  \
+    { gpu_fail(gpu_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }    \
+    gpu_status_ = gpuDeviceSynchronize();                                           \
+    if (gpu_status_ != gpuSuccess)                                                  \
+    { gpu_fail(gpu_status_, KERNEL_NAME " kernel execution", __FILE__, __LINE__); } \
+    std::cout << "  [" GPU_BACKEND_NAME "] completed " << KERNEL_NAME << std::endl; \
+} while (0)
+#else  // !GPU_SYNC_TRACE
+#define GPU_KERNEL_CHECK(KERNEL_NAME)                                               \
+do {                                                                                \
+    gpuError_t gpu_status_ = gpuGetLastError();                                     \
+    if (gpu_status_ != gpuSuccess)                                                  \
+    { gpu_fail(gpu_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }    \
+} while (0)
+#endif // GPU_SYNC_TRACE
+
 #endif // GAMEDEV_GPU_CUH

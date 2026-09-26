@@ -332,19 +332,19 @@ void save_state (const std::string &stage, real *dev_dustdens, real *dev_dustmom
     momentum_getv <<< NB_G, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
     );
-    CUDA_KERNEL_CHECK("momentum_getv");
-    CUDA_CHECK(gpuDeviceSynchronize());
+    GPU_KERNEL_CHECK("momentum_getv");
+    GPU_CHECK(gpuDeviceSynchronize());
 
     // ordinary host vectors are sufficient because test output is written only at the initial and final stages
     std::vector<real> rhod(N_G), mx(N_G), my(N_G), mz(N_G);
     std::vector<real> velx(N_G), vely(N_G), velz(N_G);
-    CUDA_CHECK(gpuMemcpy(rhod.data(), dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(mx.data(), dev_dustmomx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(my.data(), dev_dustmomy, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(mz.data(), dev_dustmomz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(velx.data(), dev_velx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(vely.data(), dev_vely, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
-    CUDA_CHECK(gpuMemcpy(velz.data(), dev_velz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(rhod.data(), dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(mx.data(), dev_dustmomx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(my.data(), dev_dustmomy, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(mz.data(), dev_dustmomz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(velx.data(), dev_velx, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(vely.data(), dev_vely, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(velz.data(), dev_velz, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
 
     // production calculations store x and z primitives as specific angular momenta; convert copies to physical linear
     // velocities for output while retaining conserved angular momenta in the dustmomx and dustmomz files
@@ -371,39 +371,39 @@ int main ()
     // allocate the same conserved and primitive fields used by the production fluid integrator
     real *dev_dustdens, *dev_dustmomx, *dev_dustmomy, *dev_dustmomz;
     real *dev_velx, *dev_vely, *dev_velz;
-    CUDA_CHECK(gpuMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
-    CUDA_CHECK(gpuMalloc((void**)&dev_dustmomx, sizeof(real)*N_G));
-    CUDA_CHECK(gpuMalloc((void**)&dev_dustmomy, sizeof(real)*N_G));
-    CUDA_CHECK(gpuMalloc((void**)&dev_dustmomz, sizeof(real)*N_G));
-    CUDA_CHECK(gpuMalloc((void**)&dev_velx, sizeof(real)*N_G));
-    CUDA_CHECK(gpuMalloc((void**)&dev_vely, sizeof(real)*N_G));
-    CUDA_CHECK(gpuMalloc((void**)&dev_velz, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_dustdens, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_dustmomx, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_dustmomy, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_dustmomz, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_velx, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_vely, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_velz, sizeof(real)*N_G));
 
     // only conserved variables were initialized on the host; momentum_getv below derives synchronized primitives
-    CUDA_CHECK(gpuMemcpy(dev_dustdens, rhod.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
-    CUDA_CHECK(gpuMemcpy(dev_dustmomx, mx.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
-    CUDA_CHECK(gpuMemcpy(dev_dustmomy, my.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
-    CUDA_CHECK(gpuMemcpy(dev_dustmomz, mz.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustdens, rhod.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomx, mx.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomy, my.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomz, mz.data(), sizeof(real)*N_G, gpuMemcpyHostToDevice));
 
     momentum_getv <<< NB_G, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
     );
-    CUDA_KERNEL_CHECK("momentum_getv");
+    GPU_KERNEL_CHECK("momentum_getv");
 
     // nonuniform radial and polar PPM kernels require precomputed face interpolation weights even when a particular
     // test evolves only one direction; keeping a common allocation path simplifies compile-time case selection
     real *dev_weight_y, *dev_weight_z;
-    CUDA_CHECK(gpuMalloc((void**)&dev_weight_y, sizeof(real)*4*(N_Y + 1)));
-    CUDA_CHECK(gpuMalloc((void**)&dev_weight_z, sizeof(real)*4*(N_Z + 1)));
+    GPU_CHECK(gpuMalloc((void**)&dev_weight_y, sizeof(real)*4*(N_Y + 1)));
+    GPU_CHECK(gpuMalloc((void**)&dev_weight_z, sizeof(real)*4*(N_Z + 1)));
     std::vector<real> weight_y(4*(N_Y + 1)), weight_z(4*(N_Z + 1));
     ppm_geometry_weights_calc(weight_y.data(), weight_z.data());
-    CUDA_CHECK(gpuMemcpy(dev_weight_y, weight_y.data(), sizeof(real)*4*(N_Y + 1), gpuMemcpyHostToDevice));
-    CUDA_CHECK(gpuMemcpy(dev_weight_z, weight_z.data(), sizeof(real)*4*(N_Z + 1), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_weight_y, weight_y.data(), sizeof(real)*4*(N_Y + 1), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_weight_z, weight_z.data(), sizeof(real)*4*(N_Z + 1), gpuMemcpyHostToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
     // the block sweep shares one persistent 11-field advection workspace across all directions
     real *dev_adv_work;
-    CUDA_CHECK(gpuMalloc(
+    GPU_CHECK(gpuMalloc(
         (void**)&dev_adv_work,
         sizeof(real)*static_cast<std::size_t>(BLOCK_ADV_FIELDS)*static_cast<std::size_t>(N_G)
     ));
@@ -414,15 +414,15 @@ int main ()
     require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
     require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
     #else  // !GAMEDEV_ROCM
-    CUDA_CHECK(gpuFuncSetAttribute(
+    GPU_CHECK(gpuFuncSetAttribute(
         diffusion_xbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*4*N_X
     ));
-    CUDA_CHECK(gpuFuncSetAttribute(
+    GPU_CHECK(gpuFuncSetAttribute(
         diffusion_ybl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*6*N_Y
     ));
-    CUDA_CHECK(gpuFuncSetAttribute(
+    GPU_CHECK(gpuFuncSetAttribute(
         diffusion_zbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*6*N_Z
     ));
@@ -432,12 +432,12 @@ int main ()
 
     // the transport tests that use velocity-dependent timesteps share the production CFL-rate kernel and host reduction
     real *dev_cfl_rate;
-    CUDA_CHECK(gpuMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
 
     #ifdef RADIATION
     // radiation and standalone optical-depth builds require one cumulative optical-depth field
     real *dev_optdepth;
-    CUDA_CHECK(gpuMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
+    GPU_CHECK(gpuMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
     #endif // RADIATION
 
     // saving the initial state enables both direct initialization checks and the later mass-conservation calculation
@@ -451,7 +451,7 @@ int main ()
         momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
         );
-        CUDA_KERNEL_CHECK("momentum_getv");
+        GPU_KERNEL_CHECK("momentum_getv");
     };
 
     auto cfl_step = [&]()
@@ -462,8 +462,8 @@ int main ()
             dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
             dev_velx, dev_vely, dev_velz
         );
-        CUDA_KERNEL_CHECK("cfl_rate_calc");
-        CUDA_CHECK(gpuDeviceSynchronize());
+        GPU_KERNEL_CHECK("cfl_rate_calc");
+        GPU_CHECK(gpuDeviceSynchronize());
         return get_dt_cfl(dev_cfl_rate, dev_velx, dev_vely, dev_velz, false);
     };
 
@@ -474,10 +474,10 @@ int main ()
         advection_xbl <<< N_Y*N_Z, TPB_BLOCK >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt
         );
-        CUDA_KERNEL_CHECK("advection_xbl");
+        GPU_KERNEL_CHECK("advection_xbl");
         #else  // !FLUID_BLOCK_SWEEP
         advection_xth <<< NB_X, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
-        CUDA_KERNEL_CHECK("advection_xth");
+        GPU_KERNEL_CHECK("advection_xth");
         #endif // FLUID_BLOCK_SWEEP
     };
 
@@ -487,10 +487,10 @@ int main ()
         advection_ybl <<< N_X*N_Z, TPB_BLOCK >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dev_adv_work, dt
         );
-        CUDA_KERNEL_CHECK("advection_ybl");
+        GPU_KERNEL_CHECK("advection_ybl");
         #else  // !FLUID_BLOCK_SWEEP
         advection_yth <<< NB_Y, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dt);
-        CUDA_KERNEL_CHECK("advection_yth");
+        GPU_KERNEL_CHECK("advection_yth");
         #endif // FLUID_BLOCK_SWEEP
     };
 
@@ -500,10 +500,10 @@ int main ()
         advection_zbl <<< N_X*N_Y, TPB_BLOCK >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dev_adv_work, dt
         );
-        CUDA_KERNEL_CHECK("advection_zbl");
+        GPU_KERNEL_CHECK("advection_zbl");
         #else  // !FLUID_BLOCK_SWEEP
         advection_zth <<< NB_Z, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dt);
-        CUDA_KERNEL_CHECK("advection_zth");
+        GPU_KERNEL_CHECK("advection_zth");
         #endif // FLUID_BLOCK_SWEEP
     };
 
@@ -515,10 +515,10 @@ int main ()
         diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
         );
-        CUDA_KERNEL_CHECK("diffusion_xbl");
+        GPU_KERNEL_CHECK("diffusion_xbl");
         #else  // !FLUID_BLOCK_SWEEP
         diffusion_xth <<< NB_X, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
-        CUDA_KERNEL_CHECK("diffusion_xth");
+        GPU_KERNEL_CHECK("diffusion_xth");
         #endif // FLUID_BLOCK_SWEEP
     };
 
@@ -528,10 +528,10 @@ int main ()
         diffusion_ybl <<< N_X*N_Z, TPB_BLOCK, sizeof(real)*6*N_Y >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
         );
-        CUDA_KERNEL_CHECK("diffusion_ybl");
+        GPU_KERNEL_CHECK("diffusion_ybl");
         #else  // !FLUID_BLOCK_SWEEP
         diffusion_yth <<< NB_Y, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
-        CUDA_KERNEL_CHECK("diffusion_yth");
+        GPU_KERNEL_CHECK("diffusion_yth");
         #endif // FLUID_BLOCK_SWEEP
     };
 
@@ -541,10 +541,10 @@ int main ()
         diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
         );
-        CUDA_KERNEL_CHECK("diffusion_zbl");
+        GPU_KERNEL_CHECK("diffusion_zbl");
         #else  // !FLUID_BLOCK_SWEEP
         diffusion_zth <<< NB_Z, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
-        CUDA_KERNEL_CHECK("diffusion_zth");
+        GPU_KERNEL_CHECK("diffusion_zth");
         #endif // FLUID_BLOCK_SWEEP
     };
     #endif // DIFFUSION
@@ -556,12 +556,12 @@ int main ()
     // optical depth is a spatial quadrature test, not a time integration test; construct the cumulative radial field
     // once, save it, and leave clock and steps at zero for the metadata record
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
-    CUDA_KERNEL_CHECK("optdepth_calc");
+    GPU_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
-    CUDA_KERNEL_CHECK("optdepth_csum");
-    CUDA_CHECK(gpuDeviceSynchronize());
+    GPU_KERNEL_CHECK("optdepth_csum");
+    GPU_CHECK(gpuDeviceSynchronize());
     std::vector<real> optdepth(N_G);
-    CUDA_CHECK(gpuMemcpy(optdepth.data(), dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(optdepth.data(), dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
     save_array("optdepth_final", optdepth);
     #elif defined(VERIFY_SOURCE_DRAG)
     // apply exactly one full source step; the model-local source kernel prescribes gas velocities, stopping times, and
@@ -570,11 +570,11 @@ int main ()
     source_update <<< NB_G, TPB >>> (
         dev_velx, dev_vely, dev_velz, dev_dustdens, VERIFY_TEND
     );
-    CUDA_KERNEL_CHECK("source_update");
+    GPU_KERNEL_CHECK("source_update");
     momentum_setv <<< NB_G, TPB >>> (
         dev_dustdens, dev_velx, dev_vely, dev_velz, dev_dustmomx, dev_dustmomy, dev_dustmomz
     );
-    CUDA_KERNEL_CHECK("momentum_setv");
+    GPU_KERNEL_CHECK("momentum_setv");
     clock = VERIFY_TEND;
     steps = 1;
     #elif defined(VERIFY_RING)
@@ -609,20 +609,20 @@ int main ()
         // radiation builds recompute optical depth at the state presented to the centered source operator; the taper is
         // one in verification runs so the analytical acceleration is active for the entire step
         optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
-        CUDA_KERNEL_CHECK("optdepth_calc");
+        GPU_KERNEL_CHECK("optdepth_calc");
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
-        CUDA_KERNEL_CHECK("optdepth_csum");
+        GPU_KERNEL_CHECK("optdepth_csum");
         source_update <<< NB_G, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dustdens, dev_optdepth, 1.0, dt);
         #else  // !RADIATION
         source_update <<< NB_G, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dustdens, dt);
         #endif // RADIATION
-        CUDA_KERNEL_CHECK("source_update");
+        GPU_KERNEL_CHECK("source_update");
 
         // source_update advances primitives, so rebuild conserved momenta before returning to conservative transport
         momentum_setv <<< NB_G, TPB >>> (
             dev_dustdens, dev_velx, dev_vely, dev_velz, dev_dustmomx, dev_dustmomy, dev_dustmomz
         );
-        CUDA_KERNEL_CHECK("momentum_setv");
+        GPU_KERNEL_CHECK("momentum_setv");
 
         // closing transport half-step reverses the opening directional order for a symmetric composition
         apply_advection_y(0.5*dt);
@@ -690,12 +690,12 @@ int main ()
     #ifdef RADIATION
     // save final optical depth for combined radiation cases after the last density update
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
-    CUDA_KERNEL_CHECK("optdepth_calc");
+    GPU_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
-    CUDA_KERNEL_CHECK("optdepth_csum");
-    CUDA_CHECK(gpuDeviceSynchronize());
+    GPU_KERNEL_CHECK("optdepth_csum");
+    GPU_CHECK(gpuDeviceSynchronize());
     std::vector<real> optdepth_final(N_G);
-    CUDA_CHECK(gpuMemcpy(optdepth_final.data(), dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(optdepth_final.data(), dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
     save_array("optdepth_final", optdepth_final);
     #endif // RADIATION
 
@@ -722,21 +722,21 @@ int main ()
          << "}\n";
 
     // release all device allocations; host std::vectors are released automatically when main returns
-    CUDA_CHECK(gpuFree(dev_dustdens));
-    CUDA_CHECK(gpuFree(dev_dustmomx));
-    CUDA_CHECK(gpuFree(dev_dustmomy));
-    CUDA_CHECK(gpuFree(dev_dustmomz));
-    CUDA_CHECK(gpuFree(dev_velx));
-    CUDA_CHECK(gpuFree(dev_vely));
-    CUDA_CHECK(gpuFree(dev_velz));
-    CUDA_CHECK(gpuFree(dev_weight_y));
-    CUDA_CHECK(gpuFree(dev_weight_z));
+    GPU_CHECK(gpuFree(dev_dustdens));
+    GPU_CHECK(gpuFree(dev_dustmomx));
+    GPU_CHECK(gpuFree(dev_dustmomy));
+    GPU_CHECK(gpuFree(dev_dustmomz));
+    GPU_CHECK(gpuFree(dev_velx));
+    GPU_CHECK(gpuFree(dev_vely));
+    GPU_CHECK(gpuFree(dev_velz));
+    GPU_CHECK(gpuFree(dev_weight_y));
+    GPU_CHECK(gpuFree(dev_weight_z));
     #ifdef FLUID_BLOCK_SWEEP
-    CUDA_CHECK(gpuFree(dev_adv_work));
+    GPU_CHECK(gpuFree(dev_adv_work));
     #endif // FLUID_BLOCK_SWEEP
-    CUDA_CHECK(gpuFree(dev_cfl_rate));
+    GPU_CHECK(gpuFree(dev_cfl_rate));
     #ifdef RADIATION
-    CUDA_CHECK(gpuFree(dev_optdepth));
+    GPU_CHECK(gpuFree(dev_optdepth));
     #endif // RADIATION
 
     std::cout << "Verification case " << case_name() << " completed at N="
