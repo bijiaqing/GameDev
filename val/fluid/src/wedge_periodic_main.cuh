@@ -1,6 +1,7 @@
-#include <cstdlib>
+// include fragment: the shared wedge-periodic main program, included once by each wedge test's fluid_runtime.cu
 #include <cmath>      // exp, fmin, fmod, pow, sin, sqrt
 #include <cstddef>    // std::size_t
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <filesystem> // std::filesystem::create_directories
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
@@ -14,8 +15,9 @@
 #include <fluid_kern.cuh>
 
 // test-only driver for periodic azimuthal transport and diffusion on a non-2pi wedge
-// the transport pulse crosses the seam under an integer-plus-fractional FARGO shift, while the diffusion mode exercises the
-// cyclic Crank-Nicolson corner coupling; both references use the configured wedge period rather than a full-disk assumption
+// the transport pulse crosses the seam under an integer-plus-fractional FARGO shift, while the diffusion mode exercises
+// the cyclic Crank-Nicolson corner coupling; both references use the configured wedge period rather than a full-disk
+// assumption
 
 namespace
 {
@@ -65,7 +67,7 @@ real compact_bump_periodic (real x)
     real center = 0.5*(BUMP_LOWER + BUMP_UPPER);
     real half_width = 0.5*(BUMP_UPPER - BUMP_LOWER);
     real coordinate = (value - center) / half_width;
-    return exp(1.0 - 1.0/(1.0 - coordinate*coordinate));
+    return exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -80,9 +82,9 @@ const char *case_name ()
 {
     #ifdef VERIFY_X_WEDGE_TRANSPORT
     return "x_wedge_transport_2d";
-    #else // VERIFY_X_WEDGE_DIFFUSION
+    #else  // VERIFY_X_WEDGE_DIFFUSION
     return "x_wedge_diffusion_2d";
-    #endif
+    #endif // VERIFY_X_WEDGE_TRANSPORT
 }
 }
 
@@ -97,7 +99,7 @@ int main ()
     std::vector<real> dustdens_initial(N_G);
 
     real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real wave_number = 2.0*M_PI / (X_MAX - X_MIN);
     for (int iy = 0; iy < N_Y; iy++)
     {
@@ -112,13 +114,14 @@ int main ()
             int idx_cell = ix + iy*N_X;
 
             #ifdef VERIFY_X_WEDGE_TRANSPORT
-            // the nonzero floor keeps the pulse away from the vacuum closure while the compact component crosses the seam
+            // the nonzero floor keeps the pulse away from the vacuum closure while the compact component crosses the
+            // seam
             real density = 1.0 + 0.5*gauss8(compact_bump_periodic, x_i, x_o) / dx;
             dustdens[idx_cell] = density;
             dustmomx[idx_cell] = density*R*R*TRANSPORT_RATE;
             dustmomy[idx_cell] = 0.10*density;
             dustmomz[idx_cell] = -0.05*density;
-            #else // VERIFY_X_WEDGE_DIFFUSION
+            #else  // VERIFY_X_WEDGE_DIFFUSION
             // one wedge-periodic Fourier mode has an exact radius-dependent exponential decay under azimuthal diffusion
             real mode_avg = (sin(wave_number*(x_o - MODE_PHASE))
                 - sin(wave_number*(x_i - MODE_PHASE))) / (wave_number*dx);
@@ -127,7 +130,7 @@ int main ()
             dustmomx[idx_cell] = 0.70*density;
             dustmomy[idx_cell] = -0.15*density;
             dustmomz[idx_cell] = 0.11*density;
-            #endif
+            #endif // VERIFY_X_WEDGE_TRANSPORT
         }
     }
     dustdens_initial = dustdens;
@@ -136,42 +139,50 @@ int main ()
     real *dev_dustmomx = nullptr;
     real *dev_dustmomy = nullptr;
     real *dev_dustmomz = nullptr;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustdens), sizeof(*dev_dustdens)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustdens),
+        sizeof(*dev_dustdens)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustmomx), sizeof(*dev_dustmomx)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustmomx),
+        sizeof(*dev_dustmomx)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustmomy), sizeof(*dev_dustmomy)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustmomy),
+        sizeof(*dev_dustmomy)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustmomz), sizeof(*dev_dustmomz)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_dustmomz),
+        sizeof(*dev_dustmomz)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_dustdens, dustdens.data(), sizeof(*(dev_dustdens))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_dustdens, dustdens.data(), sizeof(*(dev_dustdens))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_dustmomx, dustmomx.data(), sizeof(*(dev_dustmomx))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_dustmomx, dustmomx.data(), sizeof(*(dev_dustmomx))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_dustmomy, dustmomy.data(), sizeof(*(dev_dustmomy))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_dustmomy, dustmomy.data(), sizeof(*(dev_dustmomy))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_dustmomz, dustmomz.data(), sizeof(*(dev_dustmomz))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_dustmomz, dustmomz.data(), sizeof(*(dev_dustmomz))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -179,48 +190,49 @@ int main ()
 
     #if defined(FLUID_BLOCK_SWEEP) && defined(VERIFY_X_WEDGE_TRANSPORT)
     real *dev_adv_work = nullptr;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_adv_work), sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_adv_work),
+        sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate block advection workspace" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    #endif
+    #endif // FLUID_BLOCK_SWEEP && VERIFY_X_WEDGE_TRANSPORT
 
     #ifdef VERIFY_X_WEDGE_TRANSPORT
     real final_time = TRANSPORT_TIME;
     // ten-thirds cells makes the standard power-of-two grids take exactly 2, 4, 8, and 16 equal steps
     real dt_nominal = (10.0 / 3.0)*dx / TRANSPORT_RATE;
-    #else // VERIFY_X_WEDGE_DIFFUSION
+    #else  // VERIFY_X_WEDGE_DIFFUSION
     real final_time = DIFFUSION_TIME;
     real dt_nominal = 0.25*Y_MIN*dx;
-    #endif
+    #endif // VERIFY_X_WEDGE_TRANSPORT
 
     real clock = 0.0;
     int steps = 0;
     while (clock < final_time)
     {
         real dt = fmin(dt_nominal, final_time - clock);
-        #ifdef VERIFY_X_WEDGE_TRANSPORT
+            #ifdef VERIFY_X_WEDGE_TRANSPORT
             #ifdef FLUID_BLOCK_SWEEP
             advection_xbl <<< N_Y*N_Z, TPB_BLOCK >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt
             );
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
             );
             #endif // FLUID_BLOCK_SWEEP
-        #else // VERIFY_X_WEDGE_DIFFUSION
+            #else  // VERIFY_X_WEDGE_DIFFUSION
             #ifdef FLUID_BLOCK_SWEEP
             diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
             );
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             diffusion_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
             );
             #endif // FLUID_BLOCK_SWEEP
-        #endif
+            #endif // VERIFY_X_WEDGE_TRANSPORT
         if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
         {
             std::cerr << "wedge-periodic operator" << ": " << gpuGetErrorString(status) << std::endl;
@@ -235,22 +247,26 @@ int main ()
         steps++;
     }
 
-    if (gpuError_t status = gpuMemcpy(dustdens.data(), dev_dustdens, sizeof(*(dustdens.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dustdens.data(), dev_dustdens, sizeof(*(dustdens.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "download density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dustmomx.data(), dev_dustmomx, sizeof(*(dustmomx.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dustmomx.data(), dev_dustmomx, sizeof(*(dustmomx.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "download x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dustmomy.data(), dev_dustmomy, sizeof(*(dustmomy.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dustmomy.data(), dev_dustmomy, sizeof(*(dustmomy.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "download y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dustmomz.data(), dev_dustmomz, sizeof(*(dustmomz.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dustmomz.data(), dev_dustmomz, sizeof(*(dustmomz.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "download z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -306,7 +322,7 @@ int main ()
         std::cerr << "free block advection workspace" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    #endif
+    #endif // FLUID_BLOCK_SWEEP && VERIFY_X_WEDGE_TRANSPORT
 
     std::cout << "fluid " << case_name() << " completed at N=" << VERIFY_RES
               << " in " << steps << " step(s)." << std::endl;

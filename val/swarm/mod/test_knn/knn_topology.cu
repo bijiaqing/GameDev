@@ -1,6 +1,2 @@
-#ifdef GAMEDEV_ROCM
-#define GAMEDEV_ROCM
-#else
-#define GAMEDEV_CUDA
-#endif
+// build the Morton topology test; the Makefile selects the backend with -DGAMEDEV_CUDA or -DGAMEDEV_ROCM
 #include "../test_knn/topology.cuh"

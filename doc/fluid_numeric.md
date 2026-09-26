@@ -4,9 +4,11 @@
 
 The Eulerian branch represents monodisperse, pressureless dust as a finite-volume continuum on the
 disk grid. Gas is prescribed analytically, dust does not back-react on it, and the solver combines
-conservative transport with local forces and optional density diffusion. Backend-neutral complete
-files live under `inc/fluid/` and `src/fluid/`; runtime, random-number, declaration, and
-launch-policy files live under the corresponding `cuda/fluid/` or `rocm/fluid/` branch.
+conservative transport with local forces and optional density or concentration diffusion. Shared
+headers and application sources live under `inc/fluid/` and `src/fluid/`; `inc/gpu.cuh` selects
+the CUDA or HIP runtime and random-number APIs. Building, configuring, running, and reading output
+are described in the [user guide](../README.md); this document states the equations, their
+discretization, and the numerical and implementation properties that determine what a run means.
 
 ### 1.1 Supported configurations
 
@@ -16,22 +18,17 @@ The branch supports:
 - a full three-dimensional spherical grid with `N_Z > 1`
 - pressureless dust transport
 - gas drag, gravity, spherical geometric forces, and optional radiation pressure
-- optional turbulent diffusion of dust density
+- optional turbulent diffusion of dust density or dust-to-gas concentration
 - optional viscous gas accretion when diffusion is enabled
-
-Radial–polar two-dimensional models are not supported. The azimuthal dimension is always active.
-The fluid is monodisperse and does not back-react on the prescribed gas.
 
 | Geometry | Grid condition | Evolved density | Interpretation |
 |---|---|---|---|
 | radial–azimuthal | `N_X > 1`, `N_Z == 1` | $\Sigma_d$ | vertically integrated disk |
 | full 3D | `N_X > 1`, `N_Z > 1` | $\rho_d$ | spherical radial–polar volume |
 
-Transport and source evolution are always active. `DIFFUSION` enables diffusion,
-`RADIATION` enables attenuated radiation pressure, `VISC_FLOW` replaces the static gas radial
-target with the viscous prescription, and `HALF_DISK` selects a reflecting upper midplane in 3D.
-`VISC_FLOW` requires `DIFFUSION`, and every 3D fluid model requires `DIFFUSION` to support the dust
-layer vertically.
+Radial–polar two-dimensional models are not supported: the azimuthal dimension is always active.
+Every 3D model requires `DIFFUSION` to support the dust layer vertically. Section 2.5 lists the
+feature flags and the compile-time checks that enforce these conditions.
 
 ### 1.2 Physical assumptions and relation to the swarm branch
 
@@ -47,7 +44,7 @@ Their common and distinct closures are
 | velocity at one position | single valued | multiple representatives may cross with different velocities |
 | gas response to dust | absent | absent |
 | dust pressure and self-gravity | absent | absent |
-| density diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
+| density or concentration diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
 | collisions | absent | optional coagulation and fragmentation |
 | imported gas fields | absent | optional |
 | radiation pressure | optional | optional, with optional Poynting–Robertson drag |
@@ -97,15 +94,6 @@ Thus dust drag changes dust momentum but never applies the equal-and-opposite ba
 prescribed gas. Gas viscosity enters only through the prescribed viscous target velocity and dust
 diffusivity; the code does not solve a gas viscous evolution equation.
 
-### 1.3 Guide structure
-
-The remainder of this chapter defines the grid and evolved state, constructs the prescribed disk
-and initial condition, states the continuum equations, describes each numerical operator, and then
-documents their composition, GPU implementations, output semantics, validation boundary, and
-known limitations. Sections 1–7 intentionally parallel the corresponding physical topics in the
-swarm guide; the later organization differs only where the swarm requires a separate collision
-chapter.
-
 ## 2. Coordinates, grid, and evolved state
 
 ### 2.1 Coordinates and finite-volume measures
@@ -132,11 +120,6 @@ a_y=\left(\frac{Y_{\max}}{Y_{\min}}\right)^{1/N_Y},
 \Delta z=\frac{Z_{\max}-Z_{\min}}{N_Z}.
 $$
 
-Every active azimuthal domain is periodic. A range shorter than $2\pi$ is therefore a periodic
-wedge, not an open sector of an otherwise complete disk: transport, FARGO shifts, invariant-domain
-bounds, and azimuthal diffusion all identify its two azimuthal faces. Non-axisymmetric structures
-repeat with period $X_{\max}-X_{\min}$, which must be treated as part of the model definition.
-
 Its faces and coordinate centers are
 
 $$
@@ -151,9 +134,10 @@ z_{k-1/2}=Z_{\min}+k\Delta z,
 z_k=Z_{\min}+\left(k+\frac12\right)\Delta z.
 $$
 
-Complete grid cells use $(i,j,k)$ for the $(x,y,z)=(\phi,r,\theta)$ directions. A symbol $i$
-used later inside a purely one-dimensional tridiagonal or reconstruction derivation denotes a
-generic line index and is not a second radial-index convention.
+Complete grid cells use $(i,j,k)$ for the $(x,y,z)=(\phi,r,\theta)$ directions, and arrays are
+stored with $i$ varying fastest. A symbol $i$ used later inside a purely one-dimensional
+tridiagonal or reconstruction derivation denotes a generic line index and is not a second
+radial-index convention.
 
 The radial finite-volume measure is
 
@@ -161,29 +145,29 @@ The radial finite-volume measure is
 \Delta V_y=\frac{y_{\rm out}^d-y_{\rm in}^d}{d},
 \qquad
 d=
-\left\{\begin{array}{ll}
+\left\lbrace\begin{array}{ll}
 2,&N_Z=1,\\
 3,&N_Z>1.
 \end{array}\right.
 ```
 
-The polar measure is $\Delta V_z=\cos z_{\rm in}-\cos z_{\rm out}$ when the polar dimension is active.
-Consequently, `N_Z == 1` represents a vertically integrated disk and evolves dust surface density
-$\Sigma_d$; `N_Z > 1` evolves volume density $\rho_d$.
+The polar measure is $\Delta V_z=\cos z_{\rm in}-\cos z_{\rm out}$ when the polar dimension is
+active. Consequently, `N_Z == 1` represents a vertically integrated disk and evolves dust surface
+density $\Sigma_d$; `N_Z > 1` evolves volume density $\rho_d$.
 
 The complete cell measure can be written
 
 ```math
 V_{ijk}=\Delta x\,
 \frac{y_{j+1/2}^{d}-y_{j-1/2}^{d}}{d}
-\left\{\begin{array}{ll}
+\left\lbrace\begin{array}{ll}
 1,&N_Z=1,\\
 \cos z_{k-1/2}-\cos z_{k+1/2},&N_Z>1.
 \end{array}\right.
 ```
 
-Radial fluxes use $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution
-to a polar face area is
+Radial fluxes use $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution to a polar face
+area is
 
 $$
 \Delta A_{z,j}
@@ -191,8 +175,12 @@ $$
 =\frac{y_{j+1/2}^2-y_{j-1/2}^2}{2},
 $$
 
-so the separated polar face factor is
-$A_{z,j,k+1/2}=\Delta A_{z,j}\sin z_{k+1/2}$.
+so the separated polar face factor is $A_{z,j,k+1/2}=\Delta A_{z,j}\sin z_{k+1/2}$.
+
+Every azimuthal domain is periodic. A range shorter than $2\pi$ is therefore a periodic wedge, not
+an open sector of an otherwise complete disk: transport, FARGO shifts, invariant-domain bounds, and
+azimuthal diffusion all identify its two azimuthal faces. Non-axisymmetric structures repeat with
+period $X_{\max}-X_{\min}$, which must be treated as part of the model definition.
 
 ### 2.2 Primitive and conserved variables
 
@@ -227,7 +215,7 @@ For either density interpretation, define
 =\frac{(m_x,m_y,m_z)}{\varrho_d}.
 ```
 
-When $\varrho_d<\rho_{\rm vac}$, this division is replaced by
+When $\varrho_d\lt\rho_{\rm vac}$, this division is replaced by
 
 $$
 \ell_\phi=\sqrt{GM_\star R},
@@ -240,10 +228,13 @@ m_a=\varrho_du_a.
 $$
 
 This regularized vacuum state keeps all later arithmetic finite without assigning scientific
-meaning to the velocity of an almost empty cell.
+meaning to the velocity of an almost empty cell. The same reset is applied whenever primitives are
+recovered from conserved momenta, whenever conserved momenta are rebuilt from primitives, and at
+the start of the source update.
 
 For a 2D disk, $\rho_d$ in these expressions means the evolved surface density. File output
-converts $\ell_\phi$ and $\ell_\theta$ to $v_\phi$ and $v_\theta$ without changing the device state.
+converts $\ell_\phi$ and $\ell_\theta$ to $v_\phi$ and $v_\theta$ without changing the device state
+(Section 10).
 
 ### 2.3 Units, dimensions, and notation
 
@@ -264,7 +255,8 @@ v_0=\sqrt{\frac{GM_\star}{R_0}},
 $$
 
 These equations define the conversion to a chosen physical $M_\star$ and $R_0$; setting the
-constants to one does not make dimensional consistency optional. The principal dimensions are
+constants to one does not make dimensional consistency optional. With the defaults, one orbital
+period at $R_0$ is $2\pi$ code time units. The principal dimensions are
 
 | Quantity | Symbol | Dimension |
 |---|---|---|
@@ -299,41 +291,77 @@ Throughout this guide, $r$ denotes spherical radius, $R=r\sin\theta$ cylindrical
 $Z=r\cos\theta$ cylindrical height. A generic $\varrho_d$ denotes whichever density the active
 geometry evolves: $\Sigma_d$ in a vertically integrated model and $\rho_d$ in 3D.
 
-### 2.4 Principal code parameters
+### 2.4 Code parameters
 
-| Code parameter | Mathematical role |
-|---|---|
-| `G`, `M_S`, `R_0` | $G$, $M_\star$, and the reference radius $R_0$ |
-| `SIGMA_0`, `ASPR_0` | $\Sigma_0$ and $h_0$ |
-| `IDX_P`, `IDX_Q` | power-law indices $p$ and $q$ |
-| `METAL_Z` | initial metallicity $Z_{\rm metal}$ |
-| `STOKES_0` | reference midplane Stokes number $\mathrm{St}_0$ |
-| `ALPHA` or `NU` | turbulent $\alpha$ or constant kinematic viscosity $\nu$ |
-| `SCHMIDT_X/Y/Z` | directional Schmidt numbers $\mathrm{Sc}_{x,y,z}$ |
-| `BETA_0`, `KAPPA_0`, `T_BETA` | radiation ratio $\beta_0$, opacity $\kappa_0$, and ramp time $T_\beta$ |
-| `CFL_DYN`, `DT_MAX` | explicit Courant factor and global timestep ceiling |
-| `DT_OUT`, `SAVE_MAX` | interval between saved frames and final saved-frame index |
-| `POS_LIMIT` | upper bound on the CN explicit-side coefficient sum and the fraction of old donor mass exported per diffusion substep |
-| `RHO_VAC` | density below which primitive velocity uses the regularized vacuum state |
+All parameters are compile-time constants in
+[`inc/fluid/const_defs.cuh`](../inc/fluid/const_defs.cuh); a model replaces the complete file with
+its own `const_defs.cuh` ([user guide](../README.md#constants)). The type `real` is `double`.
+Lengths are in units of $R_0$, times in units of $t_0$, and angles in radians. Parameters marked
+with a flag exist only when that flag is defined.
 
-### 2.5 Compile-time feature selection
+| Constant | Default | Mathematical role | Defined when |
+|---|---|---|---|
+| `G`, `M_S`, `R_0` | 1, 1, 1 | $G$, $M_\star$, and the reference radius $R_0$ | always |
+| `N_X`, `X_MIN`, `X_MAX` | 1024, 0, $2\pi$ | azimuthal cell count and periodic range | always |
+| `N_Y`, `Y_MIN`, `Y_MAX` | 1024, 0.5, 2.5 | radial cell count and spherical-radius range | always |
+| `N_Z`, `Z_MIN`, `Z_MAX` | 1, $\pi/2$, $\pi/2$ | polar cell count and colatitude range | always |
+| `SIGMA_0` | $10^{-2}$ | gas surface density $\Sigma_0$ at $R_0$ | always |
+| `ASPR_0` | 0.05 | gas aspect ratio $h_0$ at $R_0$ | always |
+| `IDX_P`, `IDX_Q` | $-1$, $-0.4$ | power-law indices $p$ of $\Sigma_g$ and $q$ of $T$ | always |
+| `METAL_Z` | $10^{-2}$ | initial metallicity $Z_{\rm metal}$ before the edge taper | always |
+| `STOKES_0` | $10^{-3}$ | reference midplane Stokes number $\mathrm{St}_0$ at $R_0$ | always |
+| `ALPHA` | $10^{-3}$ | turbulent $\alpha$ | `DIFFUSION` without `CONST_NU` |
+| `NU` | $10^{-5}$ | constant kinematic viscosity $\nu$ | `DIFFUSION` and `CONST_NU` |
+| `SCHMIDT_X`, `SCHMIDT_Y`, `SCHMIDT_Z` | 1, 1, 1 | directional Schmidt numbers $\mathrm{Sc}_{x,y,z}$ | `DIFFUSION` |
+| `POS_LIMIT` | 0.9 | CN explicit-side coefficient-sum bound and exported old-donor mass fraction per diffusion substep | `DIFFUSION` |
+| `BETA_0` | 10 | unattenuated radiation ratio $\beta_0$ | `RADIATION` |
+| `KAPPA_0` | $5\times10^{4}$ | opacity $\kappa_0$ | `RADIATION` |
+| `T_BETA` | $2\pi$ | radiation ramp time $T_\beta$; a value $\le0$ disables the ramp | `RADIATION` |
+| `CFL_DYN` | 0.45 | explicit transport Courant factor, $0\lt$ `CFL_DYN` $\le0.5$ | always |
+| `DT_MAX` | 0.1 | global and substep timestep ceiling | always |
+| `DT_OUT`, `SAVE_MAX` | $2\pi$, 100 | interval between saved frames and final saved-frame index | always |
+| `RHO_VAC` | $10^{-30}$ | density below which the regularized vacuum state is used | always |
+| `TPB` | 64 | threads per block for elementwise and thread-line kernels | always |
+
+The default Schmidt numbers make the azimuthal and radial diffusivities negligible, so a default
+`DIFFUSION` build diffuses effectively only in the polar direction. The derived launch constants
+`N_G = N_X*N_Y*N_Z` and `NB_G`, `NB_X`, `NB_Y`, `NB_Z` are computed from these values and are not
+independent parameters.
+
+### 2.5 Compile-time features and configuration checks
 
 The production fluid branch is specialized at compilation rather than switched at runtime:
 
-| Selection | Effect |
-|---|---|
-| `DIFFUSION` | add the three directional diffusion operators and their momentum closure |
-| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration; omit for density diffusion |
-| `RADIATION` | construct optical depth and add attenuated radiation pressure |
-| `VISC_FLOW` | use the viscous gas target velocity; requires `DIFFUSION` |
-| `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required |
-| `HALF_DISK` | reflect the active polar boundary at the midplane |
-| `FLUID_SWEEP=thread` | assign one GPU thread to each complete directional line |
-| `FLUID_SWEEP=block` | assign one cooperative GPU block to each directional line |
+| Selection | Effect | Requirement or interaction |
+|---|---|---|
+| `DIFFUSION` | add the three directional diffusion operators and their momentum closure; use the diffusion balance in the initial polar velocity | required for `N_Z > 1` |
+| `DIFFUSE_CONCENTRATION` | diffuse dust-to-gas concentration; omit for density diffusion | requires `DIFFUSION` (`#error` in `fluid_kern.cuh`) |
+| `CONST_NU` | use constant $\nu$ instead of constant $\alpha$ wherever viscosity is required | acts only with `DIFFUSION`; otherwise ignored |
+| `VISC_FLOW` | use the viscous gas radial target velocity in the source update, initialization, and CFL rate | requires `DIFFUSION` |
+| `RADIATION` | construct optical depth, add attenuated radiation pressure, and write `optdepth` frames | none |
+| `HALF_DISK` | make the polar boundary at `Z_MAX` a reflecting midplane | with `N_Z > 1`, requires `Z_MAX` $=\pi/2$; no effect when `N_Z == 1` |
+| `FLUID_SWEEP=thread` | assign one GPU thread to each complete directional line | Makefile default on CUDA |
+| `FLUID_SWEEP=block` | assign one cooperative GPU block to each directional line (defines `FLUID_BLOCK_SWEEP`) | Makefile default on ROCm |
 
 Transport and the local source update have no feature flag and are always compiled. The two sweep
-choices implement the same mathematical operators and differ only in work decomposition and
-temporary storage.
+choices implement the same discrete operators and differ only in work decomposition and temporary
+storage (Section 9). `FLUID_SWEEP` is a Makefile variable; the other selections are preprocessor
+definitions added to `GPU_FLAGS` in the model's `flags.mk`.
+
+The headers reject unsupported configurations at compile time:
+
+- `N_X > 1` and `N_Y > 1`; `N_Z >= 1`
+- `X_MAX > X_MIN` and $0\lt$ `Y_MIN` $\lt$ `Y_MAX`
+- `Z_MIN > 0` and `Z_MAX` $\lt\pi$
+- `N_Z == 1` requires `Z_MIN == Z_MAX` $=\pi/2$; `N_Z > 1` requires `Z_MAX > Z_MIN`
+- with `N_Z > 1`, a full disk must strictly contain the midplane, `Z_MIN` $\lt\pi/2\lt$ `Z_MAX`,
+  while `HALF_DISK` requires `Z_MAX` $=\pi/2$
+- `N_Z > 1` requires `DIFFUSION`
+- $0\lt$ `CFL_DYN` $\le0.5$
+- `VISC_FLOW` requires `DIFFUSION` (a preprocessor `#error` in `inc/fluid/fluid_kern.cuh`)
+
+There is no upper bound on `X_MAX - X_MIN`; a range other than a divisor of $2\pi$ defines a
+periodic domain with no physical counterpart.
 
 ## 3. Prescribed disk and initialization
 
@@ -374,6 +402,48 @@ $$
 \right],
 \qquad H_g=h_gR.
 $$
+
+Thus $\Sigma_g/(\sqrt{2\pi}H_g)$ fixes the reference midplane density; because the vertical
+profile uses the exact point-mass potential rather than a Gaussian approximation, $\Sigma_g$ is
+not recovered by exactly integrating this expression over $Z$.
+
+For a finite resolved domain whose intersection at cylindrical radius $R$ consists of vertical
+intervals $[Z_{k,a},Z_{k,b}]$, the column implied by the prescribed volume profile is
+
+$$
+\Sigma_{g,\mathcal D}(R)=\Sigma_g(R)\,\mathcal C_g(R),
+$$
+
+$$
+\mathcal C_g(R)=\frac{1}{\sqrt{2\pi}H_g(R)}
+\sum_k\int_{Z_{k,a}}^{Z_{k,b}}
+\exp\left[
+\frac{R/\sqrt{R^2+Z^2}-1}{h_g(R)^2}
+\right]dZ.
+$$
+
+Thus $\mathcal C_g$ depends on the finite spherical radial and polar domain and need not equal one.
+In a vertically integrated model, $\Sigma_g$ is used directly and this 3D containment factor is not
+introduced.
+
+For comparison, on an untruncated vertical line let $\zeta=Z/H_g$. The thin-disk expansion is
+
+$$
+\exp\left[
+\frac{R/\sqrt{R^2+Z^2}-1}{h_g^2}
+\right]
+=e^{-\zeta^2/2}
+\left[1+\frac{3}{8}h_g^2\zeta^4+O(h_g^4)\right],
+$$
+
+and the Gaussian fourth moment gives
+
+$$
+\mathcal C_{g,\infty}=1+\frac{9}{8}h_g^2+O(h_g^4).
+$$
+
+Finite spherical boundaries replace this asymptotic normalization by the exact containment factor
+above and can be especially important near a radial or polar edge.
 
 The remaining local disk scales are
 
@@ -431,11 +501,18 @@ $$
 
 Thus the $(1-u^3)$ pressure term exactly cancels the off-midplane weakening of cylindrical
 gravity. At $Z=0$, $u=1$ and this effective parameter reduces to the ordinary midplane
-pressure-support definition above. Section 3.3 uses this exact rotation target.
+pressure-support definition above. The gas azimuthal target used by initialization and by the
+source update is
 
-The turbulent branch uses the $\alpha$ prescription of
-[Shakura & Sunyaev (1973)](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S). The viscosity
-is selected as either
+$$
+v_{\phi,g}=v_K\sqrt{\max(1-2\eta,0)},
+\qquad
+\ell_{\phi,g}=Rv_{\phi,g}.
+$$
+
+When `DIFFUSION` is enabled, the turbulent viscosity uses the $\alpha$ prescription of
+[Shakura & Sunyaev (1973)](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S). It is
+either
 
 $$
 \nu(R)=\alpha h_g^2R^2\Omega_K
@@ -448,47 +525,7 @@ $$
 \alpha(R)=\frac{\nu}{h_g^2R^2\Omega_K}.
 $$
 
-Thus $\Sigma_g/(\sqrt{2\pi}H_g)$ fixes the reference midplane density; because the vertical
-profile uses the exact point-mass potential rather than a Gaussian approximation, $\Sigma_g$ is
-not recovered by exactly integrating this expression over $Z$.
-
-For a finite resolved domain whose intersection at cylindrical radius $R$ consists of vertical
-intervals $[Z_{k,a},Z_{k,b}]$, the column implied by the prescribed volume profile is
-
-$$
-\Sigma_{g,\mathcal D}(R)=\Sigma_g(R)\,\mathcal C_g(R),
-$$
-
-$$
-\mathcal C_g(R)=\frac{1}{\sqrt{2\pi}H_g(R)}
-\sum_k\int_{Z_{k,a}}^{Z_{k,b}}
-\exp\left[
-\frac{R/\sqrt{R^2+Z^2}-1}{h_g(R)^2}
-\right]dZ.
-$$
-
-Thus $\mathcal C_g$ depends on the finite spherical radial and polar domain and need not equal one.
-In a vertically integrated model, $\Sigma_g$ is used directly and this 3D containment factor is not
-introduced.
-
-For comparison, on an untruncated vertical line let $x=Z/H_g$. The thin-disk expansion is
-
-$$
-\exp\left[
-\frac{R/\sqrt{R^2+Z^2}-1}{h_g^2}
-\right]
-=e^{-x^2/2}
-\left[1+\frac{3}{8}h_g^2x^4+O(h_g^4)\right],
-$$
-
-and the Gaussian fourth moment gives
-
-$$
-\mathcal C_{g,\infty}=1+\frac{9}{8}h_g^2+O(h_g^4).
-$$
-
-Finite spherical boundaries replace this asymptotic normalization by the exact containment factor
-above and can be especially important near a radial or polar edge.
+Without `DIFFUSION` no viscosity is defined, and `VISC_FLOW` is rejected.
 
 The monodisperse Stokes number assumes the linear, subsonic Epstein-drag scaling
 $t_s\propto(\rho_gc_s)^{-1}$ of
@@ -523,23 +560,8 @@ $$
 \Sigma_d(R')
 \frac{\exp[-(R-R')^2/(2\sigma_s^2)]}{\sqrt{2\pi}\sigma_s}\,dR',
 \qquad
-L_s=0.05R_0,\qquad \sigma_s=\frac{L_s}{2},
+L_s=0.05R_0,\qquad \sigma_s=\frac{L_s}{2}.
 $$
-
-evaluated by a uniform-$R$ quadrature with `N_Y + 1` source and destination points.
-
-If $R_m=R_{\min,\rm init}+m\Delta R$ is that auxiliary axis, the implemented rectangular sum is
-
-$$
-\Sigma_{d,\rm conv}(R_m)
-\approx\sum_{n\in\mathcal S}
-\Sigma_d(R_n)
-\frac{\exp[-(R_m-R_n)^2/(2\sigma_s^2)]}{\sqrt{2\pi}\sigma_s}
-\Delta R,
-$$
-
-where $\mathcal S$ contains only source points in
-$[Y_{\min}+2L_s,Y_{\max}-2L_s]$.
 
 The convolution is evaluated on a temporary uniform cylindrical-radius axis. In 3D its lower bound
 is the smallest cylindrical radius covered by the spherical domain,
@@ -549,19 +571,40 @@ R_{\min,\mathrm{init}}
 =Y_{\min}\min[\sin(Z_{\min}),\sin(Z_{\max})],
 $$
 
-rather than $Y_{\min}$. This prevents high-latitude cells with $R<Y_{\min}$ from being clipped
+rather than $Y_{\min}$. This prevents high-latitude cells with $R\lt Y_{\min}$ from being clipped
 to an unrelated radial profile value. In 2D, $R_{\min,\mathrm{init}}=Y_{\min}$.
+
+The axis has `N_Y + 1` points $R_m=R_{\min,\rm init}+m\Delta R$ with
+$\Delta R=(Y_{\max}-R_{\min,\rm init})/N_Y$, used as both source and destination points. The
+implemented rectangular sum is
+
+$$
+\Sigma_{d,\rm conv}(R_m)
+\approx\sum_{n\in\mathcal S}
+\Sigma_d(R_n)
+\frac{\exp[-(R_m-R_n)^2/(2\sigma_s^2)]}{\sqrt{2\pi}\sigma_s}
+\Delta R,
+$$
+
+where $\mathcal S$ contains only source points in $[Y_{\min}+2L_s,Y_{\max}-2L_s]$. Each grid cell
+then takes the linear interpolation of this tabulated profile at its center cylindrical radius
+$R=y_j\sin z_k$; the profile is zero outside $[R_{\min,\rm init},Y_{\max}]$.
 
 The edge convolution is not renormalized. In 2D the convolved surface density is evolved directly
 and its unresolved vertical profile is assumed to be well mixed with the gas. In 3D it is embedded
 in a Gaussian dust layer using the settling–diffusion balance discussed by
 [Youdin & Lithwick (2007)](https://arxiv.org/abs/0707.2975),
 
-$$
-H_d=H_g\sqrt{\frac{\alpha_z}{\mathrm{St}_{\rm mid}}},
+```math
+H_d=H_g\sqrt{\frac{\alpha_{z,d}}{\mathrm{St}_{\rm mid}+\chi_c\alpha_{z,d}}},
 \qquad
-\alpha_z=\frac{\alpha}{\mathrm{Sc}_z}.
-$$
+\alpha_{z,d}=\frac{\alpha}{\mathrm{Sc}_z(1+\mathrm{St}_{\rm mid}^2)},
+\qquad
+\chi_c=\left\lbrace\begin{array}{ll}
+0,&\text{density diffusion},\\
+1,&\text{concentration diffusion}.
+\end{array}\right.
+```
 
 Specifically,
 
@@ -571,8 +614,8 @@ $$
 \exp\left[-\frac{Z^2}{2H_d(R)^2}\right].
 $$
 
-This is the equilibrium implied by the selected internal density-diffusion equation, not the
-standard gas-concentration diffusion closure. Initialization then applies
+This is the midplane, small-height settling approximation for the selected flux mode, not an
+exact equilibrium of the height-dependent diffusivity. Initialization then applies
 
 $$
 \varrho_d(x_i,y_j,z_k)
@@ -583,14 +626,16 @@ $$
 $$
 
 using one reproducible deviate for each azimuthal column, so every radial and polar cell at fixed
-$x_i$ receives the same perturbation.
+$x_i$ receives the same perturbation. The deviate comes from the vendor generator seeded by the
+azimuthal index, so CUDA and ROCm builds initialize different, individually reproducible noise
+realizations.
 
 Because the edge convolution and azimuthal perturbation are not renormalized, the initialized mass
 is the finite-volume integral of the resulting field rather than a separately imposed parameter:
 
 ```math
 M_d=
-\left\{\begin{array}{ll}
+\left\lbrace\begin{array}{ll}
 \displaystyle\int\Sigma_d(R,\phi)R\,dR\,d\phi,&N_Z=1,\\
 \displaystyle\int\rho_d(r,\theta,\phi)r^2\sin\theta\,dr\,d\theta\,d\phi,&N_Z>1.
 \end{array}\right.
@@ -600,20 +645,9 @@ M_d=
 
 The initial velocity is the local no-backreaction drift relative to the pressure-supported gas,
 using the steady test-particle limit of
-[Nakagawa, Sekiya & Hayashi (1986)](<https://doi.org/10.1016/0019-1035(86)90121-1>).
-The effective rotation-support parameter derived in Section 3.1 and the gas azimuthal target are
-
-$$
-\eta(R,Z)
-=-\frac{1}{2}\left[
-\left(p+\frac{q}{2}-\frac{3}{2}\right)h_g^2
-+q\left(1-\frac{R}{\sqrt{R^2+Z^2}}\right)
-\right],
-\qquad
-v_{\phi,g}=v_K\sqrt{\max(1-2\eta,0)}.
-$$
-
-The initialized cylindrical drift is
+[Nakagawa, Sekiya & Hayashi (1986)](<https://doi.org/10.1016/0019-1035(86)90121-1>). With the
+effective rotation-support parameter $\eta(R,Z)$ and gas azimuthal target $v_{\phi,g}$ of
+Section 3.1, the initialized cylindrical drift is
 
 $$
 v_{R,d}
@@ -622,34 +656,32 @@ v_{R,d}
 v_{\phi,d}=v_{\phi,g}-\frac{\mathrm{St}}{2}v_{R,d}.
 $$
 
-If `VISC_FLOW` is enabled, the prescribed cylindrical gas radial velocity follows the steady
-viscous expression of [Kanagawa et al. (2017)](https://arxiv.org/abs/1706.08975). In the vertically
-integrated case it reduces to
+Without `VISC_FLOW`, $v_{R,g}=0$. With `VISC_FLOW`, the prescribed cylindrical gas radial velocity
+follows the steady viscous expression of [Kanagawa et al. (2017)](https://arxiv.org/abs/1706.08975).
+In the vertically integrated case it reduces to
 
 ```math
 v_{R,g}
 =-\frac{3\nu}{R}\left(g_\nu+p+\frac12\right),
 \qquad
 g_\nu=\frac{d\ln\nu}{d\ln R}
-=\left\{\begin{array}{ll}
+=\left\lbrace\begin{array}{ll}
 0,&\nu=\mathrm{constant},\\
 q+\frac32,&\alpha=\mathrm{constant}.
 \end{array}\right.
 ```
 
-For the resolved 3D expression, define
+For the resolved 3D expression, with $u=R/\sqrt{R^2+Z^2}$ as in Section 3.1, define
 
 $$
-\chi=\frac{R}{\sqrt{R^2+Z^2}},
-\qquad
-S=\frac{\chi-1}{h_g^2},
+S=\frac{u-1}{h_g^2},
 $$
 
 $$
 g_{\rho R}=p-\frac{q+3}{2}
-+\frac{\chi(1-\chi^2)}{h_g^2}-(q+1)S,
++\frac{u(1-u^2)}{h_g^2}-(q+1)S,
 \qquad
-g_{\rho Z}=-\frac{\chi(1-\chi^2)}{h_g^2}.
+g_{\rho Z}=-\frac{u(1-u^2)}{h_g^2}.
 $$
 
 The implemented target is
@@ -660,15 +692,16 @@ v_{R,g}
 \left[3\left(g_\nu+g_{\rho R}+\frac12\right)-q(1+g_{\rho Z})\right].
 $$
 
-In 3D, the polar primitive also includes the velocity
-needed to approximately balance the initialized polar diffusive flux,
+In 3D, the polar primitive also includes the velocity needed to approximately balance the
+initialized polar diffusive flux,
 
 $$
 v_{\theta,\mathrm{diff}}
-=\frac{D_z}{r\rho_d}\frac{\partial\rho_d}{\partial\theta},
+=\frac{D_z w}{r\rho_d}\frac{\partial(\rho_d/w)}{\partial\theta},
 $$
 
-evaluated with one-sided boundary differences and centered interior differences.
+where $w=1$ for density diffusion and $w=\rho_g$ for concentration diffusion, evaluated with
+one-sided boundary differences and centered interior differences.
 
 This initial vertical closure is not the same as the swarm initialization. The fluid adds this
 polar diffusive-balance velocity but does not add the swarm's terminal-settling velocity
@@ -684,8 +717,11 @@ v_r=v_{R,d}\sin z,
 \qquad
 \ell_\theta=y\left(v_{R,d}\cos z+v_{\theta,\rm diff}\right),
 \qquad
-\ell_\phi=Rv_{\phi,d}.
+\ell_\phi=Rv_{\phi,d},
 $$
+
+with $\ell_\theta=0$ when `N_Z == 1`. Conserved momenta are then built as $m_a=\varrho_du_a$, with
+the vacuum reset of Section 2.2.
 
 ## 4. Governing continuum equations
 
@@ -694,7 +730,8 @@ $$
 Let $\varrho_d$ denote the evolved dust density: $\varrho_d=\Sigma_d$ in 2D and
 $\varrho_d=\rho_d$ in 3D.
 
-**Core fluid equations.** In coordinate-independent conservation form, the model advances
+**Core fluid equations.** In coordinate-independent conservation form, the default density mode
+advances
 
 $$
 \frac{\partial\varrho_d}{\partial t}
@@ -717,10 +754,12 @@ $$
 
 The pressure tensor is zero: the advective momentum flux is
 $\varrho_d\boldsymbol v_d\boldsymbol v_d$ rather than
-$\varrho_d\boldsymbol v_d\boldsymbol v_d+\boldsymbol P_d$. The term
-$\boldsymbol S_{m,D}$ denotes the conservative donor-momentum flux paired with diffusive mass
-transport and vanishes when `DIFFUSION` is disabled; Section 7 gives its discrete definition and
-limitations. Disabling `RADIATION` sets $\boldsymbol a_{\rm rad}=0$.
+$\varrho_d\boldsymbol v_d\boldsymbol v_d+\boldsymbol P_d$. The term $\boldsymbol S_{m,D}$ denotes
+the conservative donor-momentum flux paired with diffusive mass transport and vanishes when
+`DIFFUSION` is disabled; Section 7.4 gives its discrete definition and limitations. In
+concentration mode replace $\boldsymbol D\nabla\varrho_d$ by $w\boldsymbol D\nabla(\varrho_d/w)$
+throughout the mass-diffusion operator, with the corresponding donor-momentum flux. Disabling
+`RADIATION` sets $\boldsymbol a_{\rm rad}=0$.
 
 The coordinate-free equations are common to both supported geometries, but their differential
 operators and physical closures are not identical. Their relationship is
@@ -779,7 +818,9 @@ $$
 t_s=\frac{\mathrm{St}}{\Omega_K}.
 $$
 
-The polar torque and $\ell_\theta$ are absent when `N_Z == 1`.
+Here $v_{r,g}=v_{R,g}\sin\theta$ and $\ell_{\theta,g}=rv_{R,g}\cos\theta$ are the spherical
+projections of the gas radial target, which vanish without `VISC_FLOW`. The polar torque and
+$\ell_\theta$ are absent when `N_Z == 1`.
 
 ### 4.2 Discrete conservation and physical scope
 
@@ -790,7 +831,7 @@ M_d^h=\sum_{ijk}\varrho_{d,ijk}V_{ijk},
 \qquad
 Q_a^h=\sum_{ijk}m_{a,ijk}V_{ijk},
 \quad
-a\in\{x,y,z\}.
+a\in\lbrace x,y,z\rbrace.
 $$
 
 Every internal transport or diffusive face contributes equal and opposite fluxes to its two
@@ -804,7 +845,9 @@ $$
 
 up to floating-point summation error during those operators. Outflow boundaries change these sums
 by the explicitly computed boundary flux. The source operator preserves density exactly but changes
-the stored momenta through drag, gravity, radiation, and spherical geometry.
+the stored momenta through drag, gravity, radiation, and spherical geometry. The vacuum reset of
+Section 2.2 and the transport vacuum fallback of Section 5.4 can change the stored momenta of
+near-empty cells.
 
 This conservation statement concerns the variables actually stored. In particular,
 $Q_x^h=\int\rho_d\ell_\phi\,dV$ is axial angular momentum, while $Q_y^h$ is radial linear
@@ -813,14 +856,15 @@ forces even when their numerical transport is conservative.
 
 ## 5. Conservative pressureless transport
 
-### 5.1 Reconstruction, flux, and invariant-domain limiting
+### 5.1 Directional finite-volume update
 
-Density and all three momenta are transported conservatively. Each directional operator uses:
+Density and all three momenta are transported conservatively, one direction at a time. Each
+directional operator uses:
 
-1. geometry-aware PPM reconstruction
-2. a pressureless HLL interface flux
-3. a first-order cell-centred HLL flux as a robust invariant-domain base
-4. one conservative face coefficient that limits the high-minus-low correction
+1. geometry-aware PPM reconstruction (Section 5.2)
+2. a pressureless HLL interface flux (Section 5.3)
+3. a first-order cell-centered HLL flux as a robust invariant-domain base
+4. one conservative face coefficient that limits the high-minus-low correction (Section 5.4)
 
 For a directional finite-volume coordinate with cell measure $V_i$ and face factor $A_{i+1/2}$,
 every forward-Euler transport evaluation has the conservative form
@@ -834,8 +878,8 @@ $$
 $$
 
 For azimuth, $V_i=\Delta x$ and $A=1$. For radial transport, $V_i=\Delta V_{y,i}$ and
-$A_{i+1/2}=y_{i+1/2}^{d-1}$. For polar transport through radial cell $j$, the exact
-finite-volume update is
+$A_{i+1/2}=y_{i+1/2}^{d-1}$. For polar transport through radial cell $j$, the exact finite-volume
+update is
 
 $$
 \boldsymbol U_{j,k}^{\rm FE}
@@ -849,11 +893,17 @@ Here $\Delta A_{z,j}=(y_{j+1/2}^2-y_{j-1/2}^2)/2$ and
 $\Delta V_{y,j}=(y_{j+1/2}^3-y_{j-1/2}^3)/3$. Their ratio is the exact radial
 face-area-to-volume factor; it is not approximated by $1/y_j$.
 
+The normal transport speeds are the residual angular speed $(\ell_\phi-\ell_{\rm frame})/R^2$ in
+azimuth (Section 5.5), $v_r$ radially, and $\ell_\theta/r$ in the polar direction. The reconstructed
+quantities are density and the three primitives $(\ell_\phi,v_r,\ell_\theta)$.
+
+### 5.2 PPM reconstruction
+
 The reconstruction is the piecewise parabolic method of
 [Colella & Woodward (1984)](<https://doi.org/10.1016/0021-9991(84)90143-8>). The uniform azimuthal
 mesh uses its bounded four-cell face value. On the logarithmic radial mesh and spherical polar
-mesh, face weights are precomputed from exact cubic moment constraints in the finite-volume
-coordinates
+mesh, face weights are precomputed on the host from exact cubic moment constraints in the
+finite-volume coordinates
 
 $$
 s_y=\frac{y^d}{d},
@@ -861,30 +911,15 @@ s_y=\frac{y^d}{d},
 s_z=-\cos z.
 $$
 
-Boundary-adjacent internal faces use a two-cell linear interpolation where a complete four-cell
-stencil is unavailable. If $s_L$ and $s_R$ are the arithmetic centers of the adjacent cells in
-the appropriate volume coordinate and $s_f$ is their common face, then
-
-$$
-\omega=\frac{s_f-s_L}{s_R-s_L},
-\qquad
-q_f=(1-\omega)\bar q_L+\omega\bar q_R.
-$$
-
-The pressureless flux uses the two-wave construction of
-[Harten, Lax & van Leer (1983)](https://doi.org/10.1137/1025002) and retains its proper
-left-going, right-going, and two-wave branches.
-
 On the uniform azimuthal mesh, the unlimited four-cell face estimate is
 
 $$
 q_{i+1/2}^{*}
-=\frac{7(q_i+q_{i+1})-(q_{i-1}+q_{i+2})}{12},
+=\frac{7(q_i+q_{i+1})-(q_{i-1}+q_{i+2})}{12}.
 $$
 
-and the stored face is clipped to
-$[\min(q_i,q_{i+1}),\max(q_i,q_{i+1})]$. On nonuniform radial and polar meshes, the four weights
-$w_m$ solve cubic moment-exactness conditions in $s_y$ or $s_z$ and give
+On nonuniform radial and polar meshes, the four weights $w_m$ solve cubic moment-exactness
+conditions in $s_y$ or $s_z$ and give
 
 $$
 q_{i+1/2}^{*}=\sum_{m=-1}^{2}w_m\bar q_{i+m}.
@@ -904,6 +939,19 @@ $$
 The weighted cell averages therefore reproduce the value at $t=0$ for every polynomial through
 cubic degree.
 
+Boundary-adjacent internal faces use a two-cell linear interpolation where a complete four-cell
+stencil is unavailable. If $s_L$ and $s_R$ are the arithmetic centers of the adjacent cells in the
+appropriate volume coordinate and $s_f$ is their common face, then
+
+$$
+\omega=\frac{s_f-s_L}{s_R-s_L},
+\qquad
+q_f=(1-\omega)\bar q_L+\omega\bar q_R.
+$$
+
+The physical boundary faces take the value of their single adjacent cell. Every face value, on
+every mesh, is clipped to $[\min(q_i,q_{i+1}),\max(q_i,q_{i+1})]$.
+
 Inside one cell, PPM represents the reconstructed parabola by left and right faces $q_L,q_R$ and
 
 $$
@@ -912,20 +960,7 @@ $$
 q_6=6\bar q-3(q_L+q_R).
 $$
 
-After the standard monotonicity corrections, integrating a fraction $c\in[0,1]$ next to the right
-or left face gives the time-averaged upwind states
-
-$$
-q_R^{\rm tr}=q_R-\frac{c}{2}
-\left[\Delta q-\left(1-\frac{2c}{3}\right)q_6\right],
-$$
-
-$$
-q_L^{\rm tr}=q_L+\frac{c}{2}
-\left[\Delta q+\left(1-\frac{2c}{3}\right)q_6\right].
-$$
-
-The monotonicity correction itself is
+The monotonicity correction is
 
 $$
 (q_R-\bar q)(\bar q-q_L)\le0
@@ -950,11 +985,27 @@ $$
 The code recomputes $\Delta q$ and $q_6$ after either correction. These conditions remove a newly
 created internal extremum while retaining the parabolic profile where it is locally monotone.
 
+After these corrections, integrating a fraction $c\in[0,1]$ next to the right or left face gives
+the time-averaged upwind states
+
+$$
+q_R^{\rm tr}=q_R-\frac{c}{2}
+\left[\Delta q-\left(1-\frac{2c}{3}\right)q_6\right],
+$$
+
+$$
+q_L^{\rm tr}=q_L+\frac{c}{2}
+\left[\Delta q+\left(1-\frac{2c}{3}\right)q_6\right].
+$$
+
 Azimuthal FARGO transport uses the nonzero tracing fraction $c$ because one conservative orbital
 advection update spans its requested substep. Radial and polar transport pass $c=0$ to these
-formulas and obtain their temporal order from the three SSPRK flux evaluations in Section 5.3.
+formulas and obtain their temporal order from the three SSPRK flux evaluations in Section 5.6.
 Applying both characteristic tracing and SSPRK time centering in those directions would duplicate
-the time evolution.
+the time evolution. Reconstructed interface densities are clipped at zero before the flux is
+evaluated.
+
+### 5.3 Pressureless wave structure and HLL flux
 
 In one spatial direction, the density and normal momentum subsystem is
 
@@ -975,11 +1026,13 @@ so pressureless Euler is only weakly hyperbolic. Separating states can create va
 converging characteristics can form a singular concentration in the ideal pressureless Riemann
 problem. The finite-volume code does not represent an exact delta shock. HLL replaces the local
 interaction by a bounded two-wave numerical fan; this regularization is robust but introduces
-numerical diffusion. The invariant-domain correction prevents that regularized flux from creating
-negative density or unbounded transported primitive ratios.
+numerical diffusion. The invariant-domain correction of Section 5.4 prevents that regularized flux
+from creating negative density or unbounded transported primitive ratios.
 
-For a complete pressureless state $\boldsymbol U$ transported at normal speed $a$, the physical
-flux is $\boldsymbol F=a\boldsymbol U$. With
+The pressureless flux uses the two-wave construction of
+[Harten, Lax & van Leer (1983)](https://doi.org/10.1137/1025002) and retains its proper
+left-going, right-going, and two-wave branches. For a complete pressureless state $\boldsymbol U$
+transported at normal speed $a$, the physical flux is $\boldsymbol F=a\boldsymbol U$. With
 
 $$
 s_L=\min(a_L,a_R),
@@ -996,30 +1049,35 @@ $$
 $$
 
 If both interface speeds are nonnegative, the code uses $\boldsymbol F_L$; if both are
-nonpositive, it uses $\boldsymbol F_R$.
+nonpositive, it uses $\boldsymbol F_R$. The high-order flux $\boldsymbol F^H$ evaluates this
+formula with the PPM interface states and their normal speeds; the low-order flux
+$\boldsymbol F^L$ evaluates it with the two adjacent cell-centered states.
+
+### 5.4 Invariant-domain correction
 
 The limiter enforces nonnegative density and local bounds on every momentum-to-density ratio. The
 same limited face flux enters neighboring cells with opposite signs, so the normal update remains
-conservative. As a final floating-point safety fallback, any cell whose updated density is still
-negative is converted to an exact vacuum by setting its density and all three momentum components
-to zero. This fallback should remain inactive when the CFL and invariant-domain assumptions hold;
-its purpose is to prevent a residual negative density from producing an undefined vacuum velocity,
-not to replace the conservative limiter.
+conservative.
 
-More explicitly, let $\boldsymbol F^L$ be the cell-centred low-order HLL flux and
-$\delta\boldsymbol F=\boldsymbol F^H-\boldsymbol F^L$ the PPM antidiffusive correction. A face
-applies
+Each forward-Euler evaluation first applies the complete low-order update with $\boldsymbol F^L$.
+Any cell whose low-order density is negative is converted to an exact vacuum by setting its density
+and all three momentum components to zero. This fallback should remain inactive when the CFL and
+invariant-domain assumptions hold; its purpose is to prevent a residual negative density from
+producing an undefined vacuum velocity, not to replace the conservative limiter.
+
+Let $\delta\boldsymbol F=\boldsymbol F^H-\boldsymbol F^L$ be the PPM antidiffusive correction at
+an internal face. Proceeding face by face in increasing index order, each face applies
 
 $$
 \boldsymbol U_i\leftarrow
 \boldsymbol U_i-\lambda_i\alpha\,\delta\boldsymbol F,
 \qquad
 \boldsymbol U_{i+1}\leftarrow
-\boldsymbol U_{i+1}+\lambda_{i+1}\alpha\,\delta\boldsymbol F,
+\boldsymbol U_{i+1}+\lambda_{i+1}\alpha\,\delta\boldsymbol F
 $$
 
-where $\lambda_i=\Delta t A_{i+1/2}/V_i$ and one shared $0\le\alpha\le1$ is the largest accepted
-scale satisfying
+to the current state, where $\lambda_i=\Delta t A_{i+1/2}/V_i$ and one shared $0\le\alpha\le1$ is
+the largest accepted scale satisfying
 
 $$
 \varrho_d\ge0,
@@ -1027,24 +1085,29 @@ $$
 u_{a,\min}\varrho_d\le m_a\le u_{a,\max}\varrho_d
 $$
 
-in both adjacent cells for $u_a\in\{\ell_\phi,v_r,\ell_\theta\}$.
+in both adjacent cells for $u_a\in\lbrace\ell_\phi,v_r,\ell_\theta\rbrace$. The bounds
+$u_{a,\min}$ and $u_{a,\max}$ are the minimum and maximum of $u_a$ over the cell and its immediate
+neighbors along the line (periodic in azimuth, truncated at radial and polar edges), taken from the
+primitive state before the update and widened by $10^{-12}\max(1,|u_{a,\min}|,|u_{a,\max}|)$.
+Boundary faces carry no correction.
 
 Every listed condition is an affine inequality $g(\boldsymbol U)\ge0$. If the proposed face
-correction changes it by $\Delta g$, the admissible coefficient is reduced only when
-$\Delta g<0$:
+correction changes it by $\Delta g$, the admissible coefficient is reduced only when $\Delta g\lt0$:
 
 $$
 \alpha\leftarrow
 \min\left[
 \alpha,
 (1-10^{-12})\frac{g(\boldsymbol U)}{-\Delta g}
-\right].
+\right],
 $$
 
-The final face coefficient is the minimum over density and the lower and upper bounds of all three
-primitive ratios in both adjacent cells, clipped to $[0,1]$.
+and $\alpha=0$ when $g(\boldsymbol U)\le0$ and $\Delta g\lt0$. The final face coefficient is the
+minimum over density and the lower and upper bounds of all three primitive ratios in both adjacent
+cells, clipped to $[0,1]$. Because a face sees the corrections already applied at earlier faces, the
+result depends on the face order; both GPU implementations use the same serial order.
 
-### 5.2 FARGO azimuthal transport
+### 5.5 FARGO azimuthal transport
 
 Azimuthal transport uses the FARGO orbital-advection decomposition of
 [Masset (2000)](https://arxiv.org/abs/astro-ph/9910390). For each ring, the arithmetic mean
@@ -1082,7 +1145,8 @@ c_i=\frac{|\Omega_i^{\rm res}|\Delta t}{\Delta x}
 $$
 
 and the HLL normal speeds are the reconstructed residual angular speeds. This decomposition is
-algebraically a periodic integer translation followed by conservative residual transport.
+algebraically a periodic integer translation followed by conservative residual transport, applied
+as one forward-Euler update with the correction of Section 5.4.
 
 The allowed endpoint `CFL_DYN = 0.5` can make $c_i=1$ exactly when the half-cell frame offset and
 the bounded residual displacement align. This remains within the PPM tracing domain, but it leaves
@@ -1090,15 +1154,12 @@ no roundoff margin at the one-cell limit. The production default is therefore `C
 this safety margin is not a correction to the method, and the limiting value 0.5 remains a
 supported edge case.
 
-### 5.3 Radial and polar integration and boundaries
+### 5.6 Radial and polar time integration and boundaries
 
-The radial and polar method-of-lines operators use the three-stage TVD Runge–Kutta construction
-of [Shu & Osher (1988)](https://doi.org/10.1016/0021-9991(88)90177-5), commonly denoted
-SSPRK(3,3). PPM provides spatial reconstruction; SSPRK supplies temporal integration. The radial boundaries
-are outflow-only. A full polar disk is outflow-only at both polar edges; `HALF_DISK` reflects at the
-midplane and remains outflow-only at its other polar edge.
-
-If $L(\boldsymbol U)$ is one spatial flux-divergence evaluation, the stages are
+The radial and polar method-of-lines operators use the three-stage TVD Runge–Kutta construction of
+[Shu & Osher (1988)](https://doi.org/10.1016/0021-9991(88)90177-5), commonly denoted SSPRK(3,3). PPM
+provides spatial reconstruction; SSPRK supplies temporal integration. If $L(\boldsymbol U)$ is one
+limited spatial flux-divergence evaluation, the stages are
 
 $$
 \boldsymbol U^{(1)}
@@ -1117,11 +1178,17 @@ $$
 +\frac23\left[\boldsymbol U^{(2)}+\Delta tL(\boldsymbol U^{(2)})\right].
 $$
 
-At an outflow-only boundary with outward normal speed $a_n$, the boundary mass flux is
+Each bracket is a complete low-order update with invariant-domain correction; the convex
+combinations preserve nonnegative density and the primitive bounds of their components.
+
+The radial boundaries are outflow-only. A full polar disk is outflow-only at both polar edges;
+`HALF_DISK` reflects at the midplane `Z_MAX` and remains outflow-only at `Z_MIN`. At an
+outflow-only boundary with outward normal speed $a_n$ of the adjacent cell-centered state, the
+boundary mass flux is
 
 ```math
 F_\varrho=
-\left\{\begin{array}{ll}
+\left\lbrace\begin{array}{ll}
 a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
 0,&a_n\text{ points into the domain},
 \end{array}\right.
@@ -1129,15 +1196,19 @@ a_n\max(\varrho_d,0),&a_n\text{ points out of the domain},\\
 F_{m_a}=F_\varrho u_a.
 ```
 
-At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero. Here “reflecting”
-means an impermeable finite-volume symmetry wall; the fluid operator does not move a parcel through
-the face and then reverse its polar momentum. Reflection-symmetric continuum states instead have
-zero normal velocity at the midplane, which is the interpretation exercised by the validation suite.
+This boundary flux is first order: it uses the adjacent cell average rather than a reconstructed
+face state.
+
+At a reflecting `HALF_DISK` midplane, all normal flux components are set to zero. Here
+“reflecting” means an impermeable finite-volume symmetry wall; the fluid operator does not move a
+parcel through the face and then reverse its polar momentum. Reflection-symmetric continuum states
+instead have zero normal velocity at the midplane, which is the interpretation exercised by the
+validation suite.
 
 PPM is formally high order on smooth fields, but Strang composition limits the multidimensional
-transport claim to second order. SSPRK(3,3) does not make the full scheme third order in time.
-The complete solver's accuracy also depends on boundary fluxes, limiter activation, and the
-old-donor diffusion-momentum closure described in Section 7.3.
+transport claim to second order. SSPRK(3,3) does not make the full scheme third order in time. The
+complete solver's accuracy also depends on boundary fluxes, limiter activation, and the old-donor
+diffusion-momentum closure described in Section 7.4.
 
 ## 6. Drag, gravity, geometry, and radiation
 
@@ -1154,8 +1225,9 @@ $$
 The source kernel evaluates the exponential drag relaxation exactly for frozen $t_s$ and uses
 drag-weighted old/new force coefficients. A cancellation-safe series is used for small
 $\Delta t/t_s$. Forces include central gravity, reduced by radiation when enabled, radial
-centrifugal acceleration, and polar geometric torque. The update is sequential in
-$\ell_\phi$, $\ell_\theta$, and $v_r$, with force re-evaluation after the angular updates.
+centrifugal acceleration, and polar geometric torque. The update is sequential in $\ell_\phi$,
+$\ell_\theta$, and $v_r$, with force re-evaluation after the angular updates. Cells below
+$\rho_{\rm vac}$ are set to the vacuum state of Section 2.2 and skip the update.
 
 More precisely, set
 
@@ -1204,17 +1276,18 @@ w_{n+1}=\Delta t\left(
 \right)+O(\tau^4)
 $$
 
-when $\tau<10^{-4}$. Azimuthal angular momentum has no nondrag force, so
+when $\tau\lt10^{-4}$; $Q$ itself is evaluated as $-\mathrm{expm1}(-\tau)$. Azimuthal angular
+momentum has no nondrag force, so
 
 $$
 \ell_\phi^{n+1}=E\ell_\phi^n+Q\ell_{\phi,g}.
 $$
 
-The code then evaluates the old and new polar torques using $\ell_\phi^n$ and
-$\ell_\phi^{n+1}$, advances $\ell_\theta$, reevaluates the centrifugal force with both updated
-angular momenta, and finally advances $v_r$. This ordering is what gives the symbols $F^n$ and
-$F^{n+1}$ their precise meaning here; they are sequential endpoint approximations inside one
-cell-local source solve, not forces from two separate hydrodynamic states.
+The code then evaluates the old and new polar torques using $\ell_\phi^n$ and $\ell_\phi^{n+1}$,
+advances $\ell_\theta$, reevaluates the centrifugal force with both updated angular momenta, and
+finally advances $v_r$. This ordering is what gives the symbols $F^n$ and $F^{n+1}$ their precise
+meaning here; they are sequential endpoint approximations inside one cell-local source solve, not
+forces from two separate hydrodynamic states.
 
 ### 6.2 Radiation and optical depth
 
@@ -1231,7 +1304,8 @@ f_\beta=s^2(3-2s),
 s=\mathrm{clip}(t/T_\beta,0,1).
 $$
 
-The corresponding radial acceleration is
+The ramp is evaluated at the midpoint time $t^n+\Delta t/2$ of the global step, and $f_\beta=1$
+when $T_\beta\le0$. The corresponding radial acceleration is
 
 $$
 \boldsymbol a_{\rm rad}
@@ -1252,17 +1326,6 @@ $$
 =\int_{Y_{\min}}^r\kappa_0\rho_{\rm ext}(\phi,r',\theta)\,dr'.
 $$
 
-Optical depth is reconstructed at the source midpoint. Cumulative values live at radial outer
-faces and are interpolated to logarithmic cell centers with
-
-$$
-\tau_c=\tau_{\rm in}+\frac{\tau_{\rm out}-\tau_{\rm in}}{\sqrt{a_y}+1},
-$$
-
-which is exact when optical depth is linear in physical radius within the logarithmic cell. In 2D,
-the well-mixed closure converts surface density to midplane extinction density using
-$\sqrt{2\pi}H_g$, without a Stokes-dependent scale height.
-
 The local radial optical-depth increment in cell $(i,j,k)$ is
 
 $$
@@ -1275,13 +1338,15 @@ where
 
 ```math
 \rho_{\rm ext}=
-\left\{\begin{array}{ll}
+\left\lbrace\begin{array}{ll}
 \Sigma_d/(\sqrt{2\pi}H_g),&N_Z=1,\\
 \rho_d,&N_Z>1.
 \end{array}\right.
 ```
 
-The stored outer-face value is the inclusive radial prefix sum
+In 2D, this well-mixed closure converts surface density to midplane extinction density using the
+gas scale height at the cell center, without a Stokes-dependent dust scale height. The stored
+outer-face value is the inclusive radial prefix sum
 
 $$
 \tau_{i,j+1/2,k}=\sum_{m=0}^{j}\Delta\tau_{imk},
@@ -1289,29 +1354,41 @@ $$
 \tau_{i,-1/2,k}=0.
 $$
 
-Thus the source cell sees attenuation $e^{-\tau_c}$ constructed from the inner and outer face
-values of its own radial cell. Optical depth is recomputed from the density at the midpoint of the
-symmetric global step, so radiation uses the centered mass distribution rather than the state at
-only the beginning or end of the step.
+Cumulative values therefore live at radial outer faces and are interpolated to logarithmic cell
+centers with
+
+$$
+\tau_c=\tau_{\rm in}+\frac{\tau_{\rm out}-\tau_{\rm in}}{\sqrt{a_y}+1},
+$$
+
+which is exact when optical depth is linear in physical radius within the logarithmic cell. The
+source cell sees attenuation $e^{-\tau_c}$ constructed from the inner and outer face values of its
+own radial cell. Optical depth is recomputed from the density at the midpoint of the symmetric
+global step, so radiation uses the centered mass distribution rather than the state at only the
+beginning or end of the step.
 
 ## 7. Diffusion and momentum consistency
 
 ### 7.1 Target diffusion equation and coordinate basis
 
-The selected equation is
+The default equation is
 
 $$
 \frac{\partial\rho_d}{\partial t}
 =\nabla\cdot(\boldsymbol D\nabla\rho_d),
 $$
 
-with $\rho_d$ interpreted as $\Sigma_d$ in 2D. This is the default.
-Add `-DDIFFUSE_CONCENTRATION` to the model's `GPU_FLAGS` to instead use
-$\partial_t\rho_d=\nabla\cdot[\rho_g\boldsymbol D\nabla(\rho_d/\rho_g)]$.
-The gas weight is the analytic surface density in 2D and volume density in 3D.
-For this mode, replace each gradient below by $\rho_g\nabla(\rho_d/\rho_g)$.
+with $\rho_d$ interpreted as $\Sigma_d$ in 2D. Defining `DIFFUSE_CONCENTRATION` instead selects
 
-In a vertically integrated radial–azimuthal disk, the scalar operator is
+$$
+\frac{\partial\rho_d}{\partial t}
+=\nabla\cdot\left[\rho_g\boldsymbol D\nabla\left(\frac{\rho_d}{\rho_g}\right)\right],
+$$
+
+whose discretization is described in Section 7.3. The gas weight is the analytic surface density
+in 2D and volume density in 3D.
+
+In a vertically integrated radial–azimuthal disk, the scalar density operator is
 
 $$
 \frac{\partial\Sigma_d}{\partial t}
@@ -1343,30 +1420,11 @@ D_y=\frac{\nu}{\mathrm{Sc}_y(1+\mathrm{St}^2)},
 D_z=\frac{\nu}{\mathrm{Sc}_z(1+\mathrm{St}^2)}.
 $$
 
-The disk profiles used to evaluate $\nu$ depend on cylindrical $R$; this does not change the
-coordinate basis of the differential operator.
+Both modes use the local Stokes number. The Schmidt numbers describe gas mixing before Stokes
+suppression. The disk profiles used to evaluate $\nu$ depend on cylindrical $R$; this does not
+change the coordinate basis of the differential operator.
 
 ### 7.2 Crank–Nicolson finite-volume solve
-
-Both modes use the local Stokes number. The Schmidt numbers describe gas mixing
-before Stokes suppression. The equations below first describe density diffusion.
-In concentration mode the radial and polar solves use $q_i=\rho_{d,i}/w_i$
-as the unknown, with $w_i=\rho_{g,i}$ (arbitrary common normalization):
-
-$$
-\mathcal F_{i+1/2}=-A_{i+1/2}D_{i+1/2}w_{i+1/2}
-\frac{q_{i+1}-q_i}{\delta l_{i+1/2}},\qquad
-c_i^\pm=\frac{\delta t}{2}\frac{A_{i\pm1/2}D_{i\pm1/2}w_{i\pm1/2}}
-{V_i\delta l_{i\pm1/2}w_i}.
-$$
-
-The same tridiagonal row below then applies to $q$. Gas weights and diffusivities
-are evaluated at the corresponding centers and faces. The positivity substep
-criterion uses these weighted coefficients. Final mass and donor momentum updates
-use the conservative face flux, preserving a constant concentration equilibrium.
-Axisymmetric gas makes the azimuthal concentration operator equal to its density form.
-Initialization uses the selected diffusion flux in the velocity balance; its approximate
-small-height dust scale height includes the midplane Stokes suppression and gas weighting.
 
 Each direction uses the second-order implicit trapezoidal method of
 [Crank & Nicolson (1947)](https://doi.org/10.1017/S0305004100023197) in finite-volume form. The
@@ -1411,11 +1469,11 @@ the directional geometry substituted into these coefficients is
 
 | Direction | Crank–Nicolson face coupling |
 |---|---|
-| azimuthal | $c^-_i=c^+_i=\delta tD_x/[2(R\Delta x)^2]$ |
-| radial | $A_{i+1/2}=y_{i+1/2}^{d-1}$, $V_i=\Delta V_{y,i}$, and $\delta l$ is the distance between neighboring radial centers |
-| polar | $A_{k+1/2}=\sin z_{k+1/2}$, $V_k=y\Delta V_{z,k}$, and $\delta l=y\Delta z$ |
+| azimuthal | $c^-_i=c^+_i=\delta tD_x/[2(R\Delta x)^2]$, with $D_x$ at the ring center |
+| radial | $A_{i+1/2}=y_{i+1/2}^{d-1}$, $V_i=\Delta V_{y,i}$, $D$ at the radial face, and $\delta l$ the distance between neighboring radial centers |
+| polar | $A_{k+1/2}=\sin z_{k+1/2}$, $V_k=y\Delta V_{z,k}$, $D$ at the polar face, and $\delta l=y\Delta z$ |
 
-the row solved by the radial and polar Thomas algorithm is
+The row solved by the radial and polar Thomas algorithm is
 
 $$
 -c_i^-\rho_{i-1}^{n+1}
@@ -1455,17 +1513,38 @@ N_{\rm sub}
 \left\lceil\frac{\max_i(c_i^-+c_i^+)}{\mathrm{POS\_LIMIT}}\right\rceil
 \right),
 \qquad
-\delta t=\frac{\Delta t}{N_{\rm sub}}.
+\delta t=\frac{\Delta t}{N_{\rm sub}},
 $$
 
-For the periodic azimuthal line this is equivalently based on
-$2c=\Delta tD_x/(R\Delta x)^2$. The subdivision controls the sign of the explicit
-Crank–Nicolson right-hand side; unconditional linear stability by itself would not prevent
-negative density oscillations.
+separately for every line. For the periodic azimuthal line this is equivalently based on
+$2c=\Delta tD_x/(R\Delta x)^2$. The subdivision controls the sign of the explicit Crank–Nicolson
+right-hand side; unconditional linear stability by itself would not prevent negative density
+oscillations. Each substep solves density, reconstructs and limits the face mass fluxes, and
+transports momentum as described in Section 7.4 before the next substep begins.
 
-### 7.3 Conservative donor-momentum closure
+### 7.3 Concentration diffusion
 
-The current minimum conservative momentum correction transports donor values of
+In concentration mode the radial and polar solves use $q_i=\rho_{d,i}/w_i$ as the unknown, with
+$w_i=\rho_{g,i}$ (arbitrary common normalization):
+
+$$
+\mathcal F_{i+1/2}=-A_{i+1/2}D_{i+1/2}w_{i+1/2}
+\frac{q_{i+1}-q_i}{\delta l_{i+1/2}},\qquad
+c_i^\pm=\frac{\delta t}{2}\frac{A_{i\pm1/2}D_{i\pm1/2}w_{i\pm1/2}}
+{V_i\delta l_{i\pm1/2}w_i}.
+$$
+
+The tridiagonal row of Section 7.2 then applies to $q$. Gas weights and diffusivities are
+evaluated at the corresponding centers and faces, and the positivity subcycling criterion uses
+these weighted coefficients. Final mass and donor momentum updates use the conservative face flux,
+preserving a constant-concentration equilibrium. Axisymmetric gas makes the azimuthal concentration
+operator equal to its density form. Initialization uses the selected diffusion flux in the polar
+velocity balance (Section 3.3), and its approximate small-height dust scale height includes the
+midplane Stokes suppression and gas weighting (Section 3.2).
+
+### 7.4 Conservative donor-momentum closure
+
+The minimum conservative momentum correction transports donor values of
 $(\ell_\phi,v_r,\ell_\theta)$ with the diffusive mass flux. It conserves the corresponding stored
 momenta across internal faces and avoids changing density while leaving momentum stale. This is an
 intentional generalized-property closure, not the spherical-coordinate expansion of a complete
@@ -1480,13 +1559,13 @@ $$
 +(\rho_{i+1}^{n+1}-\rho_i^{n+1})\right].
 $$
 
-Crank--Nicolson positivity of the trial density does not by itself guarantee that the old-state
+Crank–Nicolson positivity of the trial density does not by itself guarantee that the old-state
 donor rule below forms a nonnegative mixture: opposing face transfers can each exceed the donor's
 old mass while leaving a positive net density. The code therefore limits the reconstructed face
 transfers before either density or momentum is accepted. Let
 
 $$
-M_i^n=V_i\rho_i^n,
+M_i^n=V_i\max(\rho_i^n,0),
 \qquad
 O_i=\delta t\left[
 \max(\mathcal F_{\rho,i+1/2},0)
@@ -1501,7 +1580,7 @@ be the old cell mass and its total raw outward transfer. The donor factor is
 \begin{cases}
 1, & O_i=0,\\[3pt]
 \min\!\left(1,
-\dfrac{\texttt{POS_LIMIT}\,M_i^n}{O_i}\right), & O_i>0.
+\dfrac{\mathrm{POS\_LIMIT}\,M_i^n}{O_i}\right), & O_i>0.
 \end{cases}
 ```
 
@@ -1517,11 +1596,8 @@ Each face is scaled exactly once by the cell that supplies its mass:
 \end{cases}
 ```
 
-All donor factors are evaluated from the unchanged raw-flux array before any face is scaled.
-Thread and block kernels preserve old density until all three momentum components have consumed
-it; block kernels synchronize factor construction, face scaling, and workspace reuse. Existing
-workspace holds the factors, without additional grid storage or dynamic shared memory.
-The accepted density is then reconstructed conservatively,
+All donor factors are evaluated from the unchanged raw-flux array before any face is scaled. The
+accepted density is then reconstructed conservatively,
 
 $$
 M_i^{n+1}=M_i^n-\delta t
@@ -1533,27 +1609,28 @@ Because at most `POS_LIMIT` of each donor's old mass can leave during one subste
 
 $$
 M_i^n-\theta_iO_i
-\ge (1-\texttt{POS_LIMIT})M_i^n\ge0.
+\ge (1-\mathrm{POS\_LIMIT})M_i^n\ge0.
 $$
 
 The statement includes an exactly empty cell: every outward transfer from a zero-mass donor is
 suppressed. Internal faces remain conservative because the same accepted face value enters its two
 adjacent cells with opposite signs. When every $\theta_i=1$, the accepted density is the original
-Crank--Nicolson solution. Where the limiter activates, the update is a nonlinear conservative
+Crank–Nicolson solution. Where the limiter activates, the update is a nonlinear conservative
 correction and is not exactly time-centered CN locally.
 
 Reducing the timestep alone cannot guarantee termination of a strict old-donor check: an empty
 cell can receive and pass an implicit CN transfer at every finite trial step. The face limiter
 enforces the bound directly, including zero old mass.
 
-For each stored primitive $u_a\in\{\ell_\phi,v_r,\ell_\theta\}$, the associated momentum flux is
+For each stored primitive $u_a\in\lbrace\ell_\phi,v_r,\ell_\theta\rbrace$, the associated momentum
+flux is
 
 ```math
 \mathcal F_{m_a,i+1/2}
 =\widehat{\mathcal F}_{\rho,i+1/2}u_{a,\rm donor},
 \qquad
 u_{a,\rm donor}=
-\left\{\begin{array}{ll}
+\left\lbrace\begin{array}{ll}
 u_{a,i},&\mathcal F_{\rho,i+1/2}\ge0,\\
 u_{a,i+1},&\mathcal F_{\rho,i+1/2}<0,
 \end{array}\right.
@@ -1567,9 +1644,10 @@ m_{a,i}^{n+1}=m_{a,i}^n
 \left(\mathcal F_{m_a,i+1/2}-\mathcal F_{m_a,i-1/2}\right).
 $$
 
-The donor primitive is taken from the old state. The same accepted face flux enters its two cells
-with opposite signs, so internal diffusive transfers conserve both mass and every stored momentum
-exactly up to roundoff. More strongly, the update can be written as
+The donor primitive is taken from the old substep state, with the vacuum values of Section 2.2
+for a donor below $\rho_{\rm vac}$. The same accepted face flux enters its two cells with opposite
+signs, so internal diffusive transfers conserve both mass and every stored momentum exactly up to
+roundoff. More strongly, the update can be written as
 
 $$
 (M q)_i^{n+1}
@@ -1594,21 +1672,23 @@ The mass flux is time-centered when unlimited, but the transported primitive is 
 value. Constant-primitive eigenmode tests exercise CN density accuracy and consistent momentum
 scaling; the nonuniform-front tests establish bounds and conservation, not general momentum order.
 
-### 7.4 Physical meaning and the rejected Reynolds alternative
+### 7.5 Physical meaning and the rejected Reynolds alternative
 
-The selected density-diffusion flux is
+The default density-diffusion flux is
 
 $$
 \boldsymbol J=-\boldsymbol D\cdot\boldsymbol\nabla\varrho_d,
 $$
 
-where $\varrho_d$ denotes $\Sigma_d$ in the vertically integrated model and $\rho_d$ in 3D. The
-mass equation fixes the total transport flux $\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does
-not uniquely determine which momentum an unresolved diffusive exchange carries. GameDev closes
-that ambiguity by treating each stored generalized velocity
+where $\varrho_d$ denotes $\Sigma_d$ in the vertically integrated model and $\rho_d$ in 3D.
+Concentration mode instead uses $\boldsymbol J=-w\boldsymbol D\cdot\nabla(\varrho_d/w)$; the same
+donor-momentum closure applies to either flux. The mass equation fixes the total transport flux
+$\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does not uniquely determine which momentum an
+unresolved diffusive exchange carries. GameDev closes that ambiguity by treating each stored
+generalized velocity
 
 $$
-q_a\in\{\ell_\phi,v_r,\ell_\theta\}
+q_a\in\lbrace\ell_\phi,v_r,\ell_\theta\rbrace
 $$
 
 as a parcel property transported by the net diffusive mass flux:
@@ -1634,13 +1714,13 @@ T_{ij}=\varrho_dv_iv_j+J_iv_j+v_iJ_j+\mathcal R_{ij}.
 $$
 
 Adapting this structure to density diffusion would require the corrected momentum state
-$\varrho_d\boldsymbol v_d+\boldsymbol J$, both cross fluxes, all cylindrical or spherical tensor-
-divergence terms, transverse components of $\boldsymbol J$ at each face, and consistent primitive
-recovery, initialization, source, boundary, and restart semantics. Adding only $v_iJ_j$ to the
-current diffusion kernel would omit $\partial_tJ_j$ and create an inconsistent hybrid. The donor
-and complete Reynolds closures can both be Galilean invariant when their states and fluxes are
-transformed consistently, but they conserve different definitions of momentum and need not agree
-at finite diffusivity.
+$\varrho_d\boldsymbol v_d+\boldsymbol J$, both cross fluxes, all cylindrical or spherical
+tensor-divergence terms, transverse components of $\boldsymbol J$ at each face, and consistent
+primitive recovery, initialization, source, boundary, and restart semantics. Adding only $v_iJ_j$
+to the present diffusion kernel would omit $\partial_tJ_j$ and create an inconsistent hybrid. The
+donor and complete Reynolds closures can both be Galilean invariant when their states and fluxes
+are transformed consistently, but they conserve different definitions of momentum and need not
+agree at finite diffusivity.
 
 The unresolved tensor $\mathcal R_{ij}$ is independent of whether density or concentration is
 diffused. Setting it to zero removes turbulent dust pressure and shear stress; it is a closure
@@ -1649,7 +1729,7 @@ model with $\mathcal R_{ij}=0$. A Reynolds density-diffusion model should be rec
 separate physical model and must be implemented and verified as a complete system. Relevant
 derivations of conservative mean dust momentum include
 [Huang & Bai (2022)](https://arxiv.org/abs/2206.01023), whose published model diffuses dust
-concentration rather than GameDev's selected density.
+concentration; GameDev supports that mass flux but retains its distinct donor-momentum closure.
 
 ## 8. Global integrator and timestep control
 
@@ -1680,16 +1760,16 @@ validate the evolved state, advance clocks, and write any due output
 ```
 
 Inactive diffusion, polar, and radiation operations are omitted without changing the relative
-order of the remaining operators.
+order of the remaining operators. Primitive velocity is recovered after every advection launch and
+after each three-direction diffusion group; the directional diffusion solves operate directly on
+density and conserved momenta and do not consume primitive velocity between their launches. Each
+diffusion half-step is one launch per direction with its own positivity subcycling
+(Section 7.2).
 
-The inactive polar operators are skipped. Primitive velocity is recovered after every advection
-launch and after each three-direction diffusion group; the directional diffusion solves operate
-directly on density and conserved momenta and do not consume primitive velocity between their
-launches. Each directional advection half-interval is independently subcycled. Before every
-advection launch, the global CFL rate is recomputed from the current synchronized state, so
-acceleration or an earlier advection sweep cannot leave a later sweep using stale velocities.
-
-For a requested directional interval $h$, the driver repeatedly chooses
+Each directional advection half-interval is independently subcycled. Before every advection
+launch, the global CFL rate is recomputed from the current synchronized state, so acceleration or
+an earlier advection sweep cannot leave a later sweep using stale velocities. For a requested
+directional interval $h$, the driver repeatedly chooses
 
 $$
 \delta t_m=\min\left[
@@ -1732,9 +1812,7 @@ $$
 
 The maximum sine is set to one if the polar cell straddles the midplane. With `VISC_FLOW`, the
 same radial and polar geometrical rates are also evaluated for the gas target velocity before stiff
-drag can transfer that velocity to the dust. Vacuum cells contribute zero, while any nonfinite
-state makes its complete azimuthal ring contribute an infinite rate; the host reduction reports
-the first such cell and aborts the run before another operator is launched. For finite states, the
+drag can transfer that velocity to the dust. Vacuum cells contribute zero. For finite states, the
 host reduction uses
 
 $$
@@ -1744,11 +1822,16 @@ $$
 \right),
 $$
 
-with the interval shortened further whenever necessary to land exactly on an output time.
+and $\Delta t=\mathrm{DT\_MAX}$ when every rate is zero. The global step $\Delta t$ is computed
+from the state at the beginning of the step and shortened further whenever necessary to land
+exactly on an output time. The diffusion and source operators use this global step; only the
+advection half-intervals are subdivided.
 
 `CFL_DYN <= 0.5` is required by the nearest-integer FARGO shift and enforced at compile time.
 `DT_MAX` supplies an independent ceiling. Diffusion is not placed in this explicit CFL bound
-because it is solved implicitly with positivity subcycling.
+because it is solved implicitly with positivity subcycling, and the source update has no step
+restriction of its own because drag relaxation is integrated exponentially; `DT_MAX` is the only
+limit on the source step when transport rates are small.
 
 ### 8.3 Consolidated boundary conditions
 
@@ -1760,6 +1843,7 @@ The continuum boundary conditions paired with the operators are
 | inner and outer radial | outflow only | zero normal flux |
 | full-disk polar | outflow only | zero normal flux |
 | `HALF_DISK` midplane | reflecting | zero normal flux |
+| `HALF_DISK` high-latitude edge | outflow only | zero normal flux |
 
 Periodicity identifies
 
@@ -1774,7 +1858,7 @@ $$
 $$
 
 while the outflow transport condition retains only a normal characteristic directed out of the
-domain, as written in Section 5.3. These choices intentionally differ: an advected representative
+domain, as written in Section 5.6. These choices intentionally differ: an advected representative
 of the continuum may leave the modeled disk, whereas turbulent diffusion is confined by a
 reflecting numerical wall. Optical depth additionally assumes no unresolved material interior to
 the radial domain,
@@ -1783,7 +1867,25 @@ $$
 \tau(Y_{\min})=0.
 $$
 
-### 8.4 Formal accuracy and error sources
+### 8.4 Finite-state checks and failure behavior
+
+The driver does not retry or roll back a step. A failed read or write of a frame file, and two
+state checks, abort the run with an `Error: ...` message on standard error and exit status
+`EXIT_FAILURE`. The state checks are:
+
+- every CFL evaluation, before each global step and before every advection launch, marks a complete
+  azimuthal ring with infinite rate if any of its densities, conserved momenta, or primitives is
+  nonfinite; the host then reports the limiting cell index $(i,j,k)$
+- a full-grid finite check of density, conserved momenta, primitives, and, with `RADIATION`,
+  optical depth runs after initialization or restart, after the midpoint optical-depth rebuild,
+  at the end of every accepted step, and after the optical-depth rebuild for output; it reports one
+  offending cell
+
+Negative densities are not treated as failures: transport converts a negative low-order density to
+exact vacuum (Section 5.4), and diffusion cannot produce one (Section 7.4). The most recent saved
+frame is the restart point after an abort.
+
+### 8.5 Formal accuracy and error sources
 
 For a smooth transport/source problem whose component updates are second order, a mesh scale $h$,
 and timestep $\Delta t$, the intended deterministic truncation form is
@@ -1812,59 +1914,44 @@ error.
 
 ## 9. GPU implementation and computational characteristics
 
+### 9.1 Source map
+
 The main numerical components map to the production source as follows:
 
 | Scientific operation | Principal implementation |
 |---|---|
-| convolved profile and PPM geometry setup | `inc/{cuda,rocm}/fluid/fluid_host.cuh` |
-| density and velocity initialization | `src/{cuda,rocm}/fluid/init_rho_calc.*`, `src/fluid/init_vel_calc.cu` |
+| grid measures and disk profiles | `inc/fluid/param_grid.cuh`, `inc/fluid/param_phys.cuh` |
+| convolved profile, PPM geometry setup, CFL reduction, and file conversion | `inc/fluid/fluid_host.cuh` |
+| PPM, HLL, invariant-domain, and vacuum-recovery helpers | `inc/fluid/_transport.cuh` |
+| drag weights, flag checks, and kernel declarations | `inc/fluid/fluid_kern.cuh` |
+| density and velocity initialization | `src/fluid/init_rho_calc.cu`, `src/fluid/init_vel_calc.cu` |
 | conservative transport | `src/fluid/advection_[xyz]{th,bl}.cu` |
+| transport rate | `src/fluid/cfl_rate_calc.cu` |
 | drag, gravity, geometry, and radiation | `src/fluid/source_update.cu` |
 | density and donor-momentum diffusion | `src/fluid/diffusion_[xyz]{th,bl}.cu` |
 | optical-depth increment and prefix sum | `src/fluid/optdepth_calc.cu`, `src/fluid/optdepth_csum.cu` |
 | primitive/conserved conversion | `src/fluid/momentum_getv.cu`, `src/fluid/momentum_setv.cu` |
-| operator driver and output clock | `src/{cuda,rocm}/fluid/fluid_runtime.*` |
+| nonfinite-state check | `src/fluid/inf_cell_flag.cu` |
+| operator driver and output clock | `src/fluid/fluid_runtime.cu` |
 
-The same PPM/HLL and Crank–Nicolson discretizations have two compile-time GPU implementations:
+Each production model is a compile-time specialization. A model-local `const_defs.cuh`, when
+present, supplies its grid and physical constants; `flags.mk` selects optional operators and may
+set the sweep. These are not runtime parameters: changing one requires recompilation. The
+[user guide](../README.md#configuring-a-model) describes the model files and build variables.
 
-- `FLUID_SWEEP := thread` selects `advection_[xyz]th` and `diffusion_[xyz]th`, assigning one GPU
-  thread to each complete directional line
-- `FLUID_SWEEP := block` selects `advection_[xyz]bl` and `diffusion_[xyz]bl`, assigning one GPU
-  block to each line and distributing cellwise work among its threads
+### 9.2 Thread and block sweeps
 
-The thread implementation is the reference transcription and stores its line work in thread-local
-arrays. In particular, `advection_xth` contains 21 arrays of length `N_X`, a source-level footprint
-of approximately 168 KiB (172 kB) per thread at `N_X = 1024` if all arrays remain distinct.
-Compiler lifetime reuse can reduce that footprint, so `ptxas` resource reports and profiler
-local-memory traffic are the authoritative measures.
+The same PPM/HLL and Crank–Nicolson discretizations have two compile-time GPU implementations of
+the six directional kernels. All other kernels are shared.
 
-The block implementation replaces those advection arrays with 12 persistent full-grid workspace
-fields and places four azimuthal or six radial/polar diffusion work arrays in dynamic shared
-memory. Eleven advection fields hold the conserved state, recovered primitives, and antidiffusive
-fluxes; the twelfth stages the low-order density update so cells can advance cooperatively without
-reading density already overwritten by another thread. Cellwise reconstruction, low-order update,
-and SSPRK combinations are cooperative, while the face-ordered invariant-domain correction and
-Thomas or Sherman–Morrison recurrence remain serial within each line to preserve the verified
-numerical ordering. This is an implementation and memory-layout choice, not a different numerical
-method.
-
-The backend does not change the discrete equations. Ordinary elementwise and thread-line kernels
-use `TPB = 64` on both backends, while block-line kernels use 32 threads on CUDA and one 64-lane
-wavefront on ROCm. Both backends omit blanket fast-math flags; there is no selectable
-CUDA fast-math mode. Finite-only assumptions can invalidate nonfinite-state checks.
-Cross-backend validation therefore compares convergence, conserved fields, and density-weighted
-velocity norms rather than requiring byte equality.
-
-On ROCm, dynamic shared memory is AMD LDS. The host checks both the device LDS capacity and the
-kernel's static-plus-dynamic allocation before launching a block diffusion line. For double
-precision the directional dynamic requests are the values below; a six-array line of length 1366
-already exceeds a 64-KiB limit. The thread-line azimuthal advection stack is also too large for the
-validated gfx942 linker at `N_X = 1024`, making the block sweep the supported large-2D ROCm path.
-These are hardware resource constraints, not changes to the numerical operator.
-
-Performance is grid dependent, so the intended production grid should be benchmarked before
-selecting a default; neither implementation is universally preferred. Sweep-performance evidence is
-model- and machine-specific and is not part of the retained publication-verification suite.
+| Property | `FLUID_SWEEP=thread` | `FLUID_SWEEP=block` |
+|---|---|---|
+| kernels | `advection_[xyz]th`, `diffusion_[xyz]th` | `advection_[xyz]bl`, `diffusion_[xyz]bl` |
+| work unit | one thread per complete line | one block of `TPB_BLOCK` threads per line |
+| launch | `NB_X`, `NB_Y`, or `NB_Z` blocks of `TPB` threads | $N_{\rm line}$ blocks of `TPB_BLOCK` threads |
+| line storage | thread-local arrays of line length | 12 full-grid workspace fields for advection; dynamic shared memory for diffusion |
+| cooperative steps | none | loads, face reconstruction, HLL fluxes, low-order update, SSPRK combinations, donor factors, face scaling, momentum fluxes, stores |
+| serial steps per line | all | FARGO ring mean, invariant-domain correction pass, subcycle count, Thomas or Sherman–Morrison recurrence |
 
 For directional sweeps, the independent line counts are
 
@@ -1876,15 +1963,36 @@ N_{{\rm line},y}=N_XN_Z,
 N_{{\rm line},z}=N_XN_Y.
 $$
 
-The thread implementation assigns one thread to each line, whereas the block implementation
-assigns one block to each line. Its persistent advection workspace is
+The thread implementation is the reference transcription. In the block implementation, eleven
+advection workspace fields hold the conserved state, recovered primitives, and antidiffusive
+fluxes; the twelfth stages the low-order density update so cells can advance cooperatively without
+reading density already overwritten by another thread. The face-ordered invariant-domain
+correction and the Thomas or Sherman–Morrison recurrence remain serial within each line, executed
+by one thread of the block, to preserve the discrete numerical ordering of Sections 5.4 and 7.2.
+Both implementations keep the old density until all three momentum components have consumed it,
+and the block kernels synchronize factor construction, face scaling, and workspace reuse; the
+donor factors of Section 7.4 reuse existing line storage. This is an implementation and
+memory-layout choice, not a different numerical method; the validation campaign runs the complete
+fluid matrix with both sweeps ([`val/README.md`](../val/README.md)).
+
+### 9.3 Memory footprint
+
+Every build allocates eight full-grid `real` device arrays: density, three primitives, three
+conserved momenta, and the CFL rate. `RADIATION` adds one device array for optical depth. Four
+pinned host arrays (five with `RADIATION`) stage output and restart transfers, and the radial and
+polar PPM weights add $4(N_Y+1)+4(N_Z+1)$ values. The block sweep adds its persistent advection
+workspace
 
 $$
 M_{\rm adv,work}=12N_G\,\mathrm{sizeof}(\mathtt{real}).
 $$
 
-For double precision this is 96 MiB at $1024^2$ and 192 MiB at $128^3$. The extra staged-density
-field costs one additional full-grid array relative to the former serial low-order block update.
+In double precision one full-grid array is 8 MiB at $1024^2$ and 16 MiB at $128^3$, so
+
+| Grid | Base device arrays | `RADIATION` | Block workspace | Pinned host |
+|---|---|---|---|---|
+| $1024\times1024\times1$ | 64 MiB | +8 MiB | +96 MiB | 32 MiB (+8 MiB) |
+| $128^3$ | 128 MiB | +16 MiB | +192 MiB | 64 MiB (+16 MiB) |
 
 The dynamic shared-memory requirements per diffusion block are
 
@@ -1896,84 +2004,144 @@ M_{{\rm sh},y}=6N_Y\,\mathrm{sizeof}(\mathtt{real}),
 M_{{\rm sh},z}=6N_Z\,\mathrm{sizeof}(\mathtt{real}).
 $$
 
-The density, three primitive fields, three conserved momenta, and CFL-rate field use eight
-full-grid `real` arrays before optional optical depth and block workspace are counted. Nonuniform
-PPM weights are computed once on the host and uploaded, so geometry setup is not repeated inside
-every transport step.
+On CUDA the host opts each block diffusion kernel in to this dynamic size at startup; on ROCm it
+checks the device LDS capacity and the kernel's static-plus-dynamic allocation before any launch.
+A request beyond the device limit aborts at startup. In double precision a six-array line of
+length 1366 already exceeds a 64-KiB limit.
 
-Each production model is a compile-time specialization. A model-local `const_defs.cuh`, when
-present, supplies its grid and physical constants; `flags.mk` selects optional operators, and the
-Makefile chooses the thread or block sweep. These are not runtime parameters: changing one requires
-recompilation, while `variables.txt` records the resulting configuration for analysis.
+The thread kernels declare line-length arrays per thread:
+
+| Kernel | Declared `real` values per thread | At line length 1024 |
+|---|---|---|
+| `advection_xth` | $21N_X$ | 168 KiB |
+| `advection_yth`, `advection_zth` | $15N+4$ | 120 KiB |
+| `diffusion_xth` | $6N_X$ | 48 KiB |
+| `diffusion_yth`, `diffusion_zth` | $9N$ | 72 KiB |
+
+These are source-level footprints if all arrays remain distinct. Compiler lifetime reuse can
+reduce them, so compiler resource reports (for example `-Xptxas -v` through `CUDA_FLAGS`, or
+`RESOURCE_REPORT` on ROCm) and profiler local-memory traffic are the authoritative measures.
+
+### 9.4 Choosing a sweep
+
+When neither the command line nor the model's `flags.mk` sets `FLUID_SWEEP`, the Makefile uses
+`thread` on CUDA and `block` on ROCm. The choice changes only work decomposition, memory, and
+speed; the two sweeps agree to rounding error, and each is validated against the same acceptance
+criteria. The practical trade-offs are:
+
+- **Exposed parallelism.** A thread-sweep directional launch runs only $N_{\rm line}$ threads,
+  1024 for a $1024^2$ disk, which is a small fraction of a modern GPU's resident-thread capacity.
+  The block sweep runs `TPB_BLOCK` times as many threads (32 on CUDA, 64 on ROCm) and reads
+  contiguous azimuthal cells in its azimuthal kernels, whereas neighboring thread-sweep azimuthal
+  threads read addresses $N_X$ cells apart.
+- **Serial fraction.** In the block sweep one thread per line performs the invariant-domain pass
+  and the tridiagonal recurrence while the other lanes wait. The thread sweep performs every step
+  serially but keeps all lanes busy on different lines.
+- **Per-thread memory.** The thread sweep's local arrays grow with line length (Section 9.3). On
+  gfx942 the thread-sweep azimuthal advection exceeds a linker limit at `N_X = 1024`, which is why
+  ROCm defaults to the block sweep ([user guide](../README.md)).
+- **Global and shared memory.** The block sweep needs $12N_G$ additional device values and
+  dynamic shared memory that limits the diffusion line length to the device's per-block maximum.
+
+Use the block sweep on ROCm and whenever the thread sweep's per-thread arrays exceed the
+compiler's or device's limits. Otherwise, performance is grid and machine dependent: benchmark both
+sweeps on the intended production grid and GPU before fixing one for a campaign, and record the
+selection with the run. Sweep-performance evidence is not part of the retained
+publication-verification suite.
+
+### 9.5 Backend differences and diagnostics
+
+Both backends compile the same `.cu` files, with ROCm using `hipcc -x hip`. `inc/gpu.cuh` maps
+runtime allocation, copy, error, Thrust-policy, and random-number APIs to CUDA/cuRAND or
+HIP/hipRAND; builds do not invoke HIPIFY or generate HIP sources. Explicit backend branches remain
+only where the hardware differs: the block-sweep width `TPB_BLOCK` (32 threads on CUDA, one 64-lane
+wavefront on ROCm), and the dynamic shared-memory opt-in on CUDA versus the LDS capacity check on
+ROCm. Ordinary elementwise and thread-line kernels use `TPB = 64` on both backends.
+
+The backend does not change the discrete equations. Both backends compile with `-O2` and omit
+blanket fast-math flags; finite-only assumptions could invalidate the nonfinite-state checks of
+Section 8.4. The azimuthal density perturbation uses the vendor generator, so CUDA and ROCm
+initialize different noise realizations. Cross-backend validation therefore compares convergence,
+conserved fields, and density-weighted velocity norms rather than requiring byte equality.
+
+The global CFL reduction is quiet by default. It retains the nonfinite-state check but skips the
+three diagnostic velocity copies, ring-velocity reduction, and limiting-cell printout, which are
+enabled with `CUDA_SYNC_TRACE` or `HIP_SYNC_TRACE`. Those trace builds also synchronize after every
+kernel launch and print the CFL-limiting cell after each opening diffusion direction and before
+every advection launch.
 
 ## 10. Output and restart semantics
 
-The driver clips accepted steps to land exactly on each `DT_OUT` boundary. It writes density and
-physical linear velocity, leaving the internal angular-momentum primitives unchanged on the GPU.
-On restart, the saved linear velocities are converted back to $(\ell_\phi,v_r,\ell_\theta)$,
-conserved momenta are rebuilt from the loaded density, and optical depth is reconstructed when
-radiation is active. Nonfinite density, momentum, primitive, and optical-depth values are checked
-at the documented synchronization points.
-
-The file conversion is exactly
-
-$$
-v_\phi=\frac{\ell_\phi}{R},
-\qquad
-v_\theta=\frac{\ell_\theta}{r},
-$$
-
-on output and
-
-$$
-\ell_\phi=Rv_\phi,
-\qquad
-\ell_\theta=rv_\theta
-$$
-
-on input. These transformations are performed in host memory, so diagnostic I/O never temporarily
-overwrites the angular variables being evolved on the GPU. After loading,
-$m_a=\varrho_du_a$ reconstructs all conserved arrays before the next operator is launched.
-Because floating-point evaluation of $R(\ell_\phi/R)$ and $r(\ell_\theta/r)$ need not reproduce
-the original angular momentum bit for bit, restart validation must use explicit state and
-conservation tolerances rather than require byte-identical evolved fields.
-
-At frame $n$, the physical output time is
+Frame $n$ holds the state at
 
 $$
 t_n=n\,\mathrm{DT\_OUT}.
 $$
 
 The driver shortens the last accepted step in each interval so $t=t_n$ to floating-point
-precision; output interpolation is therefore unnecessary. Every frame contains `dustdens`,
-`dustvelx`, `dustvely`, and `dustvelz`, each with $N_G$ double-precision values; `optdepth` is added
-when radiation is enabled. `variables.txt` records the active grid, physical parameters, and
-timestep controls needed to interpret those arrays.
+precision; output interpolation is therefore unnecessary. File names, layout, and reading are
+described in the [user guide](../README.md#output-files); the numerical meaning of the saved fields
+is:
+
+| Field | Saved quantity |
+|---|---|
+| `dustdens` | evolved density $\varrho_d$: $\Sigma_d$ when `N_Z == 1`, $\rho_d$ when `N_Z > 1` |
+| `dustvelx` | $v_\phi=\ell_\phi/R$ at the cell center |
+| `dustvely` | $v_r$ |
+| `dustvelz` | $v_\theta=\ell_\theta/r$ at the cell center, zero when `N_Z == 1` |
+| `optdepth` | cumulative outer-face optical depth $\tau_{i,j+1/2,k}$, not the center value $\tau_c$ |
+
+The velocity conversion is performed in host memory, so diagnostic I/O never temporarily overwrites
+the angular variables being evolved on the GPU. Vacuum cells carry the regularized velocity of
+Section 2.2. The saved optical depth is recomputed from the end-of-step density just before the
+frame is written; it is not the midpoint optical depth used by the preceding source update.
+
+On restart from frame $n$, the model time is reset to $n\,\mathrm{DT\_OUT}$, the saved linear
+velocities are converted back with
+
+$$
+\ell_\phi=Rv_\phi,
+\qquad
+\ell_\theta=rv_\theta,
+$$
+
+and $m_a=\varrho_du_a$ reconstructs all conserved arrays, with the vacuum reset of Section 2.2,
+before the next operator is launched. Optical depth is reconstructed when radiation is active, and
+the restored state passes the finite check of Section 8.4. Frames contain no conserved momenta and
+no random state; the fluid evolution itself is deterministic. Because floating-point evaluation of
+$R(\ell_\phi/R)$ and $r(\ell_\theta/r)$ need not reproduce the original angular momentum bit for
+bit, restart validation must use explicit state and conservation tolerances rather than require
+byte-identical evolved fields.
 
 ## 11. Known limitations
 
 Verification definitions, evidence, and untested regimes are maintained in
-[`fluid_testset.md`](fluid_testset.md). The limitations below concern the physical or numerical
-model itself rather than current test coverage.
+[`fluid_testset.md`](fluid_testset.md); limitations shared with the swarm branch are listed in the
+[user guide](../README.md#current-limitations). The limitations below concern the fluid physical or
+numerical model itself rather than current test coverage.
 
+- The fluid is monodisperse with one Stokes-number profile and pressureless. It cannot represent
+  multistreaming after caustic formation; a swarm or another kinetic representation is required in
+  that regime.
 - The diffusion-momentum closure is an intentional coordinate-dependent parcel model: net
   diffusive mass carries the donor values of $(\ell_\phi,v_r,\ell_\theta)$, while unresolved
   momentum exchange at zero net mass flux is omitted. It must not be described as a complete
-  Reynolds-averaged momentum tensor. A future Reynolds option would be a different physical model,
-  not a correction term that can be added independently to the present kernels.
-- The 3D initializer balances polar advection and density diffusion only to discretization error. The
-  normalized instantaneous mismatch and its polar-resolution convergence are measured by
+  Reynolds-averaged momentum tensor. A Reynolds option would be a different physical model, not a
+  correction term that can be added independently to the present kernels.
+- The 3D initializer balances polar advection and the selected diffusion flux only to discretization
+  error. The normalized instantaneous mismatch and its polar-resolution convergence are measured by
   `test_startup_3d`; later momentum relaxation can still produce a physical startup transient and is
   not assumed to vanish under mesh refinement.
-- The block diffusion kernels still execute each Thomas or Sherman–Morrison recurrence serially
-  within its line, and the block advection kernels retain a serial face-ordered correction pass.
-  Further parallelization should use a conservation- and positivity-preserving face-budget limiter
-  and a batched Thomas/PCR-style tridiagonal solve, with the full analytical suite and profiler
-  evidence required after each change; an FFT is not required.
-- Pressureless dust cannot represent multistreaming after caustic formation. A swarm or another
-  kinetic representation is required in that regime.
-- CUDA uses standard math settings; backend and hardware differences can still affect rounding.
-  Verification tolerances and reproducibility claims must reflect that build choice.
+- Transport boundaries are outflow-only, while diffusion boundaries are zero-flux walls, and
+  optical depth assumes no material inside `Y_MIN`. Mass and radiation shielding near the inner
+  edge therefore depend on the chosen radial domain.
+- The azimuthal domain is always periodic; a range shorter than $2\pi$ imposes azimuthal
+  periodicity on every non-axisymmetric structure.
+- The block diffusion kernels execute each Thomas or Sherman–Morrison recurrence serially within
+  its line, and the block advection kernels retain a serial face-ordered correction pass. A more
+  parallel replacement would have to preserve the conservation and positivity properties of
+  Sections 5.4 and 7.4, for example through a face-budget limiter and a batched tridiagonal solve,
+  and would require the full analytical suite and profiler evidence.
 
 ## 12. References
 
@@ -1993,25 +2161,3 @@ model itself rather than current test coverage.
 - Burns, Lamy & Soter (1979), [radiation forces on small particles](https://doi.org/10.1016/0019-1035(79)90050-2)
 - Shakura & Sunyaev (1973), [$\alpha$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)
 - Epstein (1924), [drag on small spheres in a dilute gas](https://doi.org/10.1103/PhysRev.23.710)
-
-### Shared CUDA/ROCm application source
-
-Root application kernels and runtimes are maintained in `src/`; representation
-constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
-compile the same `.cu` files (ROCm uses `hipcc -x hip`).
-`inc/gpu.cuh` maps runtime allocation/copy/error APIs and random sampling
-to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
-does not alter stream initialization or make raw RNG checkpoints interchangeable.
-
-Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
-and collision RNG storage. The bundled KD-tree library remains
-under backend directories, as do Morton backend type/ghost helpers. Model overrides
-retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
-
-Standalone host sanity checks and migration snapshots were removed. Native accuracy
-validation is run through `val/run_all.py`; analytical references remain with the tests.
-
-The top-level CFL calculation is quiet on both backends: it retains the CFL-rate
-reduction and nonfinite-state checks, but skips the three diagnostic velocity
-copies, ring-velocity reduction, and limiting-cell printout. Explicit trace
-diagnostics remain available.

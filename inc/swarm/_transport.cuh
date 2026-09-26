@@ -1,14 +1,14 @@
-#ifndef SWARM_TRANSPORT_CUH
-#define SWARM_TRANSPORT_CUH
+#ifndef GAMEDEV_SWARM_TRANSPORT_CUH
+#define GAMEDEV_SWARM_TRANSPORT_CUH
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 #include <swarm_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // particle state access
-// =========================================================================================================================
+// =====================================================================================================================
 
 // load one particle's spherical position and stored momentum-like velocity variables
 __device__ __forceinline__
@@ -143,16 +143,18 @@ void _apply_diffusion_boundary (real &x, real &y, real &z)
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // staggered semi-analytic transport
-// =========================================================================================================================
+// =====================================================================================================================
 
 // drift the spherical position through the first half-step with the initial velocity
 __device__ __forceinline__
-void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i, real lz_i, 
+void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i, real lz_i,
     real &x_1, real &y_1, real &z_1)
 {
     // advance from the initial state i to the staggered midpoint position 1
+    // for planar motion with frozen radial velocity, integrating l_phi/r(t)^2 gives h*l_phi/(r_i*r_1), h=dt/2
+    // this is a continuous angular drift, with no integer-cell remap or residual FARGO velocity
     y_1 = y_i + 0.5*vy_i*dt;
     if constexpr (N_Z == 1)
     {
@@ -174,11 +176,11 @@ void _get_force_term (real y, real z, real R, real lx, real lz, real beta, real 
     torq_z = (N_Z > 1) ? lx*lx / R / R / sin(z)*cos(z) : 0.0;
 }
 
-// Integrator stages with prescribed midpoint environment; production and tests share this body.
-// DragFree selects the exact zero-relaxation limit for the Kepler reference tests.
+// advance the staggered drag-force stages with a prescribed midpoint environment; production and tests share this body
+// DragFree selects the exact zero-relaxation limit for the Kepler reference tests
 template<bool DragFree = false, typename Force>
 __device__ __forceinline__
-void _ssa_advance(real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
+void _ssa_advance (real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
     real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1,
     real &x_j, real &y_j, real &z_j, real &lx_j, real &vy_j, real &lz_j, Force force)
 {
@@ -214,11 +216,14 @@ void _ssa_advance(real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
     real lz_1 = (1.0 - relax_z1)*lz_i + resp_z1*(inv_ts1*lz_g1 + torq_z1);
     #else  // NO PR_EFFECT
     real lx_1, vy_1, lz_1;
-    if constexpr (DragFree) {
+    if constexpr (DragFree)
+    {
         lx_1 = lx_i;
         vy_1 = vy_i + 0.5*dt*(grav_y1 + cent_y1);
         lz_1 = lz_i + 0.5*dt*torq_z1;
-    } else {
+    }
+    else
+    {
         lx_1 = lx_i + (lx_g1 - lx_i)*(1.0 - exp(-0.5*tau_1));
         vy_1 = vy_i + ((grav_y1 + cent_y1)*ts_1 + vy_g1 - vy_i)*(1.0 - exp(-0.5*tau_1));
         lz_1 = lz_i + (torq_z1*ts_1 + lz_g1 - lz_i)*(1.0 - exp(-0.5*tau_1));
@@ -243,11 +248,14 @@ void _ssa_advance(real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
     vy_j = (1.0 - relax_yj)*vy_i + resp_yj*(inv_ts1*vy_g1 + grav_y2 + cent_y2);
     lz_j = (1.0 - relax_zj)*lz_i + resp_zj*(inv_ts1*lz_g1 + torq_z2);
     #else  // NO PR_EFFECT
-    if constexpr (DragFree) {
+    if constexpr (DragFree)
+    {
         lx_j = lx_i;
         vy_j = vy_i + dt*(grav_y2 + cent_y2);
         lz_j = lz_i + dt*torq_z2;
-    } else {
+    }
+    else
+    {
         lx_j = lx_i + (lx_g1 - lx_i)*(1.0 - exp(-tau_1));
         vy_j = vy_i + ((grav_y2 + cent_y2)*ts_1 + vy_g1 - vy_i)*(1.0 - exp(-tau_1));
         lz_j = lz_i + (torq_z2*ts_1 + lz_g1 - lz_i)*(1.0 - exp(-tau_1));
@@ -270,7 +278,7 @@ void _ssa_advance(real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
 
 // integrate gas and optional P-R drag analytically at the midpoint and complete the velocity and position update
 __device__ __forceinline__
-void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1, 
+void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1,
     real &x_j, real &y_j, real &z_j, real &lx_j, real &vy_j, real &lz_j
     #ifdef IMPORTGAS
     , const real *dev_gas_velx, const real *dev_gas_vely, const real *dev_gas_velz, const real *dev_gas_dens
@@ -279,13 +287,13 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 {
     real R_1 = _get_cyl_R(y_1, z_1);
     real Z_1 = _get_cyl_Z(y_1, z_1);
-    
+
     real h_g = _get_hg(R_1);
     real omega = _get_omegaK(R_1);
-    
+
     // evaluate the gas velocity used by the midpoint drag solve
     real lx_g1, vy_g1, lz_g1;
-    
+
     #ifdef IMPORTGAS
     if ((dev_gas_velx != nullptr) && (dev_gas_vely != nullptr) && (dev_gas_velz != nullptr))
     {
@@ -293,7 +301,7 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         real loc_x = _get_loc_x(x_1);
         real loc_y = _get_loc_y(y_1);
         real loc_z = _get_loc_z(z_1);
-        
+
         lx_g1 = _interp_field(dev_gas_velx, loc_x, loc_y, loc_z)*R_1;
         vy_g1 = _interp_field(dev_gas_vely, loc_x, loc_y, loc_z);
         lz_g1 = (N_Z > 1) ? _interp_field(dev_gas_velz, loc_x, loc_y, loc_z)*y_1 : 0.0;
@@ -322,11 +330,12 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
     ) / omega;
     _ssa_advance(dt, ts_1, lx_g1, vy_g1, lz_g1, beta, lx_i, vy_i, lz_i,
         x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j,
-        [] (real y, real z, real R, real lx, real lz, real b, real &g, real &c, real &t) {
-            _get_force_term(y,z,R,lx,lz,b,g,c,t);
+        [](real y, real z, real R, real lx, real lz, real b, real &g, real &c, real &t)
+        {
+            _get_force_term(y, z, R, lx, lz, b, g, c, t);
         });
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
-#endif // SWARM_TRANSPORT_CUH
+#endif // GAMEDEV_SWARM_TRANSPORT_CUH

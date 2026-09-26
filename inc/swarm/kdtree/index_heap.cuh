@@ -1,57 +1,60 @@
-#ifndef GAMEDEV_KDTREE_INDEX_HEAP_CUH
-#define GAMEDEV_KDTREE_INDEX_HEAP_CUH
+#ifndef GAMEDEV_SWARM_KDTREE_INDEX_HEAP_CUH
+#define GAMEDEV_SWARM_KDTREE_INDEX_HEAP_CUH
+
+#include <type_traits> // std::conditional_t
 
 #include <gpu.cuh>
-#include <type_traits>
+
+#include <_col_image.cuh>
 
 // retain the exact top-K physical neighbors while filtering inactive particles and periodic duplicate images
 template<int K, typename Node
 #ifdef GAMEDEV_ROCM
     , bool ExternalStorage = false
-#endif
+#endif // GAMEDEV_ROCM
 >
 struct idx_old_heap
 {
     const Node *kdtree_node;
     const unsigned char *dev_active;
     static_assert(K > 0 && K <= 4096, "KD-tree requires 0 < K <= 4096");
-#ifdef GAMEDEV_ROCM
-    // MI300A tuning: private heaps and 64 queries per block are a paired choice.
+    #ifdef GAMEDEV_ROCM
+    // MI300A tuning: private heaps and 64 queries per block are a paired choice
     static constexpr int threads = 64;
-    using private_keys = std::conditional_t<ExternalStorage,unsigned long long*,unsigned long long[K]>;
+    using private_keys = std::conditional_t<ExternalStorage, unsigned long long*, unsigned long long[K]>;
     private_keys near_key;
-    __device__ __forceinline__ unsigned long long get_key(int slot) const
+    __device__ __forceinline__ unsigned long long get_key (int slot) const
     { return near_key[slot]; }
-    __device__ __forceinline__ void set_key(int slot, unsigned long long value)
+    __device__ __forceinline__ void set_key (int slot, unsigned long long value)
     { near_key[slot] = value; }
-#else
-    // Keep per-block heap storage at or below 32 KiB as K increases.
+    #else  // !GAMEDEV_ROCM
+    // keep per-block heap storage at or below 32 KiB as K increases
     static constexpr int threads = K <= 256 ? 16 : K <= 512 ? 8 : K <= 1024 ? 4 : K <= 2048 ? 2 : 1;
     unsigned long long *near_key;
-    __device__ __forceinline__ unsigned long long get_key(int slot) const
+    __device__ __forceinline__ unsigned long long get_key (int slot) const
     { return near_key[threads*slot]; }
-    __device__ __forceinline__ void set_key(int slot, unsigned long long value)
+    __device__ __forceinline__ void set_key (int slot, unsigned long long value)
     { near_key[threads*slot] = value; }
-#endif
+    #endif // GAMEDEV_ROCM
     bool dedup_needed;
 
     __device__ explicit idx_old_heap (
         float search_dist, const Node *tree_node, bool dedup_needed = false,
         const unsigned char *dev_active = nullptr
-#ifdef GAMEDEV_ROCM
+        #ifdef GAMEDEV_ROCM
         , unsigned long long *external_storage = nullptr
-#endif
+        #endif // GAMEDEV_ROCM
         )
         : kdtree_node(tree_node), dev_active(dev_active), dedup_needed(dedup_needed)
     {
-#ifdef GAMEDEV_ROCM
-        if constexpr(ExternalStorage) near_key=external_storage;
-#endif
-#ifndef GAMEDEV_ROCM
+        #ifdef GAMEDEV_ROCM
+        if constexpr(ExternalStorage) near_key = external_storage;
+        #endif // GAMEDEV_ROCM
+        #ifndef GAMEDEV_ROCM
         __shared__ unsigned long long shared_key[K*threads];
         near_key = shared_key + threadIdx.x;
-        // No barrier: each thread initializes and accesses only its own column.
-#endif
+        // no barrier is needed because each thread initializes and accesses only its own column
+        #endif // !GAMEDEV_ROCM
         // initialize a finite max-heap whose invalid identifiers sort after every physical candidate
         unsigned long long empty = encode(search_dist*search_dist, 0xffffffffU);
         #pragma unroll
@@ -142,23 +145,35 @@ struct idx_old_heap
             idx_slot = 0;
         }
 
-        // Retain the selected child value to avoid a dependent scratch reload.
+        // retain the selected child value to avoid a dependent scratch reload
         while (true)
         {
             int idx_child = 2*idx_slot + 1;
-            if (idx_child >= K) { set_key(idx_slot,candidate); break; }
-            unsigned long long child = get_key(idx_child);
-            if (idx_child+1 < K)
+            if (idx_child >= K)
             {
-                unsigned long long right = get_key(idx_child+1);
-                if (right > child) { child=right; ++idx_child; }
+                set_key(idx_slot, candidate);
+                break;
             }
-            if (child < candidate) { set_key(idx_slot,candidate); break; }
-            set_key(idx_slot,child);
-            idx_slot=idx_child;
+            unsigned long long child = get_key(idx_child);
+            if (idx_child + 1 < K)
+            {
+                unsigned long long right = get_key(idx_child + 1);
+                if (right > child)
+                {
+                    child = right;
+                    ++idx_child;
+                }
+            }
+            if (child < candidate)
+            {
+                set_key(idx_slot, candidate);
+                break;
+            }
+            set_key(idx_slot, child);
+            idx_slot = idx_child;
         }
         return expandedCullDist2();
     }
 };
 
-#endif // GAMEDEV_KDTREE_INDEX_HEAP_CUH
+#endif // GAMEDEV_SWARM_KDTREE_INDEX_HEAP_CUH

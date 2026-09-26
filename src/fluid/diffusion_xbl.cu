@@ -1,13 +1,13 @@
 #ifdef DIFFUSION
 
+#include <fluid_kern.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
-#include <fluid_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_xbl
 // purpose: solve periodic Crank-Nicolson diffusion cooperatively in block-shared memory
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
@@ -116,7 +116,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
-        // reconstruct the time-centred periodic diffusive mass flux
+        // reconstruct the time-centered periodic diffusive mass flux
         for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
         {
             int ixp1 = (ix + 1) % N_X;

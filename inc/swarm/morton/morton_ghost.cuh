@@ -1,16 +1,17 @@
-#ifndef GAMEDEV_MORTON_GHOST_CUH
-#define GAMEDEV_MORTON_GHOST_CUH
+#ifndef GAMEDEV_SWARM_MORTON_GHOST_CUH
+#define GAMEDEV_SWARM_MORTON_GHOST_CUH
 
 #include <cmath>                         // fabsf, fminf, sinf
 #include <cstddef>                       // std::size_t
 #include <stdexcept>                     // std::invalid_argument
 
-#include <gpu.cuh>                // CUDA allocation and kernel-launch API
+#include <gpu.cuh>                // GPU allocation and kernel-launch API
+
 #include <thrust/device_ptr.h>           // thrust::device_ptr
 #include <thrust/execution_policy.h>     // thrust::device
 #ifdef GAMEDEV_ROCM
 #include <thrust/system/hip/execution_policy.h> // GPU_THRUST_DEVICE
-#endif
+#endif // GAMEDEV_ROCM
 #include <thrust/scan.h>                 // thrust::exclusive_scan
 
 #include <_collision.cuh>
@@ -186,4 +187,4 @@ private:
     bool unique_ids_ = true;
 };
 
-#endif // GAMEDEV_MORTON_GHOST_CUH
+#endif // GAMEDEV_SWARM_MORTON_GHOST_CUH

@@ -5,12 +5,12 @@
 #include <swarm_grid.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: ssa_substep_2
 // apply attenuated radiation, gravity, gas drag, and optional P-R drag at midpoint and complete the transport step
 //
 // parallelization: one thread per representative particle after midpoint optical-depth reconstruction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
@@ -60,6 +60,6 @@ void ssa_substep_2 (swarm *dev_particle, const real *dev_optdepth,
     _save_particle(dev_particle, idx, x_j, y_j, z_j, lx_j, vy_j, lz_j);
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // RADIATION

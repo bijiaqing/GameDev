@@ -1,14 +1,14 @@
-#ifndef SWARM_GRID_CUH
-#define SWARM_GRID_CUH
+#ifndef GAMEDEV_SWARM_GRID_CUH
+#define GAMEDEV_SWARM_GRID_CUH
 
 #include <cfloat>                   // DBL_MAX
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // interpolation stencil
-// =========================================================================================================================
+// =====================================================================================================================
 
 struct interp
 {
@@ -16,11 +16,11 @@ struct interp
     real frac_x, frac_y, frac_z;    // weights assigned to neighboring cells
 };
 
-// =========================================================================================================================
+// =====================================================================================================================
 // one-dimensional interpolation weights
-// =========================================================================================================================
+// =====================================================================================================================
 
-// construct periodic azimuthal cell-centred interpolation weights
+// construct periodic azimuthal cell-centered interpolation weights
 __device__ __forceinline__
 void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
 {
@@ -69,7 +69,7 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
     }
 }
 
-// construct logarithmic-radial interpolation weights for cell centres or outer faces
+// construct logarithmic-radial interpolation weights for cell centers or outer faces
 __device__ __forceinline__
 void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool outer_face = false)
 {
@@ -82,7 +82,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     {
         real dy = _get_dy();
         real ref_y;
-        
+
         if (outer_face)
         {
             ref_y = 1.0;
@@ -90,11 +90,12 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
         else
         {
             real mesh_dim = _get_mesh_dim();
-            
-            // place cell-centred values at the exact centroid of the represented disk measure
-            ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(dy, mesh_dim + 1.0) - 1.0) / (pow(dy, mesh_dim) - 1.0)) / log(dy);
+
+            // place cell-centered values at the exact centroid of the represented disk measure
+            ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(dy, mesh_dim + 1.0) - 1.0) / (pow(dy, mesh_dim) - 1.0))
+                / log(dy);
         }
-        
+
         bool bound_y = outer_face
             ? loc_y < ref_y || loc_y > static_cast<real>(N_Y) + ref_y - 1.0
             : loc_y <= ref_y || loc_y >= static_cast<real>(N_Y) + ref_y - 1.0;
@@ -129,7 +130,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
             }
             else
             {
-                // clamp a cell-centred stencil rather than reaching beyond the radial domain
+                // clamp a cell-centered stencil rather than reaching beyond the radial domain
                 frac_y = 0.0;
                 next_y = 0;
             }
@@ -137,7 +138,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     }
 }
 
-// construct nonperiodic polar cell-centred interpolation weights
+// construct nonperiodic polar cell-centered interpolation weights
 __device__ __forceinline__
 void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
 {
@@ -150,7 +151,7 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
     {
         real ref_z = 0.5;
         bool bound_z = loc_z <= ref_z || loc_z >= static_cast<real>(N_Z) + ref_z - 1.0;
-        
+
         if (!bound_z)
         {
             if (deci_z >= ref_z)
@@ -173,9 +174,9 @@ void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // multidimensional interpolation stencil
-// =========================================================================================================================
+// =====================================================================================================================
 
 // combine the directional weights and flattened neighbor offsets into one trilinear stencil
 __device__ __forceinline__
@@ -197,16 +198,16 @@ interp _3d_interp (real loc_x, real loc_y, real loc_z, bool outer_face = false)
     return {next_x, next_y, next_z, frac_x, frac_y, frac_z};
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // grid-to-particle interpolation
-// =========================================================================================================================
+// =====================================================================================================================
 
 // interpolate a scalar grid field at continuous index coordinates with optional radial outer-face centring
 __device__ __forceinline__
 real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z, bool outer_face = false)
 {
     #ifdef HALF_DISK
-    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-6);
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-06);
     #endif // HALF_DISK
 
     if (outer_face) // optical depth is defined on radial outer faces
@@ -241,11 +242,11 @@ real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z
     return value;
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // particle-to-grid deposition
-// =========================================================================================================================
+// =====================================================================================================================
 
-// deposit one particle weight to its cell-centred trilinear grid stencil
+// deposit one particle weight to its cell-centered trilinear grid stencil
 __device__ __forceinline__
 void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, real weight)
 {
@@ -254,7 +255,7 @@ void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, rea
     real loc_z = _get_loc_z(dev_particle[idx].position.z);
 
     #ifdef HALF_DISK
-    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1e-6);
+    loc_z = fmin(loc_z, static_cast<real>(N_Z) - 1.0e-06);
     #endif // HALF_DISK
 
     if (!_is_in_bounds(loc_x, loc_y, loc_z)) return;
@@ -275,6 +276,6 @@ void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, rea
     atomicAdd(&dev_grid_out[idx_cell + next_x + next_y + next_z],        frac_x *       frac_y *       frac_z *weight);
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
-#endif // SWARM_GRID_CUH
+#endif // GAMEDEV_SWARM_GRID_CUH

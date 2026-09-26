@@ -2,11 +2,11 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_ybl
 // purpose: reproduce the thread-sweep radial SSPRK and PPM update with one cooperative block per column
 // workspace: reuse 12 explicit full-grid fields and retain serial invariant-domain correction order within each column
-// =========================================================================================================================
+// =====================================================================================================================
 
 __device__ __forceinline__
 void _block_y_lowflux (
@@ -158,6 +158,7 @@ void advection_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
         __syncthreads();
 
+        // publish the staged low-order density only after every cell has read the old neighbor densities
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             rhod[iy] = rhod_low[iy];

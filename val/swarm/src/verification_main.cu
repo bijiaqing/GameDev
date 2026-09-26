@@ -21,19 +21,21 @@
 std::mt19937 rand_generator;
 #endif // TEST_INITIAL_3D
 
-#if !defined(TEST_DIFFUSION_1D) && !defined(TEST_DIFFUSION_2D)  && !defined(TEST_DIFFUSION_3D) && !defined(TEST_DIFFUSION_WEDGE_2D)  && !defined(TEST_DIFFUSION_WEDGE_3D) && !defined(TEST_INITIAL_3D)  && !defined(TEST_PRDRAG_2D)
+#if !defined(TEST_DIFFUSION_1D) && !defined(TEST_DIFFUSION_2D) && !defined(TEST_DIFFUSION_3D) \
+    && !defined(TEST_DIFFUSION_WEDGE_2D) && !defined(TEST_DIFFUSION_WEDGE_3D) && !defined(TEST_INITIAL_3D) \
+    && !defined(TEST_PRDRAG_2D)
 #error "shared swarm driver received an unsupported publication case"
-#endif
+#endif // TEST_* case selection
 
 namespace
 {
 
-// =========================================================================================================================
+// =====================================================================================================================
 // shared GPU driver for retained swarm publication cases
 //
 // each branch launches the production operator wherever a closed-form or statistical reference exists; the host-only
 // initialization branch records its continuous sampler and mass normalization for independent Python reconstruction
-// =========================================================================================================================
+// =====================================================================================================================
 
 const std::string output_path = PATH_OUT;
 
@@ -59,21 +61,21 @@ std::string suffix ()
 
 const char *case_name ()
 {
-#if defined(TEST_DIFFUSION_1D)
+    #if defined(TEST_DIFFUSION_1D)
     return "diffusion_1d";
-#elif defined(TEST_DIFFUSION_2D)
+    #elif defined(TEST_DIFFUSION_2D)
     return "diffusion_2d";
-#elif defined(TEST_DIFFUSION_3D)
+    #elif defined(TEST_DIFFUSION_3D)
     return "diffusion_3d";
-#elif defined(TEST_DIFFUSION_WEDGE_2D)
+    #elif defined(TEST_DIFFUSION_WEDGE_2D)
     return "diffusion_wedge_2d";
-#elif defined(TEST_DIFFUSION_WEDGE_3D)
+    #elif defined(TEST_DIFFUSION_WEDGE_3D)
     return "diffusion_wedge_3d";
-#elif defined(TEST_INITIAL_3D)
+    #elif defined(TEST_INITIAL_3D)
     return "initial_3d";
-#else
+    #else  // other TEST_* cases
     return "prdrag_2d";
-#endif
+    #endif // TEST_* case selection
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -100,7 +102,7 @@ void write_state (const std::vector<swarm> &particle, const std::string &name = 
     }
     write_binary(name, state);
 
-#ifdef MULTISIZE
+    #ifdef MULTISIZE
     std::vector<real> species(2*N_P);
     for (int idx = 0; idx < N_P; idx++)
     {
@@ -108,7 +110,7 @@ void write_state (const std::vector<swarm> &particle, const std::string &name = 
         species[N_P + idx] = particle[idx].par_numr;
     }
     write_binary("species", species);
-#endif
+    #endif // MULTISIZE
 }
 
 void write_meta (real dt, real time)
@@ -146,8 +148,9 @@ void copy_state_from_device (std::vector<swarm> &particle, const swarm *dev_part
 
 int main ()
 {
-#ifdef TEST_INITIAL_3D
-    // sample the exact finite-domain distribution and verify mass normalization without a grid-dependent vertical histogram
+    #ifdef TEST_INITIAL_3D
+    // sample the exact finite-domain distribution and verify mass normalization without a grid-dependent vertical
+    // histogram
     std::vector<real> mass_bank;
     initmass_calc(mass_bank);
     real total_dust_mass = get_total_dust_mass(mass_bank);
@@ -203,13 +206,14 @@ int main ()
     write_binary("mass_bank", mass_bank);
     write_binary("mass_summary", mass_summary);
     write_meta(0.0, 0.0);
-#else
+    #else  // !TEST_INITIAL_3D
     std::vector<swarm> particle(N_P);
     swarm *dev_particle = nullptr;
     gpu_check(gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(swarm)*N_P), "allocate particles");
 
-#ifdef TEST_PRDRAG_2D
-    // isolate one production radiation substep so P-R damping can be compared with its exact constant-coefficient update
+    #ifdef TEST_PRDRAG_2D
+    // isolate one production radiation substep so P-R damping can be compared with its exact constant-coefficient
+    // update
     for (int idx = 0; idx < N_P; idx++)
     {
         particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
@@ -226,50 +230,50 @@ int main ()
     ssa_substep_2 <<< NB_P, TPB >>> (dev_particle, dev_optdepth, 1.0, dt);
     kernel_check("P-R drag response");
     gpu_check(gpuFree(dev_optdepth), "free optical depth");
-#else
+    #else  // !TEST_PRDRAG_2D
     // apply one reproducible production SDE displacement for pathwise analytical reconstruction
     for (int idx = 0; idx < N_P; idx++)
     {
-#if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+        #if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
         real seam_offset = 0.005;
         real x = (idx % 2 == 0) ? X_MIN + seam_offset : X_MAX - seam_offset;
-#ifdef TEST_DIFFUSION_WEDGE_3D
-        // Stay one gas scale height off the midplane so Stokes-dependent diffusion can cross the seam.
+        #ifdef TEST_DIFFUSION_WEDGE_3D
+        // stay one gas scale height off the midplane so Stokes-dependent diffusion can cross the seam
         real z = 0.5*M_PI - std::atan(ASPR_0);
         real lz = 0.12;
-#else
+        #else  // !TEST_DIFFUSION_WEDGE_3D
         real z = 0.5*M_PI;
         real lz = 0.0;
-#endif
+        #endif // TEST_DIFFUSION_WEDGE_3D
         particle[idx].position = make_double3(x, 1.0, z);
         particle[idx].velocity = make_double3(0.7, 0.2, lz);
-#else
+        #else  // !(TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D)
         particle[idx].position = make_double3(0.0, 1.0, 0.5*M_PI);
         particle[idx].velocity = make_double3(0.7, 0.2, 0.0);
-#endif
+        #endif // TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D
     }
-#if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+    #if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
     write_state(particle, "state_initial");
-#endif // TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D
+    #endif // TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D
     gpu_check(gpuMemcpy(dev_particle, particle.data(), sizeof(swarm)*N_P, gpuMemcpyHostToDevice), "upload particles");
     curs *dev_rngstate = nullptr;
     gpu_check(gpuMalloc(reinterpret_cast<void **>(&dev_rngstate), sizeof(curs)*N_P), "allocate random states");
     rngstate_init <<< NB_P, TPB >>> (dev_rngstate, 17);
-#if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+    #if defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
     real dt = 0.002;
-#else
+    #else  // !(TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D)
     real dt = 0.02;
-#endif
+    #endif // TEST_DIFFUSION_WEDGE_2D || TEST_DIFFUSION_WEDGE_3D
     diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, dt);
     kernel_check("diffusion_pos");
     gpu_check(gpuFree(dev_rngstate), "free random states");
-#endif
+    #endif // TEST_PRDRAG_2D
 
     copy_state_from_device(particle, dev_particle);
     write_state(particle);
     write_meta(dt, dt);
     gpu_check(gpuFree(dev_particle), "free particles");
-#endif
+    #endif // TEST_INITIAL_3D
 
     std::cout << "swarm verification case " << case_name() << " completed at N=" << VERIFY_RES << std::endl;
     return 0;

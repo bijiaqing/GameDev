@@ -9,8 +9,8 @@
 
 #include <gpu.cuh>
 
-#include <fluid_kern.cuh>
 #include <fluid_host.cuh>
+#include <fluid_kern.cuh>
 
 const std::string PATH = PATH_OUT;
 
@@ -60,7 +60,7 @@ int main (int argc, char **argv)
     require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
     require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
 
-    #else
+    #else  // !GAMEDEV_ROCM
     // opt in to the dynamic shared-memory footprint required by each block-owned diffusion line
     GPU_CHECK(gpuFuncSetAttribute(
         diffusion_xbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
@@ -74,7 +74,7 @@ int main (int argc, char **argv)
         diffusion_zbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*6*N_Z
     ));
-    #endif
+    #endif // GAMEDEV_ROCM
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 
@@ -113,7 +113,7 @@ int main (int argc, char **argv)
             int idx_bad = bad_cell - 1;
             int ix_bad = idx_bad % N_X;
             int iy_bad = (idx_bad / N_X) % N_Y;
-            int iz_bad = idx_bad / (N_X * N_Y);
+            int iz_bad = idx_bad / (N_X*N_Y);
 
             std::cerr
             << "Error: non-finite simulation state at cell ("
@@ -179,7 +179,7 @@ int main (int argc, char **argv)
         if (!save_variable(PATH + "variables.txt"))
         {
             std::cerr << "Error: failed to save simulation parameters" << std::endl;
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
 
         SAVE_DUSTDENS_TO_FILE(idx_from);
@@ -197,7 +197,7 @@ int main (int argc, char **argv)
         if (!(frame_stream >> idx_from))
         {
             std::cerr << "Error: invalid resume frame number: " << argv[1] << "\n";
-            return 1;
+            std::exit(EXIT_FAILURE);
         }
 
         LOAD_DUSTDATA_TO_VRAM(idx_from);
@@ -242,7 +242,8 @@ int main (int argc, char **argv)
     auto recalc_dt_cfl = [&](bool verbose)
     {
         cfl_rate_calc <<< NB_X, TPB >>> (
-            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely,
+            dev_dustvelz
         );
         GPU_KERNEL_CHECK("cfl_rate_calc");
 
@@ -270,7 +271,7 @@ int main (int argc, char **argv)
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt_sub
             );
             GPU_KERNEL_CHECK("advection_xbl");
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_sub
             );
@@ -300,7 +301,7 @@ int main (int argc, char **argv)
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dev_adv_work, dt_sub
             );
             GPU_KERNEL_CHECK("advection_ybl");
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_yth <<< NB_Y, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dt_sub
             );
@@ -330,7 +331,7 @@ int main (int argc, char **argv)
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dev_adv_work, dt_sub
             );
             GPU_KERNEL_CHECK("advection_zbl");
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_zth <<< NB_Z, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt_sub
             );
@@ -358,7 +359,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_ybl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_yth <<< NB_Y, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
@@ -376,7 +377,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_xbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_xth <<< NB_X, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
@@ -394,7 +395,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_zbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_zth <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
@@ -442,7 +443,7 @@ int main (int argc, char **argv)
         real beta_taper = taper_raw*taper_raw*(3.0 - 2.0*taper_raw);
         #endif // RADIATION
 
-        // advance the centred source operator and synchronize conserved momentum
+        // advance the centered source operator and synchronize conserved momentum
         source_update <<< NB_G, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
             #ifdef RADIATION
@@ -483,7 +484,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_ybl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_zth <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );

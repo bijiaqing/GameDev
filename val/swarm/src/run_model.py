@@ -1,50 +1,59 @@
 #!/usr/bin/env python3
 
-"""Build, execute, and validate one swarm test model"""
+"""build, execute, and validate one swarm test model"""
 
 from __future__ import annotations
-
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 import argparse
 import json
 import math
+import os
 import subprocess
+import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 from validate_case import analyze as default_analyze
 
 VAL_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND, TARGET_ENV, DEFAULT_TARGET, backend_environment
-
-from val_config import PUBLICATION_TIER, model_analyzer, model_executable, swarm_resolution_tiers
+from val_config import (
+    BACKEND,
+    DEFAULT_TARGET,
+    PUBLICATION_TIER,
+    TARGET_ENV,
+    backend_environment,
+    model_analyzer,
+    model_executable,
+    model_output,
+    swarm_resolution_tiers,
+)
 
 COLPHYS_MODELS = {"test_colphys_code", "test_colphys_cgs", "test_colphys_3d"}
 
 
 def orders(errors: list[float]) -> list[float]:
-    """Calculate pairwise orders while tolerating an exactly zero error"""
+    """calculate pairwise orders while tolerating an exactly zero error"""
 
     result = []
-    for coarse, fine in zip(errors[:-1], errors[1:]):
-        result.append(math.log(coarse/fine, 2.0) if coarse > 0.0 and fine > 0.0 else float("nan"))
+    for coarse, fine in zip(errors[:-1], errors[1:], strict=True):
+        result.append(math.log(coarse / fine, 2.0) if coarse > 0.0 and fine > 0.0 else float("nan"))
     return result
 
 
 def capture(command: list[str], cwd: Path) -> str:
-    """Capture optional cluster diagnostics without making them test requirements"""
+    """capture optional cluster diagnostics without making them test requirements"""
 
     try:
         result = subprocess.run(
-            command, cwd=cwd, check=False, text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            command,
+            cwd=cwd,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
         )
         return result.stdout.strip()
     except OSError as error:
@@ -52,23 +61,21 @@ def capture(command: list[str], cwd: Path) -> str:
 
 
 def clean_results(out_dir: Path) -> None:
-    """Remove every artifact owned by one analytical model before a new run"""
+    """remove every artifact owned by one analytical model before a new run"""
 
     for pattern in ("*.dat", "meta_N*.json", "meta_N*.txt", "metrics_N*.json"):
         for path in out_dir.glob(pattern):
             path.unlink()
     for name in ("environment.json", "environment.txt", "manifest.json"):
-        (out_dir/name).unlink(missing_ok=True)
+        (out_dir / name).unlink(missing_ok=True)
 
 
 def print_record(record: dict) -> None:
-    """Print the errors and statistical ratios that actually determine PASS"""
+    """print the errors and statistical ratios that actually determine PASS"""
 
     labels = []
     for name, values in record.get("errors", {}).items():
-        labels.append(
-            f"{name}: L2={values['l2']:.6e} Linf={values['linf']:.6e}"
-        )
+        labels.append(f"{name}: L2={values['l2']:.6e} Linf={values['linf']:.6e}")
     if "mass_relative_change" in record:
         labels.append(f"mass={record['mass_relative_change']:.6e}")
     for name, values in record.get("statistics", {}).items():
@@ -81,7 +88,7 @@ def print_record(record: dict) -> None:
 
 
 def combine_search_records(search_records: dict[str, dict]) -> dict:
-    """Retain one metric record while requiring both physical search paths to pass"""
+    """retain one metric record while requiring both physical search paths to pass"""
 
     record = dict(search_records["morton"])
     record["collision_search"] = "both"
@@ -106,7 +113,7 @@ def combine_search_records(search_records: dict[str, dict]) -> dict:
 
 
 def run(model: str) -> None:
-    """Compile every requested resolution, validate it, and write one model manifest"""
+    """compile every requested resolution, validate it, and write one model manifest"""
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--res", nargs="+", type=int, default=[32, 64, 128, 256])
@@ -115,10 +122,8 @@ def run(model: str) -> None:
 
     project_root = Path(__file__).resolve().parents[3]
     analyze = model_analyzer(project_root, "swarm", model, default_analyze)
-    swarm_root = Path(__file__).resolve().parents[1]
-    model_dir = swarm_root/"mod"/model
     scope = os.environ.get("VAL_SCOPE", "manual")
-    out_dir = model_output(project_root/"val", "swarm", model, BACKEND, scope=scope)
+    out_dir = model_output(project_root / "val", "swarm", model, BACKEND, scope=scope)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.build_only:
@@ -127,8 +132,11 @@ def run(model: str) -> None:
         # keep compiler, GPU, and driver information beside the numerical metrics
         # this is especially important for stochastic tests and CUDA regressions,
         # whose performance and last-bit results can depend on the environment
-        environment = {**backend_environment(capture, project_root), "gpu_target": os.environ.get(TARGET_ENV, DEFAULT_TARGET)}
-        (out_dir/"environment.json").write_text(
+        environment = {
+            **backend_environment(capture, project_root),
+            "gpu_target": os.environ.get(TARGET_ENV, DEFAULT_TARGET),
+        }
+        (out_dir / "environment.json").write_text(
             json.dumps(environment, indent=2, sort_keys=True) + "\n"
         )
 
@@ -144,7 +152,7 @@ def run(model: str) -> None:
         search_records = {}
         record = None
         for search in searches:
-            run_out_dir = out_dir if search is None else out_dir/search
+            run_out_dir = out_dir if search is None else out_dir / search
             if not args.build_only:
                 run_out_dir.mkdir(parents=True, exist_ok=True)
                 if run_out_dir not in cleaned_output_dirs:
@@ -152,7 +160,9 @@ def run(model: str) -> None:
                     cleaned_output_dirs.add(run_out_dir)
 
             make_options = [
-                f"MODEL={model}", f"GPU_BACKEND={BACKEND}", f"GPU_TARGET={target}",
+                f"MODEL={model}",
+                f"GPU_BACKEND={BACKEND}",
+                f"GPU_TARGET={target}",
                 f"VAL_SCOPE={scope}",
             ]
             if search is not None:
@@ -160,12 +170,26 @@ def run(model: str) -> None:
 
             # every test constant is compiled into CUDA code; cleaning prevents an
             # object built for a previous TEST_RES value from being reused
-            subprocess.run([
-                "make", "-C", str(project_root), *make_options, "clean",
-            ], check=True)
-            subprocess.run([
-                "make", "-C", str(project_root), *make_options, f"RES={resolution}",
-            ], check=True)
+            subprocess.run(
+                [
+                    "make",
+                    "-C",
+                    str(project_root),
+                    *make_options,
+                    "clean",
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "make",
+                    "-C",
+                    str(project_root),
+                    *make_options,
+                    f"RES={resolution}",
+                ],
+                check=True,
+            )
             if args.build_only:
                 continue
             executable = model_executable(project_root, model, BACKEND, "swarm")
@@ -191,7 +215,9 @@ def run(model: str) -> None:
         if search_records:
             record = combine_search_records(search_records)
         record["tier"] = tier_by_resolution[resolution]
-        (out_dir/f"metrics_N{resolution}.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+        (out_dir / f"metrics_N{resolution}.json").write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n"
+        )
         records.append(record)
 
     if not records:
@@ -203,8 +229,7 @@ def run(model: str) -> None:
     minimum_order = float(records[0].get("minimum_order", 0.0))
     if convergence_field and len(records) > 1:
         convergence_errors = [
-            float(record["errors"][convergence_field]["l1"])
-            for record in records
+            float(record["errors"][convergence_field]["l1"]) for record in records
         ]
         if all(error > 0.0 for error in convergence_errors):
             convergence_orders = orders(convergence_errors)
@@ -231,9 +256,7 @@ def run(model: str) -> None:
         },
         "passed": passed,
     }
-    (out_dir/"manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    )
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
     print(f"\n{model}: {'PASS' if passed else 'FAIL'}")
     for record in records:

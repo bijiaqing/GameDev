@@ -10,7 +10,7 @@
 
 #include <gpu.cuh> // CUDA allocation, copies, and kernel launches
 
-#include "periodic_query.cuh"
+#include <periodic_query.cuh>
 
 // verify periodic query-image selection and physical-id deduplication against brute-force wedge geometry
 
@@ -205,7 +205,7 @@ periodic_case make_full_disk (int dim)
 
 periodic_case make_period_limit (int dim, bool use_images)
 {
-    float deficit = (use_images ? 2.0f : 0.5f)*1.0e-6f;
+    float deficit = (use_images ? 2.0f : 0.5f)*1.0e-06f;
     float width = 2.0f*static_cast<float>(M_PI) - deficit;
     float x_min = -0.5f*width;
     float x_max =  0.5f*width;
@@ -238,10 +238,12 @@ bool run_case (const periodic_case &test)
     std::size_t output_count = test.queries.size()*K;
 
     _morton_gpu_check(gpuMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate periodic points");
-    _morton_gpu_check(gpuMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate periodic queries");
+    _morton_gpu_check(gpuMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()),
+        "allocate periodic queries");
     _morton_gpu_check(gpuMalloc((void**)&dev_query_x, sizeof(float)*test.query_x.size()), "allocate query azimuths");
     _morton_gpu_check(gpuMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate periodic near_idx_old");
-    _morton_gpu_check(gpuMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate periodic near_dist_sq");
+    _morton_gpu_check(gpuMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count),
+        "allocate periodic near_dist_sq");
     _morton_gpu_check(gpuMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate periodic overflow flags");
     _morton_gpu_check(gpuMalloc((void**)&dev_image_count, sizeof(unsigned int)*test.queries.size()),
@@ -314,7 +316,7 @@ bool run_case (const periodic_case &test)
         for (std::size_t idx_neighbor = 0; idx_neighbor < common; idx_neighbor++)
         {
             float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
-            bool distance_matches = error <= 2.0e-6f
+            bool distance_matches = error <= 2.0e-06f
                 *std::max(1.0f, std::fabs(expected[idx_neighbor].first));
             if (actual[idx_neighbor].second == expected[idx_neighbor].second && distance_matches) continue;
 
@@ -332,7 +334,7 @@ bool run_case (const periodic_case &test)
         }
     }
 
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     _morton_gpu_check(gpuFree(dev_image_count), "release image counts");
     _morton_gpu_check(gpuFree(dev_stack_overflow), "release overflow flags");
     _morton_gpu_check(gpuFree(dev_near_dist_sq), "release neighbor distances");
@@ -340,15 +342,15 @@ bool run_case (const periodic_case &test)
     _morton_gpu_check(gpuFree(dev_query_x), "release query azimuths");
     _morton_gpu_check(gpuFree(dev_query_point), "release query points");
     _morton_gpu_check(gpuFree(dev_point), "release indexed points");
-#else
-    gpuFree(dev_image_count);
-    gpuFree(dev_stack_overflow);
-    gpuFree(dev_near_dist_sq);
-    gpuFree(dev_near_idx_old);
-    gpuFree(dev_query_x);
-    gpuFree(dev_query_point);
-    gpuFree(dev_point);
-#endif
+    #else  // !GAMEDEV_ROCM
+    static_cast<void>(gpuFree(dev_image_count));
+    static_cast<void>(gpuFree(dev_stack_overflow));
+    static_cast<void>(gpuFree(dev_near_dist_sq));
+    static_cast<void>(gpuFree(dev_near_idx_old));
+    static_cast<void>(gpuFree(dev_query_x));
+    static_cast<void>(gpuFree(dev_query_point));
+    static_cast<void>(gpuFree(dev_point));
+    #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;

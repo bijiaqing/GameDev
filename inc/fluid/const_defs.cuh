@@ -1,19 +1,20 @@
-#include <gpu.cuh>
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
+#ifndef GAMEDEV_FLUID_CONST_DEFS_CUH
+#define GAMEDEV_FLUID_CONST_DEFS_CUH
 
 #include <cmath>       // M_PI
 
+#include <gpu.cuh>
+
 using real = double;
 
-// =========================================================================================================================
+// =====================================================================================================================
 // code units
 
-const real  G           = 1.0;
-const real  M_S         = 1.0;
-const real  R_0         = 1.0;
+constexpr real  G           = 1.0;
+constexpr real  M_S         = 1.0;
+constexpr real  R_0         = 1.0;
 
-// =========================================================================================================================
+// =====================================================================================================================
 // mesh domain size and resolution
 
 constexpr int  N_X      = 1024;
@@ -28,63 +29,63 @@ constexpr int  N_Z      = 1;
 constexpr real Z_MIN    = 0.5*M_PI;
 constexpr real Z_MAX    = 0.5*M_PI;
 
-// =========================================================================================================================
+// =====================================================================================================================
 // gas parameters
 
-const real  SIGMA_0     = 1.0e-02;
-const real  ASPR_0      = 0.05;
-const real  IDX_P       = -1.0;         // radial power-law index of the gas surface density
-const real  IDX_Q       = -0.4;         // radial power-law index of the gas temperature
+constexpr real  SIGMA_0     = 1.0e-02;
+constexpr real  ASPR_0      = 0.05;
+constexpr real  IDX_P       = -1.0;         // radial power-law index of the gas surface density
+constexpr real  IDX_Q       = -0.4;         // radial power-law index of the gas temperature
 
 #ifdef DIFFUSION
 #ifndef CONST_NU  // CONST_ALPHA
-const real  ALPHA       = 1.0e-03;
-#else             // CONST_NU
-const real  NU          = 1.0e-05;
+constexpr real  ALPHA       = 1.0e-03;
+#else  // CONST_NU
+constexpr real  NU          = 1.0e-05;
 #endif // CONST_NU
 #endif // DIFFUSION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // dust parameters
 
-const real  METAL_Z     = 1.0e-02;      // dust-to-gas surface-density ratio for initialization
-const real  STOKES_0    = 1.0e-03;
+constexpr real  METAL_Z     = 1.0e-02;      // dust-to-gas surface-density ratio for initialization
+constexpr real  STOKES_0    = 1.0e-03;
 
 #ifdef RADIATION
-const real  BETA_0      = 1.0e+01;      // radiation-pressure-to-gravity ratio
-const real  KAPPA_0     = 5.0e+04;      // opacity coefficient
-const real  T_BETA      = 2.0*M_PI;     // smoothly turn radiation on over time
+constexpr real  BETA_0      = 1.0e+01;      // radiation-pressure-to-gravity ratio
+constexpr real  KAPPA_0     = 5.0e+04;      // opacity coefficient
+constexpr real  T_BETA      = 2.0*M_PI;     // smoothly turn radiation on over time
 #endif // RADIATION
 
 #ifdef DIFFUSION
-const real  SCHMIDT_X   = 1.0e+20;      // azimuthal Schmidt number in spherical X
-const real  SCHMIDT_Y   = 1.0e+20;      // radial Schmidt number in spherical Y
-const real  SCHMIDT_Z   = 1.0;          // polar Schmidt number in spherical Z
-const real  POS_LIMIT   = 0.9;          // limit for the dust density positivity limiter
+constexpr real  SCHMIDT_X   = 1.0;          // azimuthal Schmidt number in spherical X
+constexpr real  SCHMIDT_Y   = 1.0;          // radial Schmidt number in spherical Y
+constexpr real  SCHMIDT_Z   = 1.0;          // polar Schmidt number in spherical Z
+constexpr real  POS_LIMIT   = 0.9;          // limit for the dust density positivity limiter
 #endif // DIFFUSION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // time step and output
 
-const int  SAVE_MAX     = 100;
-const real DT_OUT       = 2.0*M_PI;     // output interval
-const real DT_MAX       = 1.0e-01;
+constexpr int  SAVE_MAX     = 100;
+constexpr real DT_OUT       = 2.0*M_PI;     // output interval
+constexpr real DT_MAX       = 1.0e-01;
 
 constexpr real CFL_DYN  = 0.45;         // CFL number for the explicit advection step (0 < CFL_DYN <= 0.5)
-const real RHO_VAC      = 1.0e-30;      // vacuum density for the dust density positivity limiter
+constexpr real RHO_VAC      = 1.0e-30;      // vacuum density for the dust density positivity limiter
 
-// =========================================================================================================================
+// =====================================================================================================================
 // CUDA kernel launch parameters
 
-const int TPB   = 64;
-const int N_G   = N_X*N_Y*N_Z;
+constexpr int TPB   = 64;
+constexpr int N_G   = N_X*N_Y*N_Z;
 
-const int NB_G  = N_G     / TPB + 1;
-const int NB_X  = N_Y*N_Z / TPB + 1;
-const int NB_Y  = N_X*N_Z / TPB + 1;
-const int NB_Z  = N_X*N_Y / TPB + 1;
+constexpr int NB_G  = N_G     / TPB + 1;
+constexpr int NB_X  = N_Y*N_Z / TPB + 1;
+constexpr int NB_Y  = N_X*N_Z / TPB + 1;
+constexpr int NB_Z  = N_X*N_Y / TPB + 1;
 
-// =========================================================================================================================
+// =====================================================================================================================
 // compile-time sanity checks
 
 static_assert(
@@ -144,6 +145,6 @@ static_assert(
     "FARGO nearest-integer shifting requires 0 < CFL_DYN <= 0.5"
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 
-#endif // CONST_DEFS_CUH
+#endif // GAMEDEV_FLUID_CONST_DEFS_CUH

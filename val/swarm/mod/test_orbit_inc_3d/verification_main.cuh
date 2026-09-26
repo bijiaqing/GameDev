@@ -1,5 +1,6 @@
-#include <cstdlib>
+// include fragment: the inclined orbit test's main program, included once by its swarm_runtime.cu
 #include <cmath>      // acos, atan2, cos, sin, sqrt
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
 #include <iostream>   // std::cout, std::endl
@@ -7,8 +8,9 @@
 #include <string>     // std::string, std::to_string
 #include <vector>     // std::vector
 
-#include <_transport.cuh>
 #include <gpu.cuh>
+
+#include <_transport.cuh>
 #include <swarm_kern.cuh>
 
 // test-only driver for an inclined drag-free orbit
@@ -24,7 +26,7 @@ real eccentric_anomaly (real mean_anomaly, real eccentricity)
     real anomaly = mean_anomaly;
     for (int iteration = 0; iteration < 20; iteration++)
     {
-        anomaly -= (anomaly - eccentricity*sin(anomaly) - mean_anomaly)/(1.0 - eccentricity*cos(anomaly));
+        anomaly -= (anomaly - eccentricity*sin(anomaly) - mean_anomaly) / (1.0 - eccentricity*cos(anomaly));
     }
     return anomaly;
 }
@@ -65,14 +67,14 @@ int main ()
     {
         real E = eccentric_anomaly(mean_initial[idx], eccentricity);
         real denom = 1.0 - eccentricity*cos(E);
-        real dE_dt = sqrt(G*M_S/(semimajor*semimajor*semimajor)) / denom;
+        real dE_dt = sqrt(G*M_S / (semimajor*semimajor*semimajor)) / denom;
         real3 pos = rotate_orbit(semimajor*(cos(E) - eccentricity),
             semimajor*sqrt(1.0 - eccentricity*eccentricity)*sin(E), node, inclination, periapsis);
         real3 vel = rotate_orbit(-semimajor*sin(E)*dE_dt,
             semimajor*sqrt(1.0 - eccentricity*eccentricity)*cos(E)*dE_dt, node, inclination, periapsis);
         real y = sqrt(pos.x*pos.x + pos.y*pos.y + pos.z*pos.z);
         real x = atan2(pos.y, pos.x);
-        real z = acos(pos.z/y);
+        real z = acos(pos.z / y);
         real sinz = sin(z), cosz = cos(z), sinx = sin(x), cosx = cos(x);
         real vy = vel.x*sinz*cosx + vel.y*sinz*sinx + vel.z*cosz;
         real vphi = -vel.x*sinx + vel.y*cosx;
@@ -83,18 +85,20 @@ int main ()
     }
 
     swarm *dev_particle;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle),
+        sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
     // refine only the transport timestep while preserving the same orbit and end time
-    const real dt = time_end/static_cast<real>(VERIFY_RES);
+    const real dt = time_end / static_cast<real>(VERIFY_RES);
     for (int step = 0; step < VERIFY_RES; step++)
     {
         ssa_transport <<< NB_P, TPB >>> (dev_particle, dt);
@@ -109,7 +113,8 @@ int main ()
         std::cerr << "inclined Kepler transport" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy inclined-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);

@@ -2,11 +2,11 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_xbl
 // purpose: reproduce the thread-sweep FARGO and PPM update with one cooperative block per azimuthal ring
 // workspace: reuse 12 explicit full-grid fields and retain serial invariant-domain correction order within each ring
-// =========================================================================================================================
+// =====================================================================================================================
 
 __device__ __forceinline__
 real _block_ppm_xstate (const real *value, int ix, bool upwind_on_left, real cfl)
@@ -174,6 +174,7 @@ void advection_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
     }
     __syncthreads();
 
+    // publish the staged low-order density only after every cell has read the old neighbor densities
     for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
     {
         rhod[ix] = rhod_low[ix];

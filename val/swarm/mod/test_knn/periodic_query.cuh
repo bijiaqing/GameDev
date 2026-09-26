@@ -1,13 +1,13 @@
-#ifndef VAL_PERIODIC_QUERY_CUH
-#define VAL_PERIODIC_QUERY_CUH
+#ifndef GAMEDEV_VAL_SWARM_TEST_KNN_PERIODIC_QUERY_CUH
+#define GAMEDEV_VAL_SWARM_TEST_KNN_PERIODIC_QUERY_CUH
 
 #include <climits>        // INT_MAX
 
 #include <gpu.cuh> // float3 and CUDA device intrinsics
 #ifdef GAMEDEV_ROCM
-#else
+#else  // !GAMEDEV_ROCM
 #include <math_constants.h>  // CUDART_INF_F
-#endif
+#endif // GAMEDEV_ROCM
 
 #include <morton/morton_index.cuh>
 
@@ -15,7 +15,7 @@
 __host__ __device__ constexpr
 bool _is_periodic_wedge (float x_min, float x_max)
 {
-    return x_max - x_min < 6.28318530717958647692f - 1.0e-6f;
+    return x_max - x_min < 6.28318530717958647692f - 1.0e-06f;
 }
 
 // rotate one Cartesian query into an adjacent azimuthal wedge image
@@ -98,7 +98,8 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
     int image_count = 0;
 
     _morton_topk<K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-        morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+        morton_data, query_point, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node,
+        batch_count,
         leaf_visit_count, candidate_count, stack_overflow
     );
     for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
@@ -114,7 +115,8 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
     {
         float3 image_query = _rotate_query_z(query_point, width);
         _morton_topk<K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-            morton_data, image_query, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+            morton_data, image_query, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node,
+            batch_count,
             leaf_visit_count, candidate_count, stack_overflow
         );
         for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
@@ -131,7 +133,8 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
     {
         float3 image_query = _rotate_query_z(query_point, -width);
         _morton_topk<K, BLOCK_SIZE, WORK_SIZE, STACK_SIZE>(
-            morton_data, image_query, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node, batch_count,
+            morton_data, image_query, search_dist, work_dist_sq, work_idx_old, idx_node_stack, stack_count, idx_node,
+            batch_count,
             leaf_visit_count, candidate_count, stack_overflow
         );
         for (int idx_neighbor = threadIdx.x; idx_neighbor < K; idx_neighbor += BLOCK_SIZE)
@@ -178,11 +181,11 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
 
     for (int idx_slot = image_count*K + threadIdx.x; idx_slot < MERGE_SIZE; idx_slot += BLOCK_SIZE)
     {
-#ifdef GAMEDEV_ROCM
+        #ifdef GAMEDEV_ROCM
         merge_dist_sq[idx_slot] = MORTON_INF_F;
-#else
+        #else  // !GAMEDEV_ROCM
         merge_dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+        #endif // GAMEDEV_ROCM
         merge_idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
@@ -202,11 +205,11 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
     {
         if (duplicate[idx_local++])
         {
-#ifdef GAMEDEV_ROCM
+            #ifdef GAMEDEV_ROCM
             merge_dist_sq[idx_slot] = MORTON_INF_F;
-#else
+            #else  // !GAMEDEV_ROCM
             merge_dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+            #endif // GAMEDEV_ROCM
             merge_idx_old[idx_slot] = INT_MAX;
         }
     }
@@ -259,4 +262,4 @@ void periodic_morton_query (int *dev_near_idx_old, float *dev_near_dist_sq,
     }
 }
 
-#endif // VAL_PERIODIC_QUERY_CUH
+#endif // GAMEDEV_VAL_SWARM_TEST_KNN_PERIODIC_QUERY_CUH

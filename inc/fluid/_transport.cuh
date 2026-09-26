@@ -1,9 +1,9 @@
-#ifndef FLUID_TRANSPORT_CUH
-#define FLUID_TRANSPORT_CUH
+#ifndef GAMEDEV_FLUID_TRANSPORT_CUH
+#define GAMEDEV_FLUID_TRANSPORT_CUH
 
 #include <const_defs.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // dust state recovery
 
 // recover primitive velocities from conserved momenta, with a Keplerian fallback in near-vacuum cells
@@ -28,7 +28,7 @@ void _recover_dust_state (real rhod, real R, real &mx, real &my, real &mz, real 
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // block-sweep workspace access
 
 #ifdef FLUID_BLOCK_SWEEP
@@ -40,7 +40,7 @@ real *_block_field (real *dev_adv_work, int field, int idx_line, int line_size)
 
 #endif // FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // PPM face reconstruction
 
 // reconstruct one bounded periodic-azimuthal PPM face from four neighboring cells
@@ -85,7 +85,7 @@ static void _thread_ppm_faces (const real *cell_val, const real *face_weight, re
 
 #endif // !FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // PPM profile limiting and upwind tracing
 
 // limit a cell parabolic profile to prevent new extrema and oscillations
@@ -121,12 +121,12 @@ static void _ppm_limit (real q_0, real &q_L, real &q_R, real &dq, real &q6)
 // integrate the PPM profile over the right-side upwind domain of dependence
 __device__ __forceinline__
 static real _ppm_state_R (real q_R, real dq, real q6, real cfl)
-{ return q_R - 0.5*cfl*(dq - (1.0 - 2.0*cfl/3.0)*q6); }
+{ return q_R - 0.5*cfl*(dq - (1.0 - 2.0*cfl / 3.0)*q6); }
 
 // integrate the PPM profile over the left-side upwind domain of dependence
 __device__ __forceinline__
 static real _ppm_state_L (real q_L, real dq, real q6, real cfl)
-{ return q_L + 0.5*cfl*(dq + (1.0 - 2.0*cfl/3.0)*q6); }
+{ return q_L + 0.5*cfl*(dq + (1.0 - 2.0*cfl / 3.0)*q6); }
 
 #ifndef FLUID_BLOCK_SWEEP
 
@@ -146,7 +146,7 @@ static real _thread_ppm_state (const real *face, const real *cell_val,
         _ppm_state_L(val_L, dval, coeff_curv, cfl) ;
 }
 
-#else // FLUID_BLOCK_SWEEP
+#else  // FLUID_BLOCK_SWEEP
 
 // reconstruct one bounded PPM face on demand from a nonuniform block-owned line
 __device__ __forceinline__
@@ -189,7 +189,7 @@ real _block_ppm_state (const real *value, const real *face_weight,
 
 #endif // FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // invariant-domain correction limiting
 
 // find local extrema from one cell and its periodic azimuthal neighbors
@@ -257,7 +257,7 @@ static real _invariant_scale (
     return fmax(0.0, fmin(1.0, scale));
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // pressureless Riemann flux
 
 // compute conservative dust density and momentum fluxes with the pressureless HLL solver
@@ -303,6 +303,6 @@ static void _pressureless_hll_flux (
     flux_mz = (wave_R*speed_L*mz_L - wave_L*speed_R*mz_R + wave_L*wave_R*(mz_R - mz_L))*inv_span;
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
-#endif // FLUID_TRANSPORT_CUH
+#endif // GAMEDEV_FLUID_TRANSPORT_CUH

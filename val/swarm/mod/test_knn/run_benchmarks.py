@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 
-"""Build and run the QA KD-tree versus Morton KNN experiment"""
+"""build and run the QA KD-tree versus Morton KNN experiment"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-
 import argparse
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 VAL_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND, TARGET_ENV, DEFAULT_TARGET, backend_environment
+from val_config import BACKEND, DEFAULT_TARGET, TARGET_ENV, backend_environment, model_output
 
 
 def capture(command: list[str], cwd: Path) -> str:
-    """Capture optional cluster information without hiding benchmark failures"""
+    """capture optional cluster information without hiding benchmark failures"""
 
     try:
         result = subprocess.run(
@@ -41,10 +39,14 @@ def capture(command: list[str], cwd: Path) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--particles", nargs="+", type=int,
+        "--particles",
+        nargs="+",
+        type=int,
         default=[100_000, 1_000_000, 10_000_000],
     )
-    parser.add_argument("--distribution", nargs="+", choices=("smooth", "ring", "clump", "radial"), default=None)
+    parser.add_argument(
+        "--distribution", nargs="+", choices=("smooth", "ring", "clump", "radial"), default=None
+    )
     parser.add_argument("--dim", nargs="+", type=int, choices=(2, 3), default=[2, 3])
     parser.add_argument("--queries", type=int, default=4096)
     parser.add_argument("--brute-queries", type=int, default=32)
@@ -56,21 +58,22 @@ def main() -> None:
     parser.add_argument("--target", default=os.environ.get(TARGET_ENV, DEFAULT_TARGET))
     parser.add_argument("--k", type=int, default=200)
     parser.add_argument(
-        "--output-subdir", default="",
+        "--output-subdir",
+        default="",
         help="store a selected matrix below a separate output directory",
     )
     args = parser.parse_args()
 
     test_root = Path(__file__).resolve().parent
     project_root = test_root.parents[3]
-    executable = project_root/"val"/"swarm"/"obj"/"test_knn"/BACKEND/"knn_benchmark"
+    executable = project_root / "val" / "swarm" / "obj" / "test_knn" / BACKEND / "knn_benchmark"
     scope = os.environ.get("VAL_SCOPE", "manual")
-    result_root = model_output(project_root/"val", "swarm", "test_knn", BACKEND, scope=scope)
+    result_root = model_output(project_root / "val", "swarm", "test_knn", BACKEND, scope=scope)
     if args.output_subdir:
         output_subdir = Path(args.output_subdir)
         if output_subdir.is_absolute() or ".." in output_subdir.parts:
             parser.error("--output-subdir must remain below the test_knn result directory")
-        result_root = result_root/output_subdir
+        result_root = result_root / output_subdir
     result_root.mkdir(parents=True, exist_ok=True)
 
     distributions = args.distribution or ["smooth", "ring", "clump", "radial"]
@@ -79,12 +82,21 @@ def main() -> None:
     # the complete matrix and then vary only runtime particle distributions
     subprocess.run(
         [
-            "make", "-C", str(test_root), f"GPU_TARGET={args.target}", f"GPU_BACKEND={BACKEND}", f"K={args.k}",
+            "make",
+            "-C",
+            str(test_root),
+            f"GPU_TARGET={args.target}",
+            f"GPU_BACKEND={BACKEND}",
+            f"K={args.k}",
         ],
         check=True,
     )
 
-    environment = {**backend_environment(capture, test_root), "gpu_target": args.target, "k": args.k}
+    environment = {
+        **backend_environment(capture, test_root),
+        "gpu_target": args.target,
+        "k": args.k,
+    }
     (result_root / "environment.txt").unlink(missing_ok=True)
     (result_root / "environment.json").write_text(
         json.dumps(environment, indent=2, sort_keys=True) + "\n"
@@ -101,17 +113,28 @@ def main() -> None:
                 output = result_root / f"{name}.json"
                 command = [
                     str(executable),
-                    "--particles", str(particles),
-                    "--queries", str(min(args.queries, particles)),
-                    "--brute-queries", str(min(args.brute_queries, args.queries, particles)),
-                    "--repeat", str(args.repeat),
-                    "--dim", str(dimension),
-                    "--distribution", distribution,
-                    "--radius", str(args.radius),
-                    "--leaf-target", str(args.leaf_target),
-                    "--max-level", str(args.max_level),
-                    "--max-leaf-scan", str(args.max_leaf_scan),
-                    "--output", str(output),
+                    "--particles",
+                    str(particles),
+                    "--queries",
+                    str(min(args.queries, particles)),
+                    "--brute-queries",
+                    str(min(args.brute_queries, args.queries, particles)),
+                    "--repeat",
+                    str(args.repeat),
+                    "--dim",
+                    str(dimension),
+                    "--distribution",
+                    distribution,
+                    "--radius",
+                    str(args.radius),
+                    "--leaf-target",
+                    str(args.leaf_target),
+                    "--max-level",
+                    str(args.max_level),
+                    "--max-leaf-scan",
+                    str(args.max_leaf_scan),
+                    "--output",
+                    str(output),
                 ]
                 print(f"\n=== {name} ===", flush=True)
                 output.unlink(missing_ok=True)
@@ -160,16 +183,18 @@ def main() -> None:
     manifest = {
         "component": "ordinary",
         "tier": "publication",
-        "extended_tier": "qualification" if any(
-            particles != 100_000 for particles in args.particles
-        ) else None,
+        "extended_tier": "qualification"
+        if any(particles != 100_000 for particles in args.particles)
+        else None,
         "cases": len(completed),
         "all_quality_passed": passed,
         "passed": passed,
         "environment": "environment.json",
         "files": [f"{name}.json" for name, _ in completed],
     }
-    (result_root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    (result_root / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
 
 
 if __name__ == "__main__":

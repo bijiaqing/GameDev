@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 
-"""Reduce one completed product-kernel model to compact JSON-ready scores."""
+"""reduce one completed product-kernel model to compact JSON-ready scores"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-
 import configparser
-from functools import lru_cache
 import json
 import math
+import sys
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
+sys.dont_write_bytecode = True
 
 LOG_MASS_EDGES = np.linspace(-0.5, 9.5, 201)
 LOG_MASS_CDF_EDGES = np.linspace(-0.5, 9.5, 4097)
@@ -25,9 +24,9 @@ REFERENCE_K_MAX = 100_000
 def _borel_cdf(time: float) -> np.ndarray:
     probability = np.empty(REFERENCE_K_MAX, dtype=np.float64)
     probability[0] = math.exp(-time)
-    common = time*math.exp(-time)
+    common = time * math.exp(-time)
     for k in range(1, REFERENCE_K_MAX):
-        probability[k] = probability[k - 1]*common*math.exp((k - 1)*math.log1p(1.0/k))
+        probability[k] = probability[k - 1] * common * math.exp((k - 1) * math.log1p(1.0 / k))
     return np.cumsum(probability)
 
 
@@ -41,39 +40,41 @@ def _analytic_cdf_below_log_mass(x: np.ndarray, time: float) -> np.ndarray:
 
 
 def _jensen_shannon_distance(p: np.ndarray, q: np.ndarray) -> float:
-    midpoint = 0.5*(p + q)
+    midpoint = 0.5 * (p + q)
     mask_p = p > 0.0
     mask_q = q > 0.0
-    divergence = 0.5*np.sum(p[mask_p]*np.log(p[mask_p]/midpoint[mask_p]))
-    divergence += 0.5*np.sum(q[mask_q]*np.log(q[mask_q]/midpoint[mask_q]))
-    return float(np.sqrt(max(float(divergence), 0.0)/np.log(2.0)))
+    divergence = 0.5 * np.sum(p[mask_p] * np.log(p[mask_p] / midpoint[mask_p]))
+    divergence += 0.5 * np.sum(q[mask_q] * np.log(q[mask_q] / midpoint[mask_q]))
+    return float(np.sqrt(max(float(divergence), 0.0) / np.log(2.0)))
 
 
 def score_model(output_dir: Path) -> dict[str, object]:
     config = configparser.ConfigParser()
-    config.read(output_dir/"variables.txt")
+    config.read(output_dir / "variables.txt")
     parameters = config["PARAMETERS"]
     seed = config.getint("CAMPAIGN", "SEED")
     dtype = np.dtype([(name, value) for name, value in config["SWARM_DTYPE"].items()])
 
     frame = int(parameters["SAVE_MAX"])
-    time = float(parameters["DT_OUT"])*frame
+    time = float(parameters["DT_OUT"]) * frame
     total_mass = float(parameters["TOTAL_DUST_MASS"])
-    initial_mass = float(parameters["INIT_SMIN"])**3
+    initial_mass = float(parameters["INIT_SMIN"]) ** 3
 
-    data = np.memmap(output_dir/f"particle_{frame:05d}.dat", dtype=dtype, mode="r")
-    mass = np.asarray(data["par_size"])**3
+    data = np.memmap(output_dir / f"particle_{frame:05d}.dat", dtype=dtype, mode="r")
+    mass = np.asarray(data["par_size"]) ** 3
     number = np.asarray(data["par_numr"])
-    mass_weight = number*mass/total_mass
+    mass_weight = number * mass / total_mass
     mass_ratio = float(np.sum(mass_weight))
-    log_mass = np.log10(mass/initial_mass)
+    log_mass = np.log10(mass / initial_mass)
 
-    analytical_number = total_mass/initial_mass*(1.0 - 0.5*time)
+    analytical_number = total_mass / initial_mass * (1.0 - 0.5 * time)
     simulated_number = float(np.sum(number))
 
     coarse_index = np.searchsorted(LOG_MASS_EDGES, log_mass, side="right")
     coarse_probability = np.bincount(
-        coarse_index, weights=mass_weight, minlength=len(LOG_MASS_EDGES) + 1,
+        coarse_index,
+        weights=mass_weight,
+        minlength=len(LOG_MASS_EDGES) + 1,
     ).astype(np.float64)
     coarse_probability /= mass_ratio
 
@@ -82,25 +83,27 @@ def score_model(output_dir: Path) -> dict[str, object]:
     analytic_probability = np.clip(analytic_probability, 0.0, None)
     analytic_probability /= np.sum(analytic_probability)
 
-    tv_distance = 0.5*np.sum(np.abs(coarse_probability - analytic_probability))
+    tv_distance = 0.5 * np.sum(np.abs(coarse_probability - analytic_probability))
     js_distance = _jensen_shannon_distance(coarse_probability, analytic_probability)
 
     fine_index = np.searchsorted(LOG_MASS_CDF_EDGES, log_mass, side="right")
     fine_probability = np.bincount(
-        fine_index, weights=mass_weight, minlength=len(LOG_MASS_CDF_EDGES) + 1,
+        fine_index,
+        weights=mass_weight,
+        minlength=len(LOG_MASS_CDF_EDGES) + 1,
     ).astype(np.float64)
     fine_probability /= mass_ratio
     simulated_cdf = np.cumsum(fine_probability)[:-1]
     analytical_cdf = _analytic_cdf_below_log_mass(LOG_MASS_CDF_EDGES, time)
     cdf_difference = np.abs(simulated_cdf - analytical_cdf)
     w1_log_mass = np.sum(
-        0.5*(cdf_difference[:-1] + cdf_difference[1:])*np.diff(LOG_MASS_CDF_EDGES)
+        0.5 * (cdf_difference[:-1] + cdf_difference[1:]) * np.diff(LOG_MASS_CDF_EDGES)
     )
 
-    simulated_m2_over_m1 = float(np.sum(mass_weight*mass)/mass_ratio)
-    analytical_m2_over_m1 = initial_mass/(1.0 - time)
-    number_ratio = simulated_number/analytical_number
-    moment_ratio = simulated_m2_over_m1/analytical_m2_over_m1
+    simulated_m2_over_m1 = float(np.sum(mass_weight * mass) / mass_ratio)
+    analytical_m2_over_m1 = initial_mass / (1.0 - time)
+    number_ratio = simulated_number / analytical_number
+    moment_ratio = simulated_m2_over_m1 / analytical_m2_over_m1
 
     score = {
         "frame": frame,
@@ -160,8 +163,10 @@ def scoring_metadata() -> dict[str, object]:
         "w1_unit": "dex in log10(m/m0)",
     }
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--json", type=Path, required=True)
@@ -169,5 +174,5 @@ if __name__ == "__main__":
     result = score_model(args.output_dir)
     result["reference"] = scoring_metadata()
     args.json.parent.mkdir(parents=True, exist_ok=True)
-    args.json.write_text(json.dumps(result, indent=2, allow_nan=False)+"\n")
+    args.json.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     print(args.json)

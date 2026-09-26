@@ -1,13 +1,12 @@
-#ifndef SWARM_HOST_CUH
-#define SWARM_HOST_CUH
+#ifndef GAMEDEV_SWARM_HOST_CUH
+#define GAMEDEV_SWARM_HOST_CUH
 
 #include <algorithm>        // std::copy, std::lower_bound, std::max, std::minmax_element
 #include <chrono>           // std::chrono::system_clock
-#include <cmath>            // std::abs, std::acos, std::atan2, std::cos, std::erf, std::erfc, std::exp, std::log, std::pow, std::sin, std::sqrt
+#include <cmath>            // std::abs, acos, atan2, cos, erf, erfc, exp, log, pow, sin, sqrt
 #include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
-#include <gpu.cuh>
 #include <fstream>          // std::ofstream, std::ifstream
 #include <iomanip>          // std::setw, std::setfill, std::setprecision
 #include <iostream>         // std::cout, std::cerr, std::endl
@@ -17,13 +16,15 @@
 #include <string>           // std::string, std::to_string
 #include <vector>           // std::vector
 
+#include <gpu.cuh>
+
 #include <const_defs.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // host-only mesh coordinates
-// =========================================================================================================================
+// =====================================================================================================================
 
 inline __host__
 real _get_ycent (int iy) { return Y_MIN*std::pow(_get_dy(), static_cast<real>(iy) + 0.5); }
@@ -38,9 +39,9 @@ real _get_sy (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
 inline __host__
 real _get_sz (real z) { return -std::cos(z); }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // elementary random profiles
-// =========================================================================================================================
+// =====================================================================================================================
 
 // share one deterministic host generator across all initialization samplers
 extern std::mt19937 rand_generator;
@@ -82,9 +83,9 @@ void rand_powerlaw (real *randsize, int count, real p_min, real p_max, real powe
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // smoothed power-law profiles
-// =========================================================================================================================
+// =====================================================================================================================
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
 inline static __host__
@@ -236,9 +237,13 @@ real _get_normal_mass (real Z_lo, real Z_hi, real H_d)
 
     real inv_width = 1.0 / (std::sqrt(2.0)*H_d);
     if (Z_lo >= 0.0)
+    {
         return 0.5*(std::erfc(Z_lo*inv_width) - std::erfc(Z_hi*inv_width));
+    }
     if (Z_hi <= 0.0)
+    {
         return 0.5*(std::erfc(-Z_hi*inv_width) - std::erfc(-Z_lo*inv_width));
+    }
 
     return 0.5*(std::erf(Z_hi*inv_width) - std::erf(Z_lo*inv_width));
 }
@@ -486,9 +491,9 @@ real get_total_dust_mass (const std::vector <real> &mass_bank)
     return mass_bank[0];
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // disk position sampling
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifndef IMPORTGAS
 // invert one linearly interpolated radial CDF
@@ -607,23 +612,24 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
 #endif // MULTISIZE && DIFFUSION
 #endif // !IMPORTGAS
 
-// =========================================================================================================================
+// =====================================================================================================================
 // imported dust distribution
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef IMPORTGAS
 // sample positions from imported gas density times dust-to-gas ratio and exact cell measure
 inline __host__
-void rand_from_file (real *randposx, real *randposy, real *randposz, int count, const real *gas_dens, const real *epsilon)
+void rand_from_file (real *randposx, real *randposy, real *randposz, int count, const real *gas_dens,
+    const real *epsilon)
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
-    
+
     real mesh_dim = _get_mesh_dim();
-    
+
     // integrate the imported dust density with the same exact disk cell measure
     std::vector <real> cell_mass(N_G);
     real total_mass = 0.0;
-    
+
     for (int iz = 0; iz < N_Z; iz++)
     {
         real vol_z = _get_vol_z(iz);
@@ -639,30 +645,38 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 
                 int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
                 if (!std::isfinite(gas_dens[idx_cell]) || gas_dens[idx_cell] < 0.0)
+                {
                     throw std::runtime_error("invalid imported gas density at cell " + std::to_string(idx_cell));
+                }
                 if (!std::isfinite(epsilon[idx_cell]) || epsilon[idx_cell] < 0.0)
+                {
                     throw std::runtime_error("invalid imported dust-to-gas ratio at cell " + std::to_string(idx_cell));
+                }
 
                 cell_mass[idx_cell] = gas_dens[idx_cell]*epsilon[idx_cell]*cell_measure;
                 if (!std::isfinite(cell_mass[idx_cell]))
+                {
                     throw std::runtime_error("nonfinite imported dust mass at cell " + std::to_string(idx_cell));
+                }
                 total_mass += cell_mass[idx_cell];
             }
         }
     }
 
     if (!std::isfinite(total_mass) || total_mass <= 0.0)
+    {
         throw std::runtime_error("imported dust profile has zero or nonfinite total mass");
-    
+    }
+
     // build the cell-mass cumulative distribution
     std::vector <real> cdf(N_G + 1);
     cdf[0] = 0.0;
-    
+
     for (int idx = 0; idx < N_G; idx++)
     {
         cdf[idx + 1] = cdf[idx] + cell_mass[idx];
     }
-    
+
     // normalize the CDF to unit total probability
     for (int idx = 0; idx <= N_G; idx++)
     {
@@ -680,34 +694,35 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
     {
         z_face_s[iz] = _get_sz(_get_zface(iz));
     }
-    
+
     // select cells by inverse transform sampling
     for (int idx = 0; idx < count; idx++)
     {
         real cdf_sample = random(rand_generator);
-        
+
         // locate the cell containing the sampled cumulative probability
         auto cdf_iter = std::lower_bound(cdf.begin(), cdf.end(), cdf_sample);
         int idx_cell = std::max(0, static_cast<int>(cdf_iter - cdf.begin()) - 1);
-        
+
         int ix = idx_cell % N_X;
         int iy = (idx_cell / N_X) % N_Y;
         int iz = idx_cell / (N_X*N_Y);
-        
+
         // sample logarithmic radial cells uniformly in the exact radial volume coordinate
         real s_y0 = y_face_s[iy];
         real s_y1 = y_face_s[iy + 1];
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
 
         // sample active azimuth uniformly within the selected cell and lock an inactive azimuth
-        randposx[idx] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(ix) + random(rand_generator)) : 0.5*(X_MIN + X_MAX);
+        randposx[idx] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(ix) + random(rand_generator)) : 0.5*(X_MIN
+            + X_MAX);
         randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
         if (N_Z > 1)
         {
             real s_z0 = z_face_s[iz];
             real s_z1 = z_face_s[iz + 1];
             real s_z = s_z0 + (s_z1 - s_z0)*random(rand_generator);
-            
+
             randposz[idx] = std::acos(-s_z);
         }
         else
@@ -718,39 +733,9 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 }
 #endif // IMPORTGAS
 
-// =========================================================================================================================
-// cuda error handling
-// =========================================================================================================================
-
-inline __host__
-void cuda_fail (gpuError_t status, const char *operation, const char *file, int line)
-{
-    std::cerr
-    << GPU_BACKEND_NAME " error at " << file << ":" << line
-    << " during " << operation << ": " << gpuGetErrorString(status)
-    << " (" << static_cast<int>(status) << ")" 
-    << std::endl;
-    
-    std::exit(EXIT_FAILURE);
-}
-
-#define CUDA_CHECK(OPERATION)                                                       \
-do {                                                                                \
-    gpuError_t cuda_status_ = (OPERATION);                                         \
-    if (cuda_status_ != gpuSuccess)                                                \
-    { cuda_fail(cuda_status_, #OPERATION, __FILE__, __LINE__); }                    \
-} while (0)
-
-#define CUDA_KERNEL_CHECK(KERNEL_NAME)                                              \
-do {                                                                                \
-    gpuError_t cuda_status_ = gpuGetLastError();                                  \
-    if (cuda_status_ != gpuSuccess)                                                \
-    { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
-} while (0)
-
-// =========================================================================================================================
+// =====================================================================================================================
 // output timing
-// =========================================================================================================================
+// =====================================================================================================================
 
 // calculate a nonnegative integer power without floating-point roundoff
 inline __host__
@@ -762,7 +747,7 @@ real int_pow (int base, int power)
     {
         result *= static_cast<real>(base);
     }
-    
+
     return result;
 }
 
@@ -784,9 +769,9 @@ real _get_dt_out (int idx_file)
     #endif // LOGTIMING
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // binary file I/O
-// =========================================================================================================================
+// =====================================================================================================================
 
 constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
 
@@ -844,7 +829,7 @@ bool save_device_binary (const std::string &file_name, const DataType *dev_data,
     for (std::size_t offset = 0; offset < count; offset += chunk_max)
     {
         std::size_t chunk = std::min(chunk_max, count - offset);
-        CUDA_CHECK(gpuMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, gpuMemcpyDeviceToHost));
+        GPU_CHECK(gpuMemcpy(buffer.data(), dev_data + offset, sizeof(DataType)*chunk, gpuMemcpyDeviceToHost));
         file.write(reinterpret_cast<const char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
     }
@@ -872,7 +857,7 @@ bool load_device_binary (const std::string &file_name, DataType *dev_data, std::
         std::size_t chunk = std::min(chunk_max, count - offset);
         file.read(reinterpret_cast<char*>(buffer.data()), sizeof(DataType)*chunk);
         if (!file) return false;
-        CUDA_CHECK(gpuMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, gpuMemcpyHostToDevice));
+        GPU_CHECK(gpuMemcpy(dev_data + offset, buffer.data(), sizeof(DataType)*chunk, gpuMemcpyHostToDevice));
     }
 
     return true;
@@ -913,9 +898,9 @@ void load_velocity_as_sam (swarm *particle)
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // file naming, loading, and metadata
-// =========================================================================================================================
+// =====================================================================================================================
 
 // format a frame index with the zero padding used by binary output files
 inline __host__
@@ -933,7 +918,7 @@ void msg_output (int idx_file)
 {
     std::time_t time_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     int width = std::max(3, static_cast<int>(std::to_string(SAVE_MAX).length()));
-    std::cout   
+    std::cout
     << std::endl << std::setfill('0')
     << std::setw(width) << idx_file << "/"
     << std::setw(width) << SAVE_MAX << " finished on " << std::ctime(&time_now)
@@ -977,23 +962,24 @@ bool load_epsilon (const std::string &path, int idx_file, real *epsilon)
 
 // load density and all three linear velocity components for one gas frame
 inline __host__
-bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real *gas_velx, real *gas_vely, real *gas_velz)
+bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real *gas_velx, real *gas_vely,
+    real *gas_velz)
 {
     std::string file_name;
     bool success = true;
-    
+
     file_name = path + "gasdens_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_dens, N_G);
-    
+
     file_name = path + "gasvelx_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_velx, N_G);
-    
+
     file_name = path + "gasvely_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_vely, N_G);
-    
+
     file_name = path + "gasvelz_" + frame_num(idx_file) + ".dat";
     success &= load_host_binary(file_name, gas_velz, N_G);
-    
+
     return success;
 }
 #endif // IMPORTGAS
@@ -1004,7 +990,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
 {
     std::ofstream file(file_name);
     if (!file) return false;
-    
+
     file << "[PARAMETERS]"                                                                  << std::endl;
     file                                                                                    << std::endl;
 
@@ -1033,7 +1019,7 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     #endif // CODE_UNIT
     #endif // COLLISION
     file                                                                                    << std::endl;
-    
+
     // dust parameters
     file << "STOKES_0    = " << std::scientific     << std::setprecision(8) << STOKES_0     << std::endl;
     file << "TOTAL_DUST_MASS = " << std::scientific << std::setprecision(8) << total_dust_mass << std::endl;
@@ -1061,8 +1047,6 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
-    #ifndef BERNOULLI
-    file << "COLLISION_INTEGRATOR = frozen_bath"                                         << std::endl;
     file << "COL_BATH_TPB  = " << COL_BATH_TPB                                            << std::endl;
     file << "COL_EVENT_CAP  = " << COL_EVENT_CAP                                          << std::endl;
     file << "COL_BATH_MAX   = " << std::scientific << std::setprecision(8) << COL_BATH_MAX << std::endl;
@@ -1075,19 +1059,6 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COL_BIN_MIN    = " << COL_BIN_MIN                                            << std::endl;
     file << "COL_SIZE_BIN_POLICY = moving_per_group"                                    << std::endl;
     file << "COL_SIZE_RANGE_FACTORS = 0.5 8"                                             << std::endl;
-    #else  // BERNOULLI
-    #ifdef KNN_CACHE
-    file << "COLLISION_INTEGRATOR = bernoulli_cache"                                     << std::endl;
-    #else  // DIRECT_BERNOULLI
-    file << "COLLISION_INTEGRATOR = bernoulli_direct"                                    << std::endl;
-    #endif // KNN_CACHE
-    file << "CFL_COL     = " << std::defaultfloat   << std::setprecision(8) << CFL_COL      << std::endl;
-    #endif // FROZEN_BATH / BERNOULLI
-    #if !defined(BERNOULLI) || defined(KNN_CACHE)
-    file << "COLLISION_NEIGHBORS = cached"                                              << std::endl;
-    #else  // DIRECT_BERNOULLI
-    file << "COLLISION_NEIGHBORS = direct"                                              << std::endl;
-    #endif // FROZEN_BATH || KNN_CACHE
     file << "RNG_STREAM_POLICY = shared_per_particle"                                    << std::endl;
     #ifdef COLLISION_KDTREE
     file << "COLLISION_SEARCH = kdtree"                                                   << std::endl;
@@ -1165,13 +1136,13 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "par_size   = f8"                                                               << std::endl;
     file << "par_numr   = f8"                                                               << std::endl;
     #endif // MULTISIZE
-    
+
     return file.good();
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // main-loop file transfers
-// =========================================================================================================================
+// =====================================================================================================================
 
 // save the complete particle checkpoint and its stochastic state
 inline __host__
@@ -1181,7 +1152,7 @@ bool save_particle_data (const std::string &path, int idx_file, swarm *particle,
     #endif // COLLISION || DIFFUSION
 )
 {
-    CUDA_CHECK(gpuMemcpy(particle, dev_particle, sizeof(swarm)*N_P, gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(particle, dev_particle, sizeof(swarm)*N_P, gpuMemcpyDeviceToHost));
     save_sam_as_velocity(particle);
 
     std::string file_name = path + "particle_" + frame_num(idx_file) + ".dat";
@@ -1219,7 +1190,7 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
     }
 
     load_velocity_as_sam(particle);
-    CUDA_CHECK(gpuMemcpy(dev_particle, particle, sizeof(swarm)*N_P, gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_particle, particle, sizeof(swarm)*N_P, gpuMemcpyHostToDevice));
 
     #if defined(COLLISION) || defined(DIFFUSION)
     file_name = path + "rngstate_" + frame_num(idx_file) + ".dat";
@@ -1234,101 +1205,101 @@ bool load_particle_data (const std::string &path, int idx_file, swarm *particle,
 }
 
 #if defined(COLLISION) || defined(DIFFUSION)
-#define SAVE_PARTICLE_TO_FILE(idx_file)                                                     \
-do {                                                                                        \
-    if (!save_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) return 1; \
-} while(0)
-#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) return 1; \
-} while(0)
+#define SAVE_PARTICLE_TO_FILE(idx_file)                                                                     \
+do {                                                                                                        \
+    if (!save_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) std::exit(EXIT_FAILURE); \
+} while (0)
+#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                                     \
+do {                                                                                                        \
+    if (!load_particle_data(PATH, idx_file, particle, dev_particle, dev_rngstate)) std::exit(EXIT_FAILURE); \
+} while (0)
 #else  // NO COLLISION OR DIFFUSION
-#define SAVE_PARTICLE_TO_FILE(idx_file)                                                     \
-do {                                                                                        \
-    if (!save_particle_data(PATH, idx_file, particle, dev_particle)) return 1;              \
-} while(0)
-#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_particle_data(PATH, idx_file, particle, dev_particle)) return 1;              \
-} while(0)
+#define SAVE_PARTICLE_TO_FILE(idx_file)                                                       \
+do {                                                                                          \
+    if (!save_particle_data(PATH, idx_file, particle, dev_particle)) std::exit(EXIT_FAILURE); \
+} while (0)
+#define LOAD_PARTICLE_TO_VRAM(idx_file)                                                       \
+do {                                                                                          \
+    if (!load_particle_data(PATH, idx_file, particle, dev_particle)) std::exit(EXIT_FAILURE); \
+} while (0)
 #endif // COLLISION || DIFFUSION
 
 #ifdef IMPORTGAS
-#define LOAD_GAS_DATA_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))             \
-    {                                                                                       \
+#define LOAD_GAS_DATA_TO_VRAM(idx_file)                                                          \
+do {                                                                                             \
+    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))                  \
+    {                                                                                            \
         std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
-        return 1;                                                                           \
-    }                                                                                       \
-    CUDA_CHECK(gpuMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velx, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-    CUDA_CHECK(gpuMemcpy(dev_gas_vely, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));             \
-} while(0)
+        std::exit(EXIT_FAILURE);                                                                 \
+    }                                                                                            \
+    GPU_CHECK(gpuMemcpy(dev_gas_dens, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+    GPU_CHECK(gpuMemcpy(dev_gas_velx, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+    GPU_CHECK(gpuMemcpy(dev_gas_vely, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+    GPU_CHECK(gpuMemcpy(dev_gas_velz, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));       \
+} while (0)
 
-#define LOAD_GAS_NEXT_TO_VRAM(idx_file)                                                     \
-do {                                                                                        \
-    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))             \
-    {                                                                                       \
+#define LOAD_GAS_NEXT_TO_VRAM(idx_file)                                                          \
+do {                                                                                             \
+    if (!load_gas_data(PATH, idx_file, gas_dens, gas_velx, gas_vely, gas_velz))                  \
+    {                                                                                            \
         std::cerr << "Error: Failed to load gas data files for frame " << idx_file << std::endl; \
-        return 1;                                                                           \
-    }                                                                                       \
-    CUDA_CHECK(gpuMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velx_next, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-    CUDA_CHECK(gpuMemcpy(dev_gas_vely_next, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-    CUDA_CHECK(gpuMemcpy(dev_gas_velz_next, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));        \
-} while(0)
+        std::exit(EXIT_FAILURE);                                                                 \
+    }                                                                                            \
+    GPU_CHECK(gpuMemcpy(dev_gas_dens_next, gas_dens, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+    GPU_CHECK(gpuMemcpy(dev_gas_velx_next, gas_velx, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+    GPU_CHECK(gpuMemcpy(dev_gas_vely_next, gas_vely, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+    GPU_CHECK(gpuMemcpy(dev_gas_velz_next, gas_velz, sizeof(real)*N_G, gpuMemcpyHostToDevice));  \
+} while (0)
 #endif // IMPORTGAS
 
 #ifdef SAVE_DENS
 #define SAVE_DUSTDENS_TO_FILE(idx_file)                                                     \
 do {                                                                                        \
     dustdens_init <<< NB_G, TPB >>> (dev_dustdens);                                         \
-    CUDA_KERNEL_CHECK("dustdens_init");                                                     \
+    GPU_KERNEL_CHECK("dustdens_init");                                                      \
     dustdens_depo <<< NB_P, TPB >>> (dev_dustdens, dev_particle, total_dust_mass);          \
-    CUDA_KERNEL_CHECK("dustdens_depo");                                                     \
+    GPU_KERNEL_CHECK("dustdens_depo");                                                      \
     dustdens_calc <<< NB_G, TPB >>> (dev_dustdens);                                         \
-    CUDA_KERNEL_CHECK("dustdens_calc");                                                     \
-    CUDA_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));           \
+    GPU_KERNEL_CHECK("dustdens_calc");                                                      \
+    GPU_CHECK(gpuMemcpy(dustdens, dev_dustdens, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
     std::string file_name = PATH + "dustdens_" + frame_num(idx_file) + ".dat";              \
     if (!save_host_binary(file_name, dustdens, N_G))                                        \
     {                                                                                       \
         std::cerr << "Error: Failed to save file: " << file_name << std::endl;              \
-        return 1;                                                                           \
+        std::exit(EXIT_FAILURE);                                                            \
     }                                                                                       \
-} while(0)
+} while (0)
 #endif // SAVE_DENS
 
 #ifdef RADIATION
 #define SAVE_OPTDEPTH_TO_FILE(idx_file, do_avg)                                             \
 do {                                                                                        \
     optdepth_init <<< NB_G, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_init");                                                     \
+    GPU_KERNEL_CHECK("optdepth_init");                                                      \
     optdepth_depo <<< NB_P, TPB >>> (dev_optdepth, dev_particle, total_dust_mass);          \
-    CUDA_KERNEL_CHECK("optdepth_depo");                                                     \
+    GPU_KERNEL_CHECK("optdepth_depo");                                                      \
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_calc");                                                     \
+    GPU_KERNEL_CHECK("optdepth_calc");                                                      \
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);                                         \
-    CUDA_KERNEL_CHECK("optdepth_csum");                                                     \
+    GPU_KERNEL_CHECK("optdepth_csum");                                                      \
     if (do_avg)                                                                             \
     {                                                                                       \
         optdepth_mean <<< NB_X, TPB >>> (dev_optdepth);                                     \
-        CUDA_KERNEL_CHECK("optdepth_mean");                                                 \
+        GPU_KERNEL_CHECK("optdepth_mean");                                                  \
     }                                                                                       \
-    CUDA_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));           \
+    GPU_CHECK(gpuMemcpy(optdepth, dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));  \
     std::string file_name = PATH + "optdepth_" + frame_num(idx_file) + ".dat";              \
     if (!save_host_binary(file_name, optdepth, N_G))                                        \
     {                                                                                       \
         std::cerr << "Error: Failed to save file: " << file_name << std::endl;              \
-        return 1;                                                                           \
+        std::exit(EXIT_FAILURE);                                                            \
     }                                                                                       \
-} while(0)
+} while (0)
 #endif // RADIATION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // main-loop console output
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef TRANSPORT
 #define PRINT_TITLE_TRANSPORT()             \
@@ -1397,11 +1368,5 @@ PRINT_VALUE_TRANSPORT();                    \
 PRINT_VALUE_COLLISION();                    \
 std::cout << std::endl;
 
-// =========================================================================================================================
-
-
-#ifndef HIP_CHECK
-#define HIP_CHECK CUDA_CHECK
-#define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
-#endif
-#endif // SWARM_HOST_CUH
+// =====================================================================================================================
+#endif // GAMEDEV_SWARM_HOST_CUH

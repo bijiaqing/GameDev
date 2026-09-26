@@ -9,9 +9,10 @@
 
 #include <gpu.cuh> // CUDA allocation, copies, and kernel launches
 
-#include <kdtree/knn.h>
+#include <kdtree/knn.h> // kdtree::box_t, kdtree::buildTree, kdtree::cct::knn
+
+#include <knn_types.cuh>
 #include <morton/morton_index.cuh>
-#include "knn_types.cuh"
 
 // compare Morton top-K output with brute force for ties, duplicates, sparse balls, split planes, and inactive records
 
@@ -225,11 +226,11 @@ void kdtree_active_query (int *dev_near_idx_old, float *dev_near_dist_sq,
         int idx_old = near_result.returnIndex(idx_neighbor);
         dev_near_idx_old[idx_neighbor] = idx_old;
         dev_near_dist_sq[idx_neighbor] =
-#ifdef GAMEDEV_ROCM
+            #ifdef GAMEDEV_ROCM
             (idx_old < 0) ? MORTON_INF_F : near_result.returnDist2(idx_neighbor);
-#else
+            #else  // !GAMEDEV_ROCM
             (idx_old < 0) ? CUDART_INF_F : near_result.returnDist2(idx_neighbor);
-#endif
+            #endif // GAMEDEV_ROCM
     }
 }
 
@@ -286,7 +287,9 @@ bool run_kdtree_filter_case (const edge_case &test)
     for (int idx_neighbor = 0; idx_neighbor < K; idx_neighbor++)
     {
         if (near_idx_old[idx_neighbor] >= 0)
+        {
             actual.emplace_back(near_dist_sq[idx_neighbor], near_idx_old[idx_neighbor]);
+        }
     }
     std::sort(actual.begin(), actual.end());
     std::vector<std::pair<float, int>> expected = brute_neighbors(
@@ -298,22 +301,22 @@ bool run_kdtree_filter_case (const edge_case &test)
     {
         float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
         passed = actual[idx_neighbor].second == expected[idx_neighbor].second
-            && error <= 2.0e-6f*std::max(1.0f, std::fabs(expected[idx_neighbor].first));
+            && error <= 2.0e-06f*std::max(1.0f, std::fabs(expected[idx_neighbor].first));
     }
 
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     _morton_gpu_check(gpuFree(dev_active), "release KD active mask");
     _morton_gpu_check(gpuFree(dev_near_dist_sq), "release KD neighbor distances");
     _morton_gpu_check(gpuFree(dev_near_idx_old), "release KD neighbor identifiers");
     _morton_gpu_check(gpuFree(dev_kdtree_box), "release KD bounds");
     _morton_gpu_check(gpuFree(dev_kdtree_node), "release KD nodes");
-#else
-    gpuFree(dev_active);
-    gpuFree(dev_near_dist_sq);
-    gpuFree(dev_near_idx_old);
-    gpuFree(dev_kdtree_box);
-    gpuFree(dev_kdtree_node);
-#endif
+    #else  // !GAMEDEV_ROCM
+    static_cast<void>(gpuFree(dev_active));
+    static_cast<void>(gpuFree(dev_near_dist_sq));
+    static_cast<void>(gpuFree(dev_near_idx_old));
+    static_cast<void>(gpuFree(dev_kdtree_box));
+    static_cast<void>(gpuFree(dev_kdtree_node));
+    #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << "kdtree_" << test.name << std::endl;
     return passed;
@@ -341,15 +344,19 @@ bool run_case (const edge_case &test)
     _morton_gpu_check(gpuMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate edge overflow flags");
     if (!test.active.empty())
+    {
         _morton_gpu_check(gpuMalloc((void**)&dev_active, sizeof(unsigned char)*test.active.size()),
             "allocate edge active flags");
+    }
     _morton_gpu_check(gpuMemcpy(dev_point, test.points.data(), sizeof(float3)*test.points.size(),
         gpuMemcpyHostToDevice), "copy edge points");
     _morton_gpu_check(gpuMemcpy(dev_query_point, test.queries.data(), sizeof(float3)*test.queries.size(),
         gpuMemcpyHostToDevice), "copy edge queries");
     if (dev_active)
+    {
         _morton_gpu_check(gpuMemcpy(dev_active, test.active.data(), sizeof(unsigned char)*test.active.size(),
             gpuMemcpyHostToDevice), "copy edge active flags");
+    }
 
     morton_index morton_owner;
     morton_owner.build(
@@ -404,7 +411,7 @@ bool run_case (const edge_case &test)
         for (std::size_t idx_neighbor = 0; idx_neighbor < common; idx_neighbor++)
         {
             float error = std::fabs(actual[idx_neighbor].first - expected[idx_neighbor].first);
-            bool distance_matches = error <= 2.0e-6f
+            bool distance_matches = error <= 2.0e-06f
                 *std::max(1.0f, std::fabs(expected[idx_neighbor].first));
             if (actual[idx_neighbor].second == expected[idx_neighbor].second && distance_matches) continue;
 
@@ -420,21 +427,21 @@ bool run_case (const edge_case &test)
         }
     }
 
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     if (dev_active) _morton_gpu_check(gpuFree(dev_active), "release Morton active mask");
     _morton_gpu_check(gpuFree(dev_stack_overflow), "release Morton overflow flags");
     _morton_gpu_check(gpuFree(dev_near_dist_sq), "release Morton neighbor distances");
     _morton_gpu_check(gpuFree(dev_near_idx_old), "release Morton neighbor identifiers");
     _morton_gpu_check(gpuFree(dev_query_point), "release Morton query points");
     _morton_gpu_check(gpuFree(dev_point), "release Morton points");
-#else
-    if (dev_active) gpuFree(dev_active);
-    gpuFree(dev_stack_overflow);
-    gpuFree(dev_near_dist_sq);
-    gpuFree(dev_near_idx_old);
-    gpuFree(dev_query_point);
-    gpuFree(dev_point);
-#endif
+    #else  // !GAMEDEV_ROCM
+    if (dev_active) static_cast<void>(gpuFree(dev_active));
+    static_cast<void>(gpuFree(dev_stack_overflow));
+    static_cast<void>(gpuFree(dev_near_dist_sq));
+    static_cast<void>(gpuFree(dev_near_idx_old));
+    static_cast<void>(gpuFree(dev_query_point));
+    static_cast<void>(gpuFree(dev_point));
+    #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;

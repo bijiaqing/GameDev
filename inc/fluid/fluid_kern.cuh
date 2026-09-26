@@ -1,6 +1,11 @@
+#ifndef GAMEDEV_FLUID_KERN_CUH
+#define GAMEDEV_FLUID_KERN_CUH
+
 #include <gpu.cuh>
-#ifndef FLUID_KERN_CUH
-#define FLUID_KERN_CUH
+
+#if defined(DIFFUSE_CONCENTRATION) && !defined(DIFFUSION)
+#error "DIFFUSE_CONCENTRATION requires DIFFUSION"
+#endif // DIFFUSE_CONCENTRATION && !DIFFUSION
 
 #if defined(VISC_FLOW) && !defined(DIFFUSION)
 #error "VISC_FLOW requires DIFFUSION"
@@ -8,9 +13,9 @@
 
 #include <const_defs.cuh>
 
-// Frozen-coefficient drag quadrature shared by source_update and analytical tests.
+// compute frozen-coefficient drag relaxation and force weights shared by source_update and analytical tests
 __device__ __forceinline__
-void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
+void _get_drag_weights (real dt, real ts, real &drag_relax, real &drag_decay,
     real &force_weight_old, real &force_weight_new)
 {
     real tau = dt / ts;
@@ -18,13 +23,13 @@ void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
     drag_decay = 1.0 - drag_relax;
 
     // evaluate drag-weighted force quadrature with a cancellation-safe small-step series
-    if (tau < 1.0e-4)
+    if (tau < 1.0e-04)
     {
         real tau_sq = tau*tau;
         real tau_cb = tau_sq*tau;
 
-        force_weight_old = dt*(0.5 - tau/3.0 + tau_sq/8.0  - tau_cb/30.0);
-        force_weight_new = dt*(0.5 - tau/6.0 + tau_sq/24.0 - tau_cb/120.0);
+        force_weight_old = dt*(0.5 - tau / 3.0 + tau_sq / 8.0 - tau_cb / 30.0);
+        force_weight_new = dt*(0.5 - tau / 6.0 + tau_sq / 24.0 - tau_cb / 120.0);
     }
     else
     {
@@ -34,19 +39,19 @@ void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
 
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // conservative directional transport
 
 #ifdef FLUID_BLOCK_SWEEP
 
 #ifdef GAMEDEV_ROCM
-const int TPB_BLOCK = 64;
-#else
-const int TPB_BLOCK = 32;
-#endif
+constexpr int TPB_BLOCK = 64;
+#else  // !GAMEDEV_ROCM
+constexpr int TPB_BLOCK = 32;
+#endif // GAMEDEV_ROCM
 
 // index the explicit full-grid planes shared by every block-owned advection sweep
-enum BlockAdvField
+enum block_adv_field
 {
     BLOCK_RHOD = 0,
     BLOCK_MX,
@@ -78,7 +83,7 @@ __global__ void advection_zbl (
     const real *dev_ppm_weight_z, real *dev_adv_work, real dt
 );
 
-#else // !FLUID_BLOCK_SWEEP
+#else  // !FLUID_BLOCK_SWEEP
 
 __global__ void advection_xth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
@@ -97,7 +102,7 @@ __global__ void advection_zth (
 
 #endif // FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // transport timestep rate
 
 __global__ void cfl_rate_calc (
@@ -106,7 +111,7 @@ __global__ void cfl_rate_calc (
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 // conservative density diffusion
 
 #ifdef FLUID_BLOCK_SWEEP
@@ -126,26 +131,26 @@ __global__ void diffusion_zbl (
     real dt
 );
 
-#else // !FLUID_BLOCK_SWEEP
+#else  // !FLUID_BLOCK_SWEEP
 
 __global__ void diffusion_xth (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real dt
 );
 
 __global__ void diffusion_yth (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real dt
 );
 
 __global__ void diffusion_zth (
-    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, 
+    real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real dt
 );
 
 #endif // FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // evolved-state diagnostics
 
 __global__ void inf_cell_flag (
@@ -158,7 +163,7 @@ __global__ void inf_cell_flag (
     int *dev_bad_cell
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 // field initialization
 
 __global__ void init_rho_calc (
@@ -172,7 +177,7 @@ __global__ void init_vel_calc (
     #endif // DIFFUSION
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 // primitive and conserved momentum synchronization
 
 __global__ void momentum_getv (
@@ -193,11 +198,11 @@ __global__ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens);
 __global__ void optdepth_csum (real *dev_optdepth);
 #endif // RADIATION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // local drag and external-force update
 
 __global__ void source_update (
-    real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz, 
+    real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz,
     const real *dev_dustdens,
     #ifdef RADIATION
     const real *dev_optdepth, real beta_taper,
@@ -205,6 +210,6 @@ __global__ void source_update (
     real dt
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 
-#endif // FLUID_KERN_CUH
+#endif // GAMEDEV_FLUID_KERN_CUH

@@ -2,9 +2,9 @@
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // represented grain-number normalization
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef MULTISIZE
 // calculate the physical grain count represented by one containment-weighted sampled swarm
@@ -16,7 +16,8 @@ real _get_grain_number (real size, real domain_mass, real mass_norm)
     // sample q(s) proportional to s^-0.5 for equal full-column swarm mass when radiation is disabled
     // sample q(s) proportional to s^-1.5 for equal full-column swarm area when radiation is enabled
     // convert either proposal to the target mass spectrum with the importance factor _get_mass_weight(s)
-    // multiply by domain_mass=I(s) because the finite radial-polar domain contains a size-dependent fraction of each column
+    // multiply by domain_mass=I(s) because the finite radial-polar domain contains a size-dependent fraction of each
+    // column
     // assign represented swarm mass M_i=mass_norm*w(s_i)*I(s_i)/N_P
     // choose mass_norm on the host so sum_i M_i equals total_dust_mass within roundoff
     // convert represented mass to physical grain count with N_i=M_i/m_g(s_i)
@@ -26,12 +27,12 @@ real _get_grain_number (real size, real domain_mass, real mass_norm)
 }
 #endif // MULTISIZE
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: particle_init
 // initialize representative positions, steady drag-coupled drift, and optional grain properties
 //
 // parallelization: one thread per representative particle
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void particle_init (swarm *dev_particle, const real *dev_randposx, const real *dev_randposy, const real *dev_randposz
@@ -106,4 +107,4 @@ void particle_init (swarm *dev_particle, const real *dev_randposx, const real *d
     #endif // MULTISIZE
 }
 
-// =========================================================================================================================
+// =====================================================================================================================

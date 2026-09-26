@@ -1,4 +1,4 @@
-#include <cstdlib>
+// include fragment: the shared polar-boundary main program, included once by each polar test's fluid_runtime.cu
 #include <cmath>      // cos, exp, fmin, pow, sin, sqrt
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories
@@ -54,7 +54,7 @@ real compact_bump (real value, real lower, real upper)
     real center = 0.5*(lower + upper);
     real half_width = 0.5*(upper - lower);
     real coordinate = (value - center) / half_width;
-    return exp(1.0 - 1.0/(1.0 - coordinate*coordinate));
+    return exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -69,9 +69,9 @@ const char *case_name ()
 {
     #ifdef VERIFY_Z_OUTFLOW
     return "z_outflow_3d";
-    #else // VERIFY_Z_REFLECT
+    #else  // VERIFY_Z_REFLECT
     return "z_reflect_3d";
-    #endif
+    #endif // VERIFY_Z_OUTFLOW
 }
 }
 
@@ -88,7 +88,7 @@ int main ()
     std::vector<real> ppm_weight_z(4*(N_Z + 1));
     ppm_geometry_weights_calc(ppm_weight_y.data(), ppm_weight_z.data());
 
-    real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
     for (int iz = 0; iz < N_Z; iz++)
     {
@@ -112,7 +112,7 @@ int main ()
             }, z_i, z_o);
             real lz = y*OUTFLOW_RATE / geom_z;
             real mz_int = lz*rho_int;
-            #else // VERIFY_Z_REFLECT
+            #else  // VERIFY_Z_REFLECT
             // q=rho*sin(z) is compressed toward the symmetry plane by w=a*(pi/2-z); specific polar momentum is
             // proportional to w, so it is constant along the pressureless characteristics used by the production kernel
             real rho_int = gauss8([&](real z)
@@ -125,7 +125,7 @@ int main ()
                 real lz = y*REFLECT_RATE*(0.5*M_PI - z) / geom_z;
                 return q*lz;
             }, z_i, z_o);
-            #endif
+            #endif // VERIFY_Z_OUTFLOW
 
             for (int ix = 0; ix < N_X; ix++)
             {
@@ -151,19 +151,21 @@ int main ()
     GPU_CHECK(gpuMemcpy(dev_dustmomx, dustmomx.data(), sizeof(*(dev_dustmomx))*(N_G), gpuMemcpyHostToDevice));
     GPU_CHECK(gpuMemcpy(dev_dustmomy, dustmomy.data(), sizeof(*(dev_dustmomy))*(N_G), gpuMemcpyHostToDevice));
     GPU_CHECK(gpuMemcpy(dev_dustmomz, dustmomz.data(), sizeof(*(dev_dustmomz))*(N_G), gpuMemcpyHostToDevice));
-    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()),
+        gpuMemcpyHostToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
     real *dev_adv_work = nullptr;
-    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work), sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
-    #endif // FLUID_BLOCK_SWEEP
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work),
+        sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
+        #endif // FLUID_BLOCK_SWEEP
 
     real max_rate;
     #ifdef VERIFY_Z_OUTFLOW
     max_rate = OUTFLOW_RATE;
-    #else // VERIFY_Z_REFLECT
+    #else  // VERIFY_Z_REFLECT
     max_rate = REFLECT_RATE*(0.5*M_PI - Z_MIN);
-    #endif
+    #endif // VERIFY_Z_OUTFLOW
     real dt_nominal = 0.25*dz / max_rate;
     real clock = 0.0;
     int steps = 0;
@@ -175,7 +177,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
             dev_ppm_weight_z, dev_adv_work, dt
         );
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         advection_zth <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt
         );

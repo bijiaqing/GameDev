@@ -4,6 +4,18 @@
 #include <param_phys.cuh>
 #endif // VISC_FLOW
 
+// =====================================================================================================================
+// kernel: cfl_rate_calc
+// purpose: store each cell's largest explicit transport rate, measured relative to the FARGO ring mean
+//
+// parallelization: one thread per azimuthal ring
+//
+// per call:
+//   1 radial and polar inverse length scales from finite-volume geometry
+//   2 ring validation and mean azimuthal specific angular momentum
+//   3 per-cell residual azimuthal, radial, and polar rates, with INFINITY marking a nonfinite ring
+// =====================================================================================================================
+
 __global__
 void cfl_rate_calc (
     real *dev_cfl_rate, const real *dev_dustdens,
@@ -92,6 +104,8 @@ void cfl_rate_calc (
         real vy = dev_dustvely[idx_cell];
         real lz = dev_dustvelz[idx_cell];
 
+        // FARGO removes the ring mean from the explicit flux speed, unlike particle mesh-crossing limits
+        // diffusion is absent here because its implicit line solves enforce their own substeps
         // convert angular primitives to residual azimuthal and linear polar speeds
         real vz = lz / y;
 

@@ -1,17 +1,17 @@
-#ifndef GAMEDEV_MORTON_TYPES_CUH
-#define GAMEDEV_MORTON_TYPES_CUH
+#ifndef GAMEDEV_SWARM_MORTON_TYPES_CUH
+#define GAMEDEV_SWARM_MORTON_TYPES_CUH
 
 #include <cstdint>       // std::uint32_t, std::uint64_t
 #ifdef GAMEDEV_ROCM
 #include <limits>        // std::numeric_limits
-#endif
+#endif // GAMEDEV_ROCM
 
-#include <gpu.cuh>  // CUDA vector types and device qualifiers
+#include <gpu.cuh>  // GPU vector types and device qualifiers
 #ifdef GAMEDEV_ROCM
 
 inline constexpr float MORTON_INF_F = std::numeric_limits<float>::infinity();
 inline constexpr float MORTON_PI_F = 3.14159265358979323846f;
-#endif
+#endif // GAMEDEV_ROCM
 
 // store one Morton-sorted search record and its original particle identifier
 struct morton_point
@@ -81,4 +81,4 @@ float _get_morton_point_dist_sq (const float3 &point_a, const float3 &point_b)
     return dx*dx + dy*dy + dz*dz;
 }
 
-#endif // GAMEDEV_MORTON_TYPES_CUH
+#endif // GAMEDEV_SWARM_MORTON_TYPES_CUH

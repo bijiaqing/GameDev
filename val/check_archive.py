@@ -1,36 +1,36 @@
 #!/usr/bin/env python3
 
-"""Verify that one native validation archive is complete and ready to transfer"""
+"""verify that one native validation archive is complete and ready to transfer"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-
 import argparse
-from datetime import datetime, timezone
 import json
 import math
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
 
 from val_config import (
     EXPECTED_FLUID_METRICS,
     EXPECTED_PUBLICATION_FLUID_METRICS,
     EXPECTED_PUBLICATION_SWARM_METRICS,
     EXPECTED_SWARM_METRICS,
-    VAL_TIERS,
     SWARM_CHAIN_MODELS,
+    VAL_TIERS,
+    fluid_archive_sweep,
     fluid_cases,
-    val_output_path,
     model_output,
     swarm_models,
+    val_output_path,
 )
 
 
 def load_json(path: Path) -> dict[str, Any]:
-    """Read one JSON object and reject malformed records"""
+    """read one JSON object and reject malformed records"""
 
     value = json.loads(path.read_text())
     if not isinstance(value, dict):
@@ -39,7 +39,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def variant_from_arguments(model: str, arguments: list[str]) -> str:
-    """Resolve the manifest suffix for one suite case entry"""
+    """resolve the manifest suffix for one suite case entry"""
 
     values = {arguments[index]: arguments[index + 1] for index in range(0, len(arguments), 2)}
     if model in {"test_optdepth", "test_attenuation_2d"}:
@@ -54,7 +54,7 @@ def variant_from_arguments(model: str, arguments: list[str]) -> str:
 
 
 def finite_numbers(value: Any) -> bool:
-    """Return whether every floating-point value in a JSON-compatible object is finite"""
+    """return whether every floating-point value in a JSON-compatible object is finite"""
 
     if isinstance(value, bool) or value is None or isinstance(value, (str, int)):
         return True
@@ -68,7 +68,7 @@ def finite_numbers(value: Any) -> bool:
 
 
 def valid_metric_tiers(value: Any, metric_count: int) -> bool:
-    """Require nonnegative integer tier counts that exactly partition an archive"""
+    """require nonnegative integer tier counts that exactly partition an archive"""
 
     return (
         isinstance(value, dict)
@@ -81,7 +81,7 @@ def valid_metric_tiers(value: Any, metric_count: int) -> bool:
 
 
 def check_manifest(path: Path, component: str, backend: str) -> list[str]:
-    """Validate one full-suite manifest and return any problems"""
+    """validate one full-suite manifest and return any problems"""
 
     if not path.is_file():
         return [f"missing full-suite manifest: {path}"]
@@ -96,10 +96,13 @@ def check_manifest(path: Path, component: str, backend: str) -> list[str]:
         if record.get(key) != value:
             problems.append(f"{path}: expected {key}={value!r}; found {record.get(key)!r}")
     cases = record.get("cases") if component == "fluid" else record.get("models")
-    completed = record.get("cases_completed") if component == "fluid" else record.get("models_completed")
-    expected_count = record.get("cases_expected") if component == "fluid" else record.get("models_expected")
-    canonical_count = len(fluid_cases("all")) if component == "fluid" \
-        else len(swarm_models("all"))
+    completed = (
+        record.get("cases_completed") if component == "fluid" else record.get("models_completed")
+    )
+    expected_count = (
+        record.get("cases_expected") if component == "fluid" else record.get("models_expected")
+    )
+    canonical_count = len(fluid_cases("all")) if component == "fluid" else len(swarm_models("all"))
     if not isinstance(cases, list) or completed != expected_count or completed != len(cases):
         problems.append(f"{path}: incomplete case accounting")
     elif len(cases) != canonical_count:
@@ -113,7 +116,9 @@ def check_manifest(path: Path, component: str, backend: str) -> list[str]:
     if record.get("campaign_tier") not in VAL_TIERS:
         problems.append(f"{path}: campaign_tier is missing or invalid")
     included_tiers = record.get("included_tiers")
-    if not isinstance(included_tiers, list) or any(tier not in VAL_TIERS for tier in included_tiers):
+    if not isinstance(included_tiers, list) or any(
+        tier not in VAL_TIERS for tier in included_tiers
+    ):
         problems.append(f"{path}: included_tiers is missing or invalid")
     resolutions = record.get("effective_resolutions")
     if not isinstance(resolutions, list) or not resolutions:
@@ -122,17 +127,20 @@ def check_manifest(path: Path, component: str, backend: str) -> list[str]:
 
 
 def check_fluid(
-    val_root: Path, backend: str, sweep: str, allow_partial: bool,
+    val_root: Path,
+    backend: str,
+    sweep: str,
+    allow_partial: bool,
 ) -> dict[str, Any]:
-    """Check the publication fluid metrics and their manifests"""
+    """check the publication fluid metrics and their manifests"""
 
     base = model_output(val_root, "fluid", "_suite", backend, sweep)
-    metrics = sorted((val_root/"fluid"/"out").glob(f"test_*/{backend}/{sweep}/metrics_*.json"))
-    problems = check_manifest(base/"manifest_all.json", "fluid", backend)
+    metrics = sorted((val_root / "fluid" / "out").glob(f"test_*/{backend}/{sweep}/metrics_*.json"))
+    problems = check_manifest(base / "manifest_all.json", "fluid", backend)
     invalid_metrics = []
     model_manifests = []
 
-    suite_path = base/"manifest_all.json"
+    suite_path = base / "manifest_all.json"
     if suite_path.is_file():
         suite = load_json(suite_path)
         for entry in suite.get("cases", []):
@@ -142,7 +150,9 @@ def check_fluid(
                 problems.append(f"{suite_path}: invalid arguments for {model}")
                 continue
             variant = variant_from_arguments(model, [str(value) for value in arguments])
-            path = model_output(val_root, "fluid", model, backend, sweep)/f"manifest_{variant}.json"
+            path = (
+                model_output(val_root, "fluid", model, backend, sweep) / f"manifest_{variant}.json"
+            )
             model_manifests.append(str(path.relative_to(val_root)))
             if not path.is_file():
                 problems.append(f"missing or failed fluid model manifest: {path}")
@@ -156,12 +166,11 @@ def check_fluid(
             ):
                 problems.append(f"invalid or failed fluid model manifest: {path}")
             environment = model_record.get("environment")
-            if not isinstance(environment, str) or not (path.parent/environment).is_file():
+            if not isinstance(environment, str) or not (path.parent / environment).is_file():
                 problems.append(f"missing fluid model environment referenced by {path}")
             files = model_record.get("files")
             if not isinstance(files, list) or any(
-                not isinstance(name, str) or not (path.parent/name).is_file()
-                for name in files
+                not isinstance(name, str) or not (path.parent / name).is_file() for name in files
             ):
                 problems.append(f"missing fluid metric referenced by {path}")
 
@@ -176,7 +185,9 @@ def check_fluid(
         if record.get("tier") not in VAL_TIERS:
             problems.append(f"fluid metric has missing or invalid tier: {path}")
 
-    if (not allow_partial and len(metrics) != EXPECTED_FLUID_METRICS) or (allow_partial and not metrics):
+    if (not allow_partial and len(metrics) != EXPECTED_FLUID_METRICS) or (
+        allow_partial and not metrics
+    ):
         problems.append(
             f"fluid metric count is {len(metrics)}; expected "
             f"{'a nonzero partial archive' if allow_partial else EXPECTED_FLUID_METRICS}"
@@ -184,7 +195,9 @@ def check_fluid(
     metric_tiers = load_json(suite_path).get("metric_tiers", {}) if suite_path.is_file() else {}
     if not valid_metric_tiers(metric_tiers, len(metrics)):
         problems.append("fluid tier counts do not match the archived metric count")
-    elif not allow_partial and metric_tiers.get("publication") != EXPECTED_PUBLICATION_FLUID_METRICS:
+    elif (
+        not allow_partial and metric_tiers.get("publication") != EXPECTED_PUBLICATION_FLUID_METRICS
+    ):
         problems.append(
             f"fluid publication metric count is {metric_tiers.get('publication')}; "
             f"expected {EXPECTED_PUBLICATION_FLUID_METRICS}"
@@ -204,16 +217,16 @@ def check_fluid(
 
 
 def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, Any]:
-    """Check analytical swarm records and the complete KNN manifest"""
+    """check analytical swarm records and the complete KNN manifest"""
 
     base = model_output(val_root, "swarm", "_suite", backend)
-    metrics = sorted((val_root/"swarm"/"out").glob(f"test_*/{backend}/metrics_N*.json"))
-    problems = check_manifest(base/"manifest_all.json", "swarm", backend)
-    environment_path = base/"environment_all.json"
+    metrics = sorted((val_root / "swarm" / "out").glob(f"test_*/{backend}/metrics_N*.json"))
+    problems = check_manifest(base / "manifest_all.json", "swarm", backend)
+    environment_path = base / "environment_all.json"
     if not environment_path.is_file():
         problems.append(f"missing full-suite environment record: {environment_path}")
     failed_metrics = []
-    suite_path = base/"manifest_all.json"
+    suite_path = base / "manifest_all.json"
     if suite_path.is_file():
         suite = load_json(suite_path)
         for entry in suite.get("models", []):
@@ -224,7 +237,9 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
             if not isinstance(output, str):
                 problems.append(f"{suite_path}: missing component output for {model}")
                 continue
-            component_path = model_output(val_root, "swarm", model, backend)/Path(output).relative_to(model)
+            component_path = model_output(val_root, "swarm", model, backend) / Path(
+                output
+            ).relative_to(model)
             if not component_path.is_file():
                 problems.append(f"missing swarm component manifest: {component_path}")
                 continue
@@ -232,27 +247,31 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
             if component.get("passed") is not True:
                 problems.append(f"swarm component manifest did not pass: {component_path}")
             if component.get("tier") != entry.get("tier"):
-                problems.append(f"swarm component tier disagrees with {suite_path}: {component_path}")
+                problems.append(
+                    f"swarm component tier disagrees with {suite_path}: {component_path}"
+                )
             if model != "test_knn" and (
                 component.get("backend") != backend or component.get("model") != model
             ):
                 problems.append(f"invalid swarm component identity: {component_path}")
-            if model != "test_knn" and component.get("resolution_tiers") \
-                    != entry.get("resolution_tiers"):
+            if model != "test_knn" and component.get("resolution_tiers") != entry.get(
+                "resolution_tiers"
+            ):
                 problems.append(
-                    f"swarm component resolution tiers disagree with {suite_path}: "
-                    f"{component_path}"
+                    f"swarm component resolution tiers disagree with {suite_path}: {component_path}"
                 )
             if model != "test_knn":
                 environment = component.get("environment")
-                if not isinstance(environment, str) \
-                        or not (component_path.parent/environment).is_file():
+                if (
+                    not isinstance(environment, str)
+                    or not (component_path.parent / environment).is_file()
+                ):
                     problems.append(
                         f"missing swarm model environment referenced by {component_path}"
                     )
                 files = component.get("files")
                 if not isinstance(files, list) or any(
-                    not isinstance(name, str) or not (component_path.parent/name).is_file()
+                    not isinstance(name, str) or not (component_path.parent / name).is_file()
                     for name in files
                 ):
                     problems.append(f"missing swarm metric referenced by {component_path}")
@@ -267,7 +286,9 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
         if record.get("tier") not in VAL_TIERS:
             problems.append(f"swarm metric has missing or invalid tier: {path}")
 
-    if (not allow_partial and len(metrics) != EXPECTED_SWARM_METRICS) or (allow_partial and not metrics):
+    if (not allow_partial and len(metrics) != EXPECTED_SWARM_METRICS) or (
+        allow_partial and not metrics
+    ):
         problems.append(
             f"swarm metric count is {len(metrics)}; expected "
             f"{'a nonzero partial archive' if allow_partial else EXPECTED_SWARM_METRICS}"
@@ -275,7 +296,9 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
     metric_tiers = load_json(suite_path).get("metric_tiers", {}) if suite_path.is_file() else {}
     if not valid_metric_tiers(metric_tiers, len(metrics)):
         problems.append("swarm tier counts do not match the archived metric count")
-    elif not allow_partial and metric_tiers.get("publication") != EXPECTED_PUBLICATION_SWARM_METRICS:
+    elif (
+        not allow_partial and metric_tiers.get("publication") != EXPECTED_PUBLICATION_SWARM_METRICS
+    ):
         problems.append(
             f"swarm publication metric count is {metric_tiers.get('publication')}; "
             f"expected {EXPECTED_PUBLICATION_SWARM_METRICS}"
@@ -283,14 +306,13 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
     if failed_metrics:
         problems.append(f"{len(failed_metrics)} swarm metrics did not pass")
 
-    knn_path = model_output(val_root, "swarm", "test_knn", backend)/"suite_manifest.json"
+    knn_path = model_output(val_root, "swarm", "test_knn", backend) / "suite_manifest.json"
     knn_passed = False
     if knn_path.is_file():
         try:
             knn_record = load_json(knn_path)
             knn_passed = (
-                knn_record.get("passed") is True
-                and knn_record.get("tier") == "publication"
+                knn_record.get("passed") is True and knn_record.get("tier") == "publication"
             )
         except (OSError, ValueError, json.JSONDecodeError) as error:
             problems.append(f"invalid KNN suite manifest {knn_path}: {error}")
@@ -299,7 +321,7 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
 
     chain_manifests = []
     for model in SWARM_CHAIN_MODELS:
-        path = model_output(val_root, "swarm", model, backend, scope="chain")/"manifest.json"
+        path = model_output(val_root, "swarm", model, backend, scope="chain") / "manifest.json"
         valid = False
         if path.is_file():
             try:
@@ -309,7 +331,6 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
                     record.get("model") == model
                     and record.get("backend") == backend
                     and record.get("tier") == "publication"
-                    and record.get("integrator") == "frozen_bath"
                     and record.get("passed") is True
                     and isinstance(variants, dict)
                     and bool(variants)
@@ -339,22 +360,35 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
 
 def main() -> None:
     val_root = Path(__file__).resolve().parent
-    parser = argparse.ArgumentParser(description="check one native validation archive before transfer")
+    parser = argparse.ArgumentParser(
+        description="check one native validation archive before transfer"
+    )
     parser.add_argument("--backend", choices=("cuda", "rocm"), required=True)
     parser.add_argument("--component", choices=("all", "fluid", "swarm"), default="all")
-    parser.add_argument("--fluid-sweep", choices=("thread", "block", "thread_precise", "block_precise"), default="thread")
+    parser.add_argument(
+        "--fluid-sweep",
+        choices=("thread", "block", "thread_precise", "block_precise"),
+        default="thread",
+        help="fluid line solver or archive directory; CUDA solvers map to their _precise archives",
+    )
     parser.add_argument("--val-root", type=Path, default=val_root)
     parser.add_argument(
-        "--allow-partial", action="store_true",
+        "--allow-partial",
+        action="store_true",
         help="accept a passed quick matrix with fewer than the full metric count",
     )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if not args.fluid_sweep.endswith("_precise"):
+        args.fluid_sweep = fluid_archive_sweep(args.backend, args.fluid_sweep)
+    elif args.backend != "cuda":
+        parser.error(f"--fluid-sweep {args.fluid_sweep} names a CUDA archive")
 
     selected = ("fluid", "swarm") if args.component == "all" else (args.component,)
     components = [
         check_fluid(args.val_root, args.backend, args.fluid_sweep, args.allow_partial)
-        if component == "fluid" else check_swarm(args.val_root, args.backend, args.allow_partial)
+        if component == "fluid"
+        else check_swarm(args.val_root, args.backend, args.allow_partial)
         for component in selected
     ]
     report = {
@@ -369,7 +403,9 @@ def main() -> None:
     }
     try:
         output = val_output_path(
-            args.val_root, args.output, f"check_archive_{args.backend}_{args.fluid_sweep.removesuffix('_precise')}.json"
+            args.val_root,
+            args.output,
+            f"check_archive_{args.backend}_{args.fluid_sweep.removesuffix('_precise')}.json",
         )
     except ValueError as error:
         parser.error(str(error))

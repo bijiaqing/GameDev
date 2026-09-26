@@ -1,5 +1,6 @@
-#include <cstdlib>
+// include fragment: the attenuation test's main program, included once by its fluid_runtime.cu
 #include <cmath>      // exp, pow
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
 #include <iostream>   // std::cout, std::endl
@@ -8,11 +9,13 @@
 #include <vector>     // std::vector
 
 #include <gpu.cuh>
+
 #include <fluid_kern.cuh>
 
 // test-only driver for the coupled optical-depth and radiation-source path
-// density is frozen so the analytical answer contains only the radial quadrature and one exact drag-force update; transport
-// and diffusion are intentionally absent because their errors would obscure whether attenuation reaches source_update correctly
+// density is frozen so the analytical answer contains only the radial quadrature and one exact drag-force update;
+// transport and diffusion are intentionally absent because their errors would obscure whether attenuation reaches
+// source_update correctly
 
 namespace
 {
@@ -29,20 +32,21 @@ void write_binary (const std::string &name, const std::vector<real> &values)
 
 int main ()
 {
-    const real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+    const real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     const real dt = 0.2;
     std::vector<real> rhod(N_G), lx(N_G, 0.0), vy(N_G, 0.0), lz(N_G, 0.0);
     for (int iy = 0; iy < N_Y; iy++)
     {
         real y = Y_MIN*pow(dy, static_cast<real>(iy) + 0.5);
-        real h_g = ASPR_0*pow(y/R_0, 0.5*(IDX_Q + 1.0));
+        real h_g = ASPR_0*pow(y / R_0, 0.5*(IDX_Q + 1.0));
         // choose Sigma_d so the production 2D well-mixed reconstruction gives rho_d,mid proportional to y^VERIFY_POWER
-        real sigma_d = sqrt(2.0*M_PI)*h_g*y*pow(y/R_0, static_cast<real>(VERIFY_POWER));
+        real sigma_d = sqrt(2.0*M_PI)*h_g*y*pow(y / R_0, static_cast<real>(VERIFY_POWER));
         for (int ix = 0; ix < N_X; ix++) rhod[ix + iy*N_X] = sigma_d;
     }
 
     real *dev_rhod, *dev_lx, *dev_vy, *dev_lz, *dev_optdepth;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_rhod), sizeof(*dev_rhod)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_rhod),
+        sizeof(*dev_rhod)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate attenuation density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -62,27 +66,32 @@ int main ()
         std::cerr << "allocate attenuation lz" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_optdepth), sizeof(*dev_optdepth)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_optdepth),
+        sizeof(*dev_optdepth)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate attenuation optical depth" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_rhod, rhod.data(), sizeof(*(dev_rhod))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_rhod, rhod.data(), sizeof(*(dev_rhod))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload attenuation density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_lx, lx.data(), sizeof(*(dev_lx))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_lx, lx.data(), sizeof(*(dev_lx))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload attenuation lx" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_vy, vy.data(), sizeof(*(dev_vy))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_vy, vy.data(), sizeof(*(dev_vy))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload attenuation vy" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_lz, lz.data(), sizeof(*(dev_lz))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_lz, lz.data(), sizeof(*(dev_lz))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload attenuation lz" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -100,7 +109,7 @@ int main ()
         std::cerr << "attenuation optical-depth increments" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    optdepth_csum <<< (N_X*N_Z)/TPB + 1, TPB >>> (dev_optdepth);
+    optdepth_csum <<< (N_X*N_Z) / TPB + 1, TPB >>> (dev_optdepth);
     if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
     {
         std::cerr << "attenuation optical-depth prefix sum" << ": " << gpuGetErrorString(status) << std::endl;
@@ -125,22 +134,26 @@ int main ()
     }
 
     std::vector<real> optdepth(N_G);
-    if (gpuError_t status = gpuMemcpy(optdepth.data(), dev_optdepth, sizeof(*(optdepth.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(optdepth.data(), dev_optdepth, sizeof(*(optdepth.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy attenuation optical depth" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(lx.data(), dev_lx, sizeof(*(lx.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(lx.data(), dev_lx, sizeof(*(lx.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy attenuation lx" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(vy.data(), dev_vy, sizeof(*(vy.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(vy.data(), dev_vy, sizeof(*(vy.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy attenuation vy" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(lz.data(), dev_lz, sizeof(*(lz.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(lz.data(), dev_lz, sizeof(*(lz.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy attenuation lz" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);

@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 
+"""run the initializer model, then require identical host samples at every polar resolution"""
 
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+from __future__ import annotations
+
 import json
-
+import os
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 VAL_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND
-
 import numpy as np
+from val_config import BACKEND, model_output
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]/"src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from run_model import run
-
 
 model = Path(__file__).resolve().parent.name
 run(model)
@@ -29,8 +28,8 @@ run(model)
 if "--build-only" not in sys.argv:
     project_root = Path(__file__).resolve().parents[4]
     scope = os.environ.get("VAL_SCOPE", "manual")
-    out_dir = model_output(project_root/"val", "swarm", model, BACKEND, scope=scope)
-    manifest_path = out_dir/"manifest.json"
+    out_dir = model_output(project_root / "val", "swarm", model, BACKEND, scope=scope)
+    manifest_path = out_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     resolutions = manifest["resolutions"]
     reference = None
@@ -38,7 +37,7 @@ if "--build-only" not in sys.argv:
     compared_files = []
     for resolution in resolutions:
         for name in ("initial", "mass_bank", "mass_summary"):
-            path = out_dir/f"{name}_N{resolution}.dat"
+            path = out_dir / f"{name}_N{resolution}.dat"
             values = np.fromfile(path, dtype=np.float64)
             key = (name, values.shape)
             if reference is None:

@@ -21,6 +21,18 @@ real initdens_lerp (real R, const real *dev_initdens)
     return (1.0 - frac_R)*dev_initdens[idx_src] + frac_R*dev_initdens[idx_src + 1];
 }
 
+// =====================================================================================================================
+// kernel: init_rho_calc
+// purpose: initialize dust density from the host-convolved surface-density profile
+//
+// parallelization: one thread per grid cell
+//
+// per call:
+//   1 cylindrical-radius interpolation of the surface density
+//   2 vertical diffusion-equilibrium embedding in 3D
+//   3 multiplicative azimuthal noise shared across radius and polar angle
+// =====================================================================================================================
+
 __global__
 void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 {
@@ -29,7 +41,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 
     int ix = idx_cell % N_X;
     int iy = (idx_cell / N_X) % N_Y;
-    int iz = idx_cell / (N_X * N_Y);
+    int iz = idx_cell / (N_X*N_Y);
 
     real y = _get_ycent(iy);
     real z = _get_zcent(iz);
@@ -53,7 +65,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
     else
     {
         // embed the surface profile with the density-diffusion equilibrium
-        rhod = sigma_d*exp(-0.5*Z*Z/(H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
+        rhod = sigma_d*exp(-0.5*Z*Z / (H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
     }
 
     // apply azimuthal density noise shared across radius and polar angle

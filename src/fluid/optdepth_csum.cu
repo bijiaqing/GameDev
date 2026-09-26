@@ -2,6 +2,13 @@
 
 #include <fluid_kern.cuh>
 
+// =====================================================================================================================
+// kernel: optdepth_csum
+// purpose: accumulate radial optical-depth increments outward from the inner boundary
+//
+// parallelization: one thread per radial ray
+// =====================================================================================================================
+
 __global__
 void optdepth_csum (real *dev_optdepth)
 {

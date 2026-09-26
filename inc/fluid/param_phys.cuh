@@ -1,9 +1,9 @@
-#ifndef PARAM_PHYS_CUH
-#define PARAM_PHYS_CUH
+#ifndef GAMEDEV_FLUID_PARAM_PHYS_CUH
+#define GAMEDEV_FLUID_PARAM_PHYS_CUH
 
 #include <const_defs.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // orbital and vertically isothermal gas profiles
 
 __device__ __forceinline__
@@ -24,7 +24,7 @@ __device__ __forceinline__
 real _get_gas_strat (real R, real Z, real h_g)
 { return exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g)); }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // Epstein stopping-time profile
 
 // scale the reference midplane Stokes number by inverse surface density and vertical stratification
@@ -46,12 +46,12 @@ real _get_nu (real R, real h_g)
     #ifndef CONST_NU  // CONST_ALPHA
     real nu = ALPHA*h_g*h_g*R*R*_get_omegaK(R);
     return nu;
-    #else             // CONST_NU
+        #else  // CONST_NU
         return NU;
-    #endif // CONST_NU
+        #endif // CONST_NU
 }
 
-// Local dust diffusivity, including the finite-Stokes suppression in both flux modes.
+// return the local dust diffusivity, including finite-Stokes suppression in both flux modes
 __device__ __forceinline__
 real _get_diffusivity (real R, real Z, real h_g, real schmidt)
 {
@@ -59,7 +59,8 @@ real _get_diffusivity (real R, real Z, real h_g, real schmidt)
     return _get_nu(R, h_g) / (schmidt*(1.0 + stokes*stokes));
 }
 
-// Normalization cancels between face weight and concentration. In 2D use surface density.
+// return the concentration weight w proportional to rho_g, or Sigma_g in 2D, and w = 1 for density diffusion
+// its normalization cancels between face weights and concentration
 __device__ __forceinline__
 real _get_diffusion_weight (real y, real z)
 {
@@ -68,9 +69,9 @@ real _get_diffusion_weight (real y, real z)
     if (N_Z == 1) return pow(R / R_0, IDX_P);
     real h_g = _get_hg(R);
     return pow(R / R_0, IDX_P - 0.5*(IDX_Q + 3.0))*_get_gas_strat(R, y*cos(z), h_g);
-    #else
+    #else  // !DIFFUSE_CONCENTRATION
     return 1.0;
-    #endif
+    #endif // DIFFUSE_CONCENTRATION
 }
 
 #ifdef VISC_FLOW
@@ -113,14 +114,14 @@ real _get_alpha (real R, real h_g)
 {
     #ifndef CONST_NU  // CONST_ALPHA
     return ALPHA;
-    #else             // CONST_NU
+    #else  // CONST_NU
     real alpha = NU / (h_g*h_g*R*R*_get_omegaK(R));
     return alpha;
     #endif // CONST_NU
 }
 #endif // DIFFUSION
 
-// Midplane, small-height settling equilibrium approximation used by 3D initialization.
+// return the midplane, small-height settling-equilibrium dust scale height used by 3D initialization
 __device__ __forceinline__
 real _get_hd (real R, real h_g)
 {
@@ -132,14 +133,14 @@ real _get_hd (real R, real h_g)
     alpha_z /= 1.0 + stokes_mid*stokes_mid;
     #ifdef DIFFUSE_CONCENTRATION
     return H_g*sqrt(alpha_z / (stokes_mid + alpha_z));
-    #else
+    #else  // !DIFFUSE_CONCENTRATION
     return H_g*sqrt(alpha_z / stokes_mid);
-    #endif
+    #endif // DIFFUSE_CONCENTRATION
     #else  // !DIFFUSION
     return H_g;
     #endif // DIFFUSION
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
-#endif // PARAM_PHYS_CUH
+#endif // GAMEDEV_FLUID_PARAM_PHYS_CUH

@@ -5,10 +5,10 @@
 #include <swarm_grid.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: dustdens_depo
-// deposit each representative particle's dust mass to the cell-centred grid
-// =========================================================================================================================
+// deposit each representative particle's dust mass to the cell-centered grid
+// =====================================================================================================================
 
 __global__
 void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real total_dust_mass)
@@ -27,6 +27,6 @@ void dustdens_depo (real *dev_dustdens, const swarm *dev_particle, real total_du
     _deposit_field(dev_dustdens, dev_particle, idx, weight);
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // SAVE_DENS

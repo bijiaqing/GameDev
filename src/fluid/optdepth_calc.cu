@@ -4,6 +4,13 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
+// =====================================================================================================================
+// kernel: optdepth_calc
+// purpose: store each cell's local radial optical-depth increment before the outward cumulative sum
+//
+// parallelization: one thread per grid cell
+// =====================================================================================================================
+
 __global__
 void optdepth_calc (real *dev_optdepth, const real *dev_dustdens)
 {

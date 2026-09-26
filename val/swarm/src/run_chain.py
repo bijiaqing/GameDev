@@ -1,33 +1,27 @@
 #!/usr/bin/env python3
 
-"""Exercise one CUDA collision-chain model through the production runtime"""
+"""exercise one CUDA collision-chain model through the production runtime"""
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-
 import argparse
-from array import array
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
-from pathlib import Path
+import os
 import shutil
 import subprocess
+import sys
+from array import array
+from datetime import datetime, timezone
+from pathlib import Path
 
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 VAL_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(VAL_ROOT))
-from val_config import model_output
-
-from val_config import BACKEND, TARGET_ENV, DEFAULT_TARGET
-
-from val_config import model_executable
-
+from val_config import BACKEND, DEFAULT_TARGET, TARGET_ENV, model_executable, model_output
 
 EXPECTED_PARTICLES = 2048
 PARTICLE_FIELDS = 8
@@ -36,13 +30,13 @@ NUMBER_INDEX = 7
 
 
 def utc_now() -> str:
-    """Return the manifest timestamp in UTC"""
+    """return the manifest timestamp in UTC"""
 
     return datetime.now(timezone.utc).isoformat()
 
 
 def read_particle(path: Path) -> array:
-    """Read one production swarm checkpoint as native double values"""
+    """read one production swarm checkpoint as native double values"""
 
     values = array("d")
     with path.open("rb") as stream:
@@ -53,22 +47,22 @@ def read_particle(path: Path) -> array:
 
 
 def represented_mass(values: array) -> float:
-    """Sum the size-cubed mass proxy whose constant material factor cancels"""
+    """sum the size-cubed mass proxy whose constant material factor cancels"""
 
     return math.fsum(
-        values[index + NUMBER_INDEX]*values[index + SIZE_INDEX]**3
+        values[index + NUMBER_INDEX] * values[index + SIZE_INDEX] ** 3
         for index in range(0, len(values), PARTICLE_FIELDS)
     )
 
 
 def digest(path: Path) -> str:
-    """Hash one exact artifact for repeat-determinism evidence"""
+    """hash one exact artifact for repeat-determinism evidence"""
 
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def controller_equivalent(first: dict, second: dict) -> bool:
-    """Compare controller schedules while allowing atomic-sum roundoff"""
+    """compare controller schedules while allowing atomic-sum roundoff"""
 
     if first.keys() != second.keys():
         return False
@@ -80,19 +74,22 @@ def controller_equivalent(first: dict, second: dict) -> bool:
                 return False
             if not all(
                 controller_equivalent(item_first, item_second)
-                for item_first, item_second in zip(value_first, value_second)
+                for item_first, item_second in zip(value_first, value_second, strict=True)
             ):
                 return False
         elif isinstance(value_first, dict):
-            if not isinstance(value_second, dict) \
-                or not controller_equivalent(value_first, value_second):
+            if not isinstance(value_second, dict) or not controller_equivalent(
+                value_first, value_second
+            ):
                 return False
         elif isinstance(value_first, (int, float)) and not isinstance(value_first, bool):
-            if not isinstance(value_second, (int, float)) \
-                or isinstance(value_second, bool) \
+            if (
+                not isinstance(value_second, (int, float))
+                or isinstance(value_second, bool)
                 or not math.isclose(
                     float(value_first), float(value_second), rel_tol=1.0e-12, abs_tol=1.0e-12
-                ):
+                )
+            ):
                 return False
         elif value_first != value_second:
             return False
@@ -100,28 +97,48 @@ def controller_equivalent(first: dict, second: dict) -> bool:
 
 
 def validate_controller(path: Path, require_continuation: bool) -> dict:
-    """Validate the archived adaptive schedule independently of terminal output"""
+    """validate the archived adaptive schedule independently of terminal output"""
 
     data = json.loads(path.read_text())
     baths = data.get("baths", [])
     numeric = (
-        "minimum_duration", "maximum_duration", "minimum_limit_scale", "maximum_f",
-        "maximum_e", "maximum_touched", "maximum_events", "maximum_g",
-        "maximum_g_upper", "maximum_d_bath",
+        "minimum_duration",
+        "maximum_duration",
+        "minimum_limit_scale",
+        "maximum_f",
+        "maximum_e",
+        "maximum_touched",
+        "maximum_events",
+        "maximum_g",
+        "maximum_g_upper",
+        "maximum_d_bath",
     )
     finite = all(math.isfinite(float(data.get(key, math.nan))) for key in numeric)
-    complete = data.get("schema") == 2 \
-        and data.get("bath_count") == len(baths) \
-        and data.get("bath_count", 0) > 0 \
-        and data.get("operator_count", 0) > 0 \
-        and data.get("wave_count", 0) > 0 \
+    complete = (
+        data.get("schema") == 2
+        and data.get("bath_count") == len(baths)
+        and data.get("bath_count", 0) > 0
+        and data.get("operator_count", 0) > 0
+        and data.get("wave_count", 0) > 0
         and data.get("persistent_overshoots") == 0
-    continuation = data.get("continuation_launches", 0) >= data.get("wave_count", 0)
+    )
+    # col_skip_scan may finish every owner of a wave without an event, so a wave can launch no
+    # chain; require only that the full chain ran, and that cap 1 forced continuations beyond one
+    # launch per wave
+    continuation = data.get("continuation_launches", 0) > 0
     if require_continuation:
         continuation = data.get("continuation_launches", 0) > data.get("wave_count", 0)
     bath_numeric = (
-        "duration", "limit_before", "limit_after", "max_f", "max_e", "max_touched",
-        "max_events", "max_g", "max_g_upper", "d_bath",
+        "duration",
+        "limit_before",
+        "limit_after",
+        "max_f",
+        "max_e",
+        "max_touched",
+        "max_events",
+        "max_g",
+        "max_g_upper",
+        "d_bath",
     )
     records_valid = all(
         record.get("operator", 0) > 0
@@ -160,7 +177,7 @@ def run_once(
     fragmentation: bool,
     expected_kernel: int,
 ) -> dict:
-    """Run one fresh realization and return physical and controller diagnostics"""
+    """run one fresh realization and return physical and controller diagnostics"""
 
     out_dir.mkdir(parents=True, exist_ok=True)
     for path in out_dir.iterdir():
@@ -169,11 +186,11 @@ def run_once(
         else:
             path.unlink()
     subprocess.run([str(executable)], cwd=project_root, check=True)
-    initial_path = out_dir/"particle_00000.dat"
-    final_path = out_dir/"particle_00001.dat"
-    rng_path = out_dir/"rngstate_00001.dat"
-    variable_path = out_dir/"variables.txt"
-    controller_path = out_dir/"collision_chain_00001.json"
+    initial_path = out_dir / "particle_00000.dat"
+    final_path = out_dir / "particle_00001.dat"
+    rng_path = out_dir / "rngstate_00001.dat"
+    variable_path = out_dir / "variables.txt"
+    controller_path = out_dir / "collision_chain_00001.json"
     for path in (initial_path, final_path, rng_path, variable_path, controller_path):
         if not path.is_file() or path.stat().st_size == 0:
             raise RuntimeError(f"missing collision-chain artifact: {path}")
@@ -182,7 +199,7 @@ def run_once(
     final = read_particle(final_path)
     if len(initial) != len(final):
         raise RuntimeError("initial and final particle checkpoints have different lengths")
-    if len(final) != EXPECTED_PARTICLES*PARTICLE_FIELDS:
+    if len(final) != EXPECTED_PARTICLES * PARTICLE_FIELDS:
         raise RuntimeError(
             f"particle checkpoint contains {len(final) // PARTICLE_FIELDS} records; "
             f"expected {EXPECTED_PARTICLES}"
@@ -204,11 +221,12 @@ def run_once(
     mass_final = represented_mass(final)
     mass_relative = abs(mass_final - mass_initial) / mass_initial
     variables = variable_path.read_text()
-    provenance = "COLLISION_INTEGRATOR = frozen_bath" in variables \
-        and f"COLLISION_SEARCH = {search}" in variables \
-        and f"COL_EVENT_CAP  = {event_cap}" in variables \
-        and f"COAG_KERNEL = {expected_kernel}" in variables \
+    provenance = (
+        f"COLLISION_SEARCH = {search}" in variables
+        and f"COL_EVENT_CAP  = {event_cap}" in variables
+        and f"COAG_KERNEL = {expected_kernel}" in variables
         and "COL_CONTROLLER_AUDIT = path_integrated" in variables
+    )
     controller = validate_controller(controller_path, event_cap == 1)
     return {
         "particle_count": len(final) // PARTICLE_FIELDS,
@@ -229,7 +247,7 @@ def run_once(
 
 
 def run(model: str) -> None:
-    """Build every required search/cap variant and write one component manifest"""
+    """build every required search/cap variant and write one component manifest"""
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", default=os.environ.get(TARGET_ENV, DEFAULT_TARGET))
@@ -239,7 +257,7 @@ def run(model: str) -> None:
 
     project_root = Path(__file__).resolve().parents[3]
     scope = os.environ.get("VAL_SCOPE", "manual")
-    out_dir = model_output(project_root/"val", "swarm", model, BACKEND, scope=scope)
+    out_dir = model_output(project_root / "val", "swarm", model, BACKEND, scope=scope)
     out_dir.mkdir(parents=True, exist_ok=True)
     for path in out_dir.iterdir():
         if path.is_dir():
@@ -256,11 +274,18 @@ def run(model: str) -> None:
     for search in searches:
         for event_cap in event_caps:
             tag = f"{search}_cap{event_cap}"
-            variant_dir = out_dir/tag
+            variant_dir = out_dir / tag
             make_base = [
-                "make", "-C", str(project_root), f"MODEL={model}", f"GPU_BACKEND={BACKEND}",
-                f"GPU_TARGET={args.target}", f"COLLISION_SEARCH={search}",
-                f"CHAIN_CAP={event_cap}", f"VAL_SCOPE={scope}", f"OUT_TAG={tag}",
+                "make",
+                "-C",
+                str(project_root),
+                f"MODEL={model}",
+                f"GPU_BACKEND={BACKEND}",
+                f"GPU_TARGET={args.target}",
+                f"COLLISION_SEARCH={search}",
+                f"CHAIN_CAP={event_cap}",
+                f"VAL_SCOPE={scope}",
+                f"OUT_TAG={tag}",
             ]
             subprocess.run([*make_base, "clean"], check=True)
             subprocess.run(make_base, check=True)
@@ -268,24 +293,41 @@ def run(model: str) -> None:
                 continue
 
             first = run_once(
-                executable, project_root, variant_dir, search, event_cap,
-                fragmentation, expected_kernel,
+                executable,
+                project_root,
+                variant_dir,
+                search,
+                event_cap,
+                fragmentation,
+                expected_kernel,
             )
             second = run_once(
-                executable, project_root, variant_dir, search, event_cap,
-                fragmentation, expected_kernel,
+                executable,
+                project_root,
+                variant_dir,
+                search,
+                event_cap,
+                fragmentation,
+                expected_kernel,
             )
-            path_deterministic = first["particle_sha256"] == second["particle_sha256"] \
+            path_deterministic = (
+                first["particle_sha256"] == second["particle_sha256"]
                 and first["rng_sha256"] == second["rng_sha256"]
+            )
             controller_consistent = controller_equivalent(
                 first["controller"]["comparison"], second["controller"]["comparison"]
             )
-            passed = first["finite"] and first["positive_species"] \
-                and first["changed_particles"] > 0 \
-                and first["mass_relative_error"] <= 2.0e-12 \
-                and first["provenance"] and first["controller"]["passed"] \
-                and (not fragmentation or first["fragmentation_exercised"]) \
-                and path_deterministic and controller_consistent
+            passed = (
+                first["finite"]
+                and first["positive_species"]
+                and first["changed_particles"] > 0
+                and first["mass_relative_error"] <= 2.0e-12
+                and first["provenance"]
+                and first["controller"]["passed"]
+                and (not fragmentation or first["fragmentation_exercised"])
+                and path_deterministic
+                and controller_consistent
+            )
             variants[tag] = {
                 "search": search,
                 "event_cap": event_cap,
@@ -305,26 +347,28 @@ def run(model: str) -> None:
     if args.build_only:
         return
 
-    initial_equal = len({
-        result["runs"][0]["initial_sha256"] for result in variants.values()
-    }) == 1
+    initial_equal = len({result["runs"][0]["initial_sha256"] for result in variants.values()}) == 1
     cap_pathwise_equal = True
     if len(event_caps) > 1:
         for search in searches:
             small = variants[f"{search}_cap1"]["runs"][0]
             large = variants[f"{search}_cap32"]["runs"][0]
-            cap_pathwise_equal = cap_pathwise_equal \
-                and small["particle_sha256"] == large["particle_sha256"] \
+            cap_pathwise_equal = (
+                cap_pathwise_equal
+                and small["particle_sha256"] == large["particle_sha256"]
                 and small["rng_sha256"] == large["rng_sha256"]
-    passed = all(result["passed"] for result in variants.values()) \
-        and initial_equal and cap_pathwise_equal
+            )
+    passed = (
+        all(result["passed"] for result in variants.values())
+        and initial_equal
+        and cap_pathwise_equal
+    )
     manifest = {
-        "schema": 3,
+        "schema": 4,
         "model": model,
         "backend": BACKEND,
         "gpu_target": args.target,
         "tier": "publication",
-        "integrator": "frozen_bath",
         "variants": variants,
         "initial_byte_equal": initial_equal,
         "cap_pathwise_equal": cap_pathwise_equal,
@@ -332,7 +376,7 @@ def run(model: str) -> None:
         "passed": passed,
         "finished_utc": utc_now(),
     }
-    manifest_path = out_dir/"manifest.json"
+    manifest_path = out_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     print(
         f"{model}: {'PASS' if passed else 'FAIL'} variants={len(variants)} "

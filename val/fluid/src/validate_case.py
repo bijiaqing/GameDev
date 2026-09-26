@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Compare verification output with analytical finite-volume reference fields
+"""compare verification output with analytical finite-volume reference fields
 
 The CUDA driver writes raw float64 arrays plus a metadata text file.  This
 module reconstructs the same grid, evaluates analytical *cell averages* rather
@@ -10,16 +10,16 @@ dictionary suitable for JSON serialization.
 
 from __future__ import annotations
 
-import sys
-sys.dont_write_bytecode = True
-
 import argparse
 import json
 import math
+import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 
+sys.dont_write_bytecode = True
 
 # these constants mirror src/const_defs.cuh; keeping the analytical
 # parameters here makes validation independent of the numerical output itself;
@@ -33,7 +33,7 @@ K3 = 1.874562003084784
 
 
 def read_meta(path: Path) -> dict[str, object]:
-    """Read and validate the CUDA driver's structured metadata record"""
+    """read and validate the CUDA driver's structured metadata record"""
 
     values = json.loads(path.read_text())
     if not isinstance(values, dict):
@@ -41,8 +41,10 @@ def read_meta(path: Path) -> dict[str, object]:
     return values
 
 
-def read_field(out_dir: Path, name: str, resolution: int, shape: tuple[int, int, int]) -> np.ndarray:
-    """Load one raw float64 field and restore its (z, y, x) grid shape"""
+def read_field(
+    out_dir: Path, name: str, resolution: int, shape: tuple[int, int, int]
+) -> np.ndarray:
+    """load one raw float64 field and restore its (z, y, x) grid shape"""
 
     path = out_dir / f"{name}_N{resolution}.dat"
     data = np.fromfile(path, dtype=np.float64)
@@ -54,8 +56,13 @@ def read_field(out_dir: Path, name: str, resolution: int, shape: tuple[int, int,
     return data.reshape(shape)
 
 
-def gauss_average(function, lower: np.ndarray, upper: np.ndarray, measure=None) -> np.ndarray:
-    """Integrate a function over many cells with 16-point Gauss-Legendre rules"""
+def gauss_average(
+    function: Callable[[np.ndarray], np.ndarray],
+    lower: np.ndarray,
+    upper: np.ndarray,
+    measure: Callable[[np.ndarray], np.ndarray] | None = None,
+) -> np.ndarray:
+    """integrate a function over many cells with 16-point Gauss-Legendre rules"""
 
     # lower and upper may be arrays; appending a quadrature axis with [..., None]
     # evaluates all cells at once through NumPy broadcasting; despite the
@@ -72,7 +79,7 @@ def gauss_average(function, lower: np.ndarray, upper: np.ndarray, measure=None) 
 
 
 def compact_bump(value: np.ndarray, lower: float, upper: float) -> np.ndarray:
-    """Evaluate a smooth compact-support profile that vanishes at both edges"""
+    """evaluate a smooth compact-support profile that vanishes at both edges"""
 
     center = 0.5 * (lower + upper)
     half_width = 0.5 * (upper - lower)
@@ -86,7 +93,7 @@ def compact_bump(value: np.ndarray, lower: float, upper: float) -> np.ndarray:
 
 
 def radial_mode_table(dimension: int) -> tuple[np.ndarray, np.ndarray]:
-    """Tabulate the radial Neumann eigenmode used by the diffusion exact solution"""
+    """tabulate the radial Neumann eigenmode used by the diffusion exact solution"""
 
     # the mode satisfies q'' + (d-1)q'/r + k**2 q = 0; k2 and K3 are selected
     # so q'=0 at both radial boundaries, while q(Y_MIN)=1 fixes normalization
@@ -118,7 +125,7 @@ def radial_mode_table(dimension: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def norm_set(error: np.ndarray, volume: np.ndarray) -> dict[str, float]:
-    """Compute volume-weighted L1, L2, and unweighted maximum error norms"""
+    """compute volume-weighted L1, L2, and unweighted maximum error norms"""
 
     total_volume = np.sum(volume)
     return {
@@ -129,14 +136,14 @@ def norm_set(error: np.ndarray, volume: np.ndarray) -> dict[str, float]:
 
 
 def gas_density(radius: np.ndarray, beta: float) -> np.ndarray:
-    """Return the 2D gas surface-density profile configured for the ring tests"""
+    """return the 2D gas surface-density profile configured for the ring tests"""
 
     power = 2.0 - 4.0 * beta
     return radius**power
 
 
 def analyze(out_dir: Path, resolution: int) -> dict:
-    """Analyze one completed case and return all scalar metrics"""
+    """analyze one completed case and return all scalar metrics"""
 
     # metadata tells the validator which compile-time branch produced the files
     # and provides the realized grid and final integration time
@@ -150,7 +157,6 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     dx = (X_MAX - X_MIN) / nx
     x0 = X_MIN + np.arange(nx) * dx
     x1 = x0 + dx
-    xc = 0.5 * (x0 + x1)
 
     # radial cells are logarithmically spaced, so their centers are geometric
     # rather than arithmetic means of the two faces
@@ -245,13 +251,18 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         # lambda=1+a*t and dilutes density by lambda**dimension; quadrature
         # produces exact finite-volume density and radial momentum averages
         lam = 1.0 + 0.2 * time
-        measure = lambda y: y ** (dimension - 1)
+
+        def measure(y: np.ndarray) -> np.ndarray:
+            return y ** (dimension - 1)
+
         rho_int = gauss_average(
             lambda y: lam ** (-dimension) * compact_bump(y / lam, 1.0, 1.8), y0, y1, measure
         )
         my_int = gauss_average(
             lambda y: lam ** (-dimension) * compact_bump(y / lam, 1.0, 1.8) * 0.2 * y / lam,
-            y0, y1, measure,
+            y0,
+            y1,
+            measure,
         )
         line_rhod = rho_int / radial_volume
         line_my = my_int / radial_volume
@@ -278,7 +289,9 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         # and radial volume measure
         table_y, table_q = radial_mode_table(dimension)
         mode_int = gauss_average(
-            lambda y: np.interp(y, table_y, table_q), y0, y1,
+            lambda y: np.interp(y, table_y, table_q),
+            y0,
+            y1,
             lambda y: y ** (dimension - 1),
         )
         mode_avg = mode_int / radial_volume
@@ -306,20 +319,30 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         # the eight x cells represent eight values of dt/ts spanning twelve
         # orders of magnitude; x is being used as a parameter index, not space
         stiffness = np.array([1.0e-6, 1.0e-3, 0.1, 1.0, 10.0, 1.0e2, 1.0e4, 1.0e6])
-        def source_exact(initial, gas, force0, force1):
-            # High-precision closed-form integration, independent of the device's small-h series.
+
+        def source_exact(initial: float, gas: float, force0: float, force1: float) -> np.ndarray:
+            """integrate the closed form at high precision, independently of the device series"""
             from decimal import Decimal, localcontext
+
             with localcontext() as context:
                 context.prec = 60
                 duration = Decimal(str(time))
                 result = []
                 for value in stiffness:
-                    h = Decimal(str(value)); decay = (-h).exp(); relax = 1-decay
-                    ts = duration/h
-                    new = ts*(h-relax)/h
-                    old = ts*relax-new
-                    result.append(float(Decimal(str(gas))+(Decimal(str(initial))-Decimal(str(gas)))*decay
-                                        +Decimal(str(force0))*old+Decimal(str(force1))*new))
+                    h = Decimal(str(value))
+                    decay = (-h).exp()
+                    relax = 1 - decay
+                    ts = duration / h
+                    new = ts * (h - relax) / h
+                    old = ts * relax - new
+                    result.append(
+                        float(
+                            Decimal(str(gas))
+                            + (Decimal(str(initial)) - Decimal(str(gas))) * decay
+                            + Decimal(str(force0)) * old
+                            + Decimal(str(force1)) * new
+                        )
+                    )
             return np.array(result)
 
         vx = source_exact(1.3, 0.4, -0.3, 0.2)
@@ -339,11 +362,12 @@ def analyze(out_dir: Path, resolution: int) -> dict:
         for j, radius in enumerate(yc):
             omega = math.sqrt((1.0 - beta) / radius**3)
             # Preserve the coupled ring's finite stopping time (St_0=0.1, p=1.2).
-            stokes = 0.1 * radius**(-1.2)
-            diffusivity = DIFFUSIVITY / (1.0 + stokes*stokes)
+            stokes = 0.1 * radius ** (-1.2)
+            diffusivity = DIFFUSIVITY / (1.0 + stokes * stokes)
             decay = math.exp(-diffusivity * MODE * MODE * time / radius**2)
-            average = (np.sin(MODE * (x1 - omega * time))
-                     - np.sin(MODE * (x0 - omega * time))) / (MODE * dx)
+            average = (np.sin(MODE * (x1 - omega * time)) - np.sin(MODE * (x0 - omega * time))) / (
+                MODE * dx
+            )
             mode_values[j] = Q0 + EPS * decay * average
             ell[j] = math.sqrt((1.0 - beta) * radius)
         exact_rhod[:] = (rho_g[:, None] * mode_values)[None, :, :]
@@ -367,7 +391,7 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     # density; requiring numerical density excludes cells where the production
     # recovery deliberately writes a vacuum fallback velocity; scale the floor
     # to the analytical solution so the mask remains dimensionally meaningful
-    density_floor = 1.0e-12*float(np.max(np.abs(exact_rhod)))
+    density_floor = 1.0e-12 * float(np.max(np.abs(exact_rhod)))
     active = (exact_rhod > density_floor) & (rhod > density_floor)
     active_volume = np.where(active, volume, 0.0)
     radius = yc[None, :, None] * np.sin(zc)[:, None, None]
@@ -392,7 +416,9 @@ def analyze(out_dir: Path, resolution: int) -> dict:
     # the common omitted azimuthal factor cancels from this relative change
     mass_initial = float(np.sum(volume * rhod_initial))
     mass_final = float(np.sum(volume * rhod))
-    results["mass_relative_change"] = abs(mass_final - mass_initial) / max(abs(mass_initial), 1.0e-300)
+    results["mass_relative_change"] = abs(mass_final - mass_initial) / max(
+        abs(mass_initial), 1.0e-300
+    )
     return results
 
 
@@ -407,9 +433,11 @@ def main() -> None:
     result = analyze(args.out_dir, args.resolution)
     print(json.dumps(result, indent=2, sort_keys=True))
     if args.write:
-        output_root = (Path(__file__).resolve().parents[1]/"out").resolve()
+        output_root = (Path(__file__).resolve().parents[1] / "out").resolve()
         direct = args.write.expanduser().resolve()
-        output = direct if direct.is_relative_to(output_root) else (output_root/args.write).resolve()
+        output = (
+            direct if direct.is_relative_to(output_root) else (output_root / args.write).resolve()
+        )
         if not output.is_relative_to(output_root):
             parser.error(f"validation output must remain below {output_root}: {args.write}")
         output.parent.mkdir(parents=True, exist_ok=True)

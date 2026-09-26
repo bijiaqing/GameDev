@@ -6,10 +6,10 @@
 #include <swarm_grid.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: optdepth_depo
-// deposit each representative particle's extinction cross section to the cell-centred grid
-// =========================================================================================================================
+// deposit each representative particle's extinction cross section to the cell-centered grid
+// =====================================================================================================================
 
 __global__
 void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real total_dust_mass)
@@ -40,6 +40,6 @@ void optdepth_depo (real *dev_optdepth, const swarm *dev_particle, real total_du
     _deposit_field(dev_optdepth, dev_particle, idx, weight);
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // RADIATION

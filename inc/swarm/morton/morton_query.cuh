@@ -1,14 +1,15 @@
-#ifndef GAMEDEV_MORTON_QUERY_CUH
-#define GAMEDEV_MORTON_QUERY_CUH
+#ifndef GAMEDEV_SWARM_MORTON_QUERY_CUH
+#define GAMEDEV_SWARM_MORTON_QUERY_CUH
 
 #include <climits>                         // INT_MAX
 
 #ifdef GAMEDEV_ROCM
 #include <gpu.cuh>                  // HIP device qualifiers
-#else
+#else  // !GAMEDEV_ROCM
 #include <gpu.cuh>                  // CUDA device qualifiers
+
 #include <math_constants.h>                // CUDART_INF_F
-#endif
+#endif // GAMEDEV_ROCM
 
 #include <_collision.cuh>
 #include <morton/morton_index.cuh>
@@ -69,7 +70,15 @@ void _morton_ghost_topk (
 {
     static_assert(3*K + BLOCK_SIZE <= WORK_SIZE,
         "Morton ghost work array cannot hold the duplicate-safe candidate set");
-    constexpr int FAST_SIZE = [] { int n=1; while(n<2*K || n<K+BLOCK_SIZE) n*=2; return n; }();
+    constexpr int FAST_SIZE = []()
+    {
+        int n = 1;
+        while (n < 2*K || n < K + BLOCK_SIZE)
+        {
+            n *= 2;
+        }
+        return n;
+    }();
     static_assert(FAST_SIZE <= WORK_SIZE, "Morton work array cannot hold the padded top-K merge");
 
     if (unique_ids)
@@ -92,11 +101,11 @@ void _morton_ghost_topk (
 
     for (int idx_slot = 3*K + threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
     {
-#ifdef GAMEDEV_ROCM
+        #ifdef GAMEDEV_ROCM
         work_dist_sq[idx_slot] = MORTON_INF_F;
-#else
+        #else  // !GAMEDEV_ROCM
         work_dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+        #endif // GAMEDEV_ROCM
         work_idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
@@ -106,9 +115,11 @@ void _morton_ghost_topk (
     bool duplicate[slots_per_thread];
     int idx_local = 0;
     for (int idx_slot = threadIdx.x; idx_slot < WORK_SIZE; idx_slot += BLOCK_SIZE)
+    {
         duplicate[idx_local++] = idx_slot > 0 && work_idx_old[idx_slot] != INT_MAX
             && _get_col_idx_old(work_idx_old[idx_slot])
                 == _get_col_idx_old(work_idx_old[idx_slot - 1]);
+    }
     __syncthreads();
 
     idx_local = 0;
@@ -116,11 +127,11 @@ void _morton_ghost_topk (
     {
         if (duplicate[idx_local++])
         {
-#ifdef GAMEDEV_ROCM
+            #ifdef GAMEDEV_ROCM
             work_dist_sq[idx_slot] = MORTON_INF_F;
-#else
+            #else  // !GAMEDEV_ROCM
             work_dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+            #endif // GAMEDEV_ROCM
             work_idx_old[idx_slot] = INT_MAX;
         }
     }
@@ -128,4 +139,4 @@ void _morton_ghost_topk (
     _morton_pair_sort<WORK_SIZE, BLOCK_SIZE>(work_dist_sq, work_idx_old);
 }
 
-#endif // GAMEDEV_MORTON_QUERY_CUH
+#endif // GAMEDEV_SWARM_MORTON_QUERY_CUH

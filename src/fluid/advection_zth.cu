@@ -2,7 +2,7 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_zth
 // purpose: polar transport with nonuniform PPM, pressureless HLL fluxes, boundary fluxes, and invariant-domain limiting
 //
@@ -10,10 +10,10 @@
 //
 // per call:
 //   1 three SSPRK(3,3) forward-Euler evaluations
-//   2 PPM high-order and cell-centred low-order HLL flux construction
+//   2 PPM high-order and cell-centered low-order HLL flux construction
 //   3 spherical-geometry low-order conservative update
 //   4 invariant-domain-limited antidiffusive correction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
@@ -102,7 +102,7 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_rhod[iz], flux_mx[iz], flux_my[iz], flux_mz[iz]
             );
 
-            // compute the low-order HLL flux from adjacent cell-centred states
+            // compute the low-order HLL flux from adjacent cell-centered states
             real flux_rhod_low, flux_mx_low, flux_my_low, flux_mz_low;
             _pressureless_hll_flux(
                 lz[iz] / y, lz[iz + 1] / y,
@@ -116,7 +116,7 @@ void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
             face_work_x[iz] = flux_mx[iz] - flux_mx_low;
             face_work_y[iz] = flux_my[iz] - flux_my_low;
             face_work_z[iz] = flux_mz[iz] - flux_mz_low;
-            
+
             flux_rhod[iz] = flux_rhod_low;
             flux_mx[iz] = flux_mx_low;
             flux_my[iz] = flux_my_low;

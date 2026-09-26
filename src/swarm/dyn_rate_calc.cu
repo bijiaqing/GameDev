@@ -8,18 +8,18 @@
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: dyn_rate_calc
 // calculate one conservative inverse dynamics timestep from all active local motion and diffusion scales
 //
 // parallelization: one thread per representative particle followed by a host-side maximum reduction
 //
 // constraints:
-//   1 orbital and particle mesh-crossing rates
+//   1 orbital and particle mesh-crossing rates (accuracy guards, not an Eulerian advection CFL)
 //   2 imported-gas mesh-crossing rates at both temporal endpoints
 //   3 acceleration displacement from gravity, radiation, and centrifugal forces
 //   4 stochastic and deterministic diffusion displacement in every active direction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
@@ -56,7 +56,8 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     iy = (iy >= N_Y) ? N_Y - 1 : iy;
     real dr = _get_yface(iy)*(dy - 1.0);
 
-    // limit orbital phase evolution and particle crossing of every active mesh direction
+    // retain the absolute orbital crossing guard for midpoint force and mesh-field sampling
+    // particle drift can cross cells, but no residual-orbit accuracy policy is implemented here
     // the radial scale is the exact width of the logarithmic cell containing the particle
     real omega = _get_omegaK(R);
     real rate = omega / CFL_DYN;
@@ -81,7 +82,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     vx_g = fmax(abs(vx_g), abs(_interp_field(dev_gas_velx_next, loc_x, loc_y, loc_z)));
     vy_g = fmax(abs(vy_g), abs(_interp_field(dev_gas_vely_next, loc_x, loc_y, loc_z)));
     vz_g = fmax(abs(vz_g), abs(_interp_field(dev_gas_velz_next, loc_x, loc_y, loc_z)));
-    
+
     if (N_X > 1) rate = fmax(rate, abs(vx_g) / (R*dx*CFL_DYN));
     if (N_Y > 1) rate = fmax(rate, abs(vy_g) / (dr*CFL_DYN));
     if (N_Z > 1) rate = fmax(rate, abs(vz_g) / (y*dz*CFL_DYN));
@@ -102,7 +103,8 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     beta = BETA_0 / (size / S_0);
     #endif // RADIATION
 
-    // require constant-acceleration displacement to remain below a local mesh fraction
+    // bound displacement using unattenuated radiation, before midpoint opacity is available
+    // exponential drag can reduce the actual displacement; this bound deliberately ignores that reduction
     real grav_y = -(1.0 - beta)*G*M_S / (y*y);
     real cent_y = lx*lx / (R*R*y) + lz*lz / (y*y*y);
     real accel_y = abs(grav_y + cent_y);
@@ -112,7 +114,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     accel_y = fmax(accel_y, abs(grav_y + cent_y_min));
     accel_y = fmax(accel_y, abs(grav_y + cent_y_max));
     #endif // IMPORTGAS
-    
+
     rate = fmax(rate, sqrt(accel_y / (2.0*CFL_DYN*dr)));
     if (N_Z > 1)
     {
@@ -133,18 +135,19 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     #endif // VISC_FLOW
 
     #ifdef DIFFUSION
-#ifdef IMPORTGAS
-    for (int gas_endpoint=0;gas_endpoint<2;++gas_endpoint) {
-#endif
-    auto diffusion = _get_dust_diffusion(x,y,z,
-#ifdef MULTISIZE
+    #ifdef IMPORTGAS
+    for (int gas_endpoint = 0; gas_endpoint < 2; ++gas_endpoint)
+    {
+    #endif // IMPORTGAS
+    auto diffusion = _get_dust_diffusion(x, y, z,
+            #ifdef MULTISIZE
             dev_particle[idx].par_size
-#else
+            #else  // !MULTISIZE
             S_0
-#endif
-#ifdef IMPORTGAS
-        ,gas_endpoint ? dev_gas_dens_next : dev_gas_dens
-#endif
+            #endif // MULTISIZE
+        #ifdef IMPORTGAS
+        , gas_endpoint ? dev_gas_dens_next : dev_gas_dens
+        #endif // IMPORTGAS
     );
     real nu = diffusion.nu;
 
@@ -162,14 +165,15 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     real cos_z = (N_Z > 1) ? cos(z) : 0.0;
     real diff_y = diff_R*sin_z*sin_z + diff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
-    
+
+    // bound RMS displacement, not every Gaussian draw; diffusion tails remain unbounded
     rate = fmax(rate, 2.0*diff_y / (CFL_DYN*CFL_DYN*dr*dr));
     rate = fmax(rate, abs(drift_y) / (CFL_DYN*dr));
 
     if (N_X > 1)
     {
         real cell_x = R*dx;
-        
+
         rate = fmax(rate, 2.0*diff_x / (CFL_DYN*CFL_DYN*cell_x*cell_x));
         rate = fmax(rate, abs(drift_x) / (CFL_DYN*dx));
     }
@@ -179,13 +183,13 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
         real cell_z = y*dz;
         real diff_z = diff_R*cos_z*cos_z + diff_Z*sin_z*sin_z;
         real drift_z = drift_R*cos_z - drift_Z*sin_z;
-        
+
         rate = fmax(rate, 2.0*diff_z / (CFL_DYN*CFL_DYN*cell_z*cell_z));
         rate = fmax(rate, abs(drift_z) / (CFL_DYN*cell_z));
     }
-#ifdef IMPORTGAS
+    #ifdef IMPORTGAS
     }
-#endif
+    #endif // IMPORTGAS
     #endif // DIFFUSION
 
     dev_dyn_rate[idx] = rate;

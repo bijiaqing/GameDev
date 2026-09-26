@@ -1,13 +1,13 @@
 #ifdef DIFFUSION
 
+#include <fluid_kern.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
-#include <fluid_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_zbl
 // purpose: solve spherical polar Crank-Nicolson diffusion cooperatively in block-shared memory
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
@@ -60,8 +60,8 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
         real cn_i = (iz > 0) ? 0.5*dt*sin(z_i)*diff_zi / (y*dz_len*vol_z) : 0.0;
         real cn_o = (iz < N_Z - 1) ? 0.5*dt*sin(z_o)*diff_zo / (y*dz_len*vol_z) : 0.0;
-        // Solve concentration with gas-weighted face conductances; the diagonal
-        // is also the density outgoing sum used by positivity subcycling.
+        // weight each face conductance by the gas weight so the solve advances rho_d/w
+        // the resulting diagonal is also the outgoing coefficient sum used by positivity subcycling
         real gas = _get_diffusion_weight(y, _get_zcent(iz));
         cn_i *= _get_diffusion_weight(y, z_i) / gas;
         cn_o *= _get_diffusion_weight(y, z_o) / gas;
@@ -99,15 +99,18 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real cn_i = -cn_lower[iz];
             real cn_o = -cn_upper[iz];
-            real rhod_prev = (iz > 0) ? rhod[iz - 1] / _get_diffusion_weight(y, _get_zcent(iz - 1)) : rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz));
-            real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) : rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz));
-            rhod_work[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz)) + cn_o*rhod_next;
+            real rhod_prev = (iz > 0) ? rhod[iz - 1] / _get_diffusion_weight(y, _get_zcent(iz - 1)) : rhod[iz]
+                / _get_diffusion_weight(y, _get_zcent(iz));
+            real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) : rhod[iz]
+                / _get_diffusion_weight(y, _get_zcent(iz));
+            rhod_work[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz))
+                + cn_o*rhod_next;
         }
         __syncthreads();
 
         if (threadIdx.x == 0)
         {
-            // Solve density (weight=1) or concentration with Thomas elimination.
+            // solve density (w = 1) or concentration with serial Thomas elimination
             temp_work[0] = cn_upper[0] / cn_diag[0];
             rhod_work[0] /= cn_diag[0];
             for (int iz = 1; iz < N_Z; iz++)
@@ -123,7 +126,7 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
-        // Reconstruct mass flux from old density/weight and the solved diffused variable, with zero boundary flux
+        // reconstruct the time-centered mass flux from the old and solved diffused variables, with zero boundary flux
         for (int iz = threadIdx.x; iz < N_Z; iz += blockDim.x)
         {
             if (iz == N_Z - 1)
@@ -134,7 +137,8 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             {
                 real cn_o = -cn_upper[iz];
                 temp_work[iz] = -(_get_diffusion_weight(y, _get_zcent(iz))*cn_o*y*_get_vol_z(iz) / dt_sub)*
-                    ((rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) - rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz))) + (rhod_work[iz + 1] - rhod_work[iz]));
+                    ((rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) - rhod[iz] / _get_diffusion_weight(y,
+                    _get_zcent(iz))) + (rhod_work[iz + 1] - rhod_work[iz]));
             }
         }
         __syncthreads();

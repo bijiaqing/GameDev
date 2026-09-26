@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 
-"""Run the production collision-chain base and continuation case"""
+"""run the production collision-chain base and continuation case"""
 
-import sys
-sys.dont_write_bytecode = True
+from __future__ import annotations
+
 import os
-os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-
+import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]/"src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from run_chain import run
-
 
 run(Path(__file__).resolve().parent.name)

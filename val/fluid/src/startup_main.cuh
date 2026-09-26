@@ -1,4 +1,4 @@
-#include <cstdlib>
+// include fragment: the startup-balance probe's main program, included once by its fluid_runtime.cu
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories
 #include <fstream>    // std::ofstream
@@ -15,8 +15,8 @@
 #include <param_grid.cuh>
 
 // test-only probe of the production initializer's resolved-polar density balance
-// advection and diffusion start from identical state copies, so their summed finite-difference tendencies approximate the
-// instantaneous continuum residual without mixing in later momentum relaxation or operator-splitting effects
+// advection and diffusion start from identical state copies, so their summed finite-difference tendencies approximate
+// the instantaneous continuum residual without mixing in later momentum relaxation or operator-splitting effects
 
 namespace
 {
@@ -67,11 +67,14 @@ int main ()
 
     #ifdef FLUID_BLOCK_SWEEP
     real *dev_adv_work = nullptr;
-    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work), sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
-    #endif // FLUID_BLOCK_SWEEP
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work),
+        sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
+        #endif // FLUID_BLOCK_SWEEP
 
-    GPU_CHECK(gpuMemcpy(dev_initdens, initdens.data(), sizeof(*(dev_initdens))*(initdens.size()), gpuMemcpyHostToDevice));
-    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_initdens, initdens.data(), sizeof(*(dev_initdens))*(initdens.size()),
+        gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()),
+        gpuMemcpyHostToDevice));
 
     // initialize density, its balancing polar velocity, and the conserved momenta through the production routines
     init_rho_calc <<< NB_G, TPB >>> (dev_dustdens, dev_initdens);
@@ -88,14 +91,19 @@ int main ()
     GPU_CHECK(gpuDeviceSynchronize());
 
     // retain one immutable device copy so both directional operators receive bit-identical input
-    GPU_CHECK(gpuMemcpy(dev_state_initial + 0*N_G, dev_dustdens, sizeof(*(dev_state_initial + 0*N_G))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dev_state_initial + 1*N_G, dev_dustmomx, sizeof(*(dev_state_initial + 1*N_G))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dev_state_initial + 2*N_G, dev_dustmomy, sizeof(*(dev_state_initial + 2*N_G))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dev_state_initial + 3*N_G, dev_dustmomz, sizeof(*(dev_state_initial + 3*N_G))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dustdens_initial.data(), dev_dustdens, sizeof(*(dustdens_initial.data()))*(N_G), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 0*N_G, dev_dustdens, sizeof(*(dev_state_initial + 0*N_G))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 1*N_G, dev_dustmomx, sizeof(*(dev_state_initial + 1*N_G))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 2*N_G, dev_dustmomy, sizeof(*(dev_state_initial + 2*N_G))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_state_initial + 3*N_G, dev_dustmomz, sizeof(*(dev_state_initial + 3*N_G))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dustdens_initial.data(), dev_dustdens, sizeof(*(dustdens_initial.data()))*(N_G),
+        gpuMemcpyDeviceToHost));
 
-    // scale the probe interval with polar spacing; temporal differencing then remains at least as accurate as the expected
-    // second-order spatial cancellation while retaining enough change to stay above roundoff
+    // scale the probe interval with polar spacing; temporal differencing then remains at least as accurate as the
+    // expected second-order spatial cancellation while retaining enough change to stay above roundoff
     real probe_dt = 0.25*_get_dz();
 
     #ifdef FLUID_BLOCK_SWEEP
@@ -105,20 +113,25 @@ int main ()
     );
     GPU_CHECK(gpuGetLastError());
     GPU_CHECK(gpuDeviceSynchronize());
-    #else // !FLUID_BLOCK_SWEEP
+    #else  // !FLUID_BLOCK_SWEEP
     advection_zth <<< NB_Z, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, probe_dt
     );
     GPU_CHECK(gpuGetLastError());
     GPU_CHECK(gpuDeviceSynchronize());
     #endif // FLUID_BLOCK_SWEEP
-    GPU_CHECK(gpuMemcpy(dustdens_advection.data(), dev_dustdens, sizeof(*(dustdens_advection.data()))*(N_G), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(dustdens_advection.data(), dev_dustdens, sizeof(*(dustdens_advection.data()))*(N_G),
+        gpuMemcpyDeviceToHost));
 
     // restore the same initial state before evaluating the diffusion contribution
-    GPU_CHECK(gpuMemcpy(dev_dustdens, dev_state_initial + 0*N_G, sizeof(*(dev_dustdens))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dev_dustmomx, dev_state_initial + 1*N_G, sizeof(*(dev_dustmomx))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dev_dustmomy, dev_state_initial + 2*N_G, sizeof(*(dev_dustmomy))*(N_G), gpuMemcpyDeviceToDevice));
-    GPU_CHECK(gpuMemcpy(dev_dustmomz, dev_state_initial + 3*N_G, sizeof(*(dev_dustmomz))*(N_G), gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustdens, dev_state_initial + 0*N_G, sizeof(*(dev_dustdens))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomx, dev_state_initial + 1*N_G, sizeof(*(dev_dustmomx))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomy, dev_state_initial + 2*N_G, sizeof(*(dev_dustmomy))*(N_G),
+        gpuMemcpyDeviceToDevice));
+    GPU_CHECK(gpuMemcpy(dev_dustmomz, dev_state_initial + 3*N_G, sizeof(*(dev_dustmomz))*(N_G),
+        gpuMemcpyDeviceToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
     diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (
@@ -126,14 +139,15 @@ int main ()
     );
     GPU_CHECK(gpuGetLastError());
     GPU_CHECK(gpuDeviceSynchronize());
-    #else // !FLUID_BLOCK_SWEEP
+    #else  // !FLUID_BLOCK_SWEEP
     diffusion_zth <<< NB_Z, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, probe_dt
     );
     GPU_CHECK(gpuGetLastError());
     GPU_CHECK(gpuDeviceSynchronize());
     #endif // FLUID_BLOCK_SWEEP
-    GPU_CHECK(gpuMemcpy(dustdens_diffusion.data(), dev_dustdens, sizeof(*(dustdens_diffusion.data()))*(N_G), gpuMemcpyDeviceToHost));
+    GPU_CHECK(gpuMemcpy(dustdens_diffusion.data(), dev_dustdens, sizeof(*(dustdens_diffusion.data()))*(N_G),
+        gpuMemcpyDeviceToHost));
 
     write_binary("dustdens_initial", dustdens_initial);
     write_binary("dustdens_advection", dustdens_advection);
