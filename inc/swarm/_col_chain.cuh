@@ -78,20 +78,21 @@ struct local_workspace
     }
     ~local_workspace ()
     {
-        if (environment) gpuFree(environment);
-        gpuFree(cached);
+        // a destructor cannot report a failed free, so the status is discarded deliberately
+        if (environment) static_cast<void>(gpuFree(environment));
+        static_cast<void>(gpuFree(cached));
         #ifdef COL_DIAGNOSTICS
-        gpuFree(work);
-        gpuFree(work_sum);
+        static_cast<void>(gpuFree(work));
+        static_cast<void>(gpuFree(work_sum));
         #endif // COL_DIAGNOSTICS
-        gpuFree(ids);
-        gpuFree(queue_a);
-        gpuFree(queue_b);
-        gpuFree(error);
-        gpuFree(dt);
-        gpuFree(graph);
-        gpuFree(change_rate);
-        gpuFree(second_rate);
+        static_cast<void>(gpuFree(ids));
+        static_cast<void>(gpuFree(queue_a));
+        static_cast<void>(gpuFree(queue_b));
+        static_cast<void>(gpuFree(error));
+        static_cast<void>(gpuFree(dt));
+        static_cast<void>(gpuFree(graph));
+        static_cast<void>(gpuFree(change_rate));
+        static_cast<void>(gpuFree(second_rate));
     }
 };
 

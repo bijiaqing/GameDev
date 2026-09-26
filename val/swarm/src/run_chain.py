@@ -122,7 +122,10 @@ def validate_controller(path: Path, require_continuation: bool) -> dict:
         and data.get("wave_count", 0) > 0
         and data.get("persistent_overshoots") == 0
     )
-    continuation = data.get("continuation_launches", 0) >= data.get("wave_count", 0)
+    # col_skip_scan may finish every owner of a wave without an event, so a wave can launch no
+    # chain; require only that the full chain ran, and that cap 1 forced continuations beyond one
+    # launch per wave
+    continuation = data.get("continuation_launches", 0) > 0
     if require_continuation:
         continuation = data.get("continuation_launches", 0) > data.get("wave_count", 0)
     bath_numeric = (

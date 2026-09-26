@@ -849,18 +849,18 @@ int main (int argc, char **argv)
         _morton_gpu_check(gpuFree(dev_azimuth), "release particle azimuths");
         _morton_gpu_check(gpuFree(dev_point), "release benchmark points");
         #else  // !GAMEDEV_ROCM
-        gpuFree(dev_performance_stack_overflow);
-        gpuFree(dev_morton_checksum);
-        gpuFree(dev_kdtree_checksum);
-        gpuFree(dev_quality_stack_overflow);
-        gpuFree(dev_morton_dist_sq);
-        gpuFree(dev_kdtree_dist_sq);
-        gpuFree(dev_morton_idx_old);
-        gpuFree(dev_kdtree_idx_old);
-        gpuFree(dev_kdtree_box);
-        gpuFree(dev_kdtree_node);
-        gpuFree(dev_azimuth);
-        gpuFree(dev_point);
+        static_cast<void>(gpuFree(dev_performance_stack_overflow));
+        static_cast<void>(gpuFree(dev_morton_checksum));
+        static_cast<void>(gpuFree(dev_kdtree_checksum));
+        static_cast<void>(gpuFree(dev_quality_stack_overflow));
+        static_cast<void>(gpuFree(dev_morton_dist_sq));
+        static_cast<void>(gpuFree(dev_kdtree_dist_sq));
+        static_cast<void>(gpuFree(dev_morton_idx_old));
+        static_cast<void>(gpuFree(dev_kdtree_idx_old));
+        static_cast<void>(gpuFree(dev_kdtree_box));
+        static_cast<void>(gpuFree(dev_kdtree_node));
+        static_cast<void>(gpuFree(dev_azimuth));
+        static_cast<void>(gpuFree(dev_point));
         #endif // GAMEDEV_ROCM
         return quality_passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }

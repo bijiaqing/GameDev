@@ -230,8 +230,8 @@ public:
 
     void release () noexcept
     {
-        if (dev_point_) (void)gpuFree(dev_point_);
-        if (dev_node_) (void)gpuFree(dev_node_);
+        if (dev_point_) static_cast<void>(gpuFree(dev_point_));
+        if (dev_node_) static_cast<void>(gpuFree(dev_node_));
         dev_point_ = nullptr;
         dev_node_ = nullptr;
         point_count_ = node_count_ = leaf_count_ = capacity_ = 0;
@@ -274,7 +274,7 @@ private:
                 gpuMemcpyDeviceToDevice);
             if (status != gpuSuccess)
             {
-                (void)gpuFree(nodes);
+                static_cast<void>(gpuFree(nodes));
                 _morton_gpu_check(status, "grow Morton nodes");
             }
             status = gpuFree(dev_node_);

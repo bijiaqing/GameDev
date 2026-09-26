@@ -343,13 +343,13 @@ bool run_case (const periodic_case &test)
     _morton_gpu_check(gpuFree(dev_query_point), "release query points");
     _morton_gpu_check(gpuFree(dev_point), "release indexed points");
     #else  // !GAMEDEV_ROCM
-    gpuFree(dev_image_count);
-    gpuFree(dev_stack_overflow);
-    gpuFree(dev_near_dist_sq);
-    gpuFree(dev_near_idx_old);
-    gpuFree(dev_query_x);
-    gpuFree(dev_query_point);
-    gpuFree(dev_point);
+    static_cast<void>(gpuFree(dev_image_count));
+    static_cast<void>(gpuFree(dev_stack_overflow));
+    static_cast<void>(gpuFree(dev_near_dist_sq));
+    static_cast<void>(gpuFree(dev_near_idx_old));
+    static_cast<void>(gpuFree(dev_query_x));
+    static_cast<void>(gpuFree(dev_query_point));
+    static_cast<void>(gpuFree(dev_point));
     #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;

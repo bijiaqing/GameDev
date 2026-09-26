@@ -886,19 +886,19 @@ int main (int argc, char **argv)
         _morton_gpu_check(gpuFree(dev_kdtree_box), "release KD bounds");
         _morton_gpu_check(gpuFree(dev_point), "release benchmark points");
         #else  // !GAMEDEV_ROCM
-        if (dev_kdtree_checksum) gpuFree(dev_kdtree_checksum);
-        if (dev_morton_checksum) gpuFree(dev_morton_checksum);
-        if (dev_performance_stack_overflow) gpuFree(dev_performance_stack_overflow);
-        gpuFree(dev_kdtree_idx_old);
-        gpuFree(dev_morton_idx_old);
-        gpuFree(dev_kdtree_dist_sq);
-        gpuFree(dev_morton_dist_sq);
-        gpuFree(dev_leaf_visit_count);
-        gpuFree(dev_candidate_count);
-        gpuFree(dev_quality_stack_overflow);
-        gpuFree(dev_kdtree_node);
-        gpuFree(dev_kdtree_box);
-        gpuFree(dev_point);
+        if (dev_kdtree_checksum) static_cast<void>(gpuFree(dev_kdtree_checksum));
+        if (dev_morton_checksum) static_cast<void>(gpuFree(dev_morton_checksum));
+        if (dev_performance_stack_overflow) static_cast<void>(gpuFree(dev_performance_stack_overflow));
+        static_cast<void>(gpuFree(dev_kdtree_idx_old));
+        static_cast<void>(gpuFree(dev_morton_idx_old));
+        static_cast<void>(gpuFree(dev_kdtree_dist_sq));
+        static_cast<void>(gpuFree(dev_morton_dist_sq));
+        static_cast<void>(gpuFree(dev_leaf_visit_count));
+        static_cast<void>(gpuFree(dev_candidate_count));
+        static_cast<void>(gpuFree(dev_quality_stack_overflow));
+        static_cast<void>(gpuFree(dev_kdtree_node));
+        static_cast<void>(gpuFree(dev_kdtree_box));
+        static_cast<void>(gpuFree(dev_point));
         #endif // GAMEDEV_ROCM
 
         bool quality_passed = quality.mismatched_queries == 0

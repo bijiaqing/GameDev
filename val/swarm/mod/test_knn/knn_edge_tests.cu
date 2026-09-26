@@ -311,11 +311,11 @@ bool run_kdtree_filter_case (const edge_case &test)
     _morton_gpu_check(gpuFree(dev_kdtree_box), "release KD bounds");
     _morton_gpu_check(gpuFree(dev_kdtree_node), "release KD nodes");
     #else  // !GAMEDEV_ROCM
-    gpuFree(dev_active);
-    gpuFree(dev_near_dist_sq);
-    gpuFree(dev_near_idx_old);
-    gpuFree(dev_kdtree_box);
-    gpuFree(dev_kdtree_node);
+    static_cast<void>(gpuFree(dev_active));
+    static_cast<void>(gpuFree(dev_near_dist_sq));
+    static_cast<void>(gpuFree(dev_near_idx_old));
+    static_cast<void>(gpuFree(dev_kdtree_box));
+    static_cast<void>(gpuFree(dev_kdtree_node));
     #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << "kdtree_" << test.name << std::endl;
@@ -435,12 +435,12 @@ bool run_case (const edge_case &test)
     _morton_gpu_check(gpuFree(dev_query_point), "release Morton query points");
     _morton_gpu_check(gpuFree(dev_point), "release Morton points");
     #else  // !GAMEDEV_ROCM
-    if (dev_active) gpuFree(dev_active);
-    gpuFree(dev_stack_overflow);
-    gpuFree(dev_near_dist_sq);
-    gpuFree(dev_near_idx_old);
-    gpuFree(dev_query_point);
-    gpuFree(dev_point);
+    if (dev_active) static_cast<void>(gpuFree(dev_active));
+    static_cast<void>(gpuFree(dev_stack_overflow));
+    static_cast<void>(gpuFree(dev_near_dist_sq));
+    static_cast<void>(gpuFree(dev_near_idx_old));
+    static_cast<void>(gpuFree(dev_query_point));
+    static_cast<void>(gpuFree(dev_point));
     #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;

@@ -400,7 +400,9 @@ For every realization, the validator requires:
 - no persistent activity/distribution overshoot;
 - repeated runs with identical final particle and RNG hashes;
 - equivalent controller histories to $10^{-12}$;
-- pathwise identity between cap-1 and cap-32 results for the same search backend.
+- pathwise identity between cap-1 and cap-32 results for the same search backend;
+- at least one full-chain launch, and for cap 1 more chain launches than refresh waves; a cap-32
+  wave may launch no chain when the no-event screen completes all of its owners.
 
 The controller divides a collision operator interval into frozen baths. Within each bath the
 positions and KNN geometry are fixed, while the event chain updates particle properties. The
