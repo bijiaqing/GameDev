@@ -13,7 +13,7 @@
 // per call:
 //   1 polar Crank-Nicolson coefficient construction with zero boundary fluxes
 //   2 positivity-controlled subcycling and tridiagonal solution
-//   3 time-centred diffusive mass flux construction
+//   3 time-centered diffusive mass flux construction
 //   4 donor-state momentum transport with the diffusing mass
 // =====================================================================================================================
 
@@ -143,7 +143,7 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real mass_flux[N_Z], moment_flux[N_Z];
 
-            // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary
+            // reconstruct the time-centered mass flux from the old and solved diffused variables, with zero boundary
             // fluxes
             for (int iz = 0; iz < N_Z; iz++)
             {

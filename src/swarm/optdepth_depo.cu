@@ -8,7 +8,7 @@
 
 // =====================================================================================================================
 // kernel: optdepth_depo
-// deposit each representative particle's extinction cross section to the cell-centred grid
+// deposit each representative particle's extinction cross section to the cell-centered grid
 // =====================================================================================================================
 
 __global__

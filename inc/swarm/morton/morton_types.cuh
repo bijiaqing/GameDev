@@ -4,14 +4,14 @@
 #include <cstdint>       // std::uint32_t, std::uint64_t
 #ifdef GAMEDEV_ROCM
 #include <limits>        // std::numeric_limits
-#endif
+#endif // GAMEDEV_ROCM
 
 #include <gpu.cuh>  // GPU vector types and device qualifiers
 #ifdef GAMEDEV_ROCM
 
 inline constexpr float MORTON_INF_F = std::numeric_limits<float>::infinity();
 inline constexpr float MORTON_PI_F = 3.14159265358979323846f;
-#endif
+#endif // GAMEDEV_ROCM
 
 // store one Morton-sorted search record and its original particle identifier
 struct morton_point

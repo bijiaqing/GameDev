@@ -5,7 +5,7 @@
 using real = double;
 using real3 = double3;
 
-// GM = semimajor axis = 1; exact zero-drag eccentric orbit.
+// GM = semimajor axis = 1; exact zero-drag eccentric orbit
 const real G = 1.0, M_S = 1.0, R_0 = 1.0, S_0 = 1.0;
 const int N_P = 1;
 const int N_X = 8, N_Y = 16, N_Z = 1;
@@ -29,4 +29,4 @@ struct swarm { real3 position; real3 velocity; };
 const int TPB = 64;
 const int NB_P = N_P / TPB + 1, NB_G = N_G / TPB + 1;
 const int NB_X = N_Y*N_Z / TPB + 1, NB_Y = N_X*N_Z / TPB + 1;
-#endif
+#endif // !CONST_DEFS_CUH

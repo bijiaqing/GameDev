@@ -1,3 +1,4 @@
+// include fragment: the startup-balance probe's main program, included once by its fluid_runtime.cu
 #include <cstdlib>
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories
@@ -113,7 +114,7 @@ int main ()
     );
     GPU_CHECK(gpuGetLastError());
     GPU_CHECK(gpuDeviceSynchronize());
-    #else // !FLUID_BLOCK_SWEEP
+    #else  // !FLUID_BLOCK_SWEEP
     advection_zth <<< NB_Z, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, probe_dt
     );
@@ -139,7 +140,7 @@ int main ()
     );
     GPU_CHECK(gpuGetLastError());
     GPU_CHECK(gpuDeviceSynchronize());
-    #else // !FLUID_BLOCK_SWEEP
+    #else  // !FLUID_BLOCK_SWEEP
     diffusion_zth <<< NB_Z, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, probe_dt
     );

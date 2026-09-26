@@ -473,13 +473,13 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     {
         #ifdef COL_QUERY_ENV_CACHE
         vrel = cached_pair_velocity(environment[idx_old_i], size_i, size_j);
-        #else
+        #else  // !COL_QUERY_ENV_CACHE
         vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif
+            #endif // IMPORTGAS
         );
-        #endif
+        #endif // COL_QUERY_ENV_CACHE
         real rate = numr_j*vrel*M_PI*(size_i + size_j)*(size_i + size_j) / 4.0;
         if constexpr (N_Z == 1)
         {
@@ -623,7 +623,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         return;
     }
     else
-    #endif
+    #endif // GAMEDEV_ROCM && __gfx942__
     {
     // reduce the rate moments cooperatively for general N_K and block widths
     __shared__ unsigned char valid_work[N_K];
@@ -799,7 +799,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
     __shared__ int accepted;
     #ifdef COL_DIAGNOSTICS
     __shared__ event_work event_stats;
-    #endif
+    #endif // COL_DIAGNOSTICS
     __shared__ bool keep_running;
 
     if (threadIdx.x == 0)
@@ -816,7 +816,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
         accepted = 0;
         #ifdef COL_DIAGNOSTICS
         event_stats = work[idx_old_i];
-        #endif
+        #endif // COL_DIAGNOSTICS
         keep_running = dev_col_complete[idx_old_i] == 0;
         if (dev_col_active[idx_old_i] == 0 || !(dev_col_measure[idx_old_i] > 0.0))
         {
@@ -906,9 +906,9 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
         // keep the generic allocation for other shapes; the shape choice is compile-time
         #if defined(GAMEDEV_ROCM) && defined(__gfx942__)
         constexpr int total_slots = wave_reduction_shape ? 128 : N_K;
-        #else
+        #else  // !(GAMEDEV_ROCM && __gfx942__)
         constexpr int total_slots = N_K;
-        #endif
+        #endif // GAMEDEV_ROCM && __gfx942__
         __shared__ real total_work[total_slots];
         __shared__ int last_work[total_slots];
         #if defined(GAMEDEV_ROCM) && defined(__gfx942__)
@@ -951,7 +951,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
           }
         }
         else
-        #endif
+        #endif // GAMEDEV_ROCM && __gfx942__
         {
         // reduce into separate arrays so pair_rate stays intact for serial partner sampling
         for (int j = threadIdx.x; j < N_K; j += blockDim.x)
@@ -1073,13 +1073,13 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                             {
                                 #ifdef COL_QUERY_ENV_CACHE
                                 vrel = cached_pair_velocity(environment[idx_old_i], size_i, size_j);
-                                #else
+                                #else  // !COL_QUERY_ENV_CACHE
                                 vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
                                     #ifdef IMPORTGAS
                                     , dev_gas_dens
-                                    #endif
+                                    #endif // IMPORTGAS
                                 );
-                                #endif
+                                #endif // COL_QUERY_ENV_CACHE
                             }
                             // apply the outcome while conserving represented mass through the grain count
                             real mass_before = numr_i*size_i*size_i*size_i;
@@ -1091,7 +1091,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                                 high_speed, sample, category, log_mass);
                             #ifdef COL_DIAGNOSTICS
                             record_event_work(event_stats, category, log_mass);
-                            #endif
+                            #endif // COL_DIAGNOSTICS
                             numr_i = mass_before / (size_new*size_new*size_new);
                             size_i = size_new;
                             time_i = event_time;
@@ -1119,7 +1119,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
     {
         #ifdef COL_DIAGNOSTICS
         work[idx_old_i] = event_stats;
-        #endif
+        #endif // COL_DIAGNOSTICS
         dev_particle[idx_old_i].par_size = size_i;
         dev_particle[idx_old_i].par_numr = numr_i;
         dev_rngstate[idx_old_i] = rngstate;
@@ -1641,7 +1641,7 @@ struct local_schedule
 #define localZero cudaMemset
 #define localH2D cudaMemcpyHostToDevice
 #define localD2H cudaMemcpyDeviceToHost
-#else
+#else  // !GAMEDEV_CUDA
 #define LOCAL_CHECK HIP_CHECK
 #define LOCAL_KERNEL HIP_KERNEL_CHECK
 #define localMalloc hipMalloc
@@ -1650,7 +1650,7 @@ struct local_schedule
 #define localZero hipMemset
 #define localH2D hipMemcpyHostToDevice
 #define localD2H hipMemcpyDeviceToHost
-#endif
+#endif // GAMEDEV_CUDA
 
 // spatial controller groups and the 32-bit words of one bit-packed group dependency row
 constexpr int LOCAL_GROUPS = ((N_X > 1) ? COL_BIN_X : 1)*COL_BIN_Y*((N_Z > 1) ? COL_BIN_Z : 1);
@@ -1694,7 +1694,7 @@ __global__ void local_graph (unsigned int *edges, const int *spatial,
     }
     }
     else
-    #endif
+    #endif // GAMEDEV_ROCM
     {
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N_P || !active[i]) return;
@@ -1781,18 +1781,18 @@ struct local_workspace
     #ifdef COL_DIAGNOSTICS
     std::ofstream log;
     std::uint64_t operator_id = 0;
-    #endif
+    #endif // COL_DIAGNOSTICS
     local_workspace (const std::string &path): owners(LOCAL_GROUPS), edges(LOCAL_GROUPS*LOCAL_WORDS),
         state(LOCAL_GROUPS)
     {
         #ifdef COL_QUERY_ENV_CACHE
         LOCAL_CHECK(localMalloc((void**)&environment, sizeof(query_environment)*N_P));
-        #endif
+        #endif // COL_QUERY_ENV_CACHE
         LOCAL_CHECK(localMalloc((void**)&cached, sizeof(cached_rate_moments)*N_P));
         #ifdef COL_DIAGNOSTICS
         LOCAL_CHECK(localMalloc((void**)&work, sizeof(event_work)*N_P));
         LOCAL_CHECK(localMalloc((void**)&work_sum, sizeof(event_work)));
-        #endif
+        #endif // COL_DIAGNOSTICS
         LOCAL_CHECK(localMalloc((void**)&ids, sizeof(int)*N_P));
         LOCAL_CHECK(localMalloc((void**)&queue_a, sizeof(int)*N_P));
         LOCAL_CHECK(localMalloc((void**)&queue_b, sizeof(int)*N_P));
@@ -1807,7 +1807,7 @@ struct local_workspace
         log.open(path+"collision_local_"+std::to_string(stamp)+".jsonl");
         if (!log) throw std::runtime_error("cannot open local collision diagnostics");
         log << std::setprecision(17);
-        #endif
+        #endif // COL_DIAGNOSTICS
     }
     ~local_workspace ()
     {
@@ -1816,7 +1816,7 @@ struct local_workspace
         #ifdef COL_DIAGNOSTICS
         localFree(work);
         localFree(work_sum);
-        #endif
+        #endif // COL_DIAGNOSTICS
         localFree(ids);
         localFree(queue_a);
         localFree(queue_b);
@@ -1871,10 +1871,10 @@ inline void evolve_local_collisions (
     col_audit_accum *dev_col_audit
 #ifdef IMPORTGAS
     , const real *dev_gas_dens
-#endif
+#endif // IMPORTGAS
 #ifdef COL_DIAGNOSTICS
     , real clock_sim, col_controller_summary &col_summary
-#endif
+#endif // COL_DIAGNOSTICS
 )
 {
 // called by evolve_collisions after production geometry/cache construction
@@ -1883,14 +1883,14 @@ inline void evolve_local_collisions (
 #ifdef COL_DIAGNOSTICS
 using local_clock = std::chrono::steady_clock;
 const auto local_begin = local_clock::now();
-#endif
+#endif // COL_DIAGNOSTICS
 #ifdef COL_QUERY_ENV_CACHE
 cache_query_environments <<< NB_P, TPB >>> (local.environment, dev_particle);
 LOCAL_KERNEL("cache_query_environments");
-#endif
+#endif // COL_QUERY_ENV_CACHE
 #ifdef COL_DIAGNOSTICS
 LOCAL_CHECK(localZero(local.work, 0, sizeof(event_work)*N_P));
-#endif
+#endif // COL_DIAGNOSTICS
 // rebuild owner lists and the group dependency graph only after positions change
 if (!local_geometry_valid)
 {
@@ -1902,9 +1902,9 @@ if (!local_geometry_valid)
     local_graph <<<
         #ifdef GAMEDEV_ROCM
         (N_P*(TPB % 32 == 0 ? 32 : 1) + TPB - 1) / TPB, TPB
-        #else
+        #else  // !GAMEDEV_ROCM
         NB_P, TPB
-        #endif
+        #endif // GAMEDEV_ROCM
     >>> (local.graph, dev_col_spatial, dev_col_neighbor, dev_col_active);
     LOCAL_KERNEL("local_graph");
     LOCAL_CHECK(localCopy(local.edges.data(), local.graph,
@@ -1925,7 +1925,7 @@ auto initialize = [&](int count)
     #ifdef COL_PARTNER_REFRESH
     // campaign hook: only at refresh boundaries, before snapshots and cached rates
     COL_PARTNER_REFRESH(dev_col_neighbor, local.queue_a, count);
-    #endif
+    #endif // COL_PARTNER_REFRESH
     int blocks = (count + TPB - 1) / TPB;
     col_bath_init <<< blocks, TPB >>> (local.ids, count, dev_size_old, dev_numr_old,
         dev_col_time, dev_col_events, dev_col_complete, dev_particle);
@@ -1947,13 +1947,13 @@ auto rates_and_bins = [&](int count)
     LOCAL_KERNEL("publish_size_bounds");
     #ifdef COL_PERF_VAL
     auto rate_start = col_perf_start();
-    #endif
+    #endif // COL_PERF_VAL
     col_bath_rate <<< count, COL_BATH_TPB >>> (local.ids, count, dev_col_rate, local.change_rate, local.second_rate,
         dev_particle, dev_col_neighbor, dev_col_measure, dev_col_active,
         dev_size_old, dev_numr_old,
         #ifdef IMPORTGAS
         dev_gas_dens,
-        #endif
+        #endif // IMPORTGAS
         lambda0, local.environment, local.cached);
     LOCAL_KERNEL("local_rates");
     LOCAL_CHECK(localZero(dev_col_count, 0, sizeof(int)*col_raw_count));
@@ -1971,7 +1971,7 @@ auto rates_and_bins = [&](int count)
     LOCAL_CHECK(localCopy(ratebin.data(), dev_col_ratebin, sizeof(col_rate_bin)*merged, localD2H));
     #ifdef COL_PERF_VAL
     col_perf_rate_ms += col_perf_stop(rate_start);
-    #endif
+    #endif // COL_PERF_VAL
     return merged;
 };
 // merged bins of group c occupy the contiguous range [binmap[c*COL_BIN_S], bin_end(c))
@@ -1993,14 +1993,14 @@ std::vector<double> requested(LOCAL_GROUPS);
 #ifdef COL_DIAGNOSTICS
 std::vector<int> binding(LOCAL_GROUPS);
 for (int c = 0; c < LOCAL_GROUPS; ++c) requested[c] = requested_step(c, merged, &binding[c]);
-#else
+#else  // !COL_DIAGNOSTICS
 for (int c = 0; c < LOCAL_GROUPS; ++c) requested[c] = requested_step(c, merged);
-#endif
+#endif // COL_DIAGNOSTICS
 local_schedule schedule(duration, requested, local.edges);
 std::vector<real> steps(LOCAL_GROUPS);
 #ifdef COL_DIAGNOSTICS
 std::vector<real> published(LOCAL_GROUPS, 0);
-#endif
+#endif // COL_DIAGNOSTICS
 for (int c = 0; c < LOCAL_GROUPS; ++c) steps[c] = schedule.seconds(schedule.step[c]);
 LOCAL_CHECK(localCopy(local.dt, steps.data(), sizeof(real)*LOCAL_GROUPS, localH2D));
 std::vector<bool> passed(LOCAL_GROUPS, true);
@@ -2017,7 +2017,7 @@ col_summary.operator_count++;
 int operator_index = col_summary.operator_count;
 int batch_index = 0;
 
-#endif
+#endif // COL_DIAGNOSTICS
 
 while (schedule.time() < schedule.end)
 {
@@ -2029,7 +2029,7 @@ while (schedule.time() < schedule.end)
     {
         #ifdef COL_DIAGNOSTICS
         published[c] = time;
-        #endif
+        #endif // COL_DIAGNOSTICS
         ids.insert(ids.end(), local.owners[c].begin(), local.owners[c].end());
     }
     int count = static_cast<int>(ids.size());
@@ -2053,22 +2053,22 @@ while (schedule.time() < schedule.end)
             #ifdef COL_DIAGNOSTICS
             min_request[c] = std::min(min_request[c], current_request[c]);
             max_request[c] = std::max(max_request[c], current_request[c]);
-            #endif
+            #endif // COL_DIAGNOSTICS
         }
         #ifdef COL_DIAGNOSTICS
         auto previous = schedule.level;
-        #endif
+        #endif // COL_DIAGNOSTICS
         schedule.adapt(tick, groups, current_request, passed);
         for (int c : groups)
         {
             #ifdef COL_DIAGNOSTICS
             coarsened[c] += schedule.level[c] < previous[c];
             refined[c] += schedule.level[c] > previous[c];
-            #endif
+            #endif // COL_DIAGNOSTICS
             steps[c] = schedule.seconds(schedule.step[c]);
             #ifdef COL_DIAGNOSTICS
             constrained[c] += steps[c] > current_request[c];
-            #endif
+            #endif // COL_DIAGNOSTICS
         }
         LOCAL_CHECK(localCopy(local.dt, steps.data(), sizeof(real)*LOCAL_GROUPS, localH2D));
     }
@@ -2087,13 +2087,13 @@ while (schedule.time() < schedule.end)
             steps[c] / requested_step(c, merged));
     }
 
-    #endif
+    #endif // COL_DIAGNOSTICS
     #ifdef COL_PERF_VAL
     auto event_start = col_perf_start();
-    #endif
+    #endif // COL_PERF_VAL
     #ifdef COL_DIAGNOSTICS
     const auto chain_begin = local_clock::now();
-    #endif
+    #endif // COL_DIAGNOSTICS
     // screen owners with no event in the interval, then relaunch the chain on the shrinking unfinished queue
     LOCAL_CHECK(localZero(local.error, 0, sizeof(int)));
     LOCAL_CHECK(localZero(dev_col_unfinished, 0, sizeof(int)));
@@ -2115,7 +2115,7 @@ while (schedule.time() < schedule.end)
         LOCAL_CHECK(localZero(dev_col_unfinished, 0, sizeof(int)));
         #ifdef COL_DIAGNOSTICS
         chain_blocks += unfinished;
-        #endif
+        #endif // COL_DIAGNOSTICS
         col_chain_run <<< unfinished, COL_BATH_TPB >>> (input, unfinished,
             dev_particle, dev_rngstate, dev_col_error, dev_col_unfinished,
             dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
@@ -2123,7 +2123,7 @@ while (schedule.time() < schedule.end)
             dev_col_measure, dev_col_active, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
-            #endif
+            #endif // IMPORTGAS
             lambda0, local.dt, dev_col_spatial, output, local.error, local.work, local.environment, local.cached);
         LOCAL_KERNEL("local_chain");
         LOCAL_CHECK(localCopy(&unfinished, dev_col_unfinished, sizeof(int), localD2H));
@@ -2135,15 +2135,15 @@ while (schedule.time() < schedule.end)
     if (error) throw std::runtime_error("local collision chain error "+std::to_string(error));
     #ifdef COL_DIAGNOSTICS
     chain_seconds += std::chrono::duration<double>(local_clock::now() - chain_begin).count();
-    #endif
+    #endif // COL_DIAGNOSTICS
 
     #ifdef COL_PERF_VAL
     col_perf_event_ms += col_perf_stop(event_start);
     auto audit_start = col_perf_start();
-    #endif
+    #endif // COL_PERF_VAL
     #ifdef COL_DIAGNOSTICS
     const auto audit_begin = local_clock::now();
-    #endif
+    #endif // COL_DIAGNOSTICS
     // compare realized activity and size change with the predicted envelopes and adapt each group's safety factor
     LOCAL_CHECK(localZero(dev_col_audit, 0, sizeof(col_audit_accum)*col_raw_count));
     col_audit_bin <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_col_audit,
@@ -2166,7 +2166,7 @@ while (schedule.time() < schedule.end)
         if (!(mass > 0)) continue;
         #ifdef COL_DIAGNOSTICS
         real before = local.state[c].limit_scale;
-        #endif
+        #endif // COL_DIAGNOSTICS
         std::vector<col_audit_accum> slice(audit.begin() + first, audit.begin() + last);
         auto result = _finish_col_bath(slice, int(slice.size()), local.state[c]);
         passed[c] = !(result.activity_overshoot || result.distribution_overshoot || result.persistent_overshoot);
@@ -2188,24 +2188,24 @@ while (schedule.time() < schedule.end)
         record.limit_after = local.state[c].limit_scale;
         record.result = result;
         _record_col_bath(col_summary, record);
-        #endif
+        #endif // COL_DIAGNOSTICS
     }
     // count physical launches once per wave, not once per group in that wave
     #ifdef COL_DIAGNOSTICS
     col_summary.continuation_launches += continuations;
     audit_seconds += std::chrono::duration<double>(local_clock::now() - audit_begin).count();
-    #endif
+    #endif // COL_DIAGNOSTICS
     #ifdef COL_PERF_VAL
     col_perf_audit_ms += col_perf_stop(audit_start);
     ++col_perf_batches;
     col_perf_launches += continuations;
-    #endif
+    #endif // COL_PERF_VAL
     #ifdef COL_DIAGNOSTICS
     ++col_summary.wave_count;
     owner_updates += count;
     launches += continuations;
     ++waves;
-    #endif
+    #endif // COL_DIAGNOSTICS
     ++count_col;
     dt_col = duration;
     for (int c : groups) dt_col = std::min(dt_col, steps[c]);
@@ -2264,7 +2264,7 @@ for (int k = 0; k < EVENT_CATEGORIES; ++k)
 local.log << "]}\n";
 local.log.flush();
 if (!local.log) throw std::runtime_error("cannot write local collision diagnostics");
-#endif
+#endif // COL_DIAGNOSTICS
 }
 
 #endif // COLLISION && !BERNOULLI

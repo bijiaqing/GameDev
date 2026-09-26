@@ -52,10 +52,10 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     unsigned long long private_keys[N_K];
     using cache_heap = idx_old_heap<N_K, kdtree_node, true>;
     cache_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active, private_keys);
-    #else
+    #else  // !GAMEDEV_ROCM
     using cache_heap = kdtree_heap;
     kdtree_heap near_result(search_dist, dev_kdtree_node, !unique_ids, dev_col_active);
-    #endif
+    #endif // GAMEDEV_ROCM
     kdtree::cct::knn <cache_heap, kdtree_node, kdtree_traits> (
         near_result, dev_kdtree_node[idx_tree].cartesian,
         *dev_kdtree_box, dev_kdtree_node, N_T

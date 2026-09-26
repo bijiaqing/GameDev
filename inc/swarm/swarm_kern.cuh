@@ -242,7 +242,7 @@ __global__ void ssa_transport (swarm *dev_particle,
 __global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
 #ifdef IMPORTGAS
     , const real *dev_gas_dens
-#endif
+#endif // IMPORTGAS
 );
 #endif // DIFFUSION
 

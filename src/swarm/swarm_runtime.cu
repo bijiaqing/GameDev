@@ -353,7 +353,7 @@ int main (int argc, char **argv)
     bool local_geometry_valid = false;
     #ifdef COL_DIAGNOSTICS
     col_controller_summary col_summary;
-    #endif
+    #endif // COL_DIAGNOSTICS
     #endif // COLLISION && !BERNOULLI
 
     // size/weight changes refresh collision rates without rebuilding spatial neighbors
@@ -364,7 +364,7 @@ int main (int argc, char **argv)
         col_geom_valid = false;
         #ifndef BERNOULLI
         local_geometry_valid = false;
-        #endif
+        #endif // !BERNOULLI
     };
 
     // evolve collisions over a fixed-position interval with the configured collision integrator
@@ -481,10 +481,10 @@ int main (int argc, char **argv)
             dev_col_ratebin, dev_col_audit
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif
+            #endif // IMPORTGAS
             #ifdef COL_DIAGNOSTICS
             , clock_sim, col_summary
-            #endif
+            #endif // COL_DIAGNOSTICS
         );
         #else  // BERNOULLI
         real elapsed = 0.0;
@@ -665,7 +665,7 @@ int main (int argc, char **argv)
         std::fill(local.state.begin(), local.state.end(), col_bath_state{});
         #ifdef COL_DIAGNOSTICS
         col_summary = col_controller_summary{};
-        #endif
+        #endif // COL_DIAGNOSTICS
         #endif // COLLISION && !BERNOULLI
 
         PRINT_TITLE_TO_SCREEN();
@@ -710,7 +710,7 @@ int main (int argc, char **argv)
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
                 #ifdef IMPORTGAS
                 , dev_gas_dens
-                #endif
+                #endif // IMPORTGAS
             );
             GPU_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
@@ -768,7 +768,7 @@ int main (int argc, char **argv)
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
                 #ifdef IMPORTGAS
                 , dev_gas_dens
-                #endif
+                #endif // IMPORTGAS
             );
             GPU_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
@@ -845,7 +845,7 @@ int main (int argc, char **argv)
             std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
             return 1;
         }
-        #endif
+        #endif // COL_DIAGNOSTICS
         #endif // COLLISION && !BERNOULLI
 
         msg_output(idx_file);

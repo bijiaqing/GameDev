@@ -8,25 +8,25 @@ using real = double;
 // test runners may override these nonphysical verification controls while each model keeps its constants in this header
 #ifdef TEST_RES
 constexpr int VERIFY_RES = TEST_RES;
-#else
+#else  // !TEST_RES
 constexpr int VERIFY_RES = 64;
 #endif // TEST_RES
 
 #ifdef TEST_CFL
 constexpr real VERIFY_CFL = TEST_CFL;
-#else
+#else  // !TEST_CFL
 constexpr real VERIFY_CFL = 0.5;
 #endif // TEST_CFL
 
 #ifdef TEST_POWER
 constexpr real VERIFY_POWER = TEST_POWER;
-#else
+#else  // !TEST_POWER
 constexpr real VERIFY_POWER = -1.0;
 #endif // TEST_POWER
 
 #ifdef TEST_SHIFT
 constexpr real VERIFY_SHIFT = TEST_SHIFT;
-#else
+#else  // !TEST_SHIFT
 constexpr real VERIFY_SHIFT = 3.25;
 #endif // TEST_SHIFT
 
@@ -82,29 +82,29 @@ constexpr int N_Z = 1;
 constexpr int N_X = VERIFY_RES;
 constexpr int N_Y = VERIFY_RES;
 constexpr int N_Z = 1;
-#else
+#else  // other VERIFY_* cases
 #error "A VERIFY_* model selector must be defined in flags.mk"
-#endif
+#endif // VERIFY_* case selection
 
 #if defined(VERIFY_X_WEDGE_TRANSPORT) || defined(VERIFY_X_WEDGE_DIFFUSION)
 constexpr real X_MIN = -0.4;
 constexpr real X_MAX =  0.8;
-#else
+#else  // !(VERIFY_X_WEDGE_TRANSPORT || VERIFY_X_WEDGE_DIFFUSION)
 constexpr real X_MIN = 0.0;
 constexpr real X_MAX = 2.0*M_PI;
-#endif
+#endif // VERIFY_X_WEDGE_TRANSPORT || VERIFY_X_WEDGE_DIFFUSION
 #if defined(VERIFY_DIFFUSION_POSLIMIT)
 constexpr real Y_MIN = 0.9;
 constexpr real Y_MAX = 1.1;
-#else
+#else  // !VERIFY_DIFFUSION_POSLIMIT
 #ifdef VERIFY_STARTUP_3D
 constexpr real Y_MIN = 0.8;
 constexpr real Y_MAX = 1.2;
-#else
+#else  // !VERIFY_STARTUP_3D
 constexpr real Y_MIN = 0.5;
 constexpr real Y_MAX = 2.5;
 #endif // VERIFY_STARTUP_3D
-#endif
+#endif // VERIFY_DIFFUSION_POSLIMIT
 
 // polar diffusion uses a hemisphere with natural zero-flux boundaries; other 3D tests avoid the coordinate poles, while
 // a 2D radial-azimuthal model is represented by one zero-width cell at the midplane
@@ -122,18 +122,18 @@ constexpr real Z_MAX = 0.5*M_PI;
     || defined(VERIFY_Y_DIFFUSION_SPH)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
-#else
+#else  // other VERIFY_* cases
 constexpr real Z_MIN = 0.5*M_PI;
 constexpr real Z_MAX = 0.5*M_PI;
-#endif
+#endif // VERIFY_* case selection
 
 #ifdef VERIFY_STARTUP_3D
 const real SIGMA_0 = 1.3;
 const real ASPR_0  = 0.12;
-#else
+#else  // !VERIFY_STARTUP_3D
 const real SIGMA_0 = 1.0;
 const real ASPR_0  = 0.5;
-#endif
+#endif // VERIFY_STARTUP_3D
 
 // radiation-supported ring equilibria require a gas profile consistent with the chosen beta; the remaining tests use
 // the simpler non-radiative exponent
@@ -142,37 +142,37 @@ const real ASPR_0  = 0.5;
 const real IDX_P = 1.5;
 #elif defined(VERIFY_RING_RADIATION)
 const real IDX_P = 1.2;
-#else
+#else  // !(VERIFY_STARTUP_3D || VERIFY_RING_RADIATION)
 const real IDX_P = 2.0;
-#endif
+#endif // VERIFY_STARTUP_3D / VERIFY_RING_RADIATION
 
 #ifdef VERIFY_STARTUP_3D
 const real IDX_Q = 0.0;
-#else
+#else  // !VERIFY_STARTUP_3D
 const real IDX_Q = -1.0;
-#endif
+#endif // VERIFY_STARTUP_3D
 
 #ifdef DIFFUSION
 #ifdef VERIFY_STARTUP_3D
 const real ALPHA = 4.0e-3;
-#else
+#else  // !VERIFY_STARTUP_3D
 const real NU = 5.0e-2;
-#endif
-#endif
+#endif // VERIFY_STARTUP_3D
+#endif // DIFFUSION
 
 #ifdef VERIFY_STARTUP_3D
 const real METAL_Z = 1.7e-2;
 const real STOKES_0 = 3.0e-2;
-#else
+#else  // !VERIFY_STARTUP_3D
 const real METAL_Z = 1.0e-2;
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION) || defined(VERIFY_Y_DIFFUSION_CYL) \
     || defined(VERIFY_Y_DIFFUSION_SPH) || defined(VERIFY_Z_DIFFUSION) || defined(VERIFY_DIFFUSION_POSLIMIT)
 // the tracer limit keeps the isolated Fourier/Bessel/Legendre references at constant D=nu/Sc
 const real STOKES_0 = 0.0;
-#else
+#else  // other VERIFY_* cases
 const real STOKES_0 = 1.0e-1;
-#endif
-#endif
+#endif // VERIFY_* case selection
+#endif // VERIFY_STARTUP_3D
 
 #ifdef RADIATION
 #ifdef VERIFY_RING_RADIATION
@@ -180,12 +180,12 @@ const real STOKES_0 = 1.0e-1;
 // uses unit opacity and beta only to satisfy the shared production parameter interface
 const real BETA_0 = 2.0e-1;
 const real KAPPA_0 = 0.0;
-#else
+#else  // !VERIFY_RING_RADIATION
 const real BETA_0 = 1.0;
 const real KAPPA_0 = 1.0;
-#endif
+#endif // VERIFY_RING_RADIATION
 const real T_BETA = 1.0;
-#endif
+#endif // RADIATION
 
 #ifdef DIFFUSION
 // a Schmidt number of one activates diffusion in the direction being tested; a numerically enormous value makes
@@ -193,27 +193,27 @@ const real T_BETA = 1.0;
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION) || defined(VERIFY_RING_DIFFUSION) \
     || (defined(VERIFY_DIFFUSION_POSLIMIT) && !defined(TEST_DIRECTION_Y) && !defined(TEST_DIRECTION_Z))
 const real SCHMIDT_X = 1.0;
-#else
+#else  // other VERIFY_* cases
 const real SCHMIDT_X = 1.0e300;
-#endif
+#endif // VERIFY_* case selection
 
 #if defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH) \
     || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Y))
 const real SCHMIDT_Y = 1.0;
-#else
+#else  // !(VERIFY_Y_DIFFUSION_CYL || VERIFY_Y_DIFFUSION_SPH || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Y))
 const real SCHMIDT_Y = 1.0e300;
-#endif
+#endif // VERIFY_Y_DIFFUSION_CYL || VERIFY_Y_DIFFUSION_SPH || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Y)
 
 #ifdef VERIFY_STARTUP_3D
 const real SCHMIDT_Z = 2.0;
 #elif defined(VERIFY_Z_DIFFUSION)  || (defined(VERIFY_DIFFUSION_POSLIMIT) && defined(TEST_DIRECTION_Z))
 const real SCHMIDT_Z = 1.0;
-#else
+#else  // !(VERIFY_STARTUP_3D || (VERIFY_Z_DIFFUSION || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Z)))
 const real SCHMIDT_Z = 1.0e300;
-#endif
+#endif // VERIFY_STARTUP_3D / (VERIFY_Z_DIFFUSION || (VERIFY_DIFFUSION_POSLIMIT && TEST_DIRECTION_Z))
 
 const real POS_LIMIT = 0.9;
-#endif
+#endif // DIFFUSION
 
 const int SAVE_MAX = 1;
 const real DT_OUT  = 1.0;
@@ -253,9 +253,9 @@ const real VERIFY_TEND = 1.0;
 const real VERIFY_TEND = 1.0;
 #elif defined(VERIFY_RING)
 const real VERIFY_TEND = 1.0;
-#else
+#else  // other VERIFY_* cases
 const real VERIFY_TEND = 0.5;
-#endif
+#endif // VERIFY_* case selection
 
 // fail during compilation when a test configuration violates assumptions made by the production grid helpers or kernels
 static_assert(N_X > 1, "Verification models require N_X > 1");
@@ -268,14 +268,14 @@ static_assert(N_Z == 1 || Z_MAX > Z_MIN, "An active polar grid needs nonzero ext
 
 #ifdef HALF_DISK
 static_assert(N_Z == 1 || Z_MAX == 0.5*M_PI, "HALF_DISK must end at the midplane");
-#else
+#else  // !HALF_DISK
 static_assert(N_Z == 1 || (Z_MIN < 0.5*M_PI && Z_MAX > 0.5*M_PI), "A full polar model must span the midplane");
-#endif
+#endif // HALF_DISK
 
 #ifndef DIFFUSION
 static_assert(N_Z == 1, "Production guards require DIFFUSION when N_Z>1");
-#endif
+#endif // !DIFFUSION
 
 static_assert(CFL_DYN > 0.0 && CFL_DYN <= 0.5, "Verification CFL must be in (0,0.5]");
 
-#endif
+#endif // !CONST_DEFS_CUH

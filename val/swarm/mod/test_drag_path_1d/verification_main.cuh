@@ -1,3 +1,4 @@
+// include fragment: the drag-path test's main program, included once by its swarm_runtime.cu
 #include <cstdlib>
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision

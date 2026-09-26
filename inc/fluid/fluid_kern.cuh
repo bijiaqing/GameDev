@@ -41,9 +41,9 @@ void _get_drag_weights (real dt, real ts, real &drag_relax, real &drag_decay,
 
 #ifdef GAMEDEV_ROCM
 const int TPB_BLOCK = 64;
-#else
+#else  // !GAMEDEV_ROCM
 const int TPB_BLOCK = 32;
-#endif
+#endif // GAMEDEV_ROCM
 
 // index the explicit full-grid planes shared by every block-owned advection sweep
 enum BlockAdvField
@@ -78,7 +78,7 @@ __global__ void advection_zbl (
     const real *dev_ppm_weight_z, real *dev_adv_work, real dt
 );
 
-#else // !FLUID_BLOCK_SWEEP
+#else  // !FLUID_BLOCK_SWEEP
 
 __global__ void advection_xth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
@@ -126,7 +126,7 @@ __global__ void diffusion_zbl (
     real dt
 );
 
-#else // !FLUID_BLOCK_SWEEP
+#else  // !FLUID_BLOCK_SWEEP
 
 __global__ void diffusion_xth (
     real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,

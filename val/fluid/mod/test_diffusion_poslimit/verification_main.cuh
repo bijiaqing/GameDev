@@ -1,3 +1,4 @@
+// include fragment: the positivity-limited diffusion test's main program, included once by its fluid_runtime.cu
 #include <algorithm>  // std::max, std::min
 #include <array>      // std::array
 #include <cmath>      // fabs, isfinite
@@ -34,9 +35,9 @@ void diffuse (real *rhod, real *mx, real *my, real *mz, real dt)
     // select the same thread- or block-line production kernel requested by FLUID_SWEEP
     #ifdef FLUID_BLOCK_SWEEP
     diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (rhod, mx, my, mz, dt);
-    #else
+    #else  // !FLUID_BLOCK_SWEEP
     diffusion_xth <<< NB_X, TPB >>> (rhod, mx, my, mz, dt);
-    #endif
+    #endif // FLUID_BLOCK_SWEEP
     if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
     {
         std::cerr << "azimuthal diffusion positivity step" << ": " << gpuGetErrorString(status) << std::endl;
@@ -68,7 +69,7 @@ real front_dt ()
         max_cn_sum = std::max(max_cn_sum, cn_i + cn_o);
     }
     return 0.89 / max_cn_sum;
-    #else
+    #else  // !(TEST_DIRECTION_X || TEST_DIRECTION_Y)
     real max_cn_sum = 0.0;
     for (int iy = 0; iy < N_Y; iy++)
     {
@@ -85,7 +86,7 @@ real front_dt ()
         }
     }
     return 0.89 / max_cn_sum;
-    #endif
+    #endif // TEST_DIRECTION_X / TEST_DIRECTION_Y
 }
 
 void diffuse_front (real *rhod, real *mx, real *my, real *mz, real dt)
@@ -93,22 +94,22 @@ void diffuse_front (real *rhod, real *mx, real *my, real *mz, real dt)
     #ifdef TEST_DIRECTION_X
     #ifdef FLUID_BLOCK_SWEEP
     diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (rhod, mx, my, mz, dt);
-    #else
+    #else  // !FLUID_BLOCK_SWEEP
     diffusion_xth <<< NB_X, TPB >>> (rhod, mx, my, mz, dt);
-    #endif
+    #endif // FLUID_BLOCK_SWEEP
     #elif defined(TEST_DIRECTION_Y)
     #ifdef FLUID_BLOCK_SWEEP
     diffusion_ybl <<< N_X*N_Z, TPB_BLOCK, sizeof(real)*6*N_Y >>> (rhod, mx, my, mz, dt);
-    #else
+    #else  // !FLUID_BLOCK_SWEEP
     diffusion_yth <<< NB_Y, TPB >>> (rhod, mx, my, mz, dt);
-    #endif
-    #else
+    #endif // FLUID_BLOCK_SWEEP
+    #else  // !(TEST_DIRECTION_X || TEST_DIRECTION_Y)
     #ifdef FLUID_BLOCK_SWEEP
     diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (rhod, mx, my, mz, dt);
-    #else
+    #else  // !FLUID_BLOCK_SWEEP
     diffusion_zth <<< NB_Z, TPB >>> (rhod, mx, my, mz, dt);
-    #endif
-    #endif
+    #endif // FLUID_BLOCK_SWEEP
+    #endif // TEST_DIRECTION_X / TEST_DIRECTION_Y
     if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
     {
         std::cerr << "directional diffusion donor-limit step" << ": " << gpuGetErrorString(status) << std::endl;
@@ -127,9 +128,9 @@ int line_index (int ix, int iy, int iz)
     return ix;
     #elif defined(TEST_DIRECTION_Y)
     return iy;
-    #else
+    #else  // !(TEST_DIRECTION_X || TEST_DIRECTION_Y)
     return iz;
-    #endif
+    #endif // TEST_DIRECTION_X / TEST_DIRECTION_Y
 }
 
 int run_front ()
@@ -246,9 +247,9 @@ int run_front ()
     const char *direction = "x";
     #elif defined(TEST_DIRECTION_Y)
     const char *direction = "y";
-    #else
+    #else  // !(TEST_DIRECTION_X || TEST_DIRECTION_Y)
     const char *direction = "z";
-    #endif
+    #endif // TEST_DIRECTION_X / TEST_DIRECTION_Y
     std::ofstream meta(output_path + "meta_N" + std::to_string(VERIFY_RES) + ".json");
     meta << std::setprecision(17)
          << "{\n"
@@ -295,14 +296,14 @@ int run_front ()
     return 0;
 }
 
-#endif
+#endif // TEST_DIRECTION_X || TEST_DIRECTION_Y || TEST_DIRECTION_Z
 }
 
 int main ()
 {
     #if defined(TEST_DIRECTION_X) || defined(TEST_DIRECTION_Y) || defined(TEST_DIRECTION_Z)
     return run_front();
-    #else
+    #else  // !(TEST_DIRECTION_X || TEST_DIRECTION_Y || TEST_DIRECTION_Z)
     const real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
     const real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     const real R = sqrt(Y_MIN*Y_MIN*dy);
@@ -505,5 +506,5 @@ int main ()
     std::cout << "fluid diffusion positivity case completed at N=" << VERIFY_RES
               << " with " << sub_count << " CN substeps" << std::endl;
     return 0;
-    #endif
+    #endif // TEST_DIRECTION_X || TEST_DIRECTION_Y || TEST_DIRECTION_Z
 }

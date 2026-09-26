@@ -1,3 +1,4 @@
+// include fragment: the attenuation test's main program, included once by its fluid_runtime.cu
 #include <cstdlib>
 #include <cmath>      // exp, pow
 #include <fstream>    // std::ofstream

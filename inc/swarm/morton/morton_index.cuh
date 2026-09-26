@@ -14,13 +14,13 @@
 #include <gpu.cuh>
 #ifndef GAMEDEV_ROCM
 #include <math_constants.h>  // CUDART_INF_F
-#endif
+#endif // !GAMEDEV_ROCM
 
 #include <thrust/device_ptr.h>             // thrust::device_ptr
 #include <thrust/execution_policy.h>       // thrust::device
 #ifdef GAMEDEV_ROCM
 #include <thrust/system/hip/execution_policy.h> // GPU_THRUST_DEVICE
-#endif
+#endif // GAMEDEV_ROCM
 #include <thrust/sort.h>                   // thrust::stable_sort_by_key
 #include <thrust/device_vector.h>          // device construction scratch space
 #include <thrust/scan.h>                   // child-slot offsets
@@ -360,9 +360,9 @@ void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
     {
         #ifdef GAMEDEV_ROCM
         dist_sq[idx_slot] = MORTON_INF_F;
-        #else
+        #else  // !GAMEDEV_ROCM
         dist_sq[idx_slot] = CUDART_INF_F;
-        #endif
+        #endif // GAMEDEV_ROCM
         idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
@@ -381,9 +381,9 @@ void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
         int j = threadIdx.x + BLOCK_SIZE*q;
         #ifdef GAMEDEV_ROCM
         incoming_dist[q] = j < candidate_count ? dist_sq[K + j] : MORTON_INF_F;
-        #else
+        #else  // !GAMEDEV_ROCM
         incoming_dist[q] = j < candidate_count ? dist_sq[K + j] : CUDART_INF_F;
-        #endif
+        #endif // GAMEDEV_ROCM
         incoming_id[q] = j < candidate_count ? idx_old[K + j] : INT_MAX;
     }
     // skip a batch that cannot beat the retained cutoff, leaving the top K unchanged
@@ -402,13 +402,13 @@ void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
         dist_sq[j] = MORTON_INF_F;
         idx_old[j] = INT_MAX;
     }
-    #else
+    #else  // !GAMEDEV_ROCM
     for (int j = K + threadIdx.x; j < HALF; j += BLOCK_SIZE)
     {
         dist_sq[j] = CUDART_INF_F;
         idx_old[j] = INT_MAX;
     }
-    #endif
+    #endif // GAMEDEV_ROCM
     #pragma unroll
     for (int q = 0; q < SLOTS; ++q)
     {
@@ -466,9 +466,9 @@ int _morton_pack_tile (float distance, int identifier, bool eligible,
     int warp = threadIdx.x / warpSize;
     #ifdef GAMEDEV_ROCM
     unsigned long long mask = __ballot(eligible);
-    #else
+    #else  // !GAMEDEV_ROCM
     unsigned long long mask = __ballot_sync(0xffffffffU, eligible);
-    #endif
+    #endif // GAMEDEV_ROCM
     int rank = __popcll(mask & ((1ULL << lane) - 1));
     if (lane == 0) warp_counts[warp] = __popcll(mask);
     __syncthreads();
@@ -506,9 +506,9 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
     {
         #ifdef GAMEDEV_ROCM
         near_dist_sq[idx_slot] = MORTON_INF_F;
-        #else
+        #else  // !GAMEDEV_ROCM
         near_dist_sq[idx_slot] = CUDART_INF_F;
-        #endif
+        #endif // GAMEDEV_ROCM
         near_idx_old[idx_slot] = INT_MAX;
     }
     if (threadIdx.x == 0)
@@ -555,9 +555,9 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                     take_count = min(BLOCK_SIZE, min(batch_capacity - batch_offset, node.count - idx_offset));
                     #ifdef GAMEDEV_ROCM
                     float distance = MORTON_INF_F;
-                    #else
+                    #else  // !GAMEDEV_ROCM
                     float distance = CUDART_INF_F;
-                    #endif
+                    #endif // GAMEDEV_ROCM
                     int identifier = INT_MAX;
                     bool eligible = false;
                     if (threadIdx.x < take_count)
@@ -591,9 +591,9 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                     int idx_slot = K + batch_offset + idx_local;
                     #ifdef GAMEDEV_ROCM
                     near_dist_sq[idx_slot] = MORTON_INF_F;
-                    #else
+                    #else  // !GAMEDEV_ROCM
                     near_dist_sq[idx_slot] = CUDART_INF_F;
-                    #endif
+                    #endif // GAMEDEV_ROCM
                     near_idx_old[idx_slot] = INT_MAX;
                     int idx_old = candidate.idx_old / idx_stride;
                     if (candidate_dist_sq <= search_dist_sq

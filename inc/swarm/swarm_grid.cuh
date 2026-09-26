@@ -20,7 +20,7 @@ struct interp
 // one-dimensional interpolation weights
 // =====================================================================================================================
 
-// construct periodic azimuthal cell-centred interpolation weights
+// construct periodic azimuthal cell-centered interpolation weights
 __device__ __forceinline__
 void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
 {
@@ -69,7 +69,7 @@ void _1d_interp_x (real loc_x, real deci_x, real &frac_x, int &next_x)
     }
 }
 
-// construct logarithmic-radial interpolation weights for cell centres or outer faces
+// construct logarithmic-radial interpolation weights for cell centers or outer faces
 __device__ __forceinline__
 void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool outer_face = false)
 {
@@ -91,7 +91,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
         {
             real mesh_dim = _get_mesh_dim();
 
-            // place cell-centred values at the exact centroid of the represented disk measure
+            // place cell-centered values at the exact centroid of the represented disk measure
             ref_y = log((mesh_dim / (mesh_dim + 1.0))*(pow(dy, mesh_dim + 1.0) - 1.0) / (pow(dy, mesh_dim) - 1.0))
                 / log(dy);
         }
@@ -130,7 +130,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
             }
             else
             {
-                // clamp a cell-centred stencil rather than reaching beyond the radial domain
+                // clamp a cell-centered stencil rather than reaching beyond the radial domain
                 frac_y = 0.0;
                 next_y = 0;
             }
@@ -138,7 +138,7 @@ void _1d_interp_y (real loc_y, real deci_y, real &frac_y, int &next_y, bool oute
     }
 }
 
-// construct nonperiodic polar cell-centred interpolation weights
+// construct nonperiodic polar cell-centered interpolation weights
 __device__ __forceinline__
 void _1d_interp_z (real loc_z, real deci_z, real &frac_z, int &next_z)
 {
@@ -246,7 +246,7 @@ real _interp_field (const real *dev_field_in, real loc_x, real loc_y, real loc_z
 // particle-to-grid deposition
 // =====================================================================================================================
 
-// deposit one particle weight to its cell-centred trilinear grid stencil
+// deposit one particle weight to its cell-centered trilinear grid stencil
 __device__ __forceinline__
 void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, real weight)
 {

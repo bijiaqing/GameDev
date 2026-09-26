@@ -150,9 +150,9 @@ const char *case_name ()
     return "optdepth";
     #elif defined(VERIFY_RING)
     return "ring_all_2d";
-    #else
+    #else  // other VERIFY_* cases
     return "unknown";
-    #endif
+    #endif // VERIFY_* case selection
 }
 
 std::string suffix ()
@@ -301,15 +301,15 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 real rhod_mode = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
                 #ifdef VERIFY_RING_RADIATION
                 const real beta = BETA_0;
-                #else
+                #else  // !VERIFY_RING_RADIATION
                 const real beta = 0.0;
-                #endif
+                #endif // VERIFY_RING_RADIATION
                 real ell = sqrt((1.0 - beta)*G*M_S*Rc);
                 rhod[idx] = host_gas_dens(Rc, Zc)*rhod_mode;
                 mx[idx] = rhod[idx]*ell;
                 my[idx] = 0.0;
                 mz[idx] = 0.0;
-                #endif
+                #endif // VERIFY_* case selection
             }
         }
     }
@@ -413,7 +413,7 @@ int main ()
     require_lds(reinterpret_cast<const void*>(diffusion_xbl), sizeof(real)*4*N_X, "diffusion_xbl");
     require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
     require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
-    #else
+    #else  // !GAMEDEV_ROCM
     CUDA_CHECK(gpuFuncSetAttribute(
         diffusion_xbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*4*N_X
@@ -426,7 +426,7 @@ int main ()
         diffusion_zbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*6*N_Z
     ));
-    #endif
+    #endif // GAMEDEV_ROCM
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 
@@ -438,7 +438,7 @@ int main ()
     // radiation and standalone optical-depth builds require one cumulative optical-depth field
     real *dev_optdepth;
     CUDA_CHECK(gpuMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
-    #endif
+    #endif // RADIATION
 
     // saving the initial state enables both direct initialization checks and the later mass-conservation calculation
     save_state("initial", dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
@@ -475,7 +475,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt
         );
         CUDA_KERNEL_CHECK("advection_xbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         advection_xth <<< NB_X, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
         CUDA_KERNEL_CHECK("advection_xth");
         #endif // FLUID_BLOCK_SWEEP
@@ -488,7 +488,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dev_adv_work, dt
         );
         CUDA_KERNEL_CHECK("advection_ybl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         advection_yth <<< NB_Y, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_y, dt);
         CUDA_KERNEL_CHECK("advection_yth");
         #endif // FLUID_BLOCK_SWEEP
@@ -501,7 +501,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dev_adv_work, dt
         );
         CUDA_KERNEL_CHECK("advection_zbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         advection_zth <<< NB_Z, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_weight_z, dt);
         CUDA_KERNEL_CHECK("advection_zth");
         #endif // FLUID_BLOCK_SWEEP
@@ -516,7 +516,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
         );
         CUDA_KERNEL_CHECK("diffusion_xbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_xth <<< NB_X, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
         CUDA_KERNEL_CHECK("diffusion_xth");
         #endif // FLUID_BLOCK_SWEEP
@@ -529,7 +529,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
         );
         CUDA_KERNEL_CHECK("diffusion_ybl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_yth <<< NB_Y, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
         CUDA_KERNEL_CHECK("diffusion_yth");
         #endif // FLUID_BLOCK_SWEEP
@@ -542,7 +542,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
         );
         CUDA_KERNEL_CHECK("diffusion_zbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_zth <<< NB_Z, TPB >>> (dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt);
         CUDA_KERNEL_CHECK("diffusion_zth");
         #endif // FLUID_BLOCK_SWEEP
@@ -584,7 +584,7 @@ int main ()
     real omega_max = sqrt((1.0
         #ifdef VERIFY_RING_RADIATION
         - BETA_0
-        #endif
+        #endif // VERIFY_RING_RADIATION
         )*G*M_S / (Y_MIN*Y_MIN*Y_MIN));
     real dt_target = 0.25*dx / omega_max;
 
@@ -597,7 +597,7 @@ int main ()
         apply_diffusion_y(0.5*dt);
         apply_diffusion_x(0.5*dt);
         recover_velocity();
-        #endif
+        #endif // DIFFUSION
 
         // opening transport half-step in x then y, recovering primitives after each conservative sweep
         apply_advection_x(0.5*dt);
@@ -613,9 +613,9 @@ int main ()
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
         CUDA_KERNEL_CHECK("optdepth_csum");
         source_update <<< NB_G, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dustdens, dev_optdepth, 1.0, dt);
-        #else
+        #else  // !RADIATION
         source_update <<< NB_G, TPB >>> (dev_velx, dev_vely, dev_velz, dev_dustdens, dt);
-        #endif
+        #endif // RADIATION
         CUDA_KERNEL_CHECK("source_update");
 
         // source_update advances primitives, so rebuild conserved momenta before returning to conservative transport
@@ -634,12 +634,12 @@ int main ()
         // closing diffusion half-step also reverses its opening order
         apply_diffusion_x(0.5*dt);
         apply_diffusion_y(0.5*dt);
-        #endif
+        #endif // DIFFUSION
 
         clock += dt;
         steps++;
     }
-    #else
+    #else  // !(VERIFY_OPTDEPTH || VERIFY_SOURCE_DRAG || VERIFY_RING)
     // isolated transport and diffusion tests advance only the kernel selected by the model's VERIFY_* macro
     while (clock < VERIFY_TEND)
     {
@@ -653,7 +653,7 @@ int main ()
             || defined(VERIFY_Z_TRANSPORT)
         // radial and polar transport use the current global production CFL condition
         dt = fmin(cfl_step(), VERIFY_TEND - clock);
-        #else
+        #else  // other VERIFY_* cases
         // diffusion is implicit, but a resolution-dependent timestep is retained to measure convergence of the complete
         // space-time discretization rather than allowing temporal error to remain fixed as the grid is refined
         real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
@@ -665,7 +665,7 @@ int main ()
         real dx_length = Y_MIN*(X_MAX - X_MIN) / static_cast<real>(N_X);
         min_length = fmin(min_length, dx_length);
         dt = fmin(0.25*min_length, VERIFY_TEND - clock);
-        #endif
+        #endif // VERIFY_* case selection
 
         // compile exactly one of these calls into an isolated-kernel test executable
         #if defined(VERIFY_X_TRANSPORT)
@@ -680,11 +680,11 @@ int main ()
         apply_diffusion_y(dt);
         #elif defined(VERIFY_Z_DIFFUSION)
         apply_diffusion_z(dt);
-        #endif
+        #endif // VERIFY_* case selection
         clock += dt;
         steps++;
     }
-    #endif
+    #endif // VERIFY_OPTDEPTH / VERIFY_SOURCE_DRAG / VERIFY_RING
 
     #if !defined(VERIFY_OPTDEPTH)
     #ifdef RADIATION
@@ -697,12 +697,12 @@ int main ()
     std::vector<real> optdepth_final(N_G);
     CUDA_CHECK(gpuMemcpy(optdepth_final.data(), dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
     save_array("optdepth_final", optdepth_final);
-    #endif
+    #endif // RADIATION
 
     // synchronize and save the final conserved fields and physical velocities for Python validation
     save_state("final", dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
         dev_velx, dev_vely, dev_velz);
-        #endif
+        #endif // !VERIFY_OPTDEPTH
 
     // record the compile-time configuration and realized integration statistics beside the raw binary arrays; Python
     // uses these values instead of inferring dimensions or final time from filenames and requested parameters
@@ -737,7 +737,7 @@ int main ()
     CUDA_CHECK(gpuFree(dev_cfl_rate));
     #ifdef RADIATION
     CUDA_CHECK(gpuFree(dev_optdepth));
-    #endif
+    #endif // RADIATION
 
     std::cout << "Verification case " << case_name() << " completed at N="
               << VERIFY_RES << " in " << steps << " step(s)." << std::endl;

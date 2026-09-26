@@ -2,6 +2,13 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
+// =====================================================================================================================
+// kernel: momentum_getv
+// purpose: recover primitive velocities from conserved momentum, repairing near-vacuum cells
+//
+// parallelization: one thread per grid cell
+// =====================================================================================================================
+
 __global__
 void momentum_getv (const real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,
     real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz)

@@ -5,9 +5,9 @@
 
 #include <gpu.cuh> // float3 and CUDA device intrinsics
 #ifdef GAMEDEV_ROCM
-#else
+#else  // !GAMEDEV_ROCM
 #include <math_constants.h>  // CUDART_INF_F
-#endif
+#endif // GAMEDEV_ROCM
 
 #include <morton/morton_index.cuh>
 
@@ -183,9 +183,9 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
     {
         #ifdef GAMEDEV_ROCM
         merge_dist_sq[idx_slot] = MORTON_INF_F;
-        #else
+        #else  // !GAMEDEV_ROCM
         merge_dist_sq[idx_slot] = CUDART_INF_F;
-        #endif
+        #endif // GAMEDEV_ROCM
         merge_idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
@@ -207,9 +207,9 @@ int _periodic_topk (const morton_view &morton_data, const float3 &query_point, f
         {
             #ifdef GAMEDEV_ROCM
             merge_dist_sq[idx_slot] = MORTON_INF_F;
-            #else
+            #else  // !GAMEDEV_ROCM
             merge_dist_sq[idx_slot] = CUDART_INF_F;
-            #endif
+            #endif // GAMEDEV_ROCM
             merge_idx_old[idx_slot] = INT_MAX;
         }
     }

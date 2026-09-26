@@ -824,7 +824,7 @@ Density and all three momenta are transported conservatively. Each directional o
 
 1. geometry-aware PPM reconstruction
 2. a pressureless HLL interface flux
-3. a first-order cell-centred HLL flux as a robust invariant-domain base
+3. a first-order cell-centered HLL flux as a robust invariant-domain base
 4. one conservative face coefficient that limits the high-minus-low correction
 
 For a directional finite-volume coordinate with cell measure $V_i$ and face factor $A_{i+1/2}$,
@@ -1011,7 +1011,7 @@ to zero. This fallback should remain inactive when the CFL and invariant-domain 
 its purpose is to prevent a residual negative density from producing an undefined vacuum velocity,
 not to replace the conservative limiter.
 
-More explicitly, let $\boldsymbol F^L$ be the cell-centred low-order HLL flux and
+More explicitly, let $\boldsymbol F^L$ be the cell-centered low-order HLL flux and
 $\delta\boldsymbol F=\boldsymbol F^H-\boldsymbol F^L$ the PPM antidiffusive correction. A face
 applies
 

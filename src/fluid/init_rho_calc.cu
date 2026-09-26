@@ -21,6 +21,18 @@ real initdens_lerp (real R, const real *dev_initdens)
     return (1.0 - frac_R)*dev_initdens[idx_src] + frac_R*dev_initdens[idx_src + 1];
 }
 
+// =====================================================================================================================
+// kernel: init_rho_calc
+// purpose: initialize dust density from the host-convolved surface-density profile
+//
+// parallelization: one thread per grid cell
+//
+// per call:
+//   1 cylindrical-radius interpolation of the surface density
+//   2 vertical diffusion-equilibrium embedding in 3D
+//   3 multiplicative azimuthal noise shared across radius and polar angle
+// =====================================================================================================================
+
 __global__
 void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 {

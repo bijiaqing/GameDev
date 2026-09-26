@@ -28,7 +28,7 @@
 
 #ifndef VAL_KNN_K
 #define VAL_KNN_K 200
-#endif
+#endif // !VAL_KNN_K
 
 namespace
 {
@@ -114,9 +114,9 @@ void kdtree_query (int *dev_near_idx_old, float *dev_near_dist_sq,
         dev_near_idx_old[idx_out] = idx_old;
         #ifdef GAMEDEV_ROCM
         dev_near_dist_sq[idx_out] = (idx_old < 0) ? MORTON_INF_F : near_result.returnDist2(idx_neighbor);
-        #else
+        #else  // !GAMEDEV_ROCM
         dev_near_dist_sq[idx_out] = (idx_old < 0) ? CUDART_INF_F : near_result.returnDist2(idx_neighbor);
-        #endif
+        #endif // GAMEDEV_ROCM
     }
 }
 
@@ -293,10 +293,10 @@ double kernel_time_ms (Function operation, int repeats)
     #ifdef GAMEDEV_ROCM
     _morton_gpu_check(gpuEventDestroy(event_start), "destroy benchmark start event");
     _morton_gpu_check(gpuEventDestroy(event_stop), "destroy benchmark end event");
-    #else
+    #else  // !GAMEDEV_ROCM
     gpuEventDestroy(event_start);
     gpuEventDestroy(event_stop);
-    #endif
+    #endif // GAMEDEV_ROCM
     return static_cast<double>(elapsed_ms) / repeats;
 }
 
@@ -342,10 +342,10 @@ quality_stats compare_neighbors (const std::vector<int> &kdtree_idx_old, const s
         };
         std::sort(kdtree_neighbors.begin(), kdtree_neighbors.end(), by_identifier);
         std::sort(morton_neighbors.begin(), morton_neighbors.end(), by_identifier);
-        #else
+        #else  // !GAMEDEV_ROCM
         std::sort(kdtree_neighbors.begin(), kdtree_neighbors.end());
         std::sort(morton_neighbors.begin(), morton_neighbors.end());
-        #endif
+        #endif // GAMEDEV_ROCM
 
         bool query_mismatch = kdtree_neighbors.size() != morton_neighbors.size();
         std::size_t common = std::min(kdtree_neighbors.size(), morton_neighbors.size());
@@ -394,9 +394,9 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
     std::vector<std::pair<float, int>> actual_by_id = actual;
     std::vector<std::pair<float, int>> expected_by_id = expected;
     auto by_identifier = [](const auto &left, const auto &right)
-    #else
+    #else  // !GAMEDEV_ROCM
     for (std::size_t idx = 0; idx < expected.size(); idx++)
-    #endif
+    #endif // GAMEDEV_ROCM
     {
         #ifdef GAMEDEV_ROCM
         return left.second < right.second;
@@ -407,17 +407,17 @@ bool differs_from_brute (const std::vector<std::pair<float, int>> &actual,
     for (std::size_t idx = 0; idx < expected_by_id.size(); idx++)
     {
         float distance_error = std::fabs(actual_by_id[idx].first - expected_by_id[idx].first);
-        #else
+        #else  // !GAMEDEV_ROCM
         float distance_error = std::fabs(actual[idx].first - expected[idx].first);
-        #endif
+        #endif // GAMEDEV_ROCM
         maximum_distance_error = std::max(maximum_distance_error, distance_error);
         #ifdef GAMEDEV_ROCM
         float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(expected_by_id[idx].first));
         if (actual_by_id[idx].second != expected_by_id[idx].second || distance_error > tolerance) return true;
-        #else
+        #else  // !GAMEDEV_ROCM
         float tolerance = 2.0e-6f*std::max(1.0f, std::fabs(expected[idx].first));
         if (actual[idx].second != expected[idx].second || distance_error > tolerance) return true;
-        #endif
+        #endif // GAMEDEV_ROCM
     }
     return false;
 }
@@ -885,7 +885,7 @@ int main (int argc, char **argv)
         _morton_gpu_check(gpuFree(dev_kdtree_node), "release KD nodes");
         _morton_gpu_check(gpuFree(dev_kdtree_box), "release KD bounds");
         _morton_gpu_check(gpuFree(dev_point), "release benchmark points");
-        #else
+        #else  // !GAMEDEV_ROCM
         if (dev_kdtree_checksum) gpuFree(dev_kdtree_checksum);
         if (dev_morton_checksum) gpuFree(dev_morton_checksum);
         if (dev_performance_stack_overflow) gpuFree(dev_performance_stack_overflow);
@@ -899,7 +899,7 @@ int main (int argc, char **argv)
         gpuFree(dev_kdtree_node);
         gpuFree(dev_kdtree_box);
         gpuFree(dev_point);
-        #endif
+        #endif // GAMEDEV_ROCM
 
         bool quality_passed = quality.mismatched_queries == 0
             && quality.kdtree_brute_mismatches == 0 && quality.morton_brute_mismatches == 0

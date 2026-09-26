@@ -1,3 +1,4 @@
+// include fragment: the shared collision-physics main program, included once by each colphys test's swarm_runtime.cu
 #include <cstdlib>
 #include <algorithm>  // std::max_element
 #include <array>      // std::array
@@ -471,7 +472,7 @@ int main ()
          #ifdef CODE_UNIT
          #ifdef TEST_COLPHYS_3D
          << "  \"case\": \"colphys_3d\",\n"
-         #else
+         #else  // !TEST_COLPHYS_3D
          << "  \"case\": \"colphys_code\",\n"
          #endif // TEST_COLPHYS_3D
          << "  \"code_unit\": true,\n"

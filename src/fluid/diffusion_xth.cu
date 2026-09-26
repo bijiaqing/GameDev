@@ -13,7 +13,7 @@
 // per call:
 //   1 positivity-controlled Crank-Nicolson subcycling
 //   2 cyclic tridiagonal solution by the Sherman-Morrison formula
-//   3 time-centred diffusive mass flux construction
+//   3 time-centered diffusive mass flux construction
 //   4 donor-state momentum transport with the diffusing mass
 // =====================================================================================================================
 
@@ -117,7 +117,7 @@ void diffusion_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real mass_flux[N_X], moment_flux[N_X];
 
-            // reconstruct the time-centred diffusive mass flux at every periodic face
+            // reconstruct the time-centered diffusive mass flux at every periodic face
             for (int ix = 0; ix < N_X; ix++)
             {
                 int ixp1 = (ix + 1) % N_X;

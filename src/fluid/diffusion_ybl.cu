@@ -122,7 +122,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
-        // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary flux
+        // reconstruct the time-centered mass flux from the old and solved diffused variables, with zero boundary flux
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             if (iy == N_Y - 1)

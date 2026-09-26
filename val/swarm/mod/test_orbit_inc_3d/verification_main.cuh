@@ -1,3 +1,4 @@
+// include fragment: the inclined orbit test's main program, included once by its swarm_runtime.cu
 #include <cstdlib>
 #include <cmath>      // acos, atan2, cos, sin, sqrt
 #include <fstream>    // std::ofstream

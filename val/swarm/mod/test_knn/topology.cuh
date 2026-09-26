@@ -1,3 +1,4 @@
+// include fragment: the Morton topology test's main program, included once by knn_topology.cu
 #include <cstdlib>
 // compare the device hierarchy with an independent serial topology oracle
 #include <algorithm>

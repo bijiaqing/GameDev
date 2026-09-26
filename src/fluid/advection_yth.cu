@@ -11,7 +11,7 @@
 //
 // per call:
 //   1 three SSPRK(3,3) forward-Euler evaluations
-//   2 PPM high-order and cell-centred low-order HLL flux construction
+//   2 PPM high-order and cell-centered low-order HLL flux construction
 //   3 geometry-aware low-order conservative update
 //   4 invariant-domain-limited antidiffusive correction
 // =====================================================================================================================
@@ -97,7 +97,7 @@ void advection_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
                 flux_rhod[iy], flux_mx[iy], flux_my[iy], flux_mz[iy]
             );
 
-            // compute the low-order HLL flux from adjacent cell-centred states
+            // compute the low-order HLL flux from adjacent cell-centered states
             real flux_rhod_low, flux_mx_low, flux_my_low, flux_mz_low;
             _pressureless_hll_flux(
                 vy[iy], vy[iy + 1],

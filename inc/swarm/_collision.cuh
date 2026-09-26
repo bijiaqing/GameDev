@@ -306,12 +306,12 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     real si = _get_stokes(R, Z, h, size_i
         #ifdef IMPORTGAS
         , dev_particle[idx_old_i].position.x, y, z, dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
     real sj = _get_stokes(R, Z, h, size_j
         #ifdef IMPORTGAS
         , dev_particle[idx_old_i].position.x, y, z, dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
     // use the analytic pressure-drift speed vn = (dP/dR)/(2 rho Omega), as in mcdust
     real vn = -_get_eta(R, Z, h)*R*omega;
@@ -327,13 +327,13 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
         _get_loc_x(dev_particle[idx_old_i].position.x), _get_loc_y(y), _get_loc_z(z));
     if constexpr (N_Z == 1) sigma_local = density;
     else sigma_local = sqrt(2.0*M_PI)*density*h*R;
-    #endif
+    #endif // IMPORTGAS
     real vt = _get_vrel_t(R, si, sj, h, sigma_local);
     // omit Brownian motion in code units, which provide no molecular mass in simulation mass units
     real vb = 0.0;
     #ifndef CODE_UNIT
     vb = _get_vrel_b(R, size_i, size_j, h);
-    #endif
+    #endif // !CODE_UNIT
     return sqrt(dvr*dvr + dvphi*dvphi + dvz*dvz + vt*vt + vb*vb);
 
 }

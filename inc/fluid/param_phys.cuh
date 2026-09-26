@@ -46,7 +46,7 @@ real _get_nu (real R, real h_g)
     #ifndef CONST_NU  // CONST_ALPHA
     real nu = ALPHA*h_g*h_g*R*R*_get_omegaK(R);
     return nu;
-        #else             // CONST_NU
+        #else  // CONST_NU
         return NU;
         #endif // CONST_NU
 }
@@ -69,9 +69,9 @@ real _get_diffusion_weight (real y, real z)
     if (N_Z == 1) return pow(R / R_0, IDX_P);
     real h_g = _get_hg(R);
     return pow(R / R_0, IDX_P - 0.5*(IDX_Q + 3.0))*_get_gas_strat(R, y*cos(z), h_g);
-    #else
+    #else  // !DIFFUSE_CONCENTRATION
     return 1.0;
-    #endif
+    #endif // DIFFUSE_CONCENTRATION
 }
 
 #ifdef VISC_FLOW
@@ -114,7 +114,7 @@ real _get_alpha (real R, real h_g)
 {
     #ifndef CONST_NU  // CONST_ALPHA
     return ALPHA;
-    #else             // CONST_NU
+    #else  // CONST_NU
     real alpha = NU / (h_g*h_g*R*R*_get_omegaK(R));
     return alpha;
     #endif // CONST_NU
@@ -133,9 +133,9 @@ real _get_hd (real R, real h_g)
     alpha_z /= 1.0 + stokes_mid*stokes_mid;
     #ifdef DIFFUSE_CONCENTRATION
     return H_g*sqrt(alpha_z / (stokes_mid + alpha_z));
-    #else
+    #else  // !DIFFUSE_CONCENTRATION
     return H_g*sqrt(alpha_z / stokes_mid);
-    #endif
+    #endif // DIFFUSE_CONCENTRATION
     #else  // !DIFFUSION
     return H_g;
     #endif // DIFFUSION

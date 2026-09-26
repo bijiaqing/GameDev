@@ -10,7 +10,7 @@
 #include <thrust/execution_policy.h>     // thrust::device
 #ifdef GAMEDEV_ROCM
 #include <thrust/system/hip/execution_policy.h> // GPU_THRUST_DEVICE
-#endif
+#endif // GAMEDEV_ROCM
 #include <thrust/scan.h>                 // thrust::exclusive_scan
 
 #include <_collision.cuh>

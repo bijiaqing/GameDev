@@ -1,3 +1,4 @@
+// include fragment: the shared wedge-periodic main program, included once by each wedge test's fluid_runtime.cu
 #include <cstdlib>
 #include <cmath>      // exp, fmin, fmod, pow, sin, sqrt
 #include <cstddef>    // std::size_t
@@ -81,9 +82,9 @@ const char *case_name ()
 {
     #ifdef VERIFY_X_WEDGE_TRANSPORT
     return "x_wedge_transport_2d";
-    #else // VERIFY_X_WEDGE_DIFFUSION
+    #else  // VERIFY_X_WEDGE_DIFFUSION
     return "x_wedge_diffusion_2d";
-    #endif
+    #endif // VERIFY_X_WEDGE_TRANSPORT
 }
 }
 
@@ -120,7 +121,7 @@ int main ()
             dustmomx[idx_cell] = density*R*R*TRANSPORT_RATE;
             dustmomy[idx_cell] = 0.10*density;
             dustmomz[idx_cell] = -0.05*density;
-            #else // VERIFY_X_WEDGE_DIFFUSION
+            #else  // VERIFY_X_WEDGE_DIFFUSION
             // one wedge-periodic Fourier mode has an exact radius-dependent exponential decay under azimuthal diffusion
             real mode_avg = (sin(wave_number*(x_o - MODE_PHASE))
                 - sin(wave_number*(x_i - MODE_PHASE))) / (wave_number*dx);
@@ -129,7 +130,7 @@ int main ()
             dustmomx[idx_cell] = 0.70*density;
             dustmomy[idx_cell] = -0.15*density;
             dustmomz[idx_cell] = 0.11*density;
-            #endif
+            #endif // VERIFY_X_WEDGE_TRANSPORT
         }
     }
     dustdens_initial = dustdens;
@@ -195,16 +196,16 @@ int main ()
         std::cerr << "allocate block advection workspace" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    #endif
+    #endif // FLUID_BLOCK_SWEEP && VERIFY_X_WEDGE_TRANSPORT
 
     #ifdef VERIFY_X_WEDGE_TRANSPORT
     real final_time = TRANSPORT_TIME;
     // ten-thirds cells makes the standard power-of-two grids take exactly 2, 4, 8, and 16 equal steps
     real dt_nominal = (10.0 / 3.0)*dx / TRANSPORT_RATE;
-    #else // VERIFY_X_WEDGE_DIFFUSION
+    #else  // VERIFY_X_WEDGE_DIFFUSION
     real final_time = DIFFUSION_TIME;
     real dt_nominal = 0.25*Y_MIN*dx;
-    #endif
+    #endif // VERIFY_X_WEDGE_TRANSPORT
 
     real clock = 0.0;
     int steps = 0;
@@ -216,22 +217,22 @@ int main ()
             advection_xbl <<< N_Y*N_Z, TPB_BLOCK >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt
             );
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
             );
             #endif // FLUID_BLOCK_SWEEP
-            #else // VERIFY_X_WEDGE_DIFFUSION
+            #else  // VERIFY_X_WEDGE_DIFFUSION
             #ifdef FLUID_BLOCK_SWEEP
             diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
             );
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             diffusion_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt
             );
             #endif // FLUID_BLOCK_SWEEP
-            #endif
+            #endif // VERIFY_X_WEDGE_TRANSPORT
         if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
         {
             std::cerr << "wedge-periodic operator" << ": " << gpuGetErrorString(status) << std::endl;
@@ -321,7 +322,7 @@ int main ()
         std::cerr << "free block advection workspace" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    #endif
+    #endif // FLUID_BLOCK_SWEEP && VERIFY_X_WEDGE_TRANSPORT
 
     std::cout << "fluid " << case_name() << " completed at N=" << VERIFY_RES
               << " in " << steps << " step(s)." << std::endl;

@@ -7,7 +7,7 @@ using curs = gpuRandState;
 #ifdef COLLISION_KDTREE
 #include <kdtree/builder.h>
 using kdtree_boxf = kdtree::box_t<float3>;
-#endif
+#endif // COLLISION_KDTREE
 using real = double;
 using real3 = double3;
 
@@ -24,7 +24,7 @@ constexpr int N_G = N_X*N_Y*N_Z;
 constexpr bool X_WEDGE = false;
 
 constexpr real SIGMA_0 = 1410.4014065096128, METAL_Z = 0.01;
-// h(1 au) from T=209.7926358245702 K, mu=2.34 proton masses.
+// h(1 au) from T=209.7926358245702 K, mu=2.34 proton masses
 constexpr real ASPR_0 = 0.0288821994330985, IDX_P = -1.0, IDX_Q = -0.5;
 constexpr real ALPHA = COAG_ALPHA;
 constexpr real M_MOL = 2.34*1.67262192369e-24, X_SEC = 2.0e-15;
@@ -38,9 +38,9 @@ constexpr real H_SEARCH = 1.0, V_FRAG = 100.0;
 // use the production backend default chain widths
 #ifdef GAMEDEV_ROCM
 constexpr int COL_BATH_TPB = 128;
-#else
+#else  // !GAMEDEV_ROCM
 constexpr int COL_BATH_TPB = 64;
-#endif
+#endif // GAMEDEV_ROCM
 constexpr int COL_EVENT_CAP = 32;
 constexpr int COL_BIN_X = 1, COL_BIN_Y = 16, COL_BIN_Z = 8, COL_BIN_S = 32;
 constexpr int COL_BIN_MIN = 64;
@@ -86,8 +86,8 @@ struct kdtree_traits                        // traits for kdtree::builder
 #ifdef COLLISION_KDTREE
 constexpr int N_T = X_WEDGE ? 3*N_P : N_P;
 constexpr int NB_T = N_T / 64 + 1;
-#endif
+#endif // COLLISION_KDTREE
 constexpr int TPB = 64;
 constexpr int NB_P = N_P / TPB + 1, NB_G = N_G / TPB + 1;
 constexpr int NB_X = N_Y*N_Z / TPB + 1, NB_Y = N_X*N_Z / TPB + 1;
-#endif
+#endif // !CONST_DEFS_CUH

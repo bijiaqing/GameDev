@@ -146,9 +146,9 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     __shared__ bool run_event;
     #ifdef GAMEDEV_ROCM
     curs rngstate;
-    #else
+    #else  // !GAMEDEV_ROCM
     __shared__ curs rngstate;
-    #endif
+    #endif // GAMEDEV_ROCM
 
     // let one thread advance the particle RNG before launching the cooperative search
     if (threadIdx.x == 0)
@@ -392,9 +392,9 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     __shared__ bool run_event;
     #ifdef GAMEDEV_ROCM
     curs rngstate;
-    #else
+    #else  // !GAMEDEV_ROCM
     __shared__ curs rngstate;
-    #endif
+    #endif // GAMEDEV_ROCM
     if (threadIdx.x == 0)
     {
         real col_rate_i = dev_col_rate[idx_old_i];

@@ -19,4 +19,4 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
             _get_force_term(y, z, R, lx, lz, b, g, c, t);
         });
 }
-#endif
+#endif // !PAPER_ORBIT_TRANSPORT_CUH

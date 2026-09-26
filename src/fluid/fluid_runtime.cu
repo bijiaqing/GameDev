@@ -60,7 +60,7 @@ int main (int argc, char **argv)
     require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
     require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
 
-    #else
+    #else  // !GAMEDEV_ROCM
     // opt in to the dynamic shared-memory footprint required by each block-owned diffusion line
     GPU_CHECK(gpuFuncSetAttribute(
         diffusion_xbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
@@ -74,7 +74,7 @@ int main (int argc, char **argv)
         diffusion_zbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*6*N_Z
     ));
-    #endif
+    #endif // GAMEDEV_ROCM
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 
@@ -271,7 +271,7 @@ int main (int argc, char **argv)
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_adv_work, dt_sub
             );
             GPU_KERNEL_CHECK("advection_xbl");
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_xth <<< NB_X, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dt_sub
             );
@@ -301,7 +301,7 @@ int main (int argc, char **argv)
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dev_adv_work, dt_sub
             );
             GPU_KERNEL_CHECK("advection_ybl");
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_yth <<< NB_Y, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_y, dt_sub
             );
@@ -331,7 +331,7 @@ int main (int argc, char **argv)
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dev_adv_work, dt_sub
             );
             GPU_KERNEL_CHECK("advection_zbl");
-            #else // !FLUID_BLOCK_SWEEP
+            #else  // !FLUID_BLOCK_SWEEP
             advection_zth <<< NB_Z, TPB >>> (
                 dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt_sub
             );
@@ -359,7 +359,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_ybl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_yth <<< NB_Y, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
@@ -377,7 +377,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_xbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_xth <<< NB_X, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
@@ -395,7 +395,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_zbl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_zth <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
@@ -443,7 +443,7 @@ int main (int argc, char **argv)
         real beta_taper = taper_raw*taper_raw*(3.0 - 2.0*taper_raw);
         #endif // RADIATION
 
-        // advance the centred source operator and synchronize conserved momentum
+        // advance the centered source operator and synchronize conserved momentum
         source_update <<< NB_G, TPB >>> (
             dev_dustvelx, dev_dustvely, dev_dustvelz, dev_dustdens,
             #ifdef RADIATION
@@ -484,7 +484,7 @@ int main (int argc, char **argv)
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );
         GPU_KERNEL_CHECK("diffusion_ybl");
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         diffusion_zth <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, 0.5*dt
         );

@@ -8,7 +8,7 @@
 template<int K, typename Node
 #ifdef GAMEDEV_ROCM
     , bool ExternalStorage = false
-#endif
+#endif // GAMEDEV_ROCM
 >
 struct idx_old_heap
 {
@@ -24,7 +24,7 @@ struct idx_old_heap
     { return near_key[slot]; }
     __device__ __forceinline__ void set_key (int slot, unsigned long long value)
     { near_key[slot] = value; }
-    #else
+    #else  // !GAMEDEV_ROCM
     // keep per-block heap storage at or below 32 KiB as K increases
     static constexpr int threads = K <= 256 ? 16 : K <= 512 ? 8 : K <= 1024 ? 4 : K <= 2048 ? 2 : 1;
     unsigned long long *near_key;
@@ -32,7 +32,7 @@ struct idx_old_heap
     { return near_key[threads*slot]; }
     __device__ __forceinline__ void set_key (int slot, unsigned long long value)
     { near_key[threads*slot] = value; }
-    #endif
+    #endif // GAMEDEV_ROCM
     bool dedup_needed;
 
     __device__ explicit idx_old_heap (
@@ -40,18 +40,18 @@ struct idx_old_heap
         const unsigned char *dev_active = nullptr
         #ifdef GAMEDEV_ROCM
         , unsigned long long *external_storage = nullptr
-        #endif
+        #endif // GAMEDEV_ROCM
         )
         : kdtree_node(tree_node), dev_active(dev_active), dedup_needed(dedup_needed)
     {
         #ifdef GAMEDEV_ROCM
         if constexpr(ExternalStorage) near_key = external_storage;
-        #endif
+        #endif // GAMEDEV_ROCM
         #ifndef GAMEDEV_ROCM
         __shared__ unsigned long long shared_key[K*threads];
         near_key = shared_key + threadIdx.x;
         // no barrier is needed because each thread initializes and accesses only its own column
-        #endif
+        #endif // !GAMEDEV_ROCM
         // initialize a finite max-heap whose invalid identifiers sort after every physical candidate
         unsigned long long empty = encode(search_dist*search_dist, 0xffffffffU);
         #pragma unroll

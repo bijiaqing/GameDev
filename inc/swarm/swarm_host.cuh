@@ -1418,5 +1418,5 @@ std::cout << std::endl;
 #ifndef HIP_CHECK
 #define HIP_CHECK CUDA_CHECK
 #define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
-#endif
+#endif // !HIP_CHECK
 #endif // SWARM_HOST_CUH

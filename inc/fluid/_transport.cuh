@@ -146,7 +146,7 @@ static real _thread_ppm_state (const real *face, const real *cell_val,
         _ppm_state_L(val_L, dval, coeff_curv, cfl) ;
 }
 
-#else // FLUID_BLOCK_SWEEP
+#else  // FLUID_BLOCK_SWEEP
 
 // reconstruct one bounded PPM face on demand from a nonuniform block-owned line
 __device__ __forceinline__

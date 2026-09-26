@@ -3,7 +3,7 @@
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #define GAMEDEV_GPU_DEVICE
-#endif
+#endif // __CUDA_ARCH__ || __HIP_DEVICE_COMPILE__
 
 // map API spellings only; hardware-dependent algorithms remain explicit at their call sites
 #ifdef GAMEDEV_ROCM
@@ -50,8 +50,8 @@
 #define gpuRandUniformDouble hiprand_uniform_double
 #if defined(HIP_SYNC_TRACE)
 #define GPU_SYNC_TRACE
-#endif
-#else
+#endif // HIP_SYNC_TRACE
+#else  // !GAMEDEV_ROCM
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #define GPU_BACKEND_NAME "CUDA"
@@ -95,6 +95,6 @@
 #define gpuRandUniformDouble curand_uniform_double
 #if defined(CUDA_SYNC_TRACE)
 #define GPU_SYNC_TRACE
-#endif
-#endif
-#endif
+#endif // CUDA_SYNC_TRACE
+#endif // GAMEDEV_ROCM
+#endif // !GAMEDEV_GPU_COMPAT_CUH

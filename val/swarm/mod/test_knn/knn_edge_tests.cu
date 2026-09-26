@@ -227,9 +227,9 @@ void kdtree_active_query (int *dev_near_idx_old, float *dev_near_dist_sq,
         dev_near_dist_sq[idx_neighbor] =
             #ifdef GAMEDEV_ROCM
             (idx_old < 0) ? MORTON_INF_F : near_result.returnDist2(idx_neighbor);
-            #else
+            #else  // !GAMEDEV_ROCM
             (idx_old < 0) ? CUDART_INF_F : near_result.returnDist2(idx_neighbor);
-            #endif
+            #endif // GAMEDEV_ROCM
     }
 }
 
@@ -309,13 +309,13 @@ bool run_kdtree_filter_case (const edge_case &test)
     _morton_gpu_check(gpuFree(dev_near_idx_old), "release KD neighbor identifiers");
     _morton_gpu_check(gpuFree(dev_kdtree_box), "release KD bounds");
     _morton_gpu_check(gpuFree(dev_kdtree_node), "release KD nodes");
-    #else
+    #else  // !GAMEDEV_ROCM
     gpuFree(dev_active);
     gpuFree(dev_near_dist_sq);
     gpuFree(dev_near_idx_old);
     gpuFree(dev_kdtree_box);
     gpuFree(dev_kdtree_node);
-    #endif
+    #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << "kdtree_" << test.name << std::endl;
     return passed;
@@ -433,14 +433,14 @@ bool run_case (const edge_case &test)
     _morton_gpu_check(gpuFree(dev_near_idx_old), "release Morton neighbor identifiers");
     _morton_gpu_check(gpuFree(dev_query_point), "release Morton query points");
     _morton_gpu_check(gpuFree(dev_point), "release Morton points");
-    #else
+    #else  // !GAMEDEV_ROCM
     if (dev_active) gpuFree(dev_active);
     gpuFree(dev_stack_overflow);
     gpuFree(dev_near_dist_sq);
     gpuFree(dev_near_idx_old);
     gpuFree(dev_query_point);
     gpuFree(dev_point);
-    #endif
+    #endif // GAMEDEV_ROCM
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;

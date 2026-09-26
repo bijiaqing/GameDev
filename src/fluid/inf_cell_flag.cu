@@ -1,5 +1,12 @@
 #include <fluid_kern.cuh>
 
+// =====================================================================================================================
+// kernel: inf_cell_flag
+// purpose: record the first cell holding a nonfinite evolved field so the host can reject the step
+//
+// parallelization: one thread per grid cell
+// =====================================================================================================================
+
 __global__
 void inf_cell_flag (
     const real *dev_dustdens,

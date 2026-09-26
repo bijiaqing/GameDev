@@ -5,10 +5,10 @@
 
 #ifdef GAMEDEV_ROCM
 #include <gpu.cuh>                  // HIP device qualifiers
-#else
+#else  // !GAMEDEV_ROCM
 #include <gpu.cuh>                  // CUDA device qualifiers
 #include <math_constants.h>                // CUDART_INF_F
-#endif
+#endif // GAMEDEV_ROCM
 
 #include <_collision.cuh>
 #include <morton/morton_index.cuh>
@@ -94,9 +94,9 @@ void _morton_ghost_topk (
     {
         #ifdef GAMEDEV_ROCM
         work_dist_sq[idx_slot] = MORTON_INF_F;
-        #else
+        #else  // !GAMEDEV_ROCM
         work_dist_sq[idx_slot] = CUDART_INF_F;
-        #endif
+        #endif // GAMEDEV_ROCM
         work_idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
@@ -120,9 +120,9 @@ void _morton_ghost_topk (
         {
             #ifdef GAMEDEV_ROCM
             work_dist_sq[idx_slot] = MORTON_INF_F;
-            #else
+            #else  // !GAMEDEV_ROCM
             work_dist_sq[idx_slot] = CUDART_INF_F;
-            #endif
+            #endif // GAMEDEV_ROCM
             work_idx_old[idx_slot] = INT_MAX;
         }
     }

@@ -22,7 +22,7 @@ __global__
 void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
 #ifdef IMPORTGAS
     , const real *dev_gas_dens
-#endif
+#endif // IMPORTGAS
 )
 {
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
@@ -52,12 +52,12 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
         auto diffusion = _get_dust_diffusion(x, y, z,
             #ifdef MULTISIZE
             dev_particle[idx].par_size
-            #else
+            #else  // !MULTISIZE
             S_0
-            #endif
+            #endif // MULTISIZE
             #ifdef IMPORTGAS
             , dev_gas_dens
-            #endif
+            #endif // IMPORTGAS
         );
         real nu = diffusion.nu;
         curs rngstate = dev_rngstate[idx];
@@ -106,12 +106,12 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
     auto diffusion = _get_dust_diffusion(x, y, z,
         #ifdef MULTISIZE
         dev_particle[idx].par_size
-        #else
+        #else  // !MULTISIZE
         S_0
-        #endif
+        #endif // MULTISIZE
         #ifdef IMPORTGAS
         , dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
     real nu = diffusion.nu;
 

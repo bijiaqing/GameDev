@@ -7,7 +7,7 @@
 
 // =====================================================================================================================
 // kernel: dustdens_depo
-// deposit each representative particle's dust mass to the cell-centred grid
+// deposit each representative particle's dust mass to the cell-centered grid
 // =====================================================================================================================
 
 __global__

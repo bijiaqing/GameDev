@@ -39,7 +39,7 @@ const real  IDX_Q       =  0.0;         // radial power-law index of the gas tem
 #ifdef DIFFUSION
 #ifndef CONST_NU  // CONST_ALPHA
 const real  ALPHA       = 1.0e-04;
-#else             // CONST_NU
+#else  // CONST_NU
 const real  NU          = 1.0e-05;
 #endif // CONST_NU
 #endif // DIFFUSION

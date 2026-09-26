@@ -10,7 +10,7 @@
 //
 // per call:
 //   1 FARGO integer shift and residual-frame construction
-//   2 PPM high-order and cell-centred low-order HLL flux construction
+//   2 PPM high-order and cell-centered low-order HLL flux construction
 //   3 low-order conservative update
 //   4 invariant-domain-limited antidiffusive correction
 // =====================================================================================================================

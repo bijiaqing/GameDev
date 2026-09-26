@@ -1,3 +1,4 @@
+// include fragment: the shared polar-boundary main program, included once by each polar test's fluid_runtime.cu
 #include <cstdlib>
 #include <cmath>      // cos, exp, fmin, pow, sin, sqrt
 #include <cstddef>    // std::size_t
@@ -69,9 +70,9 @@ const char *case_name ()
 {
     #ifdef VERIFY_Z_OUTFLOW
     return "z_outflow_3d";
-    #else // VERIFY_Z_REFLECT
+    #else  // VERIFY_Z_REFLECT
     return "z_reflect_3d";
-    #endif
+    #endif // VERIFY_Z_OUTFLOW
 }
 }
 
@@ -112,7 +113,7 @@ int main ()
             }, z_i, z_o);
             real lz = y*OUTFLOW_RATE / geom_z;
             real mz_int = lz*rho_int;
-            #else // VERIFY_Z_REFLECT
+            #else  // VERIFY_Z_REFLECT
             // q=rho*sin(z) is compressed toward the symmetry plane by w=a*(pi/2-z); specific polar momentum is
             // proportional to w, so it is constant along the pressureless characteristics used by the production kernel
             real rho_int = gauss8([&](real z)
@@ -125,7 +126,7 @@ int main ()
                 real lz = y*REFLECT_RATE*(0.5*M_PI - z) / geom_z;
                 return q*lz;
             }, z_i, z_o);
-            #endif
+            #endif // VERIFY_Z_OUTFLOW
 
             for (int ix = 0; ix < N_X; ix++)
             {
@@ -163,9 +164,9 @@ int main ()
     real max_rate;
     #ifdef VERIFY_Z_OUTFLOW
     max_rate = OUTFLOW_RATE;
-    #else // VERIFY_Z_REFLECT
+    #else  // VERIFY_Z_REFLECT
     max_rate = REFLECT_RATE*(0.5*M_PI - Z_MIN);
-    #endif
+    #endif // VERIFY_Z_OUTFLOW
     real dt_nominal = 0.25*dz / max_rate;
     real clock = 0.0;
     int steps = 0;
@@ -177,7 +178,7 @@ int main ()
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
             dev_ppm_weight_z, dev_adv_work, dt
         );
-        #else // !FLUID_BLOCK_SWEEP
+        #else  // !FLUID_BLOCK_SWEEP
         advection_zth <<< NB_Z, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_ppm_weight_z, dt
         );

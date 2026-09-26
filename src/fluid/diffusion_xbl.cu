@@ -116,7 +116,7 @@ void diffusion_xbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
-        // reconstruct the time-centred periodic diffusive mass flux
+        // reconstruct the time-centered periodic diffusive mass flux
         for (int ix = threadIdx.x; ix < N_X; ix += blockDim.x)
         {
             int ixp1 = (ix + 1) % N_X;

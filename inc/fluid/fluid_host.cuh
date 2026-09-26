@@ -131,7 +131,7 @@ lds_usage require_lds (const void *kernel, std::size_t requested_dynamic, const 
     std::exit(EXIT_FAILURE);
 }
 
-#endif
+#endif // GAMEDEV_ROCM
 
 // geometry-aware PPM interpolation weights
 
@@ -591,7 +591,7 @@ bool save_variable (const std::string &file_name)
     #ifdef DIFFUSION
     #ifndef CONST_NU  // CONST_ALPHA
     file << "ALPHA       = " << std::scientific   << std::setprecision(8) << ALPHA     << "\n";
-    #else             // CONST_NU
+    #else  // CONST_NU
     file << "NU          = " << std::scientific   << std::setprecision(8) << NU        << "\n";
     #endif // CONST_NU
     #endif // DIFFUSION
@@ -644,5 +644,5 @@ bool save_variable (const std::string &file_name)
 #ifndef HIP_CHECK
 #define HIP_CHECK CUDA_CHECK
 #define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
-#endif
+#endif // !HIP_CHECK
 #endif // FLUID_HOST_CUH

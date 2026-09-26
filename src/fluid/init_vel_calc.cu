@@ -2,6 +2,14 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
+// =====================================================================================================================
+// kernel: init_vel_calc
+// purpose: initialize dust primitives with the steady drag-coupled drift and, under DIFFUSION, the polar
+// diffusion balance
+//
+// parallelization: one thread per grid cell
+// =====================================================================================================================
+
 __global__
 void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
     #ifdef DIFFUSION
@@ -49,7 +57,7 @@ void init_vel_calc (real *dev_dustvelx, real *dev_dustvely, real *dev_dustvelz
         real rhod = dev_dustdens[idx_cell] / gas;
         real grad_rhod;
 
-        // differentiate the selected density or concentration with one-sided boundary and centred interior stencils
+        // differentiate the selected density or concentration with one-sided boundary and centered interior stencils
         if (iz == 0)
         {
             int idx_next = idx_cell + N_X*N_Y;

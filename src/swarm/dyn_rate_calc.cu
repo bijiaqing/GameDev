@@ -138,16 +138,16 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     #ifdef IMPORTGAS
     for (int gas_endpoint = 0; gas_endpoint < 2; ++gas_endpoint)
     {
-    #endif
+    #endif // IMPORTGAS
     auto diffusion = _get_dust_diffusion(x, y, z,
             #ifdef MULTISIZE
             dev_particle[idx].par_size
-            #else
+            #else  // !MULTISIZE
             S_0
-            #endif
+            #endif // MULTISIZE
         #ifdef IMPORTGAS
         , gas_endpoint ? dev_gas_dens_next : dev_gas_dens
-        #endif
+        #endif // IMPORTGAS
     );
     real nu = diffusion.nu;
 
@@ -189,7 +189,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     }
     #ifdef IMPORTGAS
     }
-    #endif
+    #endif // IMPORTGAS
     #endif // DIFFUSION
 
     dev_dyn_rate[idx] = rate;

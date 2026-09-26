@@ -15,7 +15,11 @@
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
 
-// identify a nonfinite collision propensity or KNN-ball radius before event sampling
+// =====================================================================================================================
+// kernel: inf_rate_flag
+// record the first particle with a nonfinite collision propensity or KNN-ball radius before event sampling
+// =====================================================================================================================
+
 __global__
 void inf_rate_flag (const real *dev_col_rate, const real *dev_col_dist, int *dev_bad_part)
 {

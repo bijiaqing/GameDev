@@ -74,4 +74,4 @@ inline void rand_disk_poly (real *x, real *r, real *theta, const real *, int cou
         sample_initial_position(rand_generator, r[i], theta[i]);
     }
 }
-#endif
+#endif // !COAG_SWARM_HOST_CUH

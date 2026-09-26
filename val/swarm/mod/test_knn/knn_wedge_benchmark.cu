@@ -29,7 +29,7 @@
 
 #ifndef VAL_KNN_K
 #define VAL_KNN_K 200
-#endif
+#endif // !VAL_KNN_K
 
 namespace
 {
@@ -178,9 +178,9 @@ void kdtree_wedge_query (int *dev_near_idx_old, float *dev_near_dist_sq,
         dev_near_idx_old[idx_out] = (idx_old < 0) ? -1 : near_result.returnNeighbor(idx_neighbor);
         #ifdef GAMEDEV_ROCM
         dev_near_dist_sq[idx_out] = (idx_old < 0) ? MORTON_INF_F : near_result.returnDist2(idx_neighbor);
-        #else
+        #else  // !GAMEDEV_ROCM
         dev_near_dist_sq[idx_out] = (idx_old < 0) ? CUDART_INF_F : near_result.returnDist2(idx_neighbor);
-        #endif
+        #endif // GAMEDEV_ROCM
     }
 }
 
@@ -329,10 +329,10 @@ double kernel_time_ms (Function operation, int repeats)
     #ifdef GAMEDEV_ROCM
     _morton_gpu_check(gpuEventDestroy(event_start), "destroy benchmark start event");
     _morton_gpu_check(gpuEventDestroy(event_stop), "destroy benchmark end event");
-    #else
+    #else  // !GAMEDEV_ROCM
     gpuEventDestroy(event_start);
     gpuEventDestroy(event_stop);
-    #endif
+    #endif // GAMEDEV_ROCM
     return static_cast<double>(elapsed_ms) / repeats;
 }
 
@@ -849,7 +849,7 @@ int main (int argc, char **argv)
         _morton_gpu_check(gpuFree(dev_kdtree_node), "release KD nodes");
         _morton_gpu_check(gpuFree(dev_azimuth), "release particle azimuths");
         _morton_gpu_check(gpuFree(dev_point), "release benchmark points");
-        #else
+        #else  // !GAMEDEV_ROCM
         gpuFree(dev_performance_stack_overflow);
         gpuFree(dev_morton_checksum);
         gpuFree(dev_kdtree_checksum);
@@ -862,7 +862,7 @@ int main (int argc, char **argv)
         gpuFree(dev_kdtree_node);
         gpuFree(dev_azimuth);
         gpuFree(dev_point);
-        #endif
+        #endif // GAMEDEV_ROCM
         return quality_passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     catch (const std::exception &error)
