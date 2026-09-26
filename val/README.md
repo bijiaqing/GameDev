@@ -10,7 +10,8 @@ below.
 - `fluid/mod/`, `swarm/mod/`: numerical setups and model-specific analytical references.
 - `fluid/src/`, `swarm/src/`: test drivers, validators, and suite runners.
 - `val_config.py`: case lists, output paths, and source fingerprints.
-- `run_all.py`: combined fluid + swarm campaign for one backend and fluid sweep.
+- `run_all.py`: complete campaign for one backend: the fluid matrix for both sweeps, the swarm
+  matrices once, and one campaign record per sweep.
 - `check_archive.py`: require complete, passing native numerical results.
 - `compare_backends.py`: compare CUDA/ROCm archives; stochastic diffusion is judged by each native
   analytical test.
@@ -73,6 +74,36 @@ Test-specific constants and drivers never modify production collision physics
 or diffusion equations. The SSA stages (`_ssa_advance` in `inc/swarm/_transport.cuh`)
 and fluid drag weights (`_get_drag_weights` in `inc/fluid/fluid_kern.cuh`) are
 shared by the simulation and the tests rather than copied.
+
+## Complete campaign
+
+Run the native campaigns on both clusters at the same time, from the same source commit:
+
+```bash
+python3 -B val/run_all.py --backend cuda
+```
+
+```bash
+python3 -B val/run_all.py --backend rocm
+```
+
+Each run validates the fluid matrix with the thread and then the block sweep, runs the swarm
+matrix and collision-chain group once, checks the archive for each sweep, and writes
+`val/run_all_<backend>_thread.json` and `val/run_all_<backend>_block.json`; the swarm stages appear
+in both records. `--fluid-sweep thread` or `--fluid-sweep block` restricts the fluid matrix to one
+sweep. Afterwards, copy one backend's `val/fluid/out/`, `val/swarm/out/`, and `val/*.json` into a
+separate directory on the other system, excluding `obj/`, and compare each sweep:
+
+```bash
+python3 -B val/compare_backends.py --cuda-root CUDA_VAL_COPY --cuda-sweep thread_precise --rocm-sweep thread
+```
+
+```bash
+python3 -B val/compare_backends.py --cuda-root CUDA_VAL_COPY --cuda-sweep block_precise --rocm-sweep block
+```
+
+`run_all.py --compare` instead reruns the native campaign and compares it with a counterpart copied
+into this checkout's own `val/` directory.
 
 ## Four independent jobs
 
