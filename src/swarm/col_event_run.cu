@@ -82,7 +82,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
         idx_old_j = idx_old_j_try;
         image_j = image_j_try;
-        cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        cumulative += _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -210,7 +210,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
 
-        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -332,7 +332,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
         idx_old_j = idx_old_j_try;
         image_j = _get_col_image(neighbor);
-        cumulative += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        cumulative += _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -423,7 +423,7 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
 
-        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,

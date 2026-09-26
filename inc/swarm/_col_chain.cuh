@@ -29,7 +29,7 @@ struct query_environment
 // analytic physical-unit gas allows the environment to be cached once per collision half-operator
 #define COL_QUERY_ENV_CACHE
 // positions and gas are fixed throughout one collision half-operator
-__device__ __forceinline__ query_environment cache_query_environment (const swarm &p)
+__device__ __forceinline__ query_environment _cache_query_environment (const swarm &p)
 {
     real R = _get_cyl_R(p.position.y, p.position.z);
     real Z = _get_cyl_Z(p.position.y, p.position.z), h = _get_hg(R);
@@ -39,7 +39,7 @@ __device__ __forceinline__ query_environment cache_query_environment (const swar
         _get_re_inv_sqrt(R, alpha, _get_sigma_g(R)*strat), 1.5*alpha*cs*cs};
 }
 // reproduce _get_stokes for analytic gas from the cached radial and vertical scalings
-__device__ __forceinline__ real cached_stokes (const query_environment &e, real size)
+__device__ __forceinline__ real _cached_stokes (const query_environment &e, real size)
 {
     real st = STOKES_0*(size / S_0);
     st /= e.radial;
@@ -47,7 +47,7 @@ __device__ __forceinline__ real cached_stokes (const query_environment &e, real 
     return st;
 }
 // reproduce the _get_vrel_t regime algebra with precomputed gas coefficients
-__device__ __forceinline__ real cached_turbulence (const query_environment &e, real stokes_i, real stokes_j)
+__device__ __forceinline__ real _cached_turbulence (const query_environment &e, real stokes_i, real stokes_j)
 {
     real re_inv_sqrt = e.re_inv_sqrt, vg_sq = e.vg_sq;
     real stokes_large, stokes_small, eps;
@@ -140,13 +140,13 @@ __device__ __forceinline__ real cached_turbulence (const query_environment &e, r
 
 
 // reproduce _get_vrel_pair with drift, settling, turbulence, and Brownian terms from the cached environment
-__device__ __forceinline__ real cached_pair_velocity (const query_environment &e, real size_i, real size_j)
+__device__ __forceinline__ real _cached_pair_velocity (const query_environment &e, real size_i, real size_j)
 {
-    real si = cached_stokes(e, size_i), sj = cached_stokes(e, size_j);
+    real si = _cached_stokes(e, size_i), sj = _cached_stokes(e, size_j);
     real fi = 1.0 / (1.0 + si*si), fj = 1.0 / (1.0 + sj*sj);
     real dvr = 2.0*e.vn*(si*fi - sj*fj), dvphi = e.vn*(fi - fj);
     real dvz = e.Z*e.omega*(fmin(si, 0.5) - fmin(sj, 0.5));
-    real vt = cached_turbulence(e, si, sj);
+    real vt = _cached_turbulence(e, si, sj);
     real mi = _get_grain_mass(size_i), mj = _get_grain_mass(size_j);
     real vb = fmin(sqrt(8.0*e.cs*e.cs*M_MOL*(mi + mj) / (M_PI*mi*mj)), e.cs);
     return sqrt(dvr*dvr + dvphi*dvphi + dvz*dvz + vt*vt + vb*vb);
@@ -181,19 +181,19 @@ inline change_bound change_limit (double A, double B, double epsilon, double hor
 // per-owner event counts and log-mass changes by outcome category, recorded only with COL_DIAGNOSTICS
 constexpr int EVENT_CATEGORIES = 7;
 struct event_work { unsigned long long count[EVENT_CATEGORIES]; real log_mass[EVENT_CATEGORIES]; };
-__host__ __device__ inline void record_event_work (event_work &work, int category, real log_mass)
+__host__ __device__ inline void _record_event_work (event_work &work, int category, real log_mass)
 {
     ++work.count[category];
     work.log_mass[category] += log_mass;
 }
 // group G identical tiny sticking projectiles into one event so each packet adds at most 0.01% target mass
-__host__ __device__ inline real sticking_packet (real q, bool fragmentation)
+__host__ __device__ inline real _sticking_packet (real q, bool fragmentation)
 {
     return !fragmentation && q > 0.0 && q <= 1.e-6
         ? fmax(1.0, floor(1.e-4 / q)) : 1.0;
 }
 // projectile-to-target grain mass ratio q for compact grains of equal material density
-__host__ __device__ inline real sticking_mass_ratio (real size_i, real size_j)
+__host__ __device__ inline real _sticking_mass_ratio (real size_i, real size_j)
 {
     real ratio = size_j / size_i;
     return ratio*ratio*ratio;
@@ -204,11 +204,11 @@ __host__ __device__ inline real sticking_mass_ratio (real size_i, real size_j)
 
 // return the sampled-to-physical rate factor and conditional absolute log-diameter jump moments
 // erosion superposes grouped remnant transitions and ungrouped debris transitions
-__host__ __device__ inline real erosion_outcome_moments (real si, real sj,
+__host__ __device__ inline real _erosion_outcome_moments (real si, real sj,
     bool high_speed, real &mean, real &second, real &maximum)
 {
-    real q = sticking_mass_ratio(si, sj);
-    real G = sticking_packet(q, false);
+    real q = _sticking_mass_ratio(si, sj);
+    real G = _sticking_packet(q, false);
     // low-speed sticking: one packet of G projectiles at rate lambda/G
     if (!high_speed)
     {
@@ -249,11 +249,11 @@ __host__ __device__ inline real erosion_outcome_moments (real si, real sj,
 // sample one outcome and return the new owner diameter; categories are four sticking q bins,
 // fragmentation, remnant erosion, and debris erosion
 // u is used only for high-speed events, and the caller supplies one independent draw
-__host__ __device__ inline real sample_erosion_outcome (real si, real sj,
+__host__ __device__ inline real _sample_erosion_outcome (real si, real sj,
     bool high_speed, real u, int &category, real &log_mass)
 {
-    real q = sticking_mass_ratio(si, sj);
-    real G = sticking_packet(q, false);
+    real q = _sticking_mass_ratio(si, sj);
+    real G = _sticking_packet(q, false);
     if (!high_speed)
     {
         category = q <= 1.e-6 ? 0 : q <= 1.e-4 ? 1 : q <= 1.e-2 ? 2 : 3;
@@ -377,7 +377,7 @@ constexpr int moving_groups = ((N_X > 1) ? COL_BIN_X : 1)*COL_BIN_Y*((N_Z > 1) ?
 static __device__ unsigned long long moving_min[moving_groups], moving_max[moving_groups];
 static __device__ real moving_lower[moving_groups], moving_upper[moving_groups];
 
-static __global__ void reset_size_extrema ()
+static __global__ void col_size_zero ()
 {
     int g = threadIdx.x + blockIdx.x*blockDim.x;
     if (g < moving_groups)
@@ -386,7 +386,7 @@ static __global__ void reset_size_extrema ()
         moving_max[g] = 0;
     }
 }
-static __global__ void reduce_size_extrema (const int *ids, int count, const swarm *particles,
+static __global__ void col_size_scan (const int *ids, int count, const swarm *particles,
     const int *spatial, const unsigned char *active)
 {
     int slot = threadIdx.x + blockIdx.x*blockDim.x;
@@ -400,7 +400,7 @@ static __global__ void reduce_size_extrema (const int *ids, int count, const swa
     atomicMax(&moving_max[spatial[i]], bits);
 }
 // widen the observed size range to [0.5*s_min, 8*s_max] so the next interval's growth stays inside the bins
-static __global__ void publish_size_bounds ()
+static __global__ void col_size_bnds ()
 {
     int g = threadIdx.x + blockIdx.x*blockDim.x;
     if (g < moving_groups && moving_max[g] != 0)
@@ -444,7 +444,7 @@ void _col_atomic_max (real *address, real value)
 }
 
 // evaluate one pair with the same synthetic or physical normalization as _get_col_rate_ij
-template <KernelType kernel> __device__ __forceinline__
+template <kernel_type kernel> __device__ __forceinline__
 real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     const real *dev_size_old, const real *dev_numr_old,
     #ifdef IMPORTGAS
@@ -472,7 +472,7 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     else if constexpr (kernel == CUSTOM_KERNEL)
     {
         #ifdef COL_QUERY_ENV_CACHE
-        vrel = cached_pair_velocity(environment[idx_old_i], size_i, size_j);
+        vrel = _cached_pair_velocity(environment[idx_old_i], size_i, size_j);
         #else  // !COL_QUERY_ENV_CACHE
         vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
             #ifdef IMPORTGAS
@@ -575,7 +575,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         real size_i = dev_size_old[idx_old_i];
         real size_j = dev_size_old[idx_old_j];
         real vrel = 0.0;
-        real pair_rate = _get_col_chain_rate <static_cast<KernelType>(COAG_KERNEL)> (
+        real pair_rate = _get_col_chain_rate <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, size_i, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -583,7 +583,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
             idx_old_i, idx_old_j, image_j, lambda_0, vrel, environment
         ) / dev_col_measure[idx_old_i];
         real mean = 0, second = 0, maximum = 0;
-        pair_rate *= erosion_outcome_moments(size_i, size_j, vrel >= V_FRAG, mean, second, maximum);
+        pair_rate *= _erosion_outcome_moments(size_i, size_j, vrel >= V_FRAG, mean, second, maximum);
         maximum_work[idx_neighbor] = pair_rate > 0.0 ? maximum : 0.0;
         change_work[idx_neighbor] = pair_rate*mean;
         second_work[idx_neighbor] = pair_rate*second;
@@ -702,7 +702,7 @@ void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col
 
 // evaluate the cached no-event path with one thread per owner
 // complete owners whose first waiting time spans the interval and queue only the rest for col_chain_run
-__global__ void col_cached_screen (const int *ids, int count, curs *rng,
+__global__ void col_skip_scan (const int *ids, int count, curs *rng,
     const unsigned char *active, const real *measure, const int *spatial, const real *steps,
     const cached_rate_moments *cached, real *time, int *events, unsigned char *complete,
     real *hazard, real *jump1, real *jump2, real *jumpmax, int *queue, int *queued)
@@ -887,7 +887,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                 int image_j = _get_col_image(neighbor);
                 real size_j = dev_size_old[idx_old_j];
                 real vrel = 0.0;
-                real pair_value = _get_col_chain_rate <static_cast<KernelType>(COAG_KERNEL)> (
+                real pair_value = _get_col_chain_rate <static_cast<kernel_type>(COAG_KERNEL)> (
                     dev_particle, size_i, dev_size_old, dev_numr_old,
                     #ifdef IMPORTGAS
                     dev_gas_dens,
@@ -895,7 +895,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                     idx_old_i, idx_old_j, image_j, lambda_0, vrel, environment
                 ) / dev_col_measure[idx_old_i];
                 real mean = 0.0, second = 0.0, maximum = 0.0;
-                pair_value *= erosion_outcome_moments(size_i, size_j, vrel >= V_FRAG, mean, second, maximum);
+                pair_value *= _erosion_outcome_moments(size_i, size_j, vrel >= V_FRAG, mean, second, maximum);
                 pair_rate[idx_neighbor] = pair_value;
                 pair_jump1[idx_neighbor] = pair_value*mean;
                 pair_jump2[idx_neighbor] = pair_value*second;
@@ -1072,7 +1072,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                             if constexpr (COAG_KERNEL == CUSTOM_KERNEL)
                             {
                                 #ifdef COL_QUERY_ENV_CACHE
-                                vrel = cached_pair_velocity(environment[idx_old_i], size_i, size_j);
+                                vrel = _cached_pair_velocity(environment[idx_old_i], size_i, size_j);
                                 #else  // !COL_QUERY_ENV_CACHE
                                 vrel = _get_vrel_pair(dev_particle, size_i, size_j, idx_old_i, idx_old_j, image_j
                                     #ifdef IMPORTGAS
@@ -1087,10 +1087,10 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                             real sample = high_speed ? _get_col_uniform(&rngstate) : 0.0;
                             int category;
                             real log_mass;
-                            real size_new = sample_erosion_outcome(size_i, size_j,
+                            real size_new = _sample_erosion_outcome(size_i, size_j,
                                 high_speed, sample, category, log_mass);
                             #ifdef COL_DIAGNOSTICS
-                            record_event_work(event_stats, category, log_mass);
+                            _record_event_work(event_stats, category, log_mass);
                             #endif // COL_DIAGNOSTICS
                             numr_i = mass_before / (size_new*size_new*size_new);
                             size_i = size_new;
@@ -1658,17 +1658,17 @@ constexpr int LOCAL_WORDS = (LOCAL_GROUPS + 31) / 32;
 
 #ifdef COL_QUERY_ENV_CACHE
 // cache every active owner's gas environment; absorbed particles at y=0 are skipped
-__global__ void cache_query_environments (query_environment *env, const swarm *particle)
+__global__ void col_env_cache (query_environment *env, const swarm *particle)
 {
     int i = blockIdx.x*blockDim.x + threadIdx.x;
-    if (i<N_P && particle[i].position.y>0.0) env[i] = cache_query_environment(particle[i]);
+    if (i<N_P && particle[i].position.y>0.0) env[i] = _cache_query_environment(particle[i]);
 }
 
 #endif // COL_QUERY_ENV_CACHE
 
 // build the group dependency graph once per geometry epoch: edge c->d when an owner in c has a neighbor in d
 // duplicate edges are reduced within each owner before issuing atomics, so no per-neighbor data reaches the host
-__global__ void local_graph (unsigned int *edges, const int *spatial,
+__global__ void col_dep_graph (unsigned int *edges, const int *spatial,
     const int *neighbors, const unsigned char *active)
 {
     #ifdef GAMEDEV_ROCM
@@ -1714,7 +1714,7 @@ __global__ void local_graph (unsigned int *edges, const int *spatial,
 }
 
 // clear the path-integrated compensators of owners entering a new bath
-__global__ void local_reset (const int *ids, int count, real *hazard,
+__global__ void col_comp_zero (const int *ids, int count, real *hazard,
     real *jump1, real *jump2, real *jumpmax)
 {
     int slot = blockIdx.x*blockDim.x + threadIdx.x;
@@ -1724,7 +1724,7 @@ __global__ void local_reset (const int *ids, int count, real *hazard,
 }
 
 // reduce per-owner diagnostics once per collision half-step with one block per event category
-__global__ void summarize_event_work (const event_work *work, event_work *sum)
+__global__ void col_event_sum (const event_work *work, event_work *sum)
 {
     const int k = blockIdx.x, t = threadIdx.x;
     __shared__ unsigned long long counts[TPB];
@@ -1885,8 +1885,8 @@ using local_clock = std::chrono::steady_clock;
 const auto local_begin = local_clock::now();
 #endif // COL_DIAGNOSTICS
 #ifdef COL_QUERY_ENV_CACHE
-cache_query_environments <<< NB_P, TPB >>> (local.environment, dev_particle);
-LOCAL_KERNEL("cache_query_environments");
+col_env_cache <<< NB_P, TPB >>> (local.environment, dev_particle);
+LOCAL_KERNEL("col_env_cache");
 #endif // COL_QUERY_ENV_CACHE
 #ifdef COL_DIAGNOSTICS
 LOCAL_CHECK(localZero(local.work, 0, sizeof(event_work)*N_P));
@@ -1899,14 +1899,14 @@ if (!local_geometry_valid)
     for (auto &v : local.owners) v.clear();
     for (int i = 0; i < N_P; ++i) local.owners[spatial[i]].push_back(i);
     LOCAL_CHECK(localZero(local.graph, 0, sizeof(unsigned int)*local.edges.size()));
-    local_graph <<<
+    col_dep_graph <<<
         #ifdef GAMEDEV_ROCM
         (N_P*(TPB % 32 == 0 ? 32 : 1) + TPB - 1) / TPB, TPB
         #else  // !GAMEDEV_ROCM
         NB_P, TPB
         #endif // GAMEDEV_ROCM
     >>> (local.graph, dev_col_spatial, dev_col_neighbor, dev_col_active);
-    LOCAL_KERNEL("local_graph");
+    LOCAL_KERNEL("col_dep_graph");
     LOCAL_CHECK(localCopy(local.edges.data(), local.graph,
         sizeof(unsigned int)*local.edges.size(), localD2H));
     local_geometry_valid = true;
@@ -1930,21 +1930,21 @@ auto initialize = [&](int count)
     col_bath_init <<< blocks, TPB >>> (local.ids, count, dev_size_old, dev_numr_old,
         dev_col_time, dev_col_events, dev_col_complete, dev_particle);
     LOCAL_KERNEL("local_publish_and_init");
-    local_reset <<< blocks, TPB >>> (local.ids, count, dev_col_hazard, dev_col_jump1_int,
+    col_comp_zero <<< blocks, TPB >>> (local.ids, count, dev_col_hazard, dev_col_jump1_int,
         dev_col_jump2_int, dev_col_jumpmax_int);
-    LOCAL_KERNEL("local_reset");
+    LOCAL_KERNEL("col_comp_zero");
 };
 // recompute bath-start rates, merge sparse size bins, and copy mass-weighted rate moments to the host
 auto rates_and_bins = [&](int count)
 {
     // keep each refreshed group's bounds unchanged until its collision interval and audit finish
-    reset_size_extrema <<< (moving_groups + TPB - 1) / TPB, TPB >>> ();
-    LOCAL_KERNEL("reset_size_extrema");
-    reduce_size_extrema <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_particle, dev_col_spatial,
+    col_size_zero <<< (moving_groups + TPB - 1) / TPB, TPB >>> ();
+    LOCAL_KERNEL("col_size_zero");
+    col_size_scan <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_particle, dev_col_spatial,
         dev_col_active);
-    LOCAL_KERNEL("reduce_size_extrema");
-    publish_size_bounds <<< (moving_groups + TPB - 1) / TPB, TPB >>> ();
-    LOCAL_KERNEL("publish_size_bounds");
+    LOCAL_KERNEL("col_size_scan");
+    col_size_bnds <<< (moving_groups + TPB - 1) / TPB, TPB >>> ();
+    LOCAL_KERNEL("col_size_bnds");
     #ifdef COL_PERF_VAL
     auto rate_start = col_perf_start();
     #endif // COL_PERF_VAL
@@ -2097,7 +2097,7 @@ while (schedule.time() < schedule.end)
     // screen owners with no event in the interval, then relaunch the chain on the shrinking unfinished queue
     LOCAL_CHECK(localZero(local.error, 0, sizeof(int)));
     LOCAL_CHECK(localZero(dev_col_unfinished, 0, sizeof(int)));
-    col_cached_screen <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_rngstate,
+    col_skip_scan <<< (count + TPB - 1) / TPB, TPB >>> (local.ids, count, dev_rngstate,
         dev_col_active, dev_col_measure, dev_col_spatial, local.dt, local.cached,
         dev_col_time, dev_col_events, dev_col_complete, dev_col_hazard,
         dev_col_jump1_int, dev_col_jump2_int, dev_col_jumpmax_int, local.queue_a, dev_col_unfinished);
@@ -2246,8 +2246,8 @@ for (int c = 0; c < LOCAL_GROUPS; ++c)
         << ",\"max_predicted_activity\":" << s.max_activity << '}';
 }
 local.log << "],\"event_counts\":[";
-summarize_event_work <<< EVENT_CATEGORIES, TPB >>> (local.work, local.work_sum);
-LOCAL_KERNEL("summarize_event_work");
+col_event_sum <<< EVENT_CATEGORIES, TPB >>> (local.work, local.work_sum);
+LOCAL_KERNEL("col_event_sum");
 event_work totals;
 LOCAL_CHECK(localCopy(&totals, local.work_sum, sizeof(event_work), localD2H));
 for (int k = 0; k < EVENT_CATEGORIES; ++k)

@@ -47,7 +47,7 @@ const int TPB_BLOCK = 32;
 #endif // GAMEDEV_ROCM
 
 // index the explicit full-grid planes shared by every block-owned advection sweep
-enum BlockAdvField
+enum block_adv_field
 {
     BLOCK_RHOD = 0,
     BLOCK_MX,

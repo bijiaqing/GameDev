@@ -60,7 +60,7 @@ void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
 }
 
 // the input range shares all key bits above this child digit
-__host__ __device__ inline int morton_child_end (const std::uint64_t *keys, int begin, int end,
+__host__ __device__ inline int _morton_child_end (const std::uint64_t *keys, int begin, int end,
                                     int shift, int code)
 {
     while (begin < end)
@@ -73,7 +73,7 @@ __host__ __device__ inline int morton_child_end (const std::uint64_t *keys, int 
 }
 
 // construct one leaf-initialized node covering a sorted record range and a cubic cell
-static __device__ morton_node morton_cell (int begin, int count, float3 lower, float width)
+static __device__ morton_node _morton_cell (int begin, int count, float3 lower, float width)
 {
     morton_node node{};
     node.idx_begin = begin;
@@ -87,7 +87,7 @@ static __device__ morton_node morton_cell (int begin, int count, float3 lower, f
 // write the root node covering every sorted record
 static __global__ void morton_origin (morton_node *nodes, int count, float3 lower, float width)
 {
-    nodes[0] = morton_cell(0, count, lower, width);
+    nodes[0] = _morton_cell(0, count, lower, width);
 }
 
 // independent sorted-key ranges need at most eight binary searches each
@@ -107,7 +107,7 @@ static __global__ void morton_counts (morton_node *nodes, const std::uint64_t *k
         int shift = 3*(max_level - level - 1);
         for (int code = 1; code <= (1 << dim); ++code)
         {
-            int next = morton_child_end(keys, begin, end, shift, code);
+            int next = _morton_child_end(keys, begin, end, shift, code);
             child_count += next > begin;
             begin = next;
         }
@@ -130,14 +130,14 @@ static __global__ void morton_expand (morton_node *nodes, const std::uint64_t *k
     float width = 0.5f*parent.width;
     for (int code = 0; code < (1 << dim); ++code)
     {
-        int next = morton_child_end(keys, begin, end, shift, code + 1);
+        int next = _morton_child_end(keys, begin, end, shift, code + 1);
         if (next > begin)
         {
             float3 lower = parent.lower;
             if (code & 1) lower.x += width;
             if (code & 2) lower.y += width;
             if (dim == 3 && (code & 4)) lower.z += width;
-            nodes[slot] = morton_cell(begin, next - begin, lower, width);
+            nodes[slot] = _morton_cell(begin, next - begin, lower, width);
             nodes[first + idx].idx_child[code] = slot++;
         }
         begin = next;

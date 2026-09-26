@@ -19,7 +19,7 @@
 using kdtree_heap = idx_old_heap<N_K, kdtree_node>;
 #endif // COLLISION_KDTREE
 
-enum KernelType
+enum kernel_type
 {
     CONSTANT_KERNEL = 0,
     LINEAR_KERNEL   = 1,
@@ -343,7 +343,7 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old,
 // =====================================================================================================================
 
 // calculate the pair-propensity numerator before division by the local KNN measure
-template <KernelType kernel> __device__ __forceinline__
+template <kernel_type kernel> __device__ __forceinline__
 real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,

@@ -92,7 +92,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, const swarm *dev_par
         )) continue;
 
         max_dist_sq = fmaxf(max_dist_sq, near_result.returnDist2(idx_neighbor));
-        col_rate_i += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        col_rate_i += _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -180,7 +180,7 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
         )) continue;
 
         pair_dist_sq[idx_neighbor] = work_dist_sq[idx_neighbor];
-        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -252,7 +252,7 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
 
-        col_rate_i += _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        col_rate_i += _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
@@ -301,7 +301,7 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
             dev_particle[idx_old_j].position.y, dev_particle[idx_old_j].position.z
         )) continue;
 
-        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<KernelType>(COAG_KERNEL)> (
+        pair_rate[idx_neighbor] = _get_col_rate_ij <static_cast<kernel_type>(COAG_KERNEL)> (
             dev_particle, dev_size_old, dev_numr_old,
             #ifdef IMPORTGAS
             dev_gas_dens,
