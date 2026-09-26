@@ -103,7 +103,6 @@ def compare_collision_chains(cuda_root: Path, rocm_root: Path) -> dict[str, Any]
                 and manifest.get("model") == model
                 and manifest.get("backend") == backend
                 and manifest.get("tier") == "publication"
-                and manifest.get("integrator") == "frozen_bath"
                 and manifest.get("passed") is True
             )
         coverage_equal = variants.get("cuda") == variants.get("rocm")

@@ -222,8 +222,7 @@ def run_once(
     mass_relative = abs(mass_final - mass_initial) / mass_initial
     variables = variable_path.read_text()
     provenance = (
-        "COLLISION_INTEGRATOR = frozen_bath" in variables
-        and f"COLLISION_SEARCH = {search}" in variables
+        f"COLLISION_SEARCH = {search}" in variables
         and f"COL_EVENT_CAP  = {event_cap}" in variables
         and f"COAG_KERNEL = {expected_kernel}" in variables
         and "COL_CONTROLLER_AUDIT = path_integrated" in variables
@@ -365,12 +364,11 @@ def run(model: str) -> None:
         and cap_pathwise_equal
     )
     manifest = {
-        "schema": 3,
+        "schema": 4,
         "model": model,
         "backend": BACKEND,
         "gpu_target": args.target,
         "tier": "publication",
-        "integrator": "frozen_bath",
         "variants": variants,
         "initial_byte_equal": initial_equal,
         "cap_pathwise_equal": cap_pathwise_equal,

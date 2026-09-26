@@ -330,7 +330,6 @@ def check_swarm(val_root: Path, backend: str, allow_partial: bool) -> dict[str, 
                     record.get("model") == model
                     and record.get("backend") == backend
                     and record.get("tier") == "publication"
-                    and record.get("integrator") == "frozen_bath"
                     and record.get("passed") is True
                     and isinstance(variants, dict)
                     and bool(variants)

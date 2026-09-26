@@ -355,9 +355,9 @@ The swarm executable is likewise a compile-time specialization:
 
 `DIFFUSION` and `RADIATION` require `TRANSPORT`, `PR_EFFECT` requires `RADIATION`, and `COLLISION`
 requires `MULTISIZE` plus exactly one search backend; `COLLISION` always selects the frozen-bath
-chain, and the obsolete `COL_CHAIN` selector is rejected at compile time. These dependencies specify
-which equations exist in an executable; they do not dynamically turn operators on or off during a
-run.
+chain, and the removed `COL_CHAIN`, `BERNOULLI`, and `KNN_CACHE` flags are rejected at compile time.
+These dependencies specify which equations exist in an executable; they do not dynamically turn
+operators on or off during a run.
 
 ## 3. Disk model, mass normalization, and initialization
 
@@ -2186,8 +2186,7 @@ which is approximately $0.808$ GB for $N_P=10^6$ and $8.08$ GB for $N_P=10^7$ at
 before the selected search index and other particle/controller arrays. No per-neighbor pair-rate
 array is retained because rates become stale when the owner changes size. This initial policy is
 explicit rather than a production-scale memory recommendation. Both GPU backends accept either
-`COLLISION_KDTREE` or `COLLISION_MORTON`. `variables.txt` records the `frozen_bath` integrator
-together with the controller constants,
+`COLLISION_KDTREE` or `COLLISION_MORTON`. `variables.txt` records the controller constants,
 search method, cache allocation, backend, and shared per-particle RNG-stream policy.
 
 ### 8.3 Exact neighbor-search contract

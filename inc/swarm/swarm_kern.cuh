@@ -37,9 +37,9 @@
 #error "COLLISION requires exactly one of COLLISION_KDTREE or COLLISION_MORTON"
 #endif // COLLISION backend selection
 
-#ifdef COL_CHAIN
-#error "COL_CHAIN is obsolete; COLLISION now selects frozen-bath collisions by default"
-#endif // COL_CHAIN
+#if defined(COL_CHAIN) || defined(BERNOULLI) || defined(KNN_CACHE)
+#error "COL_CHAIN, BERNOULLI, and KNN_CACHE were removed; COLLISION always uses the frozen-bath chain"
+#endif // COL_CHAIN || BERNOULLI || KNN_CACHE
 
 
 #ifdef COLLISION

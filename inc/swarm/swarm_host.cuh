@@ -1047,7 +1047,6 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COAG_KERNEL = " << std::defaultfloat   << std::setprecision(8) << COAG_KERNEL  << std::endl;
     file << "N_K         = " << std::defaultfloat   << std::setprecision(8) << N_K          << std::endl;
     file << "H_SEARCH    = " << std::defaultfloat   << std::setprecision(8) << H_SEARCH     << std::endl;
-    file << "COLLISION_INTEGRATOR = frozen_bath"                                         << std::endl;
     file << "COL_BATH_TPB  = " << COL_BATH_TPB                                            << std::endl;
     file << "COL_EVENT_CAP  = " << COL_EVENT_CAP                                          << std::endl;
     file << "COL_BATH_MAX   = " << std::scientific << std::setprecision(8) << COL_BATH_MAX << std::endl;
@@ -1060,7 +1059,6 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     file << "COL_BIN_MIN    = " << COL_BIN_MIN                                            << std::endl;
     file << "COL_SIZE_BIN_POLICY = moving_per_group"                                    << std::endl;
     file << "COL_SIZE_RANGE_FACTORS = 0.5 8"                                             << std::endl;
-    file << "COLLISION_NEIGHBORS = cached"                                              << std::endl;
     file << "RNG_STREAM_POLICY = shared_per_particle"                                    << std::endl;
     #ifdef COLLISION_KDTREE
     file << "COLLISION_SEARCH = kdtree"                                                   << std::endl;

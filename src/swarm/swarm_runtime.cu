@@ -338,13 +338,11 @@ int main (int argc, char **argv)
             static_cast<float>(Z_MIN), static_cast<float>(Z_MAX)
         );
     }
-    #ifdef COLLISION
     local_workspace local(PATH);
     bool local_geometry_valid = false;
     #ifdef COL_DIAGNOSTICS
     col_controller_summary col_summary;
     #endif // COL_DIAGNOSTICS
-    #endif // COLLISION
 
     // size/weight changes refresh collision rates without rebuilding spatial neighbors
     // collision-only runs keep this geometry across output intervals; transport or diffusion invalidates it
@@ -355,7 +353,7 @@ int main (int argc, char **argv)
         local_geometry_valid = false;
     };
 
-    // evolve collisions over a fixed-position interval with the configured collision integrator
+    // evolve collisions over a fixed-position interval with the frozen-bath chain
     auto evolve_collisions = [&](real duration)
     {
 
