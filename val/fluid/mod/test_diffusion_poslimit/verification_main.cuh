@@ -11,6 +11,7 @@
 #include <vector>     // std::vector
 
 #include <gpu.cuh>
+
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 

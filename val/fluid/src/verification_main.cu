@@ -10,8 +10,8 @@
 
 #include <gpu.cuh> // gpuDeviceSynchronize, gpuFree, gpuMalloc, gpuMemcpy
 
-#include <fluid_kern.cuh>
 #include <fluid_host.cuh>
+#include <fluid_kern.cuh>
 
 // =====================================================================================================================
 // shared GPU driver for the fluid verification models

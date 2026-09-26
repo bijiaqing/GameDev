@@ -1,15 +1,17 @@
 // include fragment: the Morton topology test's main program, included once by knn_topology.cu
-#include <cstdlib>
+#include <cstdlib> // std::exit, EXIT_FAILURE
 // compare the device hierarchy with an independent serial topology oracle
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <random>
-#include <vector>
-#include <morton/morton_index.cuh>
+#include <algorithm>  // std::min, std::stable_sort, std::all_of, std::sort
+#include <cassert>    // assert
+#include <cstdint>    // std::uint64_t
+#include <functional> // std::function
+#include <iostream>   // std::cerr, std::endl, std::cout
+#include <random>     // std::mt19937
+#include <vector>     // std::vector
+
 #include <gpu.cuh>
+
+#include <morton/morton_index.cuh>
 
 static std::uint64_t key_of (float3 point, int dim, int depth)
 {

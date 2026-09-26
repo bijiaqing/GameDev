@@ -1,6 +1,6 @@
 // frozen-bath collision chain: active-owner dispatch, local refresh durations, compact continuations, and cached rates
-#ifndef SWARM_COL_CHAIN_CUH
-#define SWARM_COL_CHAIN_CUH
+#ifndef GAMEDEV_SWARM_COL_CHAIN_CUH
+#define GAMEDEV_SWARM_COL_CHAIN_CUH
 
 #if defined(COLLISION) && !defined(BERNOULLI)
 
@@ -155,9 +155,9 @@ __device__ __forceinline__ real cached_pair_velocity (const query_environment &e
 // bath-start total rate, first and second log-size jump-rate moments, and largest single jump for one owner
 // a negative rate marks an invalid start state that must take the full chain path
 struct cached_rate_moments { real rate, first, second, maximum; };
-#include <algorithm>
-#include <cmath>
-#include <stdexcept>
+#include <algorithm> // std::max, std::min, std::min_element
+#include <cmath>     // std::abs, std::isfinite, std::log, std::sqrt, M_PI
+#include <stdexcept> // std::runtime_error
 
 // requested refresh duration and its binding constraint: 0 horizon, 1 mean change, 2 fluctuation
 struct change_bound { double duration; int reason; };
@@ -1454,13 +1454,13 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
 }
 
 // local collision scheduling, workspace, and host orchestration
-#include <algorithm>
-#include <cmath>
-#include <cstdint>
-#include <limits>
-#include <stdexcept>
-#include <vector>
-#include <utility>
+#include <algorithm> // std::max, std::min, std::min_element
+#include <cmath>     // std::abs, std::isfinite, std::log, std::sqrt, M_PI
+#include <cstdint>   // std::uint64_t
+#include <limits>    // std::numeric_limits
+#include <stdexcept> // std::runtime_error
+#include <utility>   // std::pair
+#include <vector>    // std::vector
 
 // schedule spatial groups on power-of-two subdivisions of one collision operator horizon
 // integer endpoints avoid rounding drift between power-of-two timestep levels
@@ -1628,8 +1628,8 @@ struct local_schedule
         for (int c : groups) next[c] += step[c];
     }
 };
-#include <chrono>
-#include <numeric>
+#include <chrono>  // std::chrono clocks and durations
+#include <numeric> // std::iota
 
 // map the host workflow's runtime calls to the selected backend
 #ifdef GAMEDEV_CUDA
@@ -2269,4 +2269,4 @@ if (!local.log) throw std::runtime_error("cannot write local collision diagnosti
 
 #endif // COLLISION && !BERNOULLI
 
-#endif // SWARM_COL_CHAIN_CUH
+#endif // GAMEDEV_SWARM_COL_CHAIN_CUH

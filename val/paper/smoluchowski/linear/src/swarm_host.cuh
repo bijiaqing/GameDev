@@ -1,4 +1,6 @@
-#pragma once
+#ifndef GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_LINEAR_SWARM_HOST_CUH
+#define GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_LINEAR_SWARM_HOST_CUH
+
 #define get_total_dust_mass _disk_total_dust_mass
 #define rand_disk_mono _disk_rand_mono
 #define rand_powerlaw _disk_rand_powerlaw
@@ -62,3 +64,5 @@ inline void rand_powerlaw (real *sizes, int count, real, real, real)
     std::gamma_distribution<real> mass(2.0, 1.0);
     for (int i = 0; i < count; ++i) sizes[i] = std::cbrt(mass(generator));
 }
+
+#endif // GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_LINEAR_SWARM_HOST_CUH

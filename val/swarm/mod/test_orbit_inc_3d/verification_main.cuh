@@ -1,6 +1,6 @@
 // include fragment: the inclined orbit test's main program, included once by its swarm_runtime.cu
-#include <cstdlib>
 #include <cmath>      // acos, atan2, cos, sin, sqrt
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
 #include <iostream>   // std::cout, std::endl
@@ -8,8 +8,9 @@
 #include <string>     // std::string, std::to_string
 #include <vector>     // std::vector
 
-#include <_transport.cuh>
 #include <gpu.cuh>
+
+#include <_transport.cuh>
 #include <swarm_kern.cuh>
 
 // test-only driver for an inclined drag-free orbit

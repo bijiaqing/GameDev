@@ -1,5 +1,5 @@
-#ifndef PARAM_GRID_CUH
-#define PARAM_GRID_CUH
+#ifndef GAMEDEV_FLUID_PARAM_GRID_CUH
+#define GAMEDEV_FLUID_PARAM_GRID_CUH
 
 #include <cmath> // cos, fmin, pow, sin
 
@@ -88,4 +88,4 @@ real _get_vol_z (int iz)
 
 // =====================================================================================================================
 
-#endif // PARAM_GRID_CUH
+#endif // GAMEDEV_FLUID_PARAM_GRID_CUH

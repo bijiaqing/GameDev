@@ -1,5 +1,5 @@
-#ifndef SWARM_COL_CACHE_CUH
-#define SWARM_COL_CACHE_CUH
+#ifndef GAMEDEV_SWARM_COL_CACHE_CUH
+#define GAMEDEV_SWARM_COL_CACHE_CUH
 
 #if defined(COLLISION) && (!defined(BERNOULLI) || defined(KNN_CACHE))
 
@@ -162,4 +162,4 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
 
 #endif // COLLISION && (FROZEN_BATH || KNN_CACHE)
 
-#endif // SWARM_COL_CACHE_CUH
+#endif // GAMEDEV_SWARM_COL_CACHE_CUH

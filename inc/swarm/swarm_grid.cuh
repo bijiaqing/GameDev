@@ -1,5 +1,5 @@
-#ifndef SWARM_GRID_CUH
-#define SWARM_GRID_CUH
+#ifndef GAMEDEV_SWARM_GRID_CUH
+#define GAMEDEV_SWARM_GRID_CUH
 
 #include <cfloat>                   // DBL_MAX
 
@@ -278,4 +278,4 @@ void _deposit_field (real *dev_grid_out, const swarm *dev_particle, int idx, rea
 
 // =====================================================================================================================
 
-#endif // SWARM_GRID_CUH
+#endif // GAMEDEV_SWARM_GRID_CUH

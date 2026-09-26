@@ -1,5 +1,5 @@
-#ifndef VAL_DRAG_PATH_TRANSPORT_CUH
-#define VAL_DRAG_PATH_TRANSPORT_CUH
+#ifndef GAMEDEV_VAL_SWARM_TEST_DRAG_PATH_1D_TRANSPORT_CUH
+#define GAMEDEV_VAL_SWARM_TEST_DRAG_PATH_1D_TRANSPORT_CUH
 
 // import the production transport header under a private name, then replace only its second SSA substep in this test
 // retain the production first drift, launch interface, boundaries, and ordering in the public ssa_transport kernel
@@ -33,4 +33,4 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
         });
 }
 
-#endif // VAL_DRAG_PATH_TRANSPORT_CUH
+#endif // GAMEDEV_VAL_SWARM_TEST_DRAG_PATH_1D_TRANSPORT_CUH

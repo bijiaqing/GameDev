@@ -1,5 +1,5 @@
-#ifndef FLUID_TRANSPORT_CUH
-#define FLUID_TRANSPORT_CUH
+#ifndef GAMEDEV_FLUID_TRANSPORT_CUH
+#define GAMEDEV_FLUID_TRANSPORT_CUH
 
 #include <const_defs.cuh>
 
@@ -305,4 +305,4 @@ static void _pressureless_hll_flux (
 
 // =====================================================================================================================
 
-#endif // FLUID_TRANSPORT_CUH
+#endif // GAMEDEV_FLUID_TRANSPORT_CUH

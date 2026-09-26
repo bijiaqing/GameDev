@@ -1,8 +1,11 @@
-#ifndef GAMEDEV_KDTREE_INDEX_HEAP_CUH
-#define GAMEDEV_KDTREE_INDEX_HEAP_CUH
+#ifndef GAMEDEV_SWARM_KDTREE_INDEX_HEAP_CUH
+#define GAMEDEV_SWARM_KDTREE_INDEX_HEAP_CUH
+
+#include <type_traits> // std::conditional_t
 
 #include <gpu.cuh>
-#include <type_traits>
+
+#include <_col_neighbor.cuh>
 
 // retain the exact top-K physical neighbors while filtering inactive particles and periodic duplicate images
 template<int K, typename Node
@@ -173,4 +176,4 @@ struct idx_old_heap
     }
 };
 
-#endif // GAMEDEV_KDTREE_INDEX_HEAP_CUH
+#endif // GAMEDEV_SWARM_KDTREE_INDEX_HEAP_CUH

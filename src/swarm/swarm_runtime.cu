@@ -1,4 +1,3 @@
-#include <gpu.cuh>
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
@@ -8,6 +7,8 @@
 #include <stdexcept>        // std::runtime_error
 #include <string>           // std::string, std::to_string
 #include <vector>           // std::vector
+
+#include <gpu.cuh>
 
 #if defined(TRANSPORT) || defined(COLLISION)
 #include <thrust/device_ptr.h>  // thrust::device_ptr

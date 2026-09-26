@@ -1,12 +1,12 @@
-#ifndef VAL_KNN_TYPES_CUH
-#define VAL_KNN_TYPES_CUH
+#ifndef GAMEDEV_VAL_SWARM_TEST_KNN_TYPES_CUH
+#define GAMEDEV_VAL_SWARM_TEST_KNN_TYPES_CUH
 
 #include <gpu.cuh> // float3 and host-device qualifiers
 
-#include <_collision.cuh>
-#include <kdtree/builder.h>
-#include <kdtree/index_heap.cuh>
+#include <kdtree/builder.h>      // kdtree::get_coord
+#include <kdtree/index_heap.cuh> // idx_old_heap
 
+#include <_collision.cuh>
 #include <morton/morton_types.cuh>
 
 // mirror the production KD-tree record while retaining periodic-image identity
@@ -45,4 +45,4 @@ struct kdtree_traits
 template<int K>
 using kdtree_heap = idx_old_heap<K, kdtree_point>;
 
-#endif // VAL_KNN_TYPES_CUH
+#endif // GAMEDEV_VAL_SWARM_TEST_KNN_TYPES_CUH

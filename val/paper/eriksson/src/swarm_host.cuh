@@ -1,5 +1,6 @@
-#ifndef COAG_SWARM_HOST_CUH
-#define COAG_SWARM_HOST_CUH
+#ifndef GAMEDEV_VAL_PAPER_ERIKSSON_SWARM_HOST_CUH
+#define GAMEDEV_VAL_PAPER_ERIKSSON_SWARM_HOST_CUH
+
 // reuse production I/O, size sampling, mass normalization, and runtime helpers
 // replace only the settled/smoothed spatial initializer and its domain-mass integral
 #define initmass_calc production_initmass_calc
@@ -7,8 +8,9 @@
 #include "../../../../inc/swarm/swarm_host.cuh"
 #undef initmass_calc
 #undef rand_disk_poly
-#include <cmath>
-#include <random>
+#include <cmath>  // std::sin, std::sqrt, std::pow, std::exp, M_PI
+#include <random> // std::mt19937, std::uniform_real_distribution
+
 #include <const_defs.cuh>
 
 // return the well-mixed dust weight rho_d = METAL_Z*rho_g from the production spherical hydrostatic gas profile
@@ -74,4 +76,4 @@ inline void rand_disk_poly (real *x, real *r, real *theta, const real *, int cou
         sample_initial_position(rand_generator, r[i], theta[i]);
     }
 }
-#endif // !COAG_SWARM_HOST_CUH
+#endif // GAMEDEV_VAL_PAPER_ERIKSSON_SWARM_HOST_CUH

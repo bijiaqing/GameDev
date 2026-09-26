@@ -1,5 +1,5 @@
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
+#ifndef GAMEDEV_VAL_SWARM_CONST_DEFS_CUH
+#define GAMEDEV_VAL_SWARM_CONST_DEFS_CUH
 
 #include <cmath>  // M_PI
 #include <string> // std::string
@@ -9,7 +9,7 @@
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION_KDTREE
-#include <kdtree/builder.h>
+#include <kdtree/builder.h> // kdtree::box_t, kdtree::get_coord
 #endif // COLLISION_KDTREE
 
 using real = double;
@@ -301,4 +301,4 @@ constexpr int NB_T = N_T / TPB + 1;
 static_assert(N_X > 0 && N_Y > 1, "swarm verification requires a radial grid and at least one x cell");
 static_assert(N_Z == 1 || Z_MAX > Z_MIN, "active z grids require nonzero extent");
 
-#endif // !CONST_DEFS_CUH
+#endif // GAMEDEV_VAL_SWARM_CONST_DEFS_CUH

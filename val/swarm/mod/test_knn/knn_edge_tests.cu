@@ -9,9 +9,10 @@
 
 #include <gpu.cuh> // CUDA allocation, copies, and kernel launches
 
-#include <kdtree/knn.h>
+#include <kdtree/knn.h> // kdtree::box_t, kdtree::buildTree, kdtree::cct::knn
+
+#include <knn_types.cuh>
 #include <morton/morton_index.cuh>
-#include "knn_types.cuh"
 
 // compare Morton top-K output with brute force for ties, duplicates, sparse balls, split planes, and inactive records
 

@@ -1,5 +1,5 @@
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
+#ifndef GAMEDEV_VAL_PAPER_PHOTOSPHERIC_SWARM_CONST_DEFS_CUH
+#define GAMEDEV_VAL_PAPER_PHOTOSPHERIC_SWARM_CONST_DEFS_CUH
 
 #include <cmath>                            // M_PI
 #include <string>                           // std::string
@@ -248,4 +248,4 @@ const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level p
 
 // =====================================================================================================================
 
-#endif // CONST_DEFS_CUH
+#endif // GAMEDEV_VAL_PAPER_PHOTOSPHERIC_SWARM_CONST_DEFS_CUH

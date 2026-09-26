@@ -1,4 +1,6 @@
-#pragma once
+#ifndef GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_PRODUCT_SWARM_HOST_CUH
+#define GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_PRODUCT_SWARM_HOST_CUH
+
 #define get_total_dust_mass _disk_total_dust_mass
 #define rand_disk_mono _disk_rand_mono
 #define save_variable _production_save_variable
@@ -53,13 +55,13 @@ inline bool save_variable (const std::string &path, real mass)
     return static_cast<bool>(file);
 }
 
-#include <_collision.cuh>
+#include <algorithm> // std::max
+#include <numeric>   // std::iota
+#include <random>    // std::mt19937, std::uniform_real_distribution, std::shuffle
+#include <stdexcept> // std::runtime_error
+#include <vector>    // std::vector
 
-#include <algorithm>
-#include <numeric>
-#include <random>
-#include <stdexcept>
-#include <vector>
+#include <_collision.cuh>
 
 // relabel cached geometric slots so they sample the whole population in this well-mixed test
 static __global__ void product_mix_partners (int *neighbors, const int *permutation)
@@ -89,3 +91,5 @@ inline void product_refresh_partners (int *neighbors, int *scratch, int count)
     GPU_KERNEL_CHECK("product_mix_partners");
 }
 #define COL_PARTNER_REFRESH product_refresh_partners
+
+#endif // GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_PRODUCT_SWARM_HOST_CUH

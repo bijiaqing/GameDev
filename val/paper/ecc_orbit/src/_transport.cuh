@@ -1,5 +1,6 @@
-#ifndef PAPER_ORBIT_TRANSPORT_CUH
-#define PAPER_ORBIT_TRANSPORT_CUH
+#ifndef GAMEDEV_VAL_PAPER_ECC_ORBIT_TRANSPORT_CUH
+#define GAMEDEV_VAL_PAPER_ECC_ORBIT_TRANSPORT_CUH
+
 // keep production state access, boundaries, forces, and the first SSA drift
 #define _ssa_substep_2 _production_ssa_substep_2
 #include "../../../../inc/swarm/_transport.cuh"
@@ -19,4 +20,4 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
             _get_force_term(y, z, R, lx, lz, b, g, c, t);
         });
 }
-#endif // !PAPER_ORBIT_TRANSPORT_CUH
+#endif // GAMEDEV_VAL_PAPER_ECC_ORBIT_TRANSPORT_CUH

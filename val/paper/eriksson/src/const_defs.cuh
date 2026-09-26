@@ -1,11 +1,13 @@
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
-#include <cmath>
-#include <string>
+#ifndef GAMEDEV_VAL_PAPER_ERIKSSON_CONST_DEFS_CUH
+#define GAMEDEV_VAL_PAPER_ERIKSSON_CONST_DEFS_CUH
+
+#include <cmath>  // M_PI
+#include <string> // std::string
+
 #include <gpu.cuh>
 using curs = gpuRandState;
 #ifdef COLLISION_KDTREE
-#include <kdtree/builder.h>
+#include <kdtree/builder.h> // kdtree::box_t, kdtree::builder, kdtree::get_coord
 using kdtree_boxf = kdtree::box_t<float3>;
 #endif // COLLISION_KDTREE
 using real = double;
@@ -90,4 +92,4 @@ constexpr int NB_T = N_T / 64 + 1;
 constexpr int TPB = 64;
 constexpr int NB_P = N_P / TPB + 1, NB_G = N_G / TPB + 1;
 constexpr int NB_X = N_Y*N_Z / TPB + 1, NB_Y = N_X*N_Z / TPB + 1;
-#endif // !CONST_DEFS_CUH
+#endif // GAMEDEV_VAL_PAPER_ERIKSSON_CONST_DEFS_CUH

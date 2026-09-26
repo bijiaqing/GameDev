@@ -1,12 +1,12 @@
-#ifndef GAMEDEV_MORTON_INDEX_CUH
-#define GAMEDEV_MORTON_INDEX_CUH
+#ifndef GAMEDEV_SWARM_MORTON_INDEX_CUH
+#define GAMEDEV_SWARM_MORTON_INDEX_CUH
 
+#include <algorithm>                      // std::min, std::max
 #include <cfloat>                         // FLT_EPSILON
 #include <climits>                        // INT_MAX
 #include <cmath>                          // fabsf, fmaxf, fminf
 #include <cstddef>                        // std::size_t
 #include <cstdint>                        // std::uint64_t
-#include <algorithm>                      // std::min, std::max
 #include <stdexcept>                      // std::invalid_argument, std::runtime_error
 #include <string>                         // std::string
 #include <vector>                         // std::vector
@@ -21,12 +21,12 @@
 #ifdef GAMEDEV_ROCM
 #include <thrust/system/hip/execution_policy.h> // GPU_THRUST_DEVICE
 #endif // GAMEDEV_ROCM
-#include <thrust/sort.h>                   // thrust::stable_sort_by_key
-#include <thrust/device_vector.h>          // device construction scratch space
-#include <thrust/scan.h>                   // child-slot offsets
-#include <thrust/count.h>                  // leaf count
-#include <thrust/copy.h>                   // diagnostic leaf compaction
+#include <thrust/copy.h>                        // diagnostic leaf compaction
+#include <thrust/count.h>                       // leaf count
+#include <thrust/device_vector.h>               // device construction scratch space
 #include <thrust/iterator/transform_iterator.h> // diagnostic leaf sizes
+#include <thrust/scan.h>                        // child-slot offsets
+#include <thrust/sort.h>                        // thrust::stable_sort_by_key
 
 #include <morton/morton_types.cuh>
 
@@ -677,4 +677,4 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
     }
 }
 
-#endif // GAMEDEV_MORTON_INDEX_CUH
+#endif // GAMEDEV_SWARM_MORTON_INDEX_CUH

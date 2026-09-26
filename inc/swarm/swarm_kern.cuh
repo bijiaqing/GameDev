@@ -1,6 +1,7 @@
+#ifndef GAMEDEV_SWARM_KERN_CUH
+#define GAMEDEV_SWARM_KERN_CUH
+
 #include <gpu.cuh>
-#ifndef SWARM_KERN_CUH
-#define SWARM_KERN_CUH
 
 #include <const_defs.cuh>
 
@@ -248,4 +249,4 @@ __global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
 
 // =====================================================================================================================
 
-#endif // SWARM_KERN_CUH
+#endif // GAMEDEV_SWARM_KERN_CUH

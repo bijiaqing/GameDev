@@ -1,6 +1,6 @@
 // include fragment: the attenuation test's main program, included once by its fluid_runtime.cu
-#include <cstdlib>
 #include <cmath>      // exp, pow
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
 #include <iostream>   // std::cout, std::endl
@@ -9,6 +9,7 @@
 #include <vector>     // std::vector
 
 #include <gpu.cuh>
+
 #include <fluid_kern.cuh>
 
 // test-only driver for the coupled optical-depth and radiation-source path

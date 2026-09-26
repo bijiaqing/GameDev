@@ -1,5 +1,5 @@
-#ifndef SWARM_HOST_CUH
-#define SWARM_HOST_CUH
+#ifndef GAMEDEV_SWARM_HOST_CUH
+#define GAMEDEV_SWARM_HOST_CUH
 
 #include <algorithm>        // std::copy, std::lower_bound, std::max, std::minmax_element
 #include <chrono>           // std::chrono::system_clock
@@ -7,7 +7,6 @@
 #include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
-#include <gpu.cuh>
 #include <fstream>          // std::ofstream, std::ifstream
 #include <iomanip>          // std::setw, std::setfill, std::setprecision
 #include <iostream>         // std::cout, std::cerr, std::endl
@@ -16,6 +15,8 @@
 #include <stdexcept>        // std::runtime_error
 #include <string>           // std::string, std::to_string
 #include <vector>           // std::vector
+
+#include <gpu.cuh>
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
@@ -1419,4 +1420,4 @@ std::cout << std::endl;
 #define HIP_CHECK CUDA_CHECK
 #define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
 #endif // !HIP_CHECK
-#endif // SWARM_HOST_CUH
+#endif // GAMEDEV_SWARM_HOST_CUH

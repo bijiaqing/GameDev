@@ -1,5 +1,5 @@
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
+#ifndef GAMEDEV_VAL_FLUID_CONST_DEFS_CUH
+#define GAMEDEV_VAL_FLUID_CONST_DEFS_CUH
 
 #include <cmath> // M_PI
 
@@ -278,4 +278,4 @@ static_assert(N_Z == 1, "Production guards require DIFFUSION when N_Z>1");
 
 static_assert(CFL_DYN > 0.0 && CFL_DYN <= 0.5, "Verification CFL must be in (0,0.5]");
 
-#endif // !CONST_DEFS_CUH
+#endif // GAMEDEV_VAL_FLUID_CONST_DEFS_CUH

@@ -1,7 +1,7 @@
 // include fragment: the shared wedge-periodic main program, included once by each wedge test's fluid_runtime.cu
-#include <cstdlib>
 #include <cmath>      // exp, fmin, fmod, pow, sin, sqrt
 #include <cstddef>    // std::size_t
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <filesystem> // std::filesystem::create_directories
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision

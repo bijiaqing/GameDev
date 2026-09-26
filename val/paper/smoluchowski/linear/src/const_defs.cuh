@@ -1,16 +1,16 @@
 // campaign constants; all collision evolution uses the current production implementation
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
+#ifndef GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_LINEAR_CONST_DEFS_CUH
+#define GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_LINEAR_CONST_DEFS_CUH
 
-#include <cmath>
-#include <string>
+#include <cmath>  // M_PI
+#include <string> // std::string
 
 #if defined(COLLISION) || defined(DIFFUSION)
 #include <gpu.cuh>
 #endif // COLLISION || DIFFUSION
 
 #ifdef COLLISION_KDTREE
-#include <kdtree/builder.h>
+#include <kdtree/builder.h> // kdtree::box_t, kdtree::get_coord
 #endif // COLLISION_KDTREE
 
 #if defined(COLLISION) || defined(DIFFUSION)
@@ -214,4 +214,4 @@ const int NB_T = N_T     / TPB + 1;
 constexpr real COL_BATH_MAX = 1.0e100;
 constexpr real BENCHMARK_MASS = 1.0e30;
 static_assert(SEED >= 0 && SEED < 10, "Campaign seeds are 0 through 9");
-#endif // !CONST_DEFS_CUH
+#endif // GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_LINEAR_CONST_DEFS_CUH

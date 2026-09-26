@@ -1,7 +1,8 @@
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
-#include <cmath>
-#include <string>
+#ifndef GAMEDEV_VAL_PAPER_ECC_ORBIT_CONST_DEFS_CUH
+#define GAMEDEV_VAL_PAPER_ECC_ORBIT_CONST_DEFS_CUH
+
+#include <cmath>  // M_PI
+#include <string> // std::string
 using real = double;
 using real3 = double3;
 
@@ -29,4 +30,4 @@ struct swarm { real3 position; real3 velocity; };
 const int TPB = 64;
 const int NB_P = N_P / TPB + 1, NB_G = N_G / TPB + 1;
 const int NB_X = N_Y*N_Z / TPB + 1, NB_Y = N_X*N_Z / TPB + 1;
-#endif // !CONST_DEFS_CUH
+#endif // GAMEDEV_VAL_PAPER_ECC_ORBIT_CONST_DEFS_CUH

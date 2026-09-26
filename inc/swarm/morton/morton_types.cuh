@@ -1,5 +1,5 @@
-#ifndef GAMEDEV_MORTON_TYPES_CUH
-#define GAMEDEV_MORTON_TYPES_CUH
+#ifndef GAMEDEV_SWARM_MORTON_TYPES_CUH
+#define GAMEDEV_SWARM_MORTON_TYPES_CUH
 
 #include <cstdint>       // std::uint32_t, std::uint64_t
 #ifdef GAMEDEV_ROCM
@@ -81,4 +81,4 @@ float _get_morton_point_dist_sq (const float3 &point_a, const float3 &point_b)
     return dx*dx + dy*dy + dz*dz;
 }
 
-#endif // GAMEDEV_MORTON_TYPES_CUH
+#endif // GAMEDEV_SWARM_MORTON_TYPES_CUH

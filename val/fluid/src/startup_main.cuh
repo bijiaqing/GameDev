@@ -1,5 +1,4 @@
 // include fragment: the startup-balance probe's main program, included once by its fluid_runtime.cu
-#include <cstdlib>
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories
 #include <fstream>    // std::ofstream

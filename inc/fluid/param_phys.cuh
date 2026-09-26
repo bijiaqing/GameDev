@@ -1,5 +1,5 @@
-#ifndef PARAM_PHYS_CUH
-#define PARAM_PHYS_CUH
+#ifndef GAMEDEV_FLUID_PARAM_PHYS_CUH
+#define GAMEDEV_FLUID_PARAM_PHYS_CUH
 
 #include <const_defs.cuh>
 
@@ -143,4 +143,4 @@ real _get_hd (real R, real h_g)
 
 // =====================================================================================================================
 
-#endif // PARAM_PHYS_CUH
+#endif // GAMEDEV_FLUID_PARAM_PHYS_CUH

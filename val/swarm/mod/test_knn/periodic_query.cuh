@@ -1,5 +1,5 @@
-#ifndef VAL_PERIODIC_QUERY_CUH
-#define VAL_PERIODIC_QUERY_CUH
+#ifndef GAMEDEV_VAL_SWARM_TEST_KNN_PERIODIC_QUERY_CUH
+#define GAMEDEV_VAL_SWARM_TEST_KNN_PERIODIC_QUERY_CUH
 
 #include <climits>        // INT_MAX
 
@@ -262,4 +262,4 @@ void periodic_morton_query (int *dev_near_idx_old, float *dev_near_dist_sq,
     }
 }
 
-#endif // VAL_PERIODIC_QUERY_CUH
+#endif // GAMEDEV_VAL_SWARM_TEST_KNN_PERIODIC_QUERY_CUH

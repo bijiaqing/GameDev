@@ -1,5 +1,5 @@
-#ifndef PARAM_PHYS_CUH
-#define PARAM_PHYS_CUH
+#ifndef GAMEDEV_SWARM_PARAM_PHYS_CUH
+#define GAMEDEV_SWARM_PARAM_PHYS_CUH
 
 #ifdef IMPORTGAS
 #include <cassert>      // assert
@@ -211,4 +211,4 @@ real _get_stokes (real R, real Z, real h_g, real size
 
 // =====================================================================================================================
 
-#endif // PARAM_PHYS_CUH
+#endif // GAMEDEV_SWARM_PARAM_PHYS_CUH

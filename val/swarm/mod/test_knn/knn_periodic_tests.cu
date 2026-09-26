@@ -10,7 +10,7 @@
 
 #include <gpu.cuh> // CUDA allocation, copies, and kernel launches
 
-#include "periodic_query.cuh"
+#include <periodic_query.cuh>
 
 // verify periodic query-image selection and physical-id deduplication against brute-force wedge geometry
 

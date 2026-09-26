@@ -1,4 +1,6 @@
-#pragma once
+#ifndef GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_CONST_SWARM_HOST_CUH
+#define GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_CONST_SWARM_HOST_CUH
+
 #define get_total_dust_mass _disk_total_dust_mass
 #define rand_disk_mono _disk_rand_mono
 #define save_variable _production_save_variable
@@ -50,3 +52,5 @@ inline bool save_variable (const std::string &path, real mass)
             "\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
     return static_cast<bool>(file);
 }
+
+#endif // GAMEDEV_VAL_PAPER_SMOLUCHOWSKI_CONST_SWARM_HOST_CUH

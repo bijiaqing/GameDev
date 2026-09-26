@@ -1,25 +1,8 @@
-#ifndef SWARM_COLLISION_CUH
-#define SWARM_COLLISION_CUH
+#ifndef GAMEDEV_SWARM_COLLISION_CUH
+#define GAMEDEV_SWARM_COLLISION_CUH
 
-#include <climits>      // INT_MAX
+#include <_col_neighbor.cuh>
 #include <const_defs.cuh>
-
-constexpr int COL_IMAGE_COUNT = 3;
-static_assert(N_P <= INT_MAX / COL_IMAGE_COUNT,
-    "N_P is too large for packed collision-neighbor identifiers");
-
-// retain a physical particle index and its selected periodic image in one cached integer
-__host__ __device__ __forceinline__
-int _encode_col_neighbor (int idx_old, int image) { return COL_IMAGE_COUNT*idx_old + image; }
-
-__host__ __device__ __forceinline__
-int _get_col_idx_old (int neighbor) { return neighbor / COL_IMAGE_COUNT; }
-
-__host__ __device__ __forceinline__
-int _get_col_image (int neighbor) { return neighbor % COL_IMAGE_COUNT; }
-
-__host__ __device__ __forceinline__
-int _get_col_image_shift (int image) { return (image == 1) ? -1 : ((image == 2) ? 1 : 0); }
 
 #ifdef COLLISION
 
@@ -30,8 +13,8 @@ int _get_col_image_shift (int image) { return (image == 1) ? -1 : ((image == 2) 
 #include <swarm_grid.cuh>
 
 #ifdef COLLISION_KDTREE
-#include <kdtree/knn.h>                 // kdtree::cct::knn
-#include <kdtree/index_heap.cuh>          // idx_old_heap
+#include <kdtree/index_heap.cuh> // idx_old_heap
+#include <kdtree/knn.h>          // kdtree::cct::knn
 
 using kdtree_heap = idx_old_heap<N_K, kdtree_node>;
 #endif // COLLISION_KDTREE
@@ -449,4 +432,4 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
 
 // =====================================================================================================================
 
-#endif // SWARM_COLLISION_CUH
+#endif // GAMEDEV_SWARM_COLLISION_CUH

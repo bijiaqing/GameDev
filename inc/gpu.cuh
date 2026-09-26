@@ -1,5 +1,5 @@
-#ifndef GAMEDEV_GPU_COMPAT_CUH
-#define GAMEDEV_GPU_COMPAT_CUH
+#ifndef GAMEDEV_GPU_CUH
+#define GAMEDEV_GPU_CUH
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #define GAMEDEV_GPU_DEVICE
@@ -7,8 +7,8 @@
 
 // map API spellings only; hardware-dependent algorithms remain explicit at their call sites
 #ifdef GAMEDEV_ROCM
-#include <hip/hip_runtime.h>
-#include <hiprand/hiprand_kernel.h>
+#include <hip/hip_runtime.h>        // HIP runtime API and device qualifiers
+#include <hiprand/hiprand_kernel.h> // hiprandState, hiprand_init, hiprand_normal_double, hiprand_uniform_double
 #define GPU_BACKEND_NAME "HIP"
 #define GPU_BACKEND_ID "rocm"
 #define GPU_CHECK HIP_CHECK
@@ -52,8 +52,8 @@
 #define GPU_SYNC_TRACE
 #endif // HIP_SYNC_TRACE
 #else  // !GAMEDEV_ROCM
-#include <cuda_runtime.h>
-#include <curand_kernel.h>
+#include <cuda_runtime.h>  // CUDA runtime API and device qualifiers
+#include <curand_kernel.h> // curandState, curand_init, curand_normal_double, curand_uniform_double
 #define GPU_BACKEND_NAME "CUDA"
 #define GPU_BACKEND_ID "cuda"
 #define GPU_CHECK CUDA_CHECK
@@ -97,4 +97,4 @@
 #define GPU_SYNC_TRACE
 #endif // CUDA_SYNC_TRACE
 #endif // GAMEDEV_ROCM
-#endif // !GAMEDEV_GPU_COMPAT_CUH
+#endif // GAMEDEV_GPU_CUH

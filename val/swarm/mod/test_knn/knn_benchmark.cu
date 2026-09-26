@@ -17,11 +17,11 @@
 
 #include <gpu.cuh> // CUDA allocation, events, copies, and kernel launches
 
-#include <kdtree/builder.h>
-#include <kdtree/knn.h>
+#include <kdtree/builder.h> // kdtree::box_t, kdtree::buildTree, kdtree::cct::knn
+#include <kdtree/knn.h>     // kdtree::box_t, kdtree::buildTree, kdtree::cct::knn
 
+#include <knn_types.cuh>
 #include <morton/morton_index.cuh>
-#include "knn_types.cuh"
 
 // compare exact nonperiodic KD-tree and adaptive-Morton top-K searches on matched point clouds
 // validate both backends against brute force before reporting build, query, and persistent-memory costs

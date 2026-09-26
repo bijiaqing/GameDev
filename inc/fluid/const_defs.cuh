@@ -1,8 +1,9 @@
-#include <gpu.cuh>
-#ifndef CONST_DEFS_CUH
-#define CONST_DEFS_CUH
+#ifndef GAMEDEV_FLUID_CONST_DEFS_CUH
+#define GAMEDEV_FLUID_CONST_DEFS_CUH
 
 #include <cmath>       // M_PI
+
+#include <gpu.cuh>
 
 using real = double;
 
@@ -146,4 +147,4 @@ static_assert(
 
 // =====================================================================================================================
 
-#endif // CONST_DEFS_CUH
+#endif // GAMEDEV_FLUID_CONST_DEFS_CUH

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef GAMEDEV_VAL_SWARM_TEST_KNN_MORTON_INDEX_CUH
+#define GAMEDEV_VAL_SWARM_TEST_KNN_MORTON_INDEX_CUH
 
 #include "../../../../../inc/swarm/morton/morton_index.cuh"
 
@@ -82,3 +83,5 @@ void morton_digest (double *dev_checksum, unsigned int *dev_stack_overflow,
         if (dev_stack_overflow) dev_stack_overflow[idx_query] = overflow;
     }
 }
+
+#endif // GAMEDEV_VAL_SWARM_TEST_KNN_MORTON_INDEX_CUH

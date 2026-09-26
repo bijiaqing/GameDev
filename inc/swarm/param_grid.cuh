@@ -1,5 +1,5 @@
-#ifndef PARAM_GRID_CUH
-#define PARAM_GRID_CUH
+#ifndef GAMEDEV_SWARM_PARAM_GRID_CUH
+#define GAMEDEV_SWARM_PARAM_GRID_CUH
 
 #include <cmath>  // cos, fabsf, fmin, fminf, log, pow, sin, sinf
 
@@ -124,4 +124,4 @@ bool _is_in_bounds (real loc_x, real loc_y, real loc_z)
 
 // =====================================================================================================================
 
-#endif // PARAM_GRID_CUH
+#endif // GAMEDEV_SWARM_PARAM_GRID_CUH

@@ -1,5 +1,6 @@
-#ifndef SWARM_DIFFUSION_CUH
-#define SWARM_DIFFUSION_CUH
+#ifndef GAMEDEV_SWARM_DIFFUSION_CUH
+#define GAMEDEV_SWARM_DIFFUSION_CUH
+
 #ifdef DIFFUSION
 #include <param_phys.cuh>
 
@@ -107,4 +108,4 @@ dust_diffusion _get_dust_diffusion (real x, real y, real z, real size
         -factor_grad*st_phi + concentration*g.x};
 }
 #endif // DIFFUSION
-#endif // SWARM_DIFFUSION_CUH
+#endif // GAMEDEV_SWARM_DIFFUSION_CUH

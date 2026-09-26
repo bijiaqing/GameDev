@@ -1,5 +1,5 @@
-#ifndef GAMEDEV_MORTON_QUERY_CUH
-#define GAMEDEV_MORTON_QUERY_CUH
+#ifndef GAMEDEV_SWARM_MORTON_QUERY_CUH
+#define GAMEDEV_SWARM_MORTON_QUERY_CUH
 
 #include <climits>                         // INT_MAX
 
@@ -7,6 +7,7 @@
 #include <gpu.cuh>                  // HIP device qualifiers
 #else  // !GAMEDEV_ROCM
 #include <gpu.cuh>                  // CUDA device qualifiers
+
 #include <math_constants.h>                // CUDART_INF_F
 #endif // GAMEDEV_ROCM
 
@@ -130,4 +131,4 @@ void _morton_ghost_topk (
     _morton_pair_sort<WORK_SIZE, BLOCK_SIZE>(work_dist_sq, work_idx_old);
 }
 
-#endif // GAMEDEV_MORTON_QUERY_CUH
+#endif // GAMEDEV_SWARM_MORTON_QUERY_CUH

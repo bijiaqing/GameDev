@@ -1,8 +1,8 @@
 #ifdef DIFFUSION
 
+#include <fluid_kern.cuh>
 #include <param_grid.cuh>
 #include <param_phys.cuh>
-#include <fluid_kern.cuh>
 
 // =====================================================================================================================
 // kernel: diffusion_zbl

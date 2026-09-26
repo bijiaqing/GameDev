@@ -1,5 +1,5 @@
-#ifndef FLUID_HOST_CUH
-#define FLUID_HOST_CUH
+#ifndef GAMEDEV_FLUID_HOST_CUH
+#define GAMEDEV_FLUID_HOST_CUH
 
 #include <algorithm>           // std::fill, std::max, std::min, std::swap
 #include <chrono>              // std::chrono::system_clock
@@ -14,6 +14,7 @@
 #include <vector>              // std::vector
 
 #include <gpu.cuh>
+
 #include <thrust/device_ptr.h> // thrust::device_ptr
 #include <thrust/extrema.h>    // thrust::max_element
 #include <thrust/reduce.h>     // thrust::reduce
@@ -645,4 +646,4 @@ bool save_variable (const std::string &file_name)
 #define HIP_CHECK CUDA_CHECK
 #define HIP_KERNEL_CHECK CUDA_KERNEL_CHECK
 #endif // !HIP_CHECK
-#endif // FLUID_HOST_CUH
+#endif // GAMEDEV_FLUID_HOST_CUH

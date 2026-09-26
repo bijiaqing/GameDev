@@ -1,6 +1,7 @@
+#ifndef GAMEDEV_FLUID_KERN_CUH
+#define GAMEDEV_FLUID_KERN_CUH
+
 #include <gpu.cuh>
-#ifndef FLUID_KERN_CUH
-#define FLUID_KERN_CUH
 
 #if defined(VISC_FLOW) && !defined(DIFFUSION)
 #error "VISC_FLOW requires DIFFUSION"
@@ -207,4 +208,4 @@ __global__ void source_update (
 
 // =====================================================================================================================
 
-#endif // FLUID_KERN_CUH
+#endif // GAMEDEV_FLUID_KERN_CUH

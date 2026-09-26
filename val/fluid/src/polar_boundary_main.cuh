@@ -1,5 +1,4 @@
 // include fragment: the shared polar-boundary main program, included once by each polar test's fluid_runtime.cu
-#include <cstdlib>
 #include <cmath>      // cos, exp, fmin, pow, sin, sqrt
 #include <cstddef>    // std::size_t
 #include <filesystem> // std::filesystem::create_directories

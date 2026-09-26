@@ -9,8 +9,8 @@
 
 #include <gpu.cuh>
 
-#include <fluid_kern.cuh>
 #include <fluid_host.cuh>
+#include <fluid_kern.cuh>
 
 const std::string PATH = PATH_OUT;
 

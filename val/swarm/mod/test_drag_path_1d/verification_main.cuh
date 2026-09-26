@@ -1,5 +1,5 @@
 // include fragment: the drag-path test's main program, included once by its swarm_runtime.cu
-#include <cstdlib>
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
 #include <iostream>   // std::cout, std::endl
@@ -7,8 +7,9 @@
 #include <string>     // std::string, std::to_string
 #include <vector>     // std::vector
 
-#include <_transport.cuh>
 #include <gpu.cuh>
+
+#include <_transport.cuh>
 #include <swarm_kern.cuh>
 
 // test-only driver for multi-step drag trajectories

@@ -1,5 +1,5 @@
-#ifndef SWARM_TRANSPORT_CUH
-#define SWARM_TRANSPORT_CUH
+#ifndef GAMEDEV_SWARM_TRANSPORT_CUH
+#define GAMEDEV_SWARM_TRANSPORT_CUH
 
 #include <const_defs.cuh>
 #include <param_grid.cuh>
@@ -338,4 +338,4 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 
 // =====================================================================================================================
 
-#endif // SWARM_TRANSPORT_CUH
+#endif // GAMEDEV_SWARM_TRANSPORT_CUH

@@ -1,8 +1,8 @@
 // include fragment: the shared collision-physics main program, included once by each colphys test's swarm_runtime.cu
-#include <cstdlib>
 #include <algorithm>  // std::max_element
 #include <array>      // std::array
 #include <cmath>      // sqrt
+#include <cstdlib>    // std::exit, EXIT_FAILURE
 #include <fstream>    // std::ofstream
 #include <iomanip>    // std::setprecision
 #include <iostream>   // std::cout, std::endl
@@ -10,9 +10,10 @@
 #include <string>     // std::string, std::to_string
 #include <vector>     // std::vector
 
+#include <gpu.cuh>
+
 #include <_col_cache.cuh>
 #include <_collision.cuh>
-#include <gpu.cuh>
 #include <swarm_kern.cuh>
 
 #ifdef COLLISION_MORTON
