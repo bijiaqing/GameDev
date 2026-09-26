@@ -116,8 +116,11 @@ of their results needs `--ignore-source-fingerprint` and does not certify a comm
 
 ## What qualifies a result
 
-A validation result qualifies only the source it was produced from. Qualification requires fresh
-native CUDA and ROCm campaigns with matching source fingerprints and a passing comparison. Local
-builds, import checks, and host arithmetic are not GPU validation, a single model run or a
-scientific campaign under `paper/` does not qualify the suites, and results from earlier sources
-are not evidence for the current one.
+A validation result qualifies only the source it was produced from. The source fingerprint hashes
+the `Makefile` and every C, C++, CUDA, HIP, make-fragment, and Python source under `inc/`, `src/`,
+and `val/`, except `val/tools/` and the generated `out/`, `obj/`, `logs/`, and `temp/` directories,
+so any other file of these kinds present in the checkout, tracked or not, changes it. Qualification
+requires fresh native CUDA and ROCm campaigns with matching source fingerprints and a passing
+comparison. Local builds, import checks, and host arithmetic are not GPU validation, a single model
+run or a scientific campaign under `paper/` does not qualify the suites, and results from earlier
+sources are not evidence for the current one.

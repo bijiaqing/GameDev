@@ -209,6 +209,8 @@ def val_output_path(val_root: Path, requested: Path | None, default_name: str) -
 def source_fingerprint(project_root: Path) -> tuple[str, int]:
     """hash every compiled or interpreted source that can affect a validation result"""
 
+    # val/tools holds local developer checks that never run in a campaign
+    tools = project_root / "val" / "tools"
     files = [project_root / "Makefile"]
     for root in (project_root / "inc", project_root / "src", project_root / "val"):
         files.extend(
@@ -231,6 +233,7 @@ def source_fingerprint(project_root: Path) -> tuple[str, int]:
             }
             and not {"logs", "temp", "out", "obj"} & set(path.parts)
             and "__pycache__" not in path.parts
+            and not path.is_relative_to(tools)
         )
 
     digest = hashlib.sha256()
