@@ -29,7 +29,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
 
     int ix = idx_cell % N_X;
     int iy = (idx_cell / N_X) % N_Y;
-    int iz = idx_cell / (N_X * N_Y);
+    int iz = idx_cell / (N_X*N_Y);
 
     real y = _get_ycent(iy);
     real z = _get_zcent(iz);
@@ -53,7 +53,7 @@ void init_rho_calc (real *dev_dustdens, const real *dev_initdens)
     else
     {
         // embed the surface profile with the density-diffusion equilibrium
-        rhod = sigma_d*exp(-0.5*Z*Z/(H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
+        rhod = sigma_d*exp(-0.5*Z*Z / (H_d*H_d)) / (sqrt(2.0*M_PI)*H_d);
     }
 
     // apply azimuthal density noise shared across radius and polar angle

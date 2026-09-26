@@ -29,7 +29,7 @@ constexpr real ASPR_0 = 0.0288821994330985, IDX_P = -1.0, IDX_Q = -0.5;
 constexpr real ALPHA = COAG_ALPHA;
 constexpr real M_MOL = 2.34*1.67262192369e-24, X_SEC = 2.0e-15;
 constexpr real RHO_0 = 1.0;
-constexpr real STOKES_0 = M_PI*RHO_0*S_0/(4.0*SIGMA_0);
+constexpr real STOKES_0 = M_PI*RHO_0*S_0 / (4.0*SIGMA_0);
 constexpr real SCHMIDT_X = 1.0, SCHMIDT_R = 1.0, SCHMIDT_Z = 1.0;
 constexpr real INIT_SMIN = 1.0e-4, INIT_SMAX = INIT_SMIN; // fixed 0.5-micron radius monomers
 
@@ -48,8 +48,13 @@ constexpr real COL_BATH_MAX = YEAR;
 constexpr real COL_BATH_EPS = 0.08, COL_BATH_ALPHA = 1.0e-3;
 static_assert(N_K == 256 && COL_BATH_EPS == 0.08, "Benchmark settings must match across variants");
 constexpr int MORTON_TPB = 64, MORTON_LEAF_TARGET = 128;
-constexpr int neighbor_pow2(int n) { int p=1; while(p<n) p*=2; return p; }
-constexpr int MORTON_MAX_LEVEL = 20, MORTON_WORK_SIZE = neighbor_pow2(3*N_K+MORTON_TPB);
+constexpr int neighbor_pow2 (int n)
+{
+    int p = 1;
+    while (p < n) p *= 2;
+    return p;
+}
+constexpr int MORTON_MAX_LEVEL = 20, MORTON_WORK_SIZE = neighbor_pow2(3*N_K + MORTON_TPB);
 static_assert(3*N_K + MORTON_TPB <= MORTON_WORK_SIZE);
 
 constexpr int SAVE_MAX = COAG_OUTPUTS, LIN_BASE = 1;
@@ -72,16 +77,17 @@ struct kdtree_traits                        // traits for kdtree::builder
 
     // expose point coordinates and split dimensions through the KD-tree traits interface
     static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
-    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node,
+        int dim) { return kdtree::get_coord(node.cartesian, dim); }
     static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
     static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
 };
 #endif // COLLISION_KDTREE
 #ifdef COLLISION_KDTREE
 constexpr int N_T = X_WEDGE ? 3*N_P : N_P;
-constexpr int NB_T = N_T/64 + 1;
+constexpr int NB_T = N_T / 64 + 1;
 #endif
 constexpr int TPB = 64;
-constexpr int NB_P = N_P/TPB + 1, NB_G = N_G/TPB + 1;
-constexpr int NB_X = N_Y*N_Z/TPB + 1, NB_Y = N_X*N_Z/TPB + 1;
+constexpr int NB_P = N_P / TPB + 1, NB_G = N_G / TPB + 1;
+constexpr int NB_X = N_Y*N_Z / TPB + 1, NB_Y = N_X*N_Z / TPB + 1;
 #endif

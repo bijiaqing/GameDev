@@ -21,18 +21,18 @@ using kdtree_boxf = kdtree::box_t<float3>;  // axis-aligned float bounding box t
 using real  = double;                       // code real type
 using real3 = double3;                      // double3 is a built-in CUDA type
 
-// =========================================================================================================================
+// =====================================================================================================================
 // code units
-// =========================================================================================================================
+// =====================================================================================================================
 
 const real  G           = 1.0;              // gravitational constant
 const real  M_S         = 1.0;              // mass of the central star
 const real  R_0         = 1.0;              // reference radius of the disk
 const real  S_0         = 1.0;              // reference grain diameter, independent of the disk reference radius
 
-// =========================================================================================================================
+// =====================================================================================================================
 // mesh domain size and resolution
-// =========================================================================================================================
+// =====================================================================================================================
 
 const int   N_P         = 1.0e+09;          // total number of representative particles
 
@@ -59,15 +59,15 @@ const bool  X_WEDGE     = N_X > 1
 static_assert(N_Z == 1, "N_Z > 1 requires DIFFUSION");
 #endif // NO DIFFUSION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // gas parameters
-// =========================================================================================================================
+// =====================================================================================================================
 
 const real  SIGMA_0     = 1.0e-02;          // reference gas surface density at R_0
 const real  METAL_Z     = 1.0e-02;          // total dust-to-gas surface-density ratio for initialization
 const real  ASPR_0      = 0.05;             // the reference aspect ratio of the gas disk
 const real  IDX_P       = -0.5;             // the radial power-law index of the gas surface density profile
-const real  IDX_Q       =  0.0;             // the radial power-law index of the gas temperature profile (vertically isothermal)
+const real  IDX_Q       =  0.0;             // radial power-law index of the gas temperature (vertically isothermal)
 
 #if defined(COLLISION) || defined(DIFFUSION)
 #ifdef CONST_NU
@@ -86,9 +86,9 @@ const real  X_SEC       = 2.0e-15;          // the cross section of H2 gas in cm
 #endif // CODE_UNIT
 #endif // COLLISION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // dust parameters for dynamics
-// =========================================================================================================================
+// =====================================================================================================================
 
 const real  STOKES_0    = 1.0e-03;          // midplane Stokes number at R_0 for dust with the reference size
 
@@ -146,15 +146,24 @@ const real  COL_BATH_ALPHA = 1.0e-3;         // family-wise confidence-tail prob
 const int   MORTON_TPB         = 64;       // cooperative threads assigned to one Morton query
 const int   MORTON_LEAF_TARGET = 128;       // target records per adaptive leaf
 const int   MORTON_MAX_LEVEL   = 20;        // maximum adaptive subdivision depth
-const int   MORTON_WORK_SIZE   = [] { int n=1; while(n<3*N_K+MORTON_TPB) n*=2; return n; }();      // shared slots for duplicate-safe top-K selection
+// shared slots for duplicate-safe top-K selection
+const int   MORTON_WORK_SIZE = []()
+{
+    int n = 1;
+    while (n < 3*N_K + MORTON_TPB)
+    {
+        n *= 2;
+    }
+    return n;
+}();
 
 static_assert(3*N_K + MORTON_TPB <= MORTON_WORK_SIZE,
     "Morton work storage must hold three periodic images of every KNN slot");
 #endif // COLLISION_MORTON
 
-// =========================================================================================================================
+// =====================================================================================================================
 // dust initialization parameters
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef MULTISIZE
 const real INIT_SMIN    = 1.0e+00;          // minimum grain size for particle initialization
@@ -164,9 +173,9 @@ const real INIT_SMAX    = 1.0e+00;          // maximum grain size for particle i
 #if defined(COLLISION) && !defined(BERNOULLI)
 #endif // COLLISION && !BERNOULLI
 
-// =========================================================================================================================
+// =====================================================================================================================
 // time step and output parameters
-// =========================================================================================================================
+// =====================================================================================================================
 
 const int  SAVE_MAX     = 20;               // total number of outputs for mesh fields
 
@@ -178,14 +187,14 @@ const real CFL_DYN      = 0.45;             // maximum fraction of a local mesh 
 #endif // TRANSPORT
 
 #if defined(LOGTIMING) || defined(LOGOUTPUT)
-const int  LOG_BASE     = 10;               // logarithmic base for time stepping (LOGTIMING) or particle output (LOGOUTPUT)
+const int  LOG_BASE     = 10;               // logarithmic base for LOGTIMING time steps or LOGOUTPUT particle output
 #else  // LINEAR
 const int  LIN_BASE     = 10;               // save particle data every LIN_BASE density outputs
 #endif // LOGTIMING || LOGOUTPUT
 
-// =========================================================================================================================
+// =====================================================================================================================
 // structures
-// =========================================================================================================================
+// =====================================================================================================================
 
 struct swarm                                // representative-particle state
 {
@@ -214,15 +223,16 @@ struct kdtree_traits                        // traits for kdtree::builder
 
     // expose point coordinates and split dimensions through the KD-tree traits interface
     static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
-    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node,
+        int dim) { return kdtree::get_coord(node.cartesian, dim); }
     static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
     static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
 };
 #endif // COLLISION_KDTREE
 
-// =========================================================================================================================
+// =====================================================================================================================
 // cuda numerical parameters
-// =========================================================================================================================
+// =====================================================================================================================
 
 const int TPB = 64; // number of threads per block
 
@@ -236,6 +246,6 @@ const int N_T  = X_WEDGE ? 3*N_P : N_P;    // physical and periodic-image tree n
 const int NB_T = N_T     / TPB + 1;         // number of blocks for tree-level parallelization
 #endif // COLLISION_KDTREE
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // CONST_DEFS_CUH

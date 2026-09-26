@@ -13,23 +13,24 @@
 #include <fluid_kern.cuh>
 #include <fluid_host.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // shared GPU driver for the fluid verification models
 //
-// each model directory defines one VERIFY_* macro in flags.mk and includes this file as its main program; the preprocessor
-// keeps only the selected initial condition, integration branch, and case name in the resulting executable; this lets every
-// test call the production kernels while sharing identical allocation, output, and metadata logic
+// each model directory defines one VERIFY_* macro in flags.mk and includes this file as its main program; the
+// preprocessor keeps only the selected initial condition, integration branch, and case name in the resulting
+// executable; this lets every test call the production kernels while sharing identical allocation, output, and metadata
+// logic
 //
 // the executable does not calculate error norms; it writes initial and final fields plus metadata for validate_case.py,
 // which independently constructs analytical finite-volume reference solutions and performs the comparison
-// =========================================================================================================================
+// =====================================================================================================================
 
 namespace
 {
 const std::string PATH = PATH_OUT;
 
-// integrate one scalar function with an eight-point Gauss-Legendre rule; the tables contain only the four positive nodes;
-// evaluating each node at symmetric offsets supplies all eight quadrature points
+// integrate one scalar function with an eight-point Gauss-Legendre rule; the tables contain only the four positive
+// nodes; evaluating each node at symmetric offsets supplies all eight quadrature points
 template <typename Function>
 real gauss8 (Function function, real lower, real upper)
 {
@@ -61,7 +62,7 @@ real compact_bump (real value, real lower, real upper)
     real center = 0.5*(lower + upper);
     real half_width = 0.5*(upper - lower);
     real u = (value - center) / half_width;
-    return exp(1.0 - 1.0/(1.0 - u*u));
+    return exp(1.0 - 1.0 / (1.0 - u*u));
 }
 
 real spherical_j0 (real value)
@@ -86,8 +87,9 @@ real spherical_y0_deriv (real value)
 
 real radial_mode (real y, int dimension)
 {
-    // construct a radial Laplacian eigenmode with zero derivative at Y_MIN; the selected k2 and k3 values also impose zero
-    // derivative at Y_MAX, so the analytical mode is compatible with the diffusion kernel's zero-flux radial boundaries
+    // construct a radial Laplacian eigenmode with zero derivative at Y_MIN; the selected k2 and k3 values also impose
+    // zero derivative at Y_MAX, so the analytical mode is compatible with the diffusion kernel's zero-flux radial
+    // boundaries
     constexpr real k2 = 1.694299217770420;
     constexpr real k3 = 1.874562003084784;
 
@@ -112,44 +114,45 @@ real radial_mode (real y, int dimension)
 real host_gas_dens (real R, real Z)
 {
     // reproduce the gas profile used as the radial baseline of the ring density
-    real sigma_g = SIGMA_0*pow(R/R_0, IDX_P);
+    real sigma_g = SIGMA_0*pow(R / R_0, IDX_P);
     if (N_Z == 1) return sigma_g;
 
-    real h_g = ASPR_0*pow(R/R_0, 0.5*(IDX_Q + 1.0));
+    real h_g = ASPR_0*pow(R / R_0, 0.5*(IDX_Q + 1.0));
     real rhog_mid = sigma_g / (sqrt(2.0*M_PI)*h_g*R);
-    return rhog_mid*exp((R/sqrt(R*R + Z*Z) - 1.0)/(h_g*h_g));
+    return rhog_mid*exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g));
 }
 
 const char *case_name ()
 {
-    // store a stable case identifier in metadata; the Python validator dispatches its analytical solution using this name
-#if defined(VERIFY_X_TRANSPORT)
+    // store a stable case identifier in metadata; the Python validator dispatches its analytical solution using this
+    // name
+    #if defined(VERIFY_X_TRANSPORT)
     return "x_transport";
-#elif defined(VERIFY_Y_TRANSPORT_CYL)
+    #elif defined(VERIFY_Y_TRANSPORT_CYL)
     return "y_transport_cyl";
-#elif defined(VERIFY_Y_TRANSPORT_SPH)
+    #elif defined(VERIFY_Y_TRANSPORT_SPH)
     return "y_transport_sph";
-#elif defined(VERIFY_Y_OUTFLOW_2D)
+    #elif defined(VERIFY_Y_OUTFLOW_2D)
     return "y_outflow_2d";
-#elif defined(VERIFY_Z_TRANSPORT)
+    #elif defined(VERIFY_Z_TRANSPORT)
     return "z_transport";
-#elif defined(VERIFY_X_DIFFUSION)
+    #elif defined(VERIFY_X_DIFFUSION)
     return "x_diffusion";
-#elif defined(VERIFY_Y_DIFFUSION_CYL)
+    #elif defined(VERIFY_Y_DIFFUSION_CYL)
     return "y_diffusion_cyl";
-#elif defined(VERIFY_Y_DIFFUSION_SPH)
+    #elif defined(VERIFY_Y_DIFFUSION_SPH)
     return "y_diffusion_sph";
-#elif defined(VERIFY_Z_DIFFUSION)
+    #elif defined(VERIFY_Z_DIFFUSION)
     return "z_diffusion";
-#elif defined(VERIFY_SOURCE_DRAG)
+    #elif defined(VERIFY_SOURCE_DRAG)
     return "source_drag";
-#elif defined(VERIFY_OPTDEPTH)
+    #elif defined(VERIFY_OPTDEPTH)
     return "optdepth";
-#elif defined(VERIFY_RING)
+    #elif defined(VERIFY_RING)
     return "ring_all_2d";
-#else
+    #else
     return "unknown";
-#endif
+    #endif
 }
 
 std::string suffix ()
@@ -164,7 +167,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
     std::vector<real> &my, std::vector<real> &mz)
 {
     real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
 
     // traverse cells in the same x-fastest ordering used by all production kernels and binary output files
@@ -188,19 +191,21 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 real x1 = x0 + dx;
                 int idx = ix + iy*N_X + iz*N_X*N_Y;
 
-#if defined(VERIFY_X_TRANSPORT)
-                // cell-average a periodic Fourier mode and assign specific angular momentum R^2, giving unit angular speed
-                real q = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
+                #if defined(VERIFY_X_TRANSPORT)
+                // cell-average a periodic Fourier mode and assign specific angular momentum R^2, giving unit angular
+                // speed
+                real q = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
                 real velx = Rc*Rc;
                 rhod[idx] = q;
                 mx[idx] = q*velx;
                 my[idx] = 0.0;
                 mz[idx] = 0.0;
-#elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
-                // integrate the compact bump and its radial momentum with the appropriate cylindrical or spherical volume
-                // measure; dividing by volume produces the finite-volume cell averages consumed by the advection kernel
+                #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)
+                // integrate the compact bump and its radial momentum with the appropriate cylindrical or spherical
+                // volume measure; dividing by volume produces the finite-volume cell averages consumed by the advection
+                // kernel
                 int dimension = (N_Z > 1) ? 3 : 2;
-                real volume = (pow(y1, dimension) - pow(y0, dimension))/static_cast<real>(dimension);
+                real volume = (pow(y1, dimension) - pow(y0, dimension)) / static_cast<real>(dimension);
                 real rho_int = gauss8([&](real y)
                 {
                     return compact_bump(y, 1.0, 1.8)*pow(y, dimension - 1);
@@ -209,26 +214,27 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 {
                     return compact_bump(y, 1.0, 1.8)*VERIFY_A*y*pow(y, dimension - 1);
                 }, y0, y1);
-                rhod[idx] = rho_int/volume;
+                rhod[idx] = rho_int / volume;
                 mx[idx] = 0.7*rhod[idx];
-                my[idx] = my_int/volume;
+                my[idx] = my_int / volume;
                 mz[idx] = 0.11*rhod[idx];
-#elif defined(VERIFY_Y_OUTFLOW_2D)
+                #elif defined(VERIFY_Y_OUTFLOW_2D)
                 // initialize exact finite-volume averages of a smooth pulse touching the outer-boundary region
                 // constant radial velocity then leaves the interior state and escaped mass analytically integrable
                 int dimension = (N_Z > 1) ? 3 : 2;
-                real volume = (pow(y1, dimension) - pow(y0, dimension))/static_cast<real>(dimension);
+                real volume = (pow(y1, dimension) - pow(y0, dimension)) / static_cast<real>(dimension);
                 real rho_int = gauss8([&](real y)
                 {
                     return compact_bump(y, 1.7, 2.5)*pow(y, dimension - 1);
                 }, y0, y1);
-                rhod[idx] = rho_int/volume;
+                rhod[idx] = rho_int / volume;
                 mx[idx] = 0.0;
                 my[idx] = VERIFY_A*rhod[idx];
                 mz[idx] = 0.0;
-#elif defined(VERIFY_Z_TRANSPORT)
-                // average the compact bump with the polar finite-volume measure and choose the shell momentum so the exact
-                // integrated polar face-area-to-volume factor gives the same known angular rate in every radial shell
+                #elif defined(VERIFY_Z_TRANSPORT)
+                // average the compact bump with the polar finite-volume measure and choose the shell momentum so the
+                // exact integrated polar face-area-to-volume factor gives the same known angular rate in every radial
+                // shell
                 real volume = cos(z0) - cos(z1);
                 real rho_int = gauss8([&](real z)
                 {
@@ -237,22 +243,23 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 real area_z = 0.5*(y1*y1 - y0*y0);
                 real vol_y = (y1*y1*y1 - y0*y0*y0) / 3.0;
                 real lz = VERIFY_RATE_Z*yc*vol_y / area_z;
-                rhod[idx] = rho_int/volume;
+                rhod[idx] = rho_int / volume;
                 mx[idx] = 0.7*rhod[idx];
                 my[idx] = 0.05*rhod[idx];
                 mz[idx] = lz*rhod[idx];
-#elif defined(VERIFY_X_DIFFUSION)
-                // a periodic Fourier mode is an exact azimuthal diffusion eigenfunction; constant primitive momentum ratios
-                // also test whether diffusing mass transports all three conserved momentum components consistently
-                real rhod_init = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
+                #elif defined(VERIFY_X_DIFFUSION)
+                // a periodic Fourier mode is an exact azimuthal diffusion eigenfunction; constant primitive momentum
+                // ratios also test whether diffusing mass transports all three conserved momentum components
+                // consistently
+                real rhod_init = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
                 rhod[idx] = rhod_init;
                 mx[idx] = 0.7*rhod_init;
                 my[idx] = -0.15*rhod_init;
                 mz[idx] = 0.11*rhod_init;
-#elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
+                #elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
                 // average the zero-flux radial eigenmode with the correct dimension-dependent volume measure
                 int dimension = (N_Z > 1) ? 3 : 2;
-                real volume = (pow(y1, dimension) - pow(y0, dimension))/static_cast<real>(dimension);
+                real volume = (pow(y1, dimension) - pow(y0, dimension)) / static_cast<real>(dimension);
                 real mode_avg = gauss8([&](real y)
                 {
                     return radial_mode(y, dimension)*pow(y, dimension - 1);
@@ -262,7 +269,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 mx[idx] = 0.7*rhod_init;
                 my[idx] = -0.15*rhod_init;
                 mz[idx] = 0.11*rhod_init;
-#elif defined(VERIFY_Z_DIFFUSION)
+                #elif defined(VERIFY_Z_DIFFUSION)
                 // p2(cos z) is an angular Laplacian eigenmode; multiplication by sin(z) supplies the spherical volume
                 // measure before division by the exact polar cell volume
                 real volume = cos(z0) - cos(z1);
@@ -276,33 +283,33 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 mx[idx] = 0.7*rhod_init;
                 my[idx] = -0.15*rhod_init;
                 mz[idx] = 0.11*rhod_init;
-#elif defined(VERIFY_SOURCE_DRAG)
-                // eight x cells encode eight drag stiffnesses through the test parameter helpers; spatial variation is not
-                // involved; one source update can then be checked from the non-stiff through the very stiff limit
+                #elif defined(VERIFY_SOURCE_DRAG)
+                // eight x cells encode eight drag stiffnesses through the test parameter helpers; spatial variation is
+                // not involved; one source update can then be checked from the non-stiff through the very stiff limit
                 rhod[idx] = 1.0;
                 mx[idx] = 1.3;
                 my[idx] = -0.8;
                 mz[idx] = 0.6;
-#elif defined(VERIFY_OPTDEPTH)
+                #elif defined(VERIFY_OPTDEPTH)
                 // choose surface density so the reconstructed midplane volume density is the requested radial power law
-                real h_g = ASPR_0*pow(Rc/R_0, 0.5*(IDX_Q + 1.0));
+                real h_g = ASPR_0*pow(Rc / R_0, 0.5*(IDX_Q + 1.0));
                 rhod[idx] = sqrt(2.0*M_PI)*h_g*Rc*pow(yc, static_cast<real>(VERIFY_POWER));
                 mx[idx] = my[idx] = mz[idx] = 0.0;
-#elif defined(VERIFY_RING)
+                #elif defined(VERIFY_RING)
                 // initialize a relative Fourier density perturbation on circular equilibrium rings; radiation modifies
                 // the equilibrium angular momentum, while optional diffusion supplies the known Fourier-mode damping
-                real rhod_mode = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0))/(VERIFY_M*dx);
-#ifdef VERIFY_RING_RADIATION
+                real rhod_mode = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
+                #ifdef VERIFY_RING_RADIATION
                 const real beta = BETA_0;
-#else
+                #else
                 const real beta = 0.0;
-#endif
+                #endif
                 real ell = sqrt((1.0 - beta)*G*M_S*Rc);
                 rhod[idx] = host_gas_dens(Rc, Zc)*rhod_mode;
                 mx[idx] = rhod[idx]*ell;
                 my[idx] = 0.0;
                 mz[idx] = 0.0;
-#endif
+                #endif
             }
         }
     }
@@ -320,7 +327,8 @@ void save_array (const std::string &name, const std::vector<real> &array)
 void save_state (const std::string &stage, real *dev_dustdens, real *dev_dustmomx,
     real *dev_dustmomy, real *dev_dustmomz, real *dev_velx, real *dev_vely, real *dev_velz)
 {
-    // synchronize primitive variables with the current conserved fields before copying either representation to the host
+    // synchronize primitive variables with the current conserved fields before copying either representation to the
+    // host
     momentum_getv <<< NB_G, TPB >>> (
         dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
     );
@@ -382,8 +390,8 @@ int main ()
     );
     CUDA_KERNEL_CHECK("momentum_getv");
 
-    // nonuniform radial and polar PPM kernels require precomputed face interpolation weights even when a particular test
-    // evolves only one direction; keeping a common allocation path simplifies compile-time case selection
+    // nonuniform radial and polar PPM kernels require precomputed face interpolation weights even when a particular
+    // test evolves only one direction; keeping a common allocation path simplifies compile-time case selection
     real *dev_weight_y, *dev_weight_z;
     CUDA_CHECK(gpuMalloc((void**)&dev_weight_y, sizeof(real)*4*(N_Y + 1)));
     CUDA_CHECK(gpuMalloc((void**)&dev_weight_z, sizeof(real)*4*(N_Z + 1)));
@@ -401,11 +409,11 @@ int main ()
     ));
 
     #ifdef DIFFUSION
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     require_lds(reinterpret_cast<const void*>(diffusion_xbl), sizeof(real)*4*N_X, "diffusion_xbl");
     require_lds(reinterpret_cast<const void*>(diffusion_ybl), sizeof(real)*6*N_Y, "diffusion_ybl");
     require_lds(reinterpret_cast<const void*>(diffusion_zbl), sizeof(real)*6*N_Z, "diffusion_zbl");
-#else
+    #else
     CUDA_CHECK(gpuFuncSetAttribute(
         diffusion_xbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*4*N_X
@@ -418,7 +426,7 @@ int main ()
         diffusion_zbl, gpuFuncAttributeMaxDynamicSharedMemorySize,
         sizeof(real)*6*N_Z
     ));
-#endif
+    #endif
     #endif // DIFFUSION
     #endif // FLUID_BLOCK_SWEEP
 
@@ -426,11 +434,11 @@ int main ()
     real *dev_cfl_rate;
     CUDA_CHECK(gpuMalloc((void**)&dev_cfl_rate, sizeof(real)*N_G));
 
-#ifdef RADIATION
+    #ifdef RADIATION
     // radiation and standalone optical-depth builds require one cumulative optical-depth field
     real *dev_optdepth;
     CUDA_CHECK(gpuMalloc((void**)&dev_optdepth, sizeof(real)*N_G));
-#endif
+    #endif
 
     // saving the initial state enables both direct initialization checks and the later mass-conservation calculation
     save_state("initial", dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
@@ -438,8 +446,8 @@ int main ()
 
     auto recover_velocity = [&]()
     {
-        // conservative transport and diffusion update momentum, so primitives must be reconstructed before any subsequent
-        // operator that reads velocity or specific angular momentum
+        // conservative transport and diffusion update momentum, so primitives must be reconstructed before any
+        // subsequent operator that reads velocity or specific angular momentum
         momentum_getv <<< NB_G, TPB >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_velx, dev_vely, dev_velz
         );
@@ -544,9 +552,9 @@ int main ()
     real clock = 0.0;
     int steps = 0;
 
-#if defined(VERIFY_OPTDEPTH)
-    // optical depth is a spatial quadrature test, not a time integration test; construct the cumulative radial field once,
-    // save it, and leave clock and steps at zero for the metadata record
+    #if defined(VERIFY_OPTDEPTH)
+    // optical depth is a spatial quadrature test, not a time integration test; construct the cumulative radial field
+    // once, save it, and leave clock and steps at zero for the metadata record
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
     CUDA_KERNEL_CHECK("optdepth_calc");
     optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -555,9 +563,10 @@ int main ()
     std::vector<real> optdepth(N_G);
     CUDA_CHECK(gpuMemcpy(optdepth.data(), dev_optdepth, sizeof(real)*N_G, gpuMemcpyDeviceToHost));
     save_array("optdepth_final", optdepth);
-#elif defined(VERIFY_SOURCE_DRAG)
+    #elif defined(VERIFY_SOURCE_DRAG)
     // apply exactly one full source step; the model-local source kernel prescribes gas velocities, stopping times, and
-    // linearly varying forces; its weights come from the production helper and its reference uses high-precision integration
+    // linearly varying forces; its weights come from the production helper and its reference uses high-precision
+    // integration
     source_update <<< NB_G, TPB >>> (
         dev_velx, dev_vely, dev_velz, dev_dustdens, VERIFY_TEND
     );
@@ -568,16 +577,16 @@ int main ()
     CUDA_KERNEL_CHECK("momentum_setv");
     clock = VERIFY_TEND;
     steps = 1;
-#elif defined(VERIFY_RING)
-    // combined ring tests exercise the production operator composition; their target timestep is tied to one quarter of an
-    // azimuthal cell at the fastest equilibrium orbit, then clipped so the final step lands exactly on VERIFY_TEND
-    real dx = (X_MAX - X_MIN)/static_cast<real>(N_X);
+    #elif defined(VERIFY_RING)
+    // combined ring tests exercise the production operator composition; their target timestep is tied to one quarter of
+    // an azimuthal cell at the fastest equilibrium orbit, then clipped so the final step lands exactly on VERIFY_TEND
+    real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
     real omega_max = sqrt((1.0
         #ifdef VERIFY_RING_RADIATION
         - BETA_0
         #endif
-        )*G*M_S/(Y_MIN*Y_MIN*Y_MIN));
-    real dt_target = 0.25*dx/omega_max;
+        )*G*M_S / (Y_MIN*Y_MIN*Y_MIN));
+    real dt_target = 0.25*dx / omega_max;
 
     while (clock < VERIFY_TEND)
     {
@@ -597,8 +606,8 @@ int main ()
         recover_velocity();
 
         #ifdef RADIATION
-        // radiation builds recompute optical depth at the state presented to the centered source operator; the taper is one
-        // in verification runs so the analytical acceleration is active for the entire step
+        // radiation builds recompute optical depth at the state presented to the centered source operator; the taper is
+        // one in verification runs so the analytical acceleration is active for the entire step
         optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
         CUDA_KERNEL_CHECK("optdepth_calc");
         optdepth_csum <<< NB_Y, TPB >>> (dev_optdepth);
@@ -630,52 +639,54 @@ int main ()
         clock += dt;
         steps++;
     }
-#else
+    #else
     // isolated transport and diffusion tests advance only the kernel selected by the model's VERIFY_* macro
     while (clock < VERIFY_TEND)
     {
         real dt;
-#if defined(VERIFY_X_TRANSPORT)
-        // prescribe the azimuthal displacement in cell widths so integer and fractional FARGO shifts can be studied directly
-        real dx = (X_MAX - X_MIN)/static_cast<real>(N_X);
+        #if defined(VERIFY_X_TRANSPORT)
+        // prescribe the azimuthal displacement in cell widths so integer and fractional FARGO shifts can be studied
+        // directly
+        real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
         dt = fmin(static_cast<real>(VERIFY_SHIFT)*dx, VERIFY_TEND - clock);
-#elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)  || defined(VERIFY_Y_OUTFLOW_2D) || defined(VERIFY_Z_TRANSPORT)
+        #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_2D) \
+            || defined(VERIFY_Z_TRANSPORT)
         // radial and polar transport use the current global production CFL condition
         dt = fmin(cfl_step(), VERIFY_TEND - clock);
-#else
+        #else
         // diffusion is implicit, but a resolution-dependent timestep is retained to measure convergence of the complete
         // space-time discretization rather than allowing temporal error to remain fixed as the grid is refined
-        real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+        real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
         real min_length = Y_MIN*(dy - 1.0);
         if (N_Z > 1)
         {
-            min_length = fmin(min_length, Y_MIN*(Z_MAX - Z_MIN)/static_cast<real>(N_Z));
+            min_length = fmin(min_length, Y_MIN*(Z_MAX - Z_MIN) / static_cast<real>(N_Z));
         }
-        real dx_length = Y_MIN*(X_MAX - X_MIN)/static_cast<real>(N_X);
+        real dx_length = Y_MIN*(X_MAX - X_MIN) / static_cast<real>(N_X);
         min_length = fmin(min_length, dx_length);
         dt = fmin(0.25*min_length, VERIFY_TEND - clock);
-#endif
+        #endif
 
         // compile exactly one of these calls into an isolated-kernel test executable
-#if defined(VERIFY_X_TRANSPORT)
+        #if defined(VERIFY_X_TRANSPORT)
         apply_advection_x(dt);
-#elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)  || defined(VERIFY_Y_OUTFLOW_2D)
+        #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH)  || defined(VERIFY_Y_OUTFLOW_2D)
         apply_advection_y(dt);
-#elif defined(VERIFY_Z_TRANSPORT)
+        #elif defined(VERIFY_Z_TRANSPORT)
         apply_advection_z(dt);
-#elif defined(VERIFY_X_DIFFUSION)
+        #elif defined(VERIFY_X_DIFFUSION)
         apply_diffusion_x(dt);
-#elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
+        #elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
         apply_diffusion_y(dt);
-#elif defined(VERIFY_Z_DIFFUSION)
+        #elif defined(VERIFY_Z_DIFFUSION)
         apply_diffusion_z(dt);
-#endif
+        #endif
         clock += dt;
         steps++;
     }
-#endif
+    #endif
 
-#if !defined(VERIFY_OPTDEPTH)
+    #if !defined(VERIFY_OPTDEPTH)
     #ifdef RADIATION
     // save final optical depth for combined radiation cases after the last density update
     optdepth_calc <<< NB_G, TPB >>> (dev_optdepth, dev_dustdens);
@@ -691,10 +702,10 @@ int main ()
     // synchronize and save the final conserved fields and physical velocities for Python validation
     save_state("final", dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,
         dev_velx, dev_vely, dev_velz);
-#endif
+        #endif
 
-    // record the compile-time configuration and realized integration statistics beside the raw binary arrays; Python uses
-    // these values instead of inferring dimensions or final time from filenames and requested parameters
+    // record the compile-time configuration and realized integration statistics beside the raw binary arrays; Python
+    // uses these values instead of inferring dimensions or final time from filenames and requested parameters
     std::ofstream meta(PATH + "meta_N" + std::to_string(VERIFY_RES) + ".json");
     meta << std::setprecision(17)
          << "{\n"
@@ -724,9 +735,9 @@ int main ()
     CUDA_CHECK(gpuFree(dev_adv_work));
     #endif // FLUID_BLOCK_SWEEP
     CUDA_CHECK(gpuFree(dev_cfl_rate));
-#ifdef RADIATION
+    #ifdef RADIATION
     CUDA_CHECK(gpuFree(dev_optdepth));
-#endif
+    #endif
 
     std::cout << "Verification case " << case_name() << " completed at N="
               << VERIFY_RES << " in " << steps << " step(s)." << std::endl;

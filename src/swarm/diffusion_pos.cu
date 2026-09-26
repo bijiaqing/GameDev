@@ -6,7 +6,7 @@
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_pos
 // apply one cylindrical diffusion SDE step while preserving physical Cartesian velocity
 //
@@ -16,7 +16,7 @@
 //   1 reconstruct the physical velocity before spatial redistribution
 //   2 sample azimuthal, cylindrical-radial, and vertical drift-diffusion increments
 //   3 map back to spherical position and reconstruct the stored velocity variables
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
@@ -49,15 +49,15 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
         real vx_cart = vR*cos(x) - vx*sin(x);
         real vy_cart = vR*sin(x) + vx*cos(x);
 
-        auto diffusion = _get_dust_diffusion(x,y,z,
-#ifdef MULTISIZE
+        auto diffusion = _get_dust_diffusion(x, y, z,
+            #ifdef MULTISIZE
             dev_particle[idx].par_size
-#else
+            #else
             S_0
-#endif
-#ifdef IMPORTGAS
-            ,dev_gas_dens
-#endif
+            #endif
+            #ifdef IMPORTGAS
+            , dev_gas_dens
+            #endif
         );
         real nu = diffusion.nu;
         curs rngstate = dev_rngstate[idx];
@@ -103,15 +103,15 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
     real vx_cart = vR*cos(x) - vx*sin(x);
     real vy_cart = vR*sin(x) + vx*cos(x);
 
-    auto diffusion = _get_dust_diffusion(x,y,z,
-#ifdef MULTISIZE
+    auto diffusion = _get_dust_diffusion(x, y, z,
+        #ifdef MULTISIZE
         dev_particle[idx].par_size
-#else
+        #else
         S_0
-#endif
-#ifdef IMPORTGAS
-        ,dev_gas_dens
-#endif
+        #endif
+        #ifdef IMPORTGAS
+        , dev_gas_dens
+        #endif
     );
     real nu = diffusion.nu;
 
@@ -196,6 +196,6 @@ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
     dev_rngstate[idx] = rngstate; // persist the advanced random stream
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // DIFFUSION

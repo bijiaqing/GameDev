@@ -5,25 +5,25 @@
 
 #include <const_defs.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // fluid mesh primitives
-// =========================================================================================================================
+// =====================================================================================================================
 
 // grid spacing
-// -------------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 
 __host__ __device__ __forceinline__
-real _get_dx() { return (X_MAX - X_MIN) / static_cast<real>(N_X); }
+real _get_dx () { return (X_MAX - X_MIN) / static_cast<real>(N_X); }
 
 __host__ __device__ __forceinline__
-real _get_dy() { return pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y)); }
+real _get_dy () { return pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y)); }
 
 __host__ __device__ __forceinline__
-real _get_dz() { return (Z_MAX - Z_MIN) / static_cast<real>(N_Z); }
+real _get_dz () { return (Z_MAX - Z_MIN) / static_cast<real>(N_Z); }
 
 // smallest cylindrical radius covered by the spherical domain
 __host__ __device__ __forceinline__
-real _get_init_Rmin()
+real _get_init_Rmin ()
 {
     if (N_Z == 1) return Y_MIN;
 
@@ -31,14 +31,14 @@ real _get_init_Rmin()
 }
 
 // active geometry
-// -------------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 
 // radial measure power: 2 for a vertically integrated disk and 3 when the polar dimension is active
 __host__ __device__ __forceinline__
-real _get_mesh_dim() { return 2.0 + static_cast<real>(N_Z > 1); }
+real _get_mesh_dim () { return 2.0 + static_cast<real>(N_Z > 1); }
 
 // cell faces and centers
-// -------------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 
 // radial faces and logarithmic center
 __host__ __device__ __forceinline__
@@ -55,7 +55,7 @@ __host__ __device__ __forceinline__
 real _get_zcent (int iz) { return Z_MIN + (static_cast<real>(iz) + 0.5)*_get_dz(); }
 
 // cell measures
-// -------------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 
 // radial face-area factor y^(d-1)
 __host__ __device__ __forceinline__
@@ -86,6 +86,6 @@ __host__ __device__ __forceinline__
 real _get_vol_z (int iz)
 { return (N_Z > 1) ? cos(_get_zface(iz)) - cos(_get_zface(iz + 1)) : 1.0; }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // PARAM_GRID_CUH

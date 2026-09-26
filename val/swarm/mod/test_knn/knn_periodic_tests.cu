@@ -238,10 +238,12 @@ bool run_case (const periodic_case &test)
     std::size_t output_count = test.queries.size()*K;
 
     _morton_gpu_check(gpuMalloc((void**)&dev_point, sizeof(float3)*test.points.size()), "allocate periodic points");
-    _morton_gpu_check(gpuMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()), "allocate periodic queries");
+    _morton_gpu_check(gpuMalloc((void**)&dev_query_point, sizeof(float3)*test.queries.size()),
+        "allocate periodic queries");
     _morton_gpu_check(gpuMalloc((void**)&dev_query_x, sizeof(float)*test.query_x.size()), "allocate query azimuths");
     _morton_gpu_check(gpuMalloc((void**)&dev_near_idx_old, sizeof(int)*output_count), "allocate periodic near_idx_old");
-    _morton_gpu_check(gpuMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count), "allocate periodic near_dist_sq");
+    _morton_gpu_check(gpuMalloc((void**)&dev_near_dist_sq, sizeof(float)*output_count),
+        "allocate periodic near_dist_sq");
     _morton_gpu_check(gpuMalloc((void**)&dev_stack_overflow, sizeof(unsigned int)*test.queries.size()),
         "allocate periodic overflow flags");
     _morton_gpu_check(gpuMalloc((void**)&dev_image_count, sizeof(unsigned int)*test.queries.size()),
@@ -332,7 +334,7 @@ bool run_case (const periodic_case &test)
         }
     }
 
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     _morton_gpu_check(gpuFree(dev_image_count), "release image counts");
     _morton_gpu_check(gpuFree(dev_stack_overflow), "release overflow flags");
     _morton_gpu_check(gpuFree(dev_near_dist_sq), "release neighbor distances");
@@ -340,7 +342,7 @@ bool run_case (const periodic_case &test)
     _morton_gpu_check(gpuFree(dev_query_x), "release query azimuths");
     _morton_gpu_check(gpuFree(dev_query_point), "release query points");
     _morton_gpu_check(gpuFree(dev_point), "release indexed points");
-#else
+    #else
     gpuFree(dev_image_count);
     gpuFree(dev_stack_overflow);
     gpuFree(dev_near_dist_sq);
@@ -348,7 +350,7 @@ bool run_case (const periodic_case &test)
     gpuFree(dev_query_x);
     gpuFree(dev_query_point);
     gpuFree(dev_point);
-#endif
+    #endif
 
     std::cout << (passed ? "PASS  " : "FAIL  ") << test.name << std::endl;
     return passed;

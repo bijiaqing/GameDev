@@ -11,7 +11,8 @@
 #define VAL_DRAG_GAS_VY 0.15
 #define VAL_DRAG_FORCE_Y -0.08
 
-// replace disk-dependent forces and stopping times with constant coefficients that have an exact velocity and path solution
+// replace disk-dependent forces and stopping times with constant coefficients that have an exact velocity and path
+// solution
 // call the production SSA stages with constant gas velocity, stopping time, and radial force
 __device__ __forceinline__
 void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real lz_i,
@@ -24,8 +25,11 @@ void _ssa_substep_2 (real dt, real size, real beta, real lx_i, real vy_i, real l
 {
     _ssa_advance(dt, size, 0.0, VAL_DRAG_GAS_VY, 0.0, beta, lx_i, vy_i, lz_i,
         x_1, y_1, z_1, x_j, y_j, z_j, lx_j, vy_j, lz_j,
-        [] (real, real, real, real, real, real, real &g, real &c, real &t) {
-            g=VAL_DRAG_FORCE_Y; c=0.0; t=0.0;
+        [](real, real, real, real, real, real, real &g, real &c, real &t)
+        {
+            g = VAL_DRAG_FORCE_Y;
+            c = 0.0;
+            t = 0.0;
         });
 }
 

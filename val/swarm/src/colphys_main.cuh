@@ -62,7 +62,9 @@ __global__ void collision_physics (real *result, const swarm *particle, const re
         stokes_large[7 + 2*idx] = boundary[idx]*(1.0 + 1.0e-6);
     }
     for (int idx = 0; idx < turbulence_count; idx++)
+    {
         result[1 + idx] = _get_vrel_t(R, stokes_large[idx], size_ratio*stokes_large[idx], h_g, sigma_g);
+    }
 
     #ifdef CODE_UNIT
     result[17] = 0.0;
@@ -91,7 +93,9 @@ __global__ void collision_physics (real *result, const swarm *particle, const re
     image_particle[2].position = make_double3(+seam_offset, 1.0, image_z);
     image_particle[3].position = make_double3(-seam_offset, 1.0, image_z);
     for (int idx = 0; idx < 4; idx++)
+    {
         image_particle[idx].velocity = make_double3(1.5, 0.2, image_lz);
+    }
     real image_size[4] = {size[0], size[1], size[0], size[1]};
     real image_number[4] = {number[0], number[1], number[0], number[1]};
     int neighbor = _encode_col_neighbor(1, 1);
@@ -156,62 +160,74 @@ int main ()
     int *dev_bad_part;
     real *dev_col_measure;
     unsigned char *dev_col_active;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle),
+        sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_cache_particle), sizeof(*dev_cache_particle)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_cache_particle),
+        sizeof(*dev_cache_particle)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics cache particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_size), sizeof(*dev_size)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_size),
+        sizeof(*dev_size)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics sizes" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_number), sizeof(*dev_number)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_number),
+        sizeof(*dev_number)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics numbers" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_result), sizeof(*dev_result)*(device_result_count)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_result),
+        sizeof(*dev_result)*(device_result_count)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics results" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_col_neighbor), sizeof(*dev_col_neighbor)*(N_P*N_K)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_col_neighbor),
+        sizeof(*dev_col_neighbor)*(N_P*N_K)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics neighbors" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_col_measure), sizeof(*dev_col_measure)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_col_measure),
+        sizeof(*dev_col_measure)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics measures" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_col_active), sizeof(*dev_col_active)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_col_active),
+        sizeof(*dev_col_active)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics active flags" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload collision-physics particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_cache_particle, cache_particle.data(), sizeof(*(dev_cache_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_cache_particle, cache_particle.data(), sizeof(*(dev_cache_particle))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload collision-physics cache particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_size, size.data(), sizeof(*(dev_size))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_size, size.data(), sizeof(*(dev_size))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload collision-physics sizes" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_number, number.data(), sizeof(*(dev_number))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_number, number.data(), sizeof(*(dev_number))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload collision-physics numbers" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -231,12 +247,14 @@ int main ()
 
     // exercise the production search-to-cache handoff before either rate consumer reads it
     int bad_part = 0;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_bad_part), sizeof(*dev_bad_part)*(1)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_bad_part),
+        sizeof(*dev_bad_part)*(1)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics bad-particle flag" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_bad_part, &bad_part, sizeof(*(dev_bad_part))*(1), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_bad_part, &bad_part, sizeof(*(dev_bad_part))*(1),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "clear collision-physics bad-particle flag" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -249,12 +267,14 @@ int main ()
     #ifdef COLLISION_KDTREE
     kdtree_node *dev_kdtree_node;
     kdtree_boxf *dev_kdtree_box;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_kdtree_node), sizeof(*dev_kdtree_node)*(N_T)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_kdtree_node),
+        sizeof(*dev_kdtree_node)*(N_T)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics KD nodes" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_kdtree_box), sizeof(*dev_kdtree_box)*(1)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_kdtree_box),
+        sizeof(*dev_kdtree_box)*(1)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics KD bounds" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -304,24 +324,29 @@ int main ()
     float *dev_morton_posx;
     float *dev_search_dist;
     unsigned int *dev_morton_overflow;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_morton_point), sizeof(*dev_morton_point)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_morton_point),
+        sizeof(*dev_morton_point)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics Morton points" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_morton_posx), sizeof(*dev_morton_posx)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_morton_posx),
+        sizeof(*dev_morton_posx)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics Morton azimuths" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_search_dist), sizeof(*dev_search_dist)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_search_dist),
+        sizeof(*dev_search_dist)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate collision-physics search distances" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_morton_overflow), sizeof(*dev_morton_overflow)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_morton_overflow),
+        sizeof(*dev_morton_overflow)*(N_P)); status != gpuSuccess)
     {
-        std::cerr << "allocate collision-physics Morton overflow flags" << ": " << gpuGetErrorString(status) << std::endl;
+        std::cerr << "allocate collision-physics Morton overflow flags" << ": "
+           << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
     col_site_init <<< NB_P, TPB >>> (
@@ -339,7 +364,8 @@ int main ()
         std::exit(EXIT_FAILURE);
     }
     std::array<float, N_P> search_dist;
-    if (gpuError_t status = gpuMemcpy(search_dist.data(), dev_search_dist, sizeof(*(search_dist.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(search_dist.data(), dev_search_dist, sizeof(*(search_dist.data()))*(N_P),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy collision-physics search distances" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -368,16 +394,20 @@ int main ()
         std::exit(EXIT_FAILURE);
     }
     std::array<unsigned int, N_P> morton_overflow;
-    if (gpuError_t status = gpuMemcpy(morton_overflow.data(), dev_morton_overflow, sizeof(*(morton_overflow.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(morton_overflow.data(), dev_morton_overflow,
+        sizeof(*(morton_overflow.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy collision-physics Morton overflow flags" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
     if (*std::max_element(morton_overflow.begin(), morton_overflow.end()) != 0)
+    {
         throw std::runtime_error("collision-physics Morton cache overflow");
+    }
     #endif // COLLISION_KDTREE
 
-    if (gpuError_t status = gpuMemcpy(&bad_part, dev_bad_part, sizeof(*(&bad_part))*(1), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(&bad_part, dev_bad_part, sizeof(*(&bad_part))*(1),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy collision-physics bad-particle flag" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -404,27 +434,34 @@ int main ()
     }
 
     std::vector<real> result(result_count);
-    if (gpuError_t status = gpuMemcpy(result.data(), dev_result, sizeof(*(result.data()))*(device_result_count), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(result.data(), dev_result, sizeof(*(result.data()))*(device_result_count),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy collision-physics results" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
     std::array<int, N_P*N_K> col_neighbor;
     std::array<real, N_P> col_measure;
-    if (gpuError_t status = gpuMemcpy(col_neighbor.data(), dev_col_neighbor, sizeof(*(col_neighbor.data()))*(N_P*N_K), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(col_neighbor.data(), dev_col_neighbor, sizeof(*(col_neighbor.data()))*(N_P*N_K),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy collision-physics neighbors" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(col_measure.data(), dev_col_measure, sizeof(*(col_measure.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(col_measure.data(), dev_col_measure, sizeof(*(col_measure.data()))*(N_P),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy collision-physics measures" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
     for (int idx = 0; idx < N_P*N_K; idx++)
+    {
         result[device_result_count + idx] = static_cast<real>(col_neighbor[idx]);
+    }
     for (int idx = 0; idx < N_P; idx++)
+    {
         result[device_result_count + N_P*N_K + idx] = col_measure[idx];
+    }
     write_binary("collision_physics", result);
 
     std::ofstream meta(output_path + "meta_N" + std::to_string(VERIFY_RES) + ".json");

@@ -8,7 +8,7 @@
 #include <param_phys.cuh>
 #include <swarm_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: dyn_rate_calc
 // calculate one conservative inverse dynamics timestep from all active local motion and diffusion scales
 //
@@ -19,7 +19,7 @@
 //   2 imported-gas mesh-crossing rates at both temporal endpoints
 //   3 acceleration displacement from gravity, radiation, and centrifugal forces
 //   4 stochastic and deterministic diffusion displacement in every active direction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
@@ -135,18 +135,19 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     #endif // VISC_FLOW
 
     #ifdef DIFFUSION
-#ifdef IMPORTGAS
-    for (int gas_endpoint=0;gas_endpoint<2;++gas_endpoint) {
-#endif
-    auto diffusion = _get_dust_diffusion(x,y,z,
-#ifdef MULTISIZE
+    #ifdef IMPORTGAS
+    for (int gas_endpoint = 0; gas_endpoint < 2; ++gas_endpoint)
+    {
+    #endif
+    auto diffusion = _get_dust_diffusion(x, y, z,
+            #ifdef MULTISIZE
             dev_particle[idx].par_size
-#else
+            #else
             S_0
-#endif
-#ifdef IMPORTGAS
-        ,gas_endpoint ? dev_gas_dens_next : dev_gas_dens
-#endif
+            #endif
+        #ifdef IMPORTGAS
+        , gas_endpoint ? dev_gas_dens_next : dev_gas_dens
+        #endif
     );
     real nu = diffusion.nu;
 
@@ -186,9 +187,9 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
         rate = fmax(rate, 2.0*diff_z / (CFL_DYN*CFL_DYN*cell_z*cell_z));
         rate = fmax(rate, abs(drift_z) / (CFL_DYN*cell_z));
     }
-#ifdef IMPORTGAS
+    #ifdef IMPORTGAS
     }
-#endif
+    #endif
     #endif // DIFFUSION
 
     dev_dyn_rate[idx] = rate;

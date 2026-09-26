@@ -10,7 +10,7 @@
 
 // compute frozen-coefficient drag relaxation and force weights shared by source_update and analytical tests
 __device__ __forceinline__
-void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
+void _get_drag_weights (real dt, real ts, real &drag_relax, real &drag_decay,
     real &force_weight_old, real &force_weight_new)
 {
     real tau = dt / ts;
@@ -23,8 +23,8 @@ void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
         real tau_sq = tau*tau;
         real tau_cb = tau_sq*tau;
 
-        force_weight_old = dt*(0.5 - tau/3.0 + tau_sq/8.0  - tau_cb/30.0);
-        force_weight_new = dt*(0.5 - tau/6.0 + tau_sq/24.0 - tau_cb/120.0);
+        force_weight_old = dt*(0.5 - tau / 3.0 + tau_sq / 8.0 - tau_cb / 30.0);
+        force_weight_new = dt*(0.5 - tau / 6.0 + tau_sq / 24.0 - tau_cb / 120.0);
     }
     else
     {
@@ -34,7 +34,7 @@ void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
 
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // conservative directional transport
 
 #ifdef FLUID_BLOCK_SWEEP
@@ -97,7 +97,7 @@ __global__ void advection_zth (
 
 #endif // FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // transport timestep rate
 
 __global__ void cfl_rate_calc (
@@ -106,7 +106,7 @@ __global__ void cfl_rate_calc (
     const real *dev_dustvelx, const real *dev_dustvely, const real *dev_dustvelz
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 // conservative density diffusion
 
 #ifdef FLUID_BLOCK_SWEEP
@@ -145,7 +145,7 @@ __global__ void diffusion_zth (
 
 #endif // FLUID_BLOCK_SWEEP
 
-// =========================================================================================================================
+// =====================================================================================================================
 // evolved-state diagnostics
 
 __global__ void inf_cell_flag (
@@ -158,7 +158,7 @@ __global__ void inf_cell_flag (
     int *dev_bad_cell
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 // field initialization
 
 __global__ void init_rho_calc (
@@ -172,7 +172,7 @@ __global__ void init_vel_calc (
     #endif // DIFFUSION
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 // primitive and conserved momentum synchronization
 
 __global__ void momentum_getv (
@@ -193,7 +193,7 @@ __global__ void optdepth_calc (real *dev_optdepth, const real *dev_dustdens);
 __global__ void optdepth_csum (real *dev_optdepth);
 #endif // RADIATION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // local drag and external-force update
 
 __global__ void source_update (
@@ -205,6 +205,6 @@ __global__ void source_update (
     real dt
 );
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // FLUID_KERN_CUH

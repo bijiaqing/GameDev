@@ -6,7 +6,7 @@
 #undef get_total_dust_mass
 #undef rand_disk_mono
 #undef save_variable
-inline real get_total_dust_mass(const std::vector<real>&) { return BENCHMARK_MASS; }
+inline real get_total_dust_mass (const std::vector<real>&) { return BENCHMARK_MASS; }
 inline __host__
 void rand_disk_mono (
     real *randposx, real *randposy, real *randposz, real, int count
@@ -40,11 +40,13 @@ void rand_disk_mono (
     }
 }
 
-inline bool save_variable(const std::string &path, real mass) {
+inline bool save_variable (const std::string &path, real mass)
+{
     if (!_production_save_variable(path, mass)) return false;
     std::ofstream file(path, std::ios::app);
     file << "\n[CAMPAIGN]\nSEED = " << SEED
-         << "\nPOSITION_SEED = " << SEED+1 << "\nCOLLISION_SEED = " << SEED+1
-         << "\nUNIT_VOLUME = 1\nGEOMETRY_REUSE = 1\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
+         << "\nPOSITION_SEED = " << SEED + 1 << "\nCOLLISION_SEED = " << SEED + 1
+         << "\nUNIT_VOLUME = 1\nGEOMETRY_REUSE = 1"
+            "\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
     return static_cast<bool>(file);
 }

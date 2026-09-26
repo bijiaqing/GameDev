@@ -36,16 +36,17 @@ int _get_col_image_shift (int image) { return (image == 1) ? -1 : ((image == 2) 
 using kdtree_heap = idx_old_heap<N_K, kdtree_node>;
 #endif // COLLISION_KDTREE
 
-enum KernelType {
+enum KernelType
+{
     CONSTANT_KERNEL = 0,
     LINEAR_KERNEL   = 1,
     PRODUCT_KERNEL  = 2,
     CUSTOM_KERNEL   = 3,
 };
 
-// =========================================================================================================================
+// =====================================================================================================================
 // resolved velocity and KNN geometry
-// =========================================================================================================================
+// =====================================================================================================================
 
 // reconstruct one particle's physical Cartesian velocity from its spherical stored variables
 __device__ __forceinline__
@@ -238,7 +239,8 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g, real sigma_g)
         // regime 2: transition near t_small boundary (t_stop_large ~ t_small) following eq. 26
 
         vrel_sq = vg_sq*(stokes_large - stokes_small) / (stokes_large + stokes_small);
-        vrel_sq *= (stokes_large / (1.0 + re_inv_sqrt / stokes_large) - stokes_small / (1.0 + re_inv_sqrt / stokes_small));
+        vrel_sq *= (stokes_large / (1.0 + re_inv_sqrt / stokes_large) - stokes_small / (1.0 + re_inv_sqrt
+            / stokes_small));
     }
     else if (stokes_large < 5.0*re_inv_sqrt)
     {
@@ -313,7 +315,7 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     );
     // use the analytic pressure-drift speed vn = (dP/dR)/(2 rho Omega), as in mcdust
     real vn = -_get_eta(R, Z, h)*R*omega;
-    real fi = 1.0/(1.0 + si*si), fj = 1.0/(1.0 + sj*sj);
+    real fi = 1.0 / (1.0 + si*si), fj = 1.0 / (1.0 + sj*sj);
     real dvr = 2.0*vn*(si*fi - sj*fj); // benchmark gas radial velocity is zero
     real dvphi = vn*(fi - fj);
     // cap the terminal settling speed at St = 0.5, beyond which grains oscillate about the midplane
@@ -353,9 +355,9 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old,
     );
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // pair collision propensity
-// =========================================================================================================================
+// =====================================================================================================================
 
 // calculate the pair-propensity numerator before division by the local KNN measure
 template <KernelType kernel> __device__ __forceinline__
@@ -445,6 +447,6 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
 
 #endif // COLLISION
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // SWARM_COLLISION_CUH

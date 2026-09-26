@@ -3,7 +3,7 @@
 
 #include <algorithm>        // std::copy, std::lower_bound, std::max, std::minmax_element
 #include <chrono>           // std::chrono::system_clock
-#include <cmath>            // std::abs, std::acos, std::atan2, std::cos, std::erf, std::erfc, std::exp, std::log, std::pow, std::sin, std::sqrt
+#include <cmath>            // std::abs, acos, atan2, cos, erf, erfc, exp, log, pow, sin, sqrt
 #include <cstddef>          // std::size_t
 #include <cstdlib>          // std::exit, EXIT_FAILURE
 #include <ctime>            // std::time_t, std::ctime
@@ -21,9 +21,9 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // host-only mesh coordinates
-// =========================================================================================================================
+// =====================================================================================================================
 
 inline __host__
 real _get_ycent (int iy) { return Y_MIN*std::pow(_get_dy(), static_cast<real>(iy) + 0.5); }
@@ -38,9 +38,9 @@ real _get_sy (real y) { return std::pow(y, _get_mesh_dim()) / _get_mesh_dim(); }
 inline __host__
 real _get_sz (real z) { return -std::cos(z); }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // elementary random profiles
-// =========================================================================================================================
+// =====================================================================================================================
 
 // share one deterministic host generator across all initialization samplers
 extern std::mt19937 rand_generator;
@@ -82,9 +82,9 @@ void rand_powerlaw (real *randsize, int count, real p_min, real p_max, real powe
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // smoothed power-law profiles
-// =========================================================================================================================
+// =====================================================================================================================
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
 inline static __host__
@@ -236,9 +236,13 @@ real _get_normal_mass (real Z_lo, real Z_hi, real H_d)
 
     real inv_width = 1.0 / (std::sqrt(2.0)*H_d);
     if (Z_lo >= 0.0)
+    {
         return 0.5*(std::erfc(Z_lo*inv_width) - std::erfc(Z_hi*inv_width));
+    }
     if (Z_hi <= 0.0)
+    {
         return 0.5*(std::erfc(-Z_hi*inv_width) - std::erfc(-Z_lo*inv_width));
+    }
 
     return 0.5*(std::erf(Z_hi*inv_width) - std::erf(Z_lo*inv_width));
 }
@@ -486,9 +490,9 @@ real get_total_dust_mass (const std::vector <real> &mass_bank)
     return mass_bank[0];
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // disk position sampling
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifndef IMPORTGAS
 // invert one linearly interpolated radial CDF
@@ -607,14 +611,15 @@ void rand_disk_poly (real *randposx, real *randposy, real *randposz, const real 
 #endif // MULTISIZE && DIFFUSION
 #endif // !IMPORTGAS
 
-// =========================================================================================================================
+// =====================================================================================================================
 // imported dust distribution
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef IMPORTGAS
 // sample positions from imported gas density times dust-to-gas ratio and exact cell measure
 inline __host__
-void rand_from_file (real *randposx, real *randposy, real *randposz, int count, const real *gas_dens, const real *epsilon)
+void rand_from_file (real *randposx, real *randposy, real *randposz, int count, const real *gas_dens,
+    const real *epsilon)
 {
     std::uniform_real_distribution<real> random(0.0, 1.0);
 
@@ -639,20 +644,28 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 
                 int idx_cell = ix + iy*N_X + iz*N_X*N_Y;
                 if (!std::isfinite(gas_dens[idx_cell]) || gas_dens[idx_cell] < 0.0)
+                {
                     throw std::runtime_error("invalid imported gas density at cell " + std::to_string(idx_cell));
+                }
                 if (!std::isfinite(epsilon[idx_cell]) || epsilon[idx_cell] < 0.0)
+                {
                     throw std::runtime_error("invalid imported dust-to-gas ratio at cell " + std::to_string(idx_cell));
+                }
 
                 cell_mass[idx_cell] = gas_dens[idx_cell]*epsilon[idx_cell]*cell_measure;
                 if (!std::isfinite(cell_mass[idx_cell]))
+                {
                     throw std::runtime_error("nonfinite imported dust mass at cell " + std::to_string(idx_cell));
+                }
                 total_mass += cell_mass[idx_cell];
             }
         }
     }
 
     if (!std::isfinite(total_mass) || total_mass <= 0.0)
+    {
         throw std::runtime_error("imported dust profile has zero or nonfinite total mass");
+    }
 
     // build the cell-mass cumulative distribution
     std::vector <real> cdf(N_G + 1);
@@ -700,7 +713,8 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
         real s_y = s_y0 + (s_y1 - s_y0)*random(rand_generator);
 
         // sample active azimuth uniformly within the selected cell and lock an inactive azimuth
-        randposx[idx] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(ix) + random(rand_generator)) : 0.5*(X_MIN + X_MAX);
+        randposx[idx] = (N_X > 1) ? X_MIN + _get_dx()*(static_cast<real>(ix) + random(rand_generator)) : 0.5*(X_MIN
+            + X_MAX);
         randposy[idx] = std::pow(mesh_dim*s_y, 1.0 / mesh_dim);
         if (N_Z > 1)
         {
@@ -718,9 +732,9 @@ void rand_from_file (real *randposx, real *randposy, real *randposz, int count, 
 }
 #endif // IMPORTGAS
 
-// =========================================================================================================================
+// =====================================================================================================================
 // cuda error handling
-// =========================================================================================================================
+// =====================================================================================================================
 
 inline __host__
 void cuda_fail (gpuError_t status, const char *operation, const char *file, int line)
@@ -748,9 +762,9 @@ do {                                                                            
     { cuda_fail(cuda_status_, KERNEL_NAME " kernel launch", __FILE__, __LINE__); }  \
 } while (0)
 
-// =========================================================================================================================
+// =====================================================================================================================
 // output timing
-// =========================================================================================================================
+// =====================================================================================================================
 
 // calculate a nonnegative integer power without floating-point roundoff
 inline __host__
@@ -784,9 +798,9 @@ real _get_dt_out (int idx_file)
     #endif // LOGTIMING
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // binary file I/O
-// =========================================================================================================================
+// =====================================================================================================================
 
 constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
 
@@ -913,9 +927,9 @@ void load_velocity_as_sam (swarm *particle)
     }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // file naming, loading, and metadata
-// =========================================================================================================================
+// =====================================================================================================================
 
 // format a frame index with the zero padding used by binary output files
 inline __host__
@@ -977,7 +991,8 @@ bool load_epsilon (const std::string &path, int idx_file, real *epsilon)
 
 // load density and all three linear velocity components for one gas frame
 inline __host__
-bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real *gas_velx, real *gas_vely, real *gas_velz)
+bool load_gas_data (const std::string &path, int idx_file, real *gas_dens, real *gas_velx, real *gas_vely,
+    real *gas_velz)
 {
     std::string file_name;
     bool success = true;
@@ -1169,9 +1184,9 @@ bool save_variable (const std::string &file_name, real total_dust_mass)
     return file.good();
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // main-loop file transfers
-// =========================================================================================================================
+// =====================================================================================================================
 
 // save the complete particle checkpoint and its stochastic state
 inline __host__
@@ -1326,9 +1341,9 @@ do {                                                                            
 } while(0)
 #endif // RADIATION
 
-// =========================================================================================================================
+// =====================================================================================================================
 // main-loop console output
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef TRANSPORT
 #define PRINT_TITLE_TRANSPORT()             \
@@ -1397,7 +1412,7 @@ PRINT_VALUE_TRANSPORT();                    \
 PRINT_VALUE_COLLISION();                    \
 std::cout << std::endl;
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 
 #ifndef HIP_CHECK

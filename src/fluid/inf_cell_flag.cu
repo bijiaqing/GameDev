@@ -16,8 +16,10 @@ void inf_cell_flag (
 
     // test every evolved field in the current cell
     bool finite = isfinite(dev_dustdens[idx_cell]);
-    finite = finite && isfinite(dev_dustmomx[idx_cell]) && isfinite(dev_dustmomy[idx_cell]) && isfinite(dev_dustmomz[idx_cell]);
-    finite = finite && isfinite(dev_dustvelx[idx_cell]) && isfinite(dev_dustvely[idx_cell]) && isfinite(dev_dustvelz[idx_cell]);
+    finite = finite && isfinite(dev_dustmomx[idx_cell]) && isfinite(dev_dustmomy[idx_cell])
+        && isfinite(dev_dustmomz[idx_cell]);
+    finite = finite && isfinite(dev_dustvelx[idx_cell]) && isfinite(dev_dustvely[idx_cell])
+        && isfinite(dev_dustvelz[idx_cell]);
 
     #ifdef RADIATION
     finite = finite && isfinite(dev_optdepth[idx_cell]);

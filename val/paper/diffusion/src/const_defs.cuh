@@ -33,6 +33,6 @@ const int LIN_BASE = 1;
 struct swarm { real3 position; real3 velocity; };
 static_assert(sizeof(swarm) == 6*sizeof(real), "analysis expects six packed doubles per particle");
 const int TPB = 64;
-const int NB_P = N_P/TPB + 1, NB_G = N_G/TPB + 1;
-const int NB_X = N_Y*N_Z/TPB + 1, NB_Y = N_X*N_Z/TPB + 1;
+const int NB_P = N_P / TPB + 1, NB_G = N_G / TPB + 1;
+const int NB_X = N_Y*N_Z / TPB + 1, NB_Y = N_X*N_Z / TPB + 1;
 #endif

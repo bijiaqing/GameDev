@@ -54,7 +54,7 @@ real compact_bump (real value, real lower, real upper)
     real center = 0.5*(lower + upper);
     real half_width = 0.5*(upper - lower);
     real coordinate = (value - center) / half_width;
-    return exp(1.0 - 1.0/(1.0 - coordinate*coordinate));
+    return exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -88,7 +88,7 @@ int main ()
     std::vector<real> ppm_weight_z(4*(N_Z + 1));
     ppm_geometry_weights_calc(ppm_weight_y.data(), ppm_weight_z.data());
 
-    real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
     for (int iz = 0; iz < N_Z; iz++)
     {
@@ -151,12 +151,14 @@ int main ()
     GPU_CHECK(gpuMemcpy(dev_dustmomx, dustmomx.data(), sizeof(*(dev_dustmomx))*(N_G), gpuMemcpyHostToDevice));
     GPU_CHECK(gpuMemcpy(dev_dustmomy, dustmomy.data(), sizeof(*(dev_dustmomy))*(N_G), gpuMemcpyHostToDevice));
     GPU_CHECK(gpuMemcpy(dev_dustmomz, dustmomz.data(), sizeof(*(dev_dustmomz))*(N_G), gpuMemcpyHostToDevice));
-    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()), gpuMemcpyHostToDevice));
+    GPU_CHECK(gpuMemcpy(dev_ppm_weight_z, ppm_weight_z.data(), sizeof(*(dev_ppm_weight_z))*(ppm_weight_z.size()),
+        gpuMemcpyHostToDevice));
 
     #ifdef FLUID_BLOCK_SWEEP
     real *dev_adv_work = nullptr;
-    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work), sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
-    #endif // FLUID_BLOCK_SWEEP
+    GPU_CHECK(gpuMalloc(reinterpret_cast<void **>(&dev_adv_work),
+        sizeof(*dev_adv_work)*(static_cast<std::size_t>(BLOCK_ADV_FIELDS)*N_G)));
+        #endif // FLUID_BLOCK_SWEEP
 
     real max_rate;
     #ifdef VERIFY_Z_OUTFLOW

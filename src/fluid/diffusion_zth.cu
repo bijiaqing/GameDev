@@ -4,7 +4,7 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_zth
 // purpose: polar diffusion of dust density with spherical-geometry conservative momentum transport
 //
@@ -15,7 +15,7 @@
 //   2 positivity-controlled subcycling and tridiagonal solution
 //   3 time-centred diffusive mass flux construction
 //   4 donor-state momentum transport with the diffusing mass
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
@@ -111,10 +111,13 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 real cn_i = -cn_lower[iz];
                 real cn_o = -cn_upper[iz];
 
-                real rhod_prev = (iz > 0)       ? rhod[iz - 1] / _get_diffusion_weight(y, _get_zcent(iz - 1)) : rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz));
-                real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) : rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz));
+                real rhod_prev = (iz > 0)       ? rhod[iz - 1] / _get_diffusion_weight(y, _get_zcent(iz - 1)) : rhod[iz]
+                    / _get_diffusion_weight(y, _get_zcent(iz));
+                real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) : rhod[iz]
+                    / _get_diffusion_weight(y, _get_zcent(iz));
 
-                rhod_rhs[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz)) + cn_o*rhod_next;
+                rhod_rhs[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz))
+                    + cn_o*rhod_next;
             }
 
             // initialize the Thomas forward elimination
@@ -140,7 +143,8 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real mass_flux[N_Z], moment_flux[N_Z];
 
-            // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary fluxes
+            // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary
+            // fluxes
             for (int iz = 0; iz < N_Z; iz++)
             {
                 if (iz == N_Z - 1)
@@ -154,7 +158,8 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 real cn_o = -cn_upper[iz];
 
                 mass_flux[iz]  = -(_get_diffusion_weight(y, _get_zcent(iz))*cn_o*y*vol_z / dt_sub);
-                mass_flux[iz] *= (rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) - rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz))) + (rhod_work[iz + 1] - rhod_work[iz]);
+                mass_flux[iz] *= (rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) - rhod[iz]
+                    / _get_diffusion_weight(y, _get_zcent(iz))) + (rhod_work[iz + 1] - rhod_work[iz]);
             }
 
             // bound total outward mass from each old polar donor using its spherical line measure

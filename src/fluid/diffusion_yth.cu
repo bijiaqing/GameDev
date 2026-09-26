@@ -4,7 +4,7 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_yth
 // purpose: radial diffusion of dust density with geometry-aware conservative momentum transport
 //
@@ -15,7 +15,7 @@
 //   2 positivity-controlled subcycling and tridiagonal solution
 //   3 time-centred diffusive mass flux construction
 //   4 donor-state momentum transport with the diffusing mass
-// =========================================================================================================================
+// =====================================================================================================================
 
 __device__ __forceinline__
 real _thread_dr_cent_i (int iy) { return _get_ycent(iy)*(_get_dy() - 1.0) / _get_dy(); }
@@ -109,10 +109,13 @@ void diffusion_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 real cn_i = -cn_lower[iy];
                 real cn_o = -cn_upper[iy];
 
-                real rhod_prev = (iy > 0)       ? rhod[iy - 1] / _get_diffusion_weight(_get_ycent(iy - 1), z) : rhod[iy] / _get_diffusion_weight(_get_ycent(iy), z);
-                real rhod_next = (iy < N_Y - 1) ? rhod[iy + 1] / _get_diffusion_weight(_get_ycent(iy + 1), z) : rhod[iy] / _get_diffusion_weight(_get_ycent(iy), z);
+                real rhod_prev = (iy > 0)       ? rhod[iy - 1] / _get_diffusion_weight(_get_ycent(iy - 1), z) : rhod[iy]
+                    / _get_diffusion_weight(_get_ycent(iy), z);
+                real rhod_next = (iy < N_Y - 1) ? rhod[iy + 1] / _get_diffusion_weight(_get_ycent(iy + 1), z) : rhod[iy]
+                    / _get_diffusion_weight(_get_ycent(iy), z);
 
-                rhod_rhs[iy] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iy] / _get_diffusion_weight(_get_ycent(iy), z) + cn_o*rhod_next;
+                rhod_rhs[iy] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iy] / _get_diffusion_weight(_get_ycent(iy), z)
+                    + cn_o*rhod_next;
             }
 
             // initialize the Thomas forward elimination
@@ -138,7 +141,8 @@ void diffusion_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real mass_flux[N_Y], moment_flux[N_Y];
 
-            // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary fluxes
+            // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary
+            // fluxes
             for (int iy = 0; iy < N_Y; iy++)
             {
                 if (iy == N_Y - 1)
@@ -152,7 +156,8 @@ void diffusion_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 real cn_o = -cn_upper[iy];
 
                 mass_flux[iy]  = -(_get_diffusion_weight(_get_ycent(iy), z)*cn_o*vol_y / dt_sub);
-                mass_flux[iy] *= (rhod[iy + 1] / _get_diffusion_weight(_get_ycent(iy + 1), z) - rhod[iy] / _get_diffusion_weight(_get_ycent(iy), z)) + (rhod_work[iy + 1] - rhod_work[iy]);
+                mass_flux[iy] *= (rhod[iy + 1] / _get_diffusion_weight(_get_ycent(iy + 1), z) - rhod[iy]
+                    / _get_diffusion_weight(_get_ycent(iy), z)) + (rhod_work[iy + 1] - rhod_work[iy]);
             }
 
             // bound total outward mass from each old radial donor using its finite-volume measure

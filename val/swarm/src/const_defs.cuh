@@ -35,13 +35,15 @@ constexpr real R_0 = 1.0;
 constexpr real S_0 = 1.0;
 
 // keep publication samples large only where stochastic statistics require them
-#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D)  || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D)
+#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) || defined(TEST_COLCHAIN_WEDGE_2D) \
+    || defined(TEST_COLCHAIN_3D)
 constexpr int N_P = 2048;
 #elif defined(TEST_ORBIT_ECC_2D) || defined(TEST_ORBIT_BETA_2D) || defined(TEST_ORBIT_INC_3D)
 constexpr int N_P = 4;
 #elif defined(TEST_DRAG_PATH_1D)
 constexpr int N_P = 3;
-#elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D)  || defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
+#elif defined(TEST_DIFFUSION_1D) || defined(TEST_DIFFUSION_2D) || defined(TEST_DIFFUSION_3D) \
+    || defined(TEST_DIFFUSION_WEDGE_2D) || defined(TEST_DIFFUSION_WEDGE_3D)
 constexpr int N_P = 16*VERIFY_RES*VERIFY_RES;
 #elif defined(TEST_INITIAL_3D)
 constexpr int N_P = 65536;
@@ -104,7 +106,8 @@ constexpr real Y_MAX = 1.5;
 #ifdef TEST_INITIAL_3D
 constexpr real Z_MIN = 0.5*M_PI - 0.01;
 constexpr real Z_MAX = 0.5*M_PI + 0.01;
-#elif defined(TEST_ORBIT_INC_3D) || defined(TEST_DIFFUSION_3D)  || defined(TEST_DIFFUSION_WEDGE_3D) || defined(TEST_COLCHAIN_3D)  || defined(TEST_COLPHYS_3D)
+#elif defined(TEST_ORBIT_INC_3D) || defined(TEST_DIFFUSION_3D) || defined(TEST_DIFFUSION_WEDGE_3D) \
+    || defined(TEST_COLCHAIN_3D) || defined(TEST_COLPHYS_3D)
 constexpr real Z_MIN = 0.35;
 constexpr real Z_MAX = M_PI - 0.35;
 #else
@@ -185,12 +188,14 @@ constexpr real REYNOLDS_0 = 1.0e8;
 constexpr real M_MOL = 2.3*1.66054e-24;
 constexpr real X_SEC = 2.0e-15;
 #endif
-#if defined(TEST_COLCHAIN_FRAG_2D) || defined(TEST_COLCHAIN_WEDGE_2D)  || defined(TEST_COLPHYS_CODE)  || defined(TEST_COLPHYS_CGS) || defined(TEST_COLPHYS_3D)
+#if defined(TEST_COLCHAIN_FRAG_2D) || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLPHYS_CODE) \
+    || defined(TEST_COLPHYS_CGS) || defined(TEST_COLPHYS_3D)
 constexpr int COAG_KERNEL = 3;
 #else
 constexpr int COAG_KERNEL = 0;
 #endif
-#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D)  || defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_3D)
+#if defined(TEST_COLCHAIN_2D) || defined(TEST_COLCHAIN_FRAG_2D) || defined(TEST_COLCHAIN_WEDGE_2D) \
+    || defined(TEST_COLCHAIN_3D)
 constexpr int N_K = 200;
 #else
 constexpr int N_K = 2;
@@ -255,10 +260,10 @@ struct swarm
 {
     real3 position;
     real3 velocity;
-#ifdef MULTISIZE
+    #ifdef MULTISIZE
     real par_size;
     real par_numr;
-#endif
+    #endif
 };
 
 #ifdef COLLISION_KDTREE
@@ -275,7 +280,8 @@ struct kdtree_traits
     using point_t = float3;
     enum { has_explicit_dim = true };
     static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
-    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node,
+        int dim) { return kdtree::get_coord(node.cartesian, dim); }
     static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
     static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
 };

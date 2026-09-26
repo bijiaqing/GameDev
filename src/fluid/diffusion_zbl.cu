@@ -4,10 +4,10 @@
 #include <param_phys.cuh>
 #include <fluid_kern.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_zbl
 // purpose: solve spherical polar Crank-Nicolson diffusion cooperatively in block-shared memory
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
@@ -99,9 +99,12 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real cn_i = -cn_lower[iz];
             real cn_o = -cn_upper[iz];
-            real rhod_prev = (iz > 0) ? rhod[iz - 1] / _get_diffusion_weight(y, _get_zcent(iz - 1)) : rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz));
-            real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) : rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz));
-            rhod_work[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz)) + cn_o*rhod_next;
+            real rhod_prev = (iz > 0) ? rhod[iz - 1] / _get_diffusion_weight(y, _get_zcent(iz - 1)) : rhod[iz]
+                / _get_diffusion_weight(y, _get_zcent(iz));
+            real rhod_next = (iz < N_Z - 1) ? rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) : rhod[iz]
+                / _get_diffusion_weight(y, _get_zcent(iz));
+            rhod_work[iz] = cn_i*rhod_prev + (1.0 - cn_i - cn_o)*rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz))
+                + cn_o*rhod_next;
         }
         __syncthreads();
 
@@ -134,7 +137,8 @@ void diffusion_zbl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             {
                 real cn_o = -cn_upper[iz];
                 temp_work[iz] = -(_get_diffusion_weight(y, _get_zcent(iz))*cn_o*y*_get_vol_z(iz) / dt_sub)*
-                    ((rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) - rhod[iz] / _get_diffusion_weight(y, _get_zcent(iz))) + (rhod_work[iz + 1] - rhod_work[iz]));
+                    ((rhod[iz + 1] / _get_diffusion_weight(y, _get_zcent(iz + 1)) - rhod[iz] / _get_diffusion_weight(y,
+                    _get_zcent(iz))) + (rhod_work[iz + 1] - rhod_work[iz]));
             }
         }
         __syncthreads();

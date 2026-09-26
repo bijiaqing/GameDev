@@ -2,11 +2,11 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_zbl
 // purpose: reproduce the thread-sweep polar SSPRK and PPM update with one cooperative block per column
 // workspace: reuse 12 explicit full-grid fields and retain serial invariant-domain correction order within each column
-// =========================================================================================================================
+// =====================================================================================================================
 
 __device__ __forceinline__
 void _block_z_lowflux (

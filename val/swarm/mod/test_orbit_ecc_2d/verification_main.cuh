@@ -12,8 +12,8 @@
 #include <swarm_kern.cuh>
 
 // test-only driver for non-circular, drag-free production transport
-// four particles start at different orbital phases to exercise radial and azimuthal coupling, while the model-local transport
-// specialization removes gas drag so the final state can be compared directly with Kepler's equation
+// four particles start at different orbital phases to exercise radial and azimuthal coupling, while the model-local
+// transport specialization removes gas drag so the final state can be compared directly with Kepler's equation
 
 namespace
 {
@@ -21,7 +21,8 @@ const std::string output_path = PATH_OUT;
 
 real eccentric_anomaly (real mean_anomaly, real eccentricity)
 {
-    // solve Kepler's equation only to construct initial conditions; the GPU evolution never calls this host reference routine
+    // solve Kepler's equation only to construct initial conditions; the GPU evolution never calls this host reference
+    // routine
     real anomaly = mean_anomaly;
     for (int iteration = 0; iteration < 20; iteration++)
     {
@@ -56,24 +57,26 @@ int main ()
         real E = eccentric_anomaly(mean_initial[idx], eccentricity);
         real x = atan2(sqrt(1.0 - eccentricity*eccentricity)*sin(E), cos(E) - eccentricity);
         real y = semimajor*(1.0 - eccentricity*cos(E));
-        real vy = sqrt(G*M_S/semimajor)*eccentricity*sin(E)/(1.0 - eccentricity*cos(E));
+        real vy = sqrt(G*M_S / semimajor)*eccentricity*sin(E) / (1.0 - eccentricity*cos(E));
         particle[idx].position = make_double3(x, y, 0.5*M_PI);
         particle[idx].velocity = make_double3(angular_momentum, vy, 0.0);
         mean_anomaly[idx] = mean_initial[idx];
     }
 
     swarm *dev_particle;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle),
+        sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    real dt = time_end/static_cast<real>(VERIFY_RES);
+    real dt = time_end / static_cast<real>(VERIFY_RES);
     // treat VERIFY_RES as a temporal refinement count rather than a particle or mesh resolution
     for (int step = 0; step < VERIFY_RES; step++)
     {
@@ -89,7 +92,8 @@ int main ()
         std::cerr << "eccentric Kepler transport" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy eccentric-orbit particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);

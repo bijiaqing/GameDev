@@ -4,7 +4,7 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: diffusion_xth
 // purpose: periodic azimuthal diffusion of dust density with conservative momentum transport
 //
@@ -15,7 +15,7 @@
 //   2 cyclic tridiagonal solution by the Sherman-Morrison formula
 //   3 time-centred diffusive mass flux construction
 //   4 donor-state momentum transport with the diffusing mass
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void diffusion_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,

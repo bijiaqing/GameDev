@@ -23,15 +23,17 @@ void inf_rate_flag (const real *dev_col_rate, const real *dev_col_dist, int *dev
     if (idx >= N_P) return;
 
     if (!isfinite(dev_col_rate[idx]) || !isfinite(dev_col_dist[idx]))
+    {
         atomicCAS(dev_bad_part, 0, idx + 1);
+    }
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: col_rate_calc
 // calculate each representative particle's total local collision propensity from its K nearest neighbors
 //
 // parallelization: one KD-tree thread or one Morton block with cooperative search and pair evaluation
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef COLLISION_KDTREE
 __global__
@@ -203,12 +205,12 @@ void col_rate_calc (real *dev_col_rate, real *dev_col_dist, unsigned int *dev_mo
 
 #ifdef KNN_CACHE
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel overload: col_rate_calc
 // recalculate frozen Bernoulli rates from the persistent physical-neighbor cache
 //
 // parallelization: one KD-tree thread or one Morton block per representative particle
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef COLLISION_KDTREE
 __global__
@@ -317,6 +319,6 @@ void col_rate_calc (real *dev_col_rate, const swarm *dev_particle,
 
 #endif // KNN_CACHE
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // COLLISION

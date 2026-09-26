@@ -113,7 +113,7 @@ int main (int argc, char **argv)
             int idx_bad = bad_cell - 1;
             int ix_bad = idx_bad % N_X;
             int iy_bad = (idx_bad / N_X) % N_Y;
-            int iz_bad = idx_bad / (N_X * N_Y);
+            int iz_bad = idx_bad / (N_X*N_Y);
 
             std::cerr
             << "Error: non-finite simulation state at cell ("
@@ -242,7 +242,8 @@ int main (int argc, char **argv)
     auto recalc_dt_cfl = [&](bool verbose)
     {
         cfl_rate_calc <<< NB_X, TPB >>> (
-            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely, dev_dustvelz
+            dev_cfl_rate, dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz, dev_dustvelx, dev_dustvely,
+            dev_dustvelz
         );
         GPU_KERNEL_CHECK("cfl_rate_calc");
 

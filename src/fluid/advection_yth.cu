@@ -2,9 +2,10 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_yth
-// purpose: radial transport with nonuniform PPM, pressureless HLL fluxes, open boundaries, and invariant-domain limiting
+// purpose: radial transport with nonuniform PPM, pressureless HLL fluxes, open boundaries, and invariant-domain
+// limiting
 //
 // parallelization: one thread per azimuthal-polar column with a serial loop over N_Y radial cells
 //
@@ -13,7 +14,7 @@
 //   2 PPM high-order and cell-centred low-order HLL flux construction
 //   3 geometry-aware low-order conservative update
 //   4 invariant-domain-limited antidiffusive correction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void advection_yth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,

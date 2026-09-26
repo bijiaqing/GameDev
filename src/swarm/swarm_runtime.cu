@@ -33,7 +33,7 @@ std::mt19937 rand_generator;
 
 const std::string PATH = PATH_OUT; // convert the Makefile string literal to the output-path string used below
 
-// =========================================================================================================================
+// =====================================================================================================================
 // main program
 // initialize or resume a swarm and advance enabled operators between successive output frames
 //
@@ -43,13 +43,15 @@ const std::string PATH = PATH_OUT; // convert the Makefile string literal to the
 //   3 full staggered semi-analytic transport step with optional midpoint radiation reconstruction
 //   4 half spatial-diffusion step
 //   5 half collision step
-// =========================================================================================================================
+// =====================================================================================================================
 
 int main (int argc, char **argv)
 {
     #ifdef HALF_DISK
     if (N_Z > 1 && std::fabs(Z_MAX - 0.5*M_PI) > 16.0*std::numeric_limits<real>::epsilon())
+    {
         throw std::runtime_error("HALF_DISK requires Z_MAX = pi/2");
+    }
     #endif // HALF_DISK
 
     std::vector <real> mass_bank;
@@ -349,15 +351,15 @@ int main (int argc, char **argv)
     #if defined(COLLISION) && !defined(BERNOULLI)
     local_workspace local(PATH);
     bool local_geometry_valid = false;
-#ifdef COL_DIAGNOSTICS
+    #ifdef COL_DIAGNOSTICS
     col_controller_summary col_summary;
-#endif
+    #endif
     #endif // COLLISION && !BERNOULLI
 
     // size/weight changes refresh collision rates without rebuilding spatial neighbors
     // collision-only runs keep this geometry across output intervals; transport or diffusion invalidates it
     // invalidate the search package only when a position update ends its current geometry epoch
-    auto invalidate_col_geometry = [&] ()
+    auto invalidate_col_geometry = [&]()
     {
         col_geom_valid = false;
         #ifndef BERNOULLI
@@ -366,7 +368,7 @@ int main (int argc, char **argv)
     };
 
     // evolve collisions over a fixed-position interval with the configured collision integrator
-    auto evolve_collisions = [&] (real duration)
+    auto evolve_collisions = [&](real duration)
     {
 
         // geometry reuse must not suppress the per-operator nonfinite-state failure path
@@ -436,7 +438,7 @@ int main (int argc, char **argv)
             #if !defined(BERNOULLI) || defined(KNN_CACHE)
             // retain fixed physical neighbors while collision properties continue to evolve
             #ifdef COLLISION_KDTREE
-            col_cache_get <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (
+            col_cache_get <<< (N_T + kdtree_heap::threads - 1) / kdtree_heap::threads, kdtree_heap::threads >>> (
                 dev_col_neighbor, dev_col_measure, dev_kdtree_node, dev_kdtree_box,
                 dev_col_active, dev_particle, image_dist_min
             );
@@ -452,7 +454,9 @@ int main (int argc, char **argv)
                 morton_overflow_ptr, morton_overflow_ptr + N_P
             );
             if (max_morton_overflow != 0)
+            {
                 throw std::runtime_error("Morton traversal stack overflow in col_cache_get");
+            }
             #endif // COLLISION_KDTREE
             #endif // FROZEN_BATH || KNN_CACHE
 
@@ -505,7 +509,8 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_rate_calc <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_col_rate, dev_col_dist, dev_particle,
+            col_rate_calc <<< (N_T + kdtree_heap::threads - 1)
+                / kdtree_heap::threads, kdtree_heap::threads >>> (dev_col_rate, dev_col_dist, dev_particle,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -552,7 +557,9 @@ int main (int argc, char **argv)
                 morton_overflow_ptr, morton_overflow_ptr + N_P
             );
             if (max_morton_overflow != 0)
+            {
                 throw std::runtime_error("Morton traversal stack overflow in col_rate_calc");
+            }
             #endif // COLLISION_MORTON && !KNN_CACHE
 
             // use the largest total propensity to control every representative's event probability
@@ -586,7 +593,9 @@ int main (int argc, char **argv)
             );
             #else  // DIRECT_BERNOULLI
             #ifdef COLLISION_KDTREE
-            col_event_run <<< (N_T + kdtree_heap::threads - 1)/kdtree_heap::threads, kdtree_heap::threads >>> (dev_particle, dev_rngstate, dev_col_rate, dev_col_dist,
+            col_event_run <<< (N_T + kdtree_heap::threads - 1)
+                / kdtree_heap::threads, kdtree_heap::threads >>> (dev_particle, dev_rngstate, dev_col_rate,
+                dev_col_dist,
                 dev_col_active, dev_size_old, dev_numr_old, dev_kdtree_node, dev_kdtree_box,
                 #ifdef IMPORTGAS
                 dev_gas_dens,
@@ -616,13 +625,17 @@ int main (int argc, char **argv)
                 morton_overflow_ptr, morton_overflow_ptr + N_P
             );
             if (max_morton_overflow != 0)
+            {
                 throw std::runtime_error("Morton traversal stack overflow in col_event_run");
+            }
             #endif // COLLISION_MORTON && !KNN_CACHE
 
             real elapsed_old = elapsed;
             elapsed += dt_col;
             if (!(elapsed > elapsed_old))
+            {
                 throw std::runtime_error("collision timestep cannot advance the operator clock");
+            }
             clock_dyn = elapsed;
             count_col++;
         }
@@ -650,9 +663,9 @@ int main (int argc, char **argv)
         #if defined(COLLISION) && !defined(BERNOULLI)
         // restart controller memory at checkpoint boundaries while retaining it across split operators
         std::fill(local.state.begin(), local.state.end(), col_bath_state{});
-#ifdef COL_DIAGNOSTICS
+        #ifdef COL_DIAGNOSTICS
         col_summary = col_controller_summary{};
-#endif
+        #endif
         #endif // COLLISION && !BERNOULLI
 
         PRINT_TITLE_TO_SCREEN();
@@ -695,9 +708,9 @@ int main (int argc, char **argv)
             #ifdef DIFFUSION
             // apply the first half of the spatial diffusion operator
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
-#ifdef IMPORTGAS
+                #ifdef IMPORTGAS
                 , dev_gas_dens
-#endif
+                #endif
             );
             GPU_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
@@ -753,9 +766,9 @@ int main (int argc, char **argv)
             #ifdef DIFFUSION
             // apply the second half of the spatial diffusion operator
             diffusion_pos <<< NB_P, TPB >>> (dev_particle, dev_rngstate, 0.5*dt_dyn
-#ifdef IMPORTGAS
+                #ifdef IMPORTGAS
                 , dev_gas_dens
-#endif
+                #endif
             );
             GPU_KERNEL_CHECK("diffusion_pos");
             #ifdef COLLISION
@@ -825,14 +838,14 @@ int main (int argc, char **argv)
         #endif // LOGTIMING / LOGOUTPUT / LINEAR_OUTPUT
 
         #if defined(COLLISION) && !defined(BERNOULLI)
-#ifdef COL_DIAGNOSTICS
+        #ifdef COL_DIAGNOSTICS
         std::string controller_file = PATH + "collision_chain_" + frame_num(idx_file) + ".json";
         if (!save_col_controller(controller_file, col_summary))
         {
             std::cerr << "Error: Failed to save file: " << controller_file << std::endl;
             return 1;
         }
-#endif
+        #endif
         #endif // COLLISION && !BERNOULLI
 
         msg_output(idx_file);
@@ -841,4 +854,4 @@ int main (int argc, char **argv)
     return 0;
 }
 
-// =========================================================================================================================
+// =====================================================================================================================

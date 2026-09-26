@@ -2,7 +2,7 @@
 #include <param_grid.cuh>
 #include <param_phys.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: source_update
 // purpose: update dust primitives under gas drag, gravity, radiation pressure, and spherical geometric forces
 //
@@ -13,7 +13,7 @@
 //   2 exact exponential drag relaxation
 //   3 drag-weighted old-to-new force quadrature
 //   4 sequential azimuthal, polar, and radial primitive updates
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef RADIATION
 // interpolate cumulative outer-face optical depth to the logarithmic cell center

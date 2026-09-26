@@ -60,12 +60,12 @@ void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
 }
 
 // the input range shares all key bits above this child digit
-__host__ __device__ inline int morton_child_end(const std::uint64_t *keys, int begin, int end,
+__host__ __device__ inline int morton_child_end (const std::uint64_t *keys, int begin, int end,
                                     int shift, int code)
 {
     while (begin < end)
     {
-        int mid = begin + (end - begin)/2;
+        int mid = begin + (end - begin) / 2;
         if (int((keys[mid] >> shift) & 7ULL) < code) begin = mid + 1;
         else end = mid;
     }
@@ -73,7 +73,7 @@ __host__ __device__ inline int morton_child_end(const std::uint64_t *keys, int b
 }
 
 // construct one leaf-initialized node covering a sorted record range and a cubic cell
-static __device__ morton_node morton_cell(int begin, int count, float3 lower, float width)
+static __device__ morton_node morton_cell (int begin, int count, float3 lower, float width)
 {
     morton_node node{};
     node.idx_begin = begin;
@@ -85,13 +85,13 @@ static __device__ morton_node morton_cell(int begin, int count, float3 lower, fl
 }
 
 // write the root node covering every sorted record
-static __global__ void morton_origin(morton_node *nodes, int count, float3 lower, float width)
+static __global__ void morton_origin (morton_node *nodes, int count, float3 lower, float width)
 {
     nodes[0] = morton_cell(0, count, lower, width);
 }
 
 // independent sorted-key ranges need at most eight binary searches each
-static __global__ void morton_counts(morton_node *nodes, const std::uint64_t *keys,
+static __global__ void morton_counts (morton_node *nodes, const std::uint64_t *keys,
     int first, int count, int level, int max_level, int dim, int leaf_target, int *children)
 {
     int idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -116,7 +116,7 @@ static __global__ void morton_counts(morton_node *nodes, const std::uint64_t *ke
 }
 
 // scan-assigned child slots preserve spatial child order without serial node numbering
-static __global__ void morton_expand(morton_node *nodes, const std::uint64_t *keys,
+static __global__ void morton_expand (morton_node *nodes, const std::uint64_t *keys,
     int first, int count, int next_first, const std::uint64_t *offsets, int level, int max_level, int dim)
 {
     int idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -160,32 +160,35 @@ struct morton_nonzero
 class morton_index
 {
 public:
-    morton_index() = default;
-    morton_index(const morton_index &) = delete;
+    morton_index () = default;
+    morton_index (const morton_index &) = delete;
     morton_index &operator=(const morton_index &) = delete;
-    ~morton_index() { release(); }
+    ~morton_index () { release(); }
 
-    void build(const float3 *source, int point_count, float3 origin, float width,
+    void build (const float3 *source, int point_count, float3 origin, float width,
         int dim, int leaf_target, int max_level, const int *source_ids = nullptr)
     {
         release();
         if (point_count <= 0 || width <= 0.0f) throw std::invalid_argument("invalid adaptive Morton size");
         if (dim != 2 && dim != 3) throw std::invalid_argument("adaptive Morton dimension must be 2 or 3");
         if (leaf_target <= 0) throw std::invalid_argument("adaptive Morton leaf target must be positive");
-        if (max_level <= 0 || max_level > 20) throw std::invalid_argument("adaptive Morton max level must be 1 through 20");
+        if (max_level <= 0
+            || max_level > 20) throw std::invalid_argument("adaptive Morton max level must be 1 through 20");
         point_count_ = point_count;
         dim_ = dim;
         max_level_ = max_level;
         thrust::device_vector<std::uint64_t> keys(point_count);
         auto dev_key = thrust::raw_pointer_cast(keys.data());
-        _morton_gpu_check(gpuMalloc((void**)&dev_point_, sizeof(morton_point)*std::size_t(point_count)), "allocate Morton points");
-        morton_keygen<<<(point_count - 1)/256 + 1, 256>>>(dev_key, dev_point_, source, source_ids,
+        _morton_gpu_check(gpuMalloc((void**)&dev_point_, sizeof(morton_point)*std::size_t(point_count)),
+            "allocate Morton points");
+        morton_keygen <<< (point_count - 1) / 256 + 1, 256 >>> (dev_key, dev_point_, source, source_ids,
             point_count, origin, width, max_level, dim);
         _morton_gpu_check(gpuGetLastError(), "launch morton_keygen");
-        thrust::stable_sort_by_key(GPU_THRUST_DEVICE, keys.begin(), keys.end(), thrust::device_pointer_cast(dev_point_));
+        thrust::stable_sort_by_key(GPU_THRUST_DEVICE, keys.begin(), keys.end(),
+            thrust::device_pointer_cast(dev_point_));
 
         reserve_nodes(1);
-        morton_origin<<<1, 1>>>(dev_node_, point_count, origin, width);
+        morton_origin <<< 1, 1 >>> (dev_node_, point_count, origin, width);
         _morton_gpu_check(gpuGetLastError(), "launch morton_origin");
         node_count_ = 1;
         int first = 0, count = 1;
@@ -197,19 +200,22 @@ public:
             offsets.resize(std::size_t(count) + 1);
             auto counts_ptr = thrust::raw_pointer_cast(children.data());
             auto offsets_ptr = thrust::raw_pointer_cast(offsets.data());
-            morton_counts<<<(count - 1)/256 + 1, 256>>>(dev_node_, dev_key, first, count,
+            morton_counts <<< (count - 1) / 256 + 1, 256 >>> (dev_node_, dev_key, first, count,
                 level, max_level, dim, leaf_target, counts_ptr);
             _morton_gpu_check(gpuGetLastError(), "launch morton_counts");
             // accumulate in 64 bits so the node-index overflow check sees the true frontier size
-            thrust::exclusive_scan(GPU_THRUST_DEVICE, children.begin(), children.end(), offsets.begin(), std::uint64_t(0));
+            thrust::exclusive_scan(GPU_THRUST_DEVICE, children.begin(), children.end(), offsets.begin(),
+                std::uint64_t(0));
             std::uint64_t next_count = 0;
             // only allocation metadata crosses to the host; keys and nodes stay on-device
-            _morton_gpu_check(gpuMemcpy(&next_count, offsets_ptr + count, sizeof(next_count), gpuMemcpyDeviceToHost), "read Morton frontier count");
+            _morton_gpu_check(gpuMemcpy(&next_count, offsets_ptr + count, sizeof(next_count), gpuMemcpyDeviceToHost),
+                "read Morton frontier count");
             if (!next_count) break;
-            if (next_count > std::uint64_t(INT_MAX - node_count_)) throw std::overflow_error("Morton node index overflow");
+            if (next_count > std::uint64_t(INT_MAX
+                - node_count_)) throw std::overflow_error("Morton node index overflow");
             // growth may relocate the array; expand uses indices and the updated device pointer
             reserve_nodes(node_count_ + int(next_count));
-            morton_expand<<<(count - 1)/256 + 1, 256>>>(dev_node_, dev_key, first, count,
+            morton_expand <<< (count - 1) / 256 + 1, 256 >>> (dev_node_, dev_key, first, count,
                 node_count_, offsets_ptr, level, max_level, dim);
             _morton_gpu_check(gpuGetLastError(), "launch morton_expand");
             first = node_count_;
@@ -221,7 +227,7 @@ public:
         _morton_gpu_check(gpuDeviceSynchronize(), "complete Morton hierarchy");
     }
 
-    void release() noexcept
+    void release () noexcept
     {
         if (dev_point_) (void)gpuFree(dev_point_);
         if (dev_node_) (void)gpuFree(dev_node_);
@@ -230,15 +236,15 @@ public:
         point_count_ = node_count_ = leaf_count_ = capacity_ = 0;
         leaf_counts_.clear();
     }
-    morton_view view() const { return {dev_point_, dev_node_, point_count_, node_count_, dim_, max_level_}; }
-    std::size_t persistent_bytes() const
+    morton_view view () const { return {dev_point_, dev_node_, point_count_, node_count_, dim_, max_level_}; }
+    std::size_t persistent_bytes () const
     {
         // report actual retained capacity, including allocation slack
         return sizeof(morton_point)*std::size_t(point_count_) + sizeof(morton_node)*std::size_t(capacity_);
     }
-    int node_count() const { return node_count_; }
-    int leaf_count() const { return leaf_count_; }
-    const std::vector<int> &leaf_counts() const
+    int node_count () const { return node_count_; }
+    int leaf_count () const { return leaf_count_; }
+    const std::vector<int> &leaf_counts () const
     {
         // host occupancy statistics are requested by benchmarks, never by construction or queries
         if (leaf_counts_.empty() && leaf_count_)
@@ -254,16 +260,22 @@ public:
         return leaf_counts_;
     }
 private:
-    void reserve_nodes(int required)
+    void reserve_nodes (int required)
     {
         if (required <= capacity_) return;
         int capacity = int(std::max<long long>(required, std::min<long long>(INT_MAX, 2LL*capacity_)));
         morton_node *nodes = nullptr;
-        _morton_gpu_check(gpuMalloc((void**)&nodes, sizeof(morton_node)*std::size_t(capacity)), "allocate Morton nodes");
+        _morton_gpu_check(gpuMalloc((void**)&nodes, sizeof(morton_node)*std::size_t(capacity)),
+            "allocate Morton nodes");
         if (dev_node_)
         {
-            auto status = gpuMemcpy(nodes, dev_node_, sizeof(morton_node)*std::size_t(node_count_), gpuMemcpyDeviceToDevice);
-            if (status != gpuSuccess) { (void)gpuFree(nodes); _morton_gpu_check(status, "grow Morton nodes"); }
+            auto status = gpuMemcpy(nodes, dev_node_, sizeof(morton_node)*std::size_t(node_count_),
+                gpuMemcpyDeviceToDevice);
+            if (status != gpuSuccess)
+            {
+                (void)gpuFree(nodes);
+                _morton_gpu_check(status, "grow Morton nodes");
+            }
             status = gpuFree(dev_node_);
             dev_node_ = nodes;
             capacity_ = capacity;
@@ -339,72 +351,101 @@ void _morton_pair_sort (float *dist_sq, int *idx_old)
 // merge the sorted retained prefix with a padded candidate tile
 template<int K, int BLOCK_SIZE, int SORT_SIZE>
 __device__ __forceinline__
-void _morton_pair_merge(float *dist_sq, int *idx_old, int candidate_count)
+void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
 {
-    if constexpr (K > SORT_SIZE/2) {
+    if constexpr (K > SORT_SIZE / 2)
+    {
     for (int idx_slot = K + candidate_count + threadIdx.x;
         idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
     {
-#ifdef GAMEDEV_ROCM
+        #ifdef GAMEDEV_ROCM
         dist_sq[idx_slot] = MORTON_INF_F;
-#else
+        #else
         dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+        #endif
         idx_old[idx_slot] = INT_MAX;
     }
     __syncthreads();
     _morton_pair_sort<SORT_SIZE, BLOCK_SIZE>(dist_sq, idx_old);
-    } else {
+    }
+    else
+    {
     // stage the overlapping candidate source before moving it to the upper half
-    constexpr int HALF = SORT_SIZE/2;
-    constexpr int SLOTS = (HALF + BLOCK_SIZE - 1)/BLOCK_SIZE;
+    constexpr int HALF = SORT_SIZE / 2;
+    constexpr int SLOTS = (HALF + BLOCK_SIZE - 1) / BLOCK_SIZE;
     float incoming_dist[SLOTS];
     int incoming_id[SLOTS];
     #pragma unroll
-    for (int q=0; q<SLOTS; ++q) {
-        int j=threadIdx.x+BLOCK_SIZE*q;
-#ifdef GAMEDEV_ROCM
-        incoming_dist[q]=j<candidate_count?dist_sq[K+j]:MORTON_INF_F;
-#else
-        incoming_dist[q]=j<candidate_count?dist_sq[K+j]:CUDART_INF_F;
-#endif
-        incoming_id[q]=j<candidate_count?idx_old[K+j]:INT_MAX;
+    for (int q = 0; q < SLOTS; ++q)
+    {
+        int j = threadIdx.x + BLOCK_SIZE*q;
+        #ifdef GAMEDEV_ROCM
+        incoming_dist[q] = j < candidate_count ? dist_sq[K + j] : MORTON_INF_F;
+        #else
+        incoming_dist[q] = j < candidate_count ? dist_sq[K + j] : CUDART_INF_F;
+        #endif
+        incoming_id[q] = j < candidate_count ? idx_old[K + j] : INT_MAX;
     }
     // skip a batch that cannot beat the retained cutoff, leaving the top K unchanged
     bool improves = false;
     #pragma unroll
-    for (int q=0; q<SLOTS; ++q)
+    for (int q = 0; q < SLOTS; ++q)
+    {
         improves |= _morton_neighbor_less(incoming_dist[q], incoming_id[q],
-            dist_sq[K-1], idx_old[K-1]);
+            dist_sq[K - 1], idx_old[K - 1]);
+    }
     // this collective also provides the staging barrier
     if (!__syncthreads_or(improves)) return;
-#ifdef GAMEDEV_ROCM
-    for (int j=K+threadIdx.x; j<HALF; j+=BLOCK_SIZE) {dist_sq[j]=MORTON_INF_F;idx_old[j]=INT_MAX;}
-#else
-    for (int j=K+threadIdx.x; j<HALF; j+=BLOCK_SIZE) {dist_sq[j]=CUDART_INF_F;idx_old[j]=INT_MAX;}
-#endif
+    #ifdef GAMEDEV_ROCM
+    for (int j = K + threadIdx.x; j < HALF; j += BLOCK_SIZE)
+    {
+        dist_sq[j] = MORTON_INF_F;
+        idx_old[j] = INT_MAX;
+    }
+    #else
+    for (int j = K + threadIdx.x; j < HALF; j += BLOCK_SIZE)
+    {
+        dist_sq[j] = CUDART_INF_F;
+        idx_old[j] = INT_MAX;
+    }
+    #endif
     #pragma unroll
-    for (int q=0; q<SLOTS; ++q) {
-        int j=threadIdx.x+BLOCK_SIZE*q;
-        if (j<HALF) {dist_sq[HALF+j]=incoming_dist[q];idx_old[HALF+j]=incoming_id[q];}
+    for (int q = 0; q < SLOTS; ++q)
+    {
+        int j = threadIdx.x + BLOCK_SIZE*q;
+        if (j < HALF)
+        {
+            dist_sq[HALF + j] = incoming_dist[q];
+            idx_old[HALF + j] = incoming_id[q];
+        }
     }
     __syncthreads();
-    _morton_pair_sort<HALF,BLOCK_SIZE>(dist_sq+HALF,idx_old+HALF);
+    _morton_pair_sort<HALF, BLOCK_SIZE>(dist_sq + HALF, idx_old + HALF);
     // reverse the sorted candidates so the ascending prefix and descending candidates form a bitonic sequence
-    for (int j=threadIdx.x;j<HALF/2;j+=BLOCK_SIZE) {
-        float d=dist_sq[HALF+j];int id=idx_old[HALF+j];
-        dist_sq[HALF+j]=dist_sq[SORT_SIZE-1-j];idx_old[HALF+j]=idx_old[SORT_SIZE-1-j];
-        dist_sq[SORT_SIZE-1-j]=d;idx_old[SORT_SIZE-1-j]=id;
+    for (int j = threadIdx.x; j < HALF / 2; j += BLOCK_SIZE)
+    {
+        float d = dist_sq[HALF + j];
+        int id = idx_old[HALF + j];
+        dist_sq[HALF + j] = dist_sq[SORT_SIZE - 1 - j];
+        idx_old[HALF + j] = idx_old[SORT_SIZE - 1 - j];
+        dist_sq[SORT_SIZE - 1 - j] = d;
+        idx_old[SORT_SIZE - 1 - j] = id;
     }
     __syncthreads();
-    for (int stride=HALF;stride>0;stride>>=1) {
+    for (int stride = HALF; stride > 0; stride >>= 1)
+    {
         // after the first split, only the smallest HALF keys are retained
-        for (int j=threadIdx.x;j<(stride==HALF?SORT_SIZE:HALF);j+=BLOCK_SIZE) {
-            int other=j^stride;
-            if (other>j && _morton_neighbor_less(dist_sq[other],idx_old[other],dist_sq[j],idx_old[j])) {
-                float d=dist_sq[j];int id=idx_old[j];
-                dist_sq[j]=dist_sq[other];idx_old[j]=idx_old[other];
-                dist_sq[other]=d;idx_old[other]=id;
+        for (int j = threadIdx.x; j < (stride == HALF ? SORT_SIZE : HALF); j += BLOCK_SIZE)
+        {
+            int other = j^stride;
+            if (other > j && _morton_neighbor_less(dist_sq[other], idx_old[other], dist_sq[j], idx_old[j]))
+            {
+                float d = dist_sq[j];
+                int id = idx_old[j];
+                dist_sq[j] = dist_sq[other];
+                idx_old[j] = idx_old[other];
+                dist_sq[other] = d;
+                idx_old[other] = id;
             }
         }
         __syncthreads();
@@ -415,7 +456,7 @@ void _morton_pair_merge(float *dist_sq, int *idx_old, int candidate_count)
 // pack eligible candidates stably across the block using the hardware warp or wavefront width
 template<int BLOCK_SIZE = 64>
 __device__ __forceinline__
-int _morton_pack_tile(float distance, int identifier, bool eligible,
+int _morton_pack_tile (float distance, int identifier, bool eligible,
     float *output_dist, int *output_id)
 {
     static_assert(BLOCK_SIZE > 0 && BLOCK_SIZE <= 1024 && BLOCK_SIZE % 32 == 0,
@@ -423,21 +464,23 @@ int _morton_pack_tile(float distance, int identifier, bool eligible,
     __shared__ int warp_counts[BLOCK_SIZE / 32];
     int lane = threadIdx.x % warpSize;
     int warp = threadIdx.x / warpSize;
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     unsigned long long mask = __ballot(eligible);
-#else
+    #else
     unsigned long long mask = __ballot_sync(0xffffffffU, eligible);
-#endif
+    #endif
     int rank = __popcll(mask & ((1ULL << lane) - 1));
     if (lane == 0) warp_counts[warp] = __popcll(mask);
     __syncthreads();
     int offset = 0;
     int total = 0;
-    for (int group = 0; group < (BLOCK_SIZE + warpSize - 1) / warpSize; ++group) {
+    for (int group = 0; group < (BLOCK_SIZE + warpSize - 1) / warpSize; ++group)
+    {
         if (group < warp) offset += warp_counts[group];
         total += warp_counts[group];
     }
-    if (eligible) {
+    if (eligible)
+    {
         output_dist[offset + rank] = distance;
         output_id[offset + rank] = identifier;
     }
@@ -461,11 +504,11 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
 
     for (int idx_slot = threadIdx.x; idx_slot < SORT_SIZE; idx_slot += BLOCK_SIZE)
     {
-#ifdef GAMEDEV_ROCM
+        #ifdef GAMEDEV_ROCM
         near_dist_sq[idx_slot] = MORTON_INF_F;
-#else
+        #else
         near_dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+        #endif
         near_idx_old[idx_slot] = INT_MAX;
     }
     if (threadIdx.x == 0)
@@ -486,7 +529,9 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
         // finish all uses of the previous node before replacing the shared index
         __syncthreads();
         if (threadIdx.x == 0)
+        {
             idx_node = (stack_count > 0) ? idx_node_stack[--stack_count] : -1;
+        }
         __syncthreads();
         if (idx_node < 0) break;
 
@@ -508,24 +553,27 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                 if constexpr (BLOCK_SIZE % 32 == 0)
                 {
                     take_count = min(BLOCK_SIZE, min(batch_capacity - batch_offset, node.count - idx_offset));
-#ifdef GAMEDEV_ROCM
+                    #ifdef GAMEDEV_ROCM
                     float distance = MORTON_INF_F;
-#else
+                    #else
                     float distance = CUDART_INF_F;
-#endif
+                    #endif
                     int identifier = INT_MAX;
                     bool eligible = false;
-                    if (threadIdx.x < take_count) {
-                        const morton_point &candidate = morton_data.dev_point[node.idx_begin + idx_offset + threadIdx.x];
+                    if (threadIdx.x < take_count)
+                    {
+                        const morton_point &candidate = morton_data.dev_point[node.idx_begin + idx_offset
+                            + threadIdx.x];
                         distance = _get_morton_point_dist_sq(query_point, candidate.cartesian);
                         identifier = candidate.idx_old;
                         eligible = distance <= search_dist_sq
                             && (!dev_active || dev_active[identifier / idx_stride] != 0)
-                            && _morton_neighbor_less(distance, identifier, near_dist_sq[K-1], near_idx_old[K-1]);
+                            && _morton_neighbor_less(distance, identifier, near_dist_sq[K - 1], near_idx_old[K - 1]);
                     }
                     int accepted = _morton_pack_tile<BLOCK_SIZE>(distance, identifier, eligible,
                         near_dist_sq + K + batch_offset, near_idx_old + K + batch_offset);
-                    if (threadIdx.x == 0) {
+                    if (threadIdx.x == 0)
+                    {
                         candidate_count += take_count;
                         batch_count = batch_offset + accepted;
                     }
@@ -541,11 +589,11 @@ void _morton_topk (const morton_view &morton_data, const float3 &query_point, fl
                     float candidate_dist_sq =
                         _get_morton_point_dist_sq(query_point, candidate.cartesian);
                     int idx_slot = K + batch_offset + idx_local;
-#ifdef GAMEDEV_ROCM
+                    #ifdef GAMEDEV_ROCM
                     near_dist_sq[idx_slot] = MORTON_INF_F;
-#else
+                    #else
                     near_dist_sq[idx_slot] = CUDART_INF_F;
-#endif
+                    #endif
                     near_idx_old[idx_slot] = INT_MAX;
                     int idx_old = candidate.idx_old / idx_stride;
                     if (candidate_dist_sq <= search_dist_sq

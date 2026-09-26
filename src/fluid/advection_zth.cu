@@ -2,7 +2,7 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_zth
 // purpose: polar transport with nonuniform PPM, pressureless HLL fluxes, boundary fluxes, and invariant-domain limiting
 //
@@ -13,7 +13,7 @@
 //   2 PPM high-order and cell-centred low-order HLL flux construction
 //   3 spherical-geometry low-order conservative update
 //   4 invariant-domain-limited antidiffusive correction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void advection_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz,

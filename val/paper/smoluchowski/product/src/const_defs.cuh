@@ -82,7 +82,7 @@ const real  X_SEC       = 2.0e-15;
 
 const real  STOKES_0    = 1.0e-03;
 
-const real  RHO_0       = 6.0/M_PI;
+const real  RHO_0 = 6.0 / M_PI;
 
 #ifdef RADIATION
 const real  BETA_0      = 1.0e+01;
@@ -194,7 +194,8 @@ struct kdtree_traits
     enum { has_explicit_dim = true };
 
     static inline __host__ __device__ const point_t &get_point (const kdtree_node &node) { return node.cartesian; }
-    static inline __host__ __device__ float get_coord (const kdtree_node &node, int dim) { return kdtree::get_coord(node.cartesian, dim); }
+    static inline __host__ __device__ float get_coord (const kdtree_node &node,
+        int dim) { return kdtree::get_coord(node.cartesian, dim); }
     static inline __host__ __device__ int get_dim (const kdtree_node &node) { return node.split_dim; }
     static inline __host__ __device__ void set_dim (kdtree_node &node, int dim) { node.split_dim = dim; }
 };

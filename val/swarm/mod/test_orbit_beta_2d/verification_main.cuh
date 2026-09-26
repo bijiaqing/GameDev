@@ -59,7 +59,7 @@ int main ()
         real angular_momentum = sqrt(mu_eff*semimajor*(1.0 - eccentricity*eccentricity));
         real x = atan2(sqrt(1.0 - eccentricity*eccentricity)*sin(E), cos(E) - eccentricity);
         real y = semimajor*(1.0 - eccentricity*cos(E));
-        real vy = sqrt(mu_eff/semimajor)*eccentricity*sin(E)/(1.0 - eccentricity*cos(E));
+        real vy = sqrt(mu_eff / semimajor)*eccentricity*sin(E) / (1.0 - eccentricity*cos(E));
         particle[idx].position = make_double3(x, y, 0.5*M_PI);
         particle[idx].velocity = make_double3(angular_momentum, vy, 0.0);
         particle[idx].par_size = size_initial[idx];
@@ -69,30 +69,34 @@ int main ()
 
     swarm *dev_particle;
     real *dev_optdepth;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle),
+        sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_optdepth), sizeof(*dev_optdepth)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_optdepth),
+        sizeof(*dev_optdepth)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate zero optical depth" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
     std::vector<real> optdepth(N_G, 0.0);
-    if (gpuError_t status = gpuMemcpy(dev_optdepth, optdepth.data(), sizeof(*(dev_optdepth))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_optdepth, optdepth.data(), sizeof(*(dev_optdepth))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload zero optical depth" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
 
     // refine the split transport timestep while preserving the same orbit and end time
-    const real dt = time_end/static_cast<real>(VERIFY_RES);
+    const real dt = time_end / static_cast<real>(VERIFY_RES);
     for (int step = 0; step < VERIFY_RES; step++)
     {
         ssa_substep_1 <<< NB_P, TPB >>> (dev_particle, dt);
@@ -108,7 +112,8 @@ int main ()
         std::cerr << "reduced-gravity radiation transport" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy reduced-gravity particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);

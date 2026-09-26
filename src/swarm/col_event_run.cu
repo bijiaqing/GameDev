@@ -15,12 +15,12 @@
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: col_event_run
 // sample and apply at most one frozen-rate Bernoulli collision event per representative particle
 //
 // parallelization: one KD-tree thread or one Morton block with cooperative search and pair evaluation
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef COLLISION_KDTREE
 __global__
@@ -144,11 +144,11 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
     if (idx_old_i >= N_P) return;
 
     __shared__ bool run_event;
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     curs rngstate;
-#else
+    #else
     __shared__ curs rngstate;
-#endif
+    #endif
 
     // let one thread advance the particle RNG before launching the cooperative search
     if (threadIdx.x == 0)
@@ -282,12 +282,12 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate,
 
 #ifdef KNN_CACHE
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel overload: col_event_run
 // sample frozen Bernoulli events and select partners from the persistent physical-neighbor cache
 //
 // parallelization: one KD-tree thread or one Morton block per representative particle
-// =========================================================================================================================
+// =====================================================================================================================
 
 #ifdef COLLISION_KDTREE
 __global__
@@ -390,11 +390,11 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
     if (idx_old_i >= N_P) return;
 
     __shared__ bool run_event;
-#ifdef GAMEDEV_ROCM
+    #ifdef GAMEDEV_ROCM
     curs rngstate;
-#else
+    #else
     __shared__ curs rngstate;
-#endif
+    #endif
     if (threadIdx.x == 0)
     {
         real col_rate_i = dev_col_rate[idx_old_i];
@@ -495,6 +495,6 @@ void col_event_run (swarm *dev_particle, curs *dev_rngstate, const real *dev_col
 
 #endif // KNN_CACHE
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // COLLISION

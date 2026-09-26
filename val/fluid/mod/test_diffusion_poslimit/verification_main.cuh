@@ -32,11 +32,11 @@ void write_binary (const std::string &name, const std::vector<real> &values)
 void diffuse (real *rhod, real *mx, real *my, real *mz, real dt)
 {
     // select the same thread- or block-line production kernel requested by FLUID_SWEEP
-#ifdef FLUID_BLOCK_SWEEP
+    #ifdef FLUID_BLOCK_SWEEP
     diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (rhod, mx, my, mz, dt);
-#else
+    #else
     diffusion_xth <<< NB_X, TPB >>> (rhod, mx, my, mz, dt);
-#endif
+    #endif
     if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
     {
         std::cerr << "azimuthal diffusion positivity step" << ": " << gpuGetErrorString(status) << std::endl;
@@ -53,10 +53,10 @@ void diffuse (real *rhod, real *mx, real *my, real *mz, real dt)
 
 real front_dt ()
 {
-#ifdef TEST_DIRECTION_X
+    #ifdef TEST_DIRECTION_X
     real dx_len = _get_ycent(0)*sin(_get_zcent(0))*_get_dx();
     return 0.89*dx_len*dx_len / VERIFY_D;
-#elif defined(TEST_DIRECTION_Y)
+    #elif defined(TEST_DIRECTION_Y)
     real max_cn_sum = 0.0;
     for (int iy = 0; iy < N_Y; iy++)
     {
@@ -68,7 +68,7 @@ real front_dt ()
         max_cn_sum = std::max(max_cn_sum, cn_i + cn_o);
     }
     return 0.89 / max_cn_sum;
-#else
+    #else
     real max_cn_sum = 0.0;
     for (int iy = 0; iy < N_Y; iy++)
     {
@@ -85,30 +85,30 @@ real front_dt ()
         }
     }
     return 0.89 / max_cn_sum;
-#endif
+    #endif
 }
 
 void diffuse_front (real *rhod, real *mx, real *my, real *mz, real dt)
 {
-#ifdef TEST_DIRECTION_X
-#ifdef FLUID_BLOCK_SWEEP
+    #ifdef TEST_DIRECTION_X
+    #ifdef FLUID_BLOCK_SWEEP
     diffusion_xbl <<< N_Y*N_Z, TPB_BLOCK, sizeof(real)*4*N_X >>> (rhod, mx, my, mz, dt);
-#else
+    #else
     diffusion_xth <<< NB_X, TPB >>> (rhod, mx, my, mz, dt);
-#endif
-#elif defined(TEST_DIRECTION_Y)
-#ifdef FLUID_BLOCK_SWEEP
+    #endif
+    #elif defined(TEST_DIRECTION_Y)
+    #ifdef FLUID_BLOCK_SWEEP
     diffusion_ybl <<< N_X*N_Z, TPB_BLOCK, sizeof(real)*6*N_Y >>> (rhod, mx, my, mz, dt);
-#else
+    #else
     diffusion_yth <<< NB_Y, TPB >>> (rhod, mx, my, mz, dt);
-#endif
-#else
-#ifdef FLUID_BLOCK_SWEEP
+    #endif
+    #else
+    #ifdef FLUID_BLOCK_SWEEP
     diffusion_zbl <<< N_X*N_Y, TPB_BLOCK, sizeof(real)*6*N_Z >>> (rhod, mx, my, mz, dt);
-#else
+    #else
     diffusion_zth <<< NB_Z, TPB >>> (rhod, mx, my, mz, dt);
-#endif
-#endif
+    #endif
+    #endif
     if (gpuError_t status = gpuGetLastError(); status != gpuSuccess)
     {
         std::cerr << "directional diffusion donor-limit step" << ": " << gpuGetErrorString(status) << std::endl;
@@ -123,13 +123,13 @@ void diffuse_front (real *rhod, real *mx, real *my, real *mz, real dt)
 
 int line_index (int ix, int iy, int iz)
 {
-#ifdef TEST_DIRECTION_X
+    #ifdef TEST_DIRECTION_X
     return ix;
-#elif defined(TEST_DIRECTION_Y)
+    #elif defined(TEST_DIRECTION_Y)
     return iy;
-#else
+    #else
     return iz;
-#endif
+    #endif
 }
 
 int run_front ()
@@ -179,22 +179,26 @@ int run_front ()
         std::cerr << "allocate front z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(rhod, rhod_initial.data(), sizeof(*(rhod))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(rhod, rhod_initial.data(), sizeof(*(rhod))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload front density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(mx, mx_initial.data(), sizeof(*(mx))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(mx, mx_initial.data(), sizeof(*(mx))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload front x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(my, my_initial.data(), sizeof(*(my))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(my, my_initial.data(), sizeof(*(my))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload front y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(mz, mz_initial.data(), sizeof(*(mz))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(mz, mz_initial.data(), sizeof(*(mz))*(N_G),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload front z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -204,22 +208,26 @@ int run_front ()
     diffuse_front(rhod, mx, my, mz, dt);
 
     std::vector<real> rhod_final(N_G), mx_final(N_G), my_final(N_G), mz_final(N_G);
-    if (gpuError_t status = gpuMemcpy(rhod_final.data(), rhod, sizeof(*(rhod_final.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(rhod_final.data(), rhod, sizeof(*(rhod_final.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy front density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(mx_final.data(), mx, sizeof(*(mx_final.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(mx_final.data(), mx, sizeof(*(mx_final.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy front x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(my_final.data(), my, sizeof(*(my_final.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(my_final.data(), my, sizeof(*(my_final.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy front y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(mz_final.data(), mz, sizeof(*(mz_final.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(mz_final.data(), mz, sizeof(*(mz_final.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy front z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -234,13 +242,13 @@ int run_front ()
     write_binary("momentum_y_final", my_final);
     write_binary("momentum_z_final", mz_final);
 
-#ifdef TEST_DIRECTION_X
+    #ifdef TEST_DIRECTION_X
     const char *direction = "x";
-#elif defined(TEST_DIRECTION_Y)
+    #elif defined(TEST_DIRECTION_Y)
     const char *direction = "y";
-#else
+    #else
     const char *direction = "z";
-#endif
+    #endif
     std::ofstream meta(output_path + "meta_N" + std::to_string(VERIFY_RES) + ".json");
     meta << std::setprecision(17)
          << "{\n"
@@ -292,19 +300,21 @@ int run_front ()
 
 int main ()
 {
-#if defined(TEST_DIRECTION_X) || defined(TEST_DIRECTION_Y) || defined(TEST_DIRECTION_Z)
+    #if defined(TEST_DIRECTION_X) || defined(TEST_DIRECTION_Y) || defined(TEST_DIRECTION_Z)
     return run_front();
-#else
+    #else
     const real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    const real dy = pow(Y_MAX/Y_MIN, 1.0/static_cast<real>(N_Y));
+    const real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     const real R = sqrt(Y_MIN*Y_MIN*dy);
     const real dt = 1.0;
-    // reproduce the production positivity estimate outside the kernel solely to construct an independent manual call sequence
+    // reproduce the production positivity estimate outside the kernel solely to construct an independent manual call
+    // sequence
     const int sub_count = std::max(
         1, static_cast<int>(ceil(dt*VERIFY_D / (R*R*dx*dx) / POS_LIMIT))
     );
 
-    // the large Fourier amplitude forces more than one positivity substep while retaining strictly positive initial density
+    // the large Fourier amplitude forces more than one positivity substep while retaining strictly positive initial
+    // density
     std::vector<real> rhod_initial(N_G), mx_initial(N_G), my_initial(N_G), mz_initial(N_G);
     for (int ix = 0; ix < N_X; ix++)
     {
@@ -319,42 +329,50 @@ int main ()
 
     real *rhod_auto, *mx_auto, *my_auto, *mz_auto;
     real *rhod_manual, *mx_manual, *my_manual, *mz_manual;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&rhod_auto), sizeof(*rhod_auto)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&rhod_auto),
+        sizeof(*rhod_auto)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate automatic density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mx_auto), sizeof(*mx_auto)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mx_auto),
+        sizeof(*mx_auto)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate automatic x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&my_auto), sizeof(*my_auto)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&my_auto),
+        sizeof(*my_auto)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate automatic y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mz_auto), sizeof(*mz_auto)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mz_auto),
+        sizeof(*mz_auto)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate automatic z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&rhod_manual), sizeof(*rhod_manual)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&rhod_manual),
+        sizeof(*rhod_manual)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate manual density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mx_manual), sizeof(*mx_manual)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mx_manual),
+        sizeof(*mx_manual)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate manual x momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&my_manual), sizeof(*my_manual)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&my_manual),
+        sizeof(*my_manual)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate manual y momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mz_manual), sizeof(*mz_manual)*(N_G)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&mz_manual),
+        sizeof(*mz_manual)*(N_G)); status != gpuSuccess)
     {
         std::cerr << "allocate manual z momentum" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -365,22 +383,26 @@ int main ()
         std::array<real *, 4>{rhod_manual, mx_manual, my_manual, mz_manual}
     })
     {
-        if (gpuError_t status = gpuMemcpy(fields[0], rhod_initial.data(), sizeof(*(fields[0]))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+        if (gpuError_t status = gpuMemcpy(fields[0], rhod_initial.data(), sizeof(*(fields[0]))*(N_G),
+            gpuMemcpyHostToDevice); status != gpuSuccess)
         {
             std::cerr << "upload density" << ": " << gpuGetErrorString(status) << std::endl;
             std::exit(EXIT_FAILURE);
         }
-        if (gpuError_t status = gpuMemcpy(fields[1], mx_initial.data(), sizeof(*(fields[1]))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+        if (gpuError_t status = gpuMemcpy(fields[1], mx_initial.data(), sizeof(*(fields[1]))*(N_G),
+            gpuMemcpyHostToDevice); status != gpuSuccess)
         {
             std::cerr << "upload x momentum" << ": " << gpuGetErrorString(status) << std::endl;
             std::exit(EXIT_FAILURE);
         }
-        if (gpuError_t status = gpuMemcpy(fields[2], my_initial.data(), sizeof(*(fields[2]))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+        if (gpuError_t status = gpuMemcpy(fields[2], my_initial.data(), sizeof(*(fields[2]))*(N_G),
+            gpuMemcpyHostToDevice); status != gpuSuccess)
         {
             std::cerr << "upload y momentum" << ": " << gpuGetErrorString(status) << std::endl;
             std::exit(EXIT_FAILURE);
         }
-        if (gpuError_t status = gpuMemcpy(fields[3], mz_initial.data(), sizeof(*(fields[3]))*(N_G), gpuMemcpyHostToDevice); status != gpuSuccess)
+        if (gpuError_t status = gpuMemcpy(fields[3], mz_initial.data(), sizeof(*(fields[3]))*(N_G),
+            gpuMemcpyHostToDevice); status != gpuSuccess)
         {
             std::cerr << "upload z momentum" << ": " << gpuGetErrorString(status) << std::endl;
             std::exit(EXIT_FAILURE);
@@ -394,8 +416,9 @@ int main ()
     for (int idx_sub = 0; idx_sub < sub_count; idx_sub++)
     {
         // bypass automatic splitting by supplying one already-admissible substep at a time
-        diffuse(rhod_manual, mx_manual, my_manual, mz_manual, dt/static_cast<real>(sub_count));
-        if (gpuError_t status = gpuMemcpy(rhod_work.data(), rhod_manual, sizeof(*(rhod_work.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+        diffuse(rhod_manual, mx_manual, my_manual, mz_manual, dt / static_cast<real>(sub_count));
+        if (gpuError_t status = gpuMemcpy(rhod_work.data(), rhod_manual, sizeof(*(rhod_work.data()))*(N_G),
+            gpuMemcpyDeviceToHost); status != gpuSuccess)
         {
             std::cerr << "copy manual density" << ": " << gpuGetErrorString(status) << std::endl;
             std::exit(EXIT_FAILURE);
@@ -404,12 +427,14 @@ int main ()
     }
 
     std::vector<real> rhod_auto_host(N_G), rhod_manual_host(N_G);
-    if (gpuError_t status = gpuMemcpy(rhod_auto_host.data(), rhod_auto, sizeof(*(rhod_auto_host.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(rhod_auto_host.data(), rhod_auto, sizeof(*(rhod_auto_host.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy automatic density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(rhod_manual_host.data(), rhod_manual, sizeof(*(rhod_manual_host.data()))*(N_G), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(rhod_manual_host.data(), rhod_manual, sizeof(*(rhod_manual_host.data()))*(N_G),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy final manual density" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
@@ -480,5 +505,5 @@ int main ()
     std::cout << "fluid diffusion positivity case completed at N=" << VERIFY_RES
               << " with " << sub_count << " CN substeps" << std::endl;
     return 0;
-#endif
+    #endif
 }

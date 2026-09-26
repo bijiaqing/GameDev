@@ -8,7 +8,7 @@
 #undef rand_disk_mono
 #undef rand_powerlaw
 #undef save_variable
-inline real get_total_dust_mass(const std::vector<real>&) { return BENCHMARK_MASS; }
+inline real get_total_dust_mass (const std::vector<real>&) { return BENCHMARK_MASS; }
 inline __host__
 void rand_disk_mono (
     real *randposx, real *randposy, real *randposz, real, int count
@@ -42,20 +42,23 @@ void rand_disk_mono (
     }
 }
 
-inline bool save_variable(const std::string &path, real mass) {
+inline bool save_variable (const std::string &path, real mass)
+{
     if (!_production_save_variable(path, mass)) return false;
     std::ofstream file(path, std::ios::app);
     file << "\n[CAMPAIGN]\nSEED = " << SEED
-         << "\nPOSITION_SEED = " << SEED+1 << "\nCOLLISION_SEED = " << SEED+1
+         << "\nPOSITION_SEED = " << SEED + 1 << "\nCOLLISION_SEED = " << SEED + 1
          << "\nINITIAL_MASS_SEED = " << SEED
          << "\nINITIAL_MASS_DISTRIBUTION = gamma_shape2_scale1\nPARTNER_RESHUFFLE = none"
-         << "\nUNIT_VOLUME = 1\nGEOMETRY_REUSE = 1\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
+         << "\nUNIT_VOLUME = 1\nGEOMETRY_REUSE = 1"
+            "\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
     return static_cast<bool>(file);
 }
 
 // equal represented masses require mass-weighted exponential sampling, p(m)=m*exp(-m)
-inline void rand_powerlaw(real *sizes, int count, real, real, real) {
+inline void rand_powerlaw (real *sizes, int count, real, real, real)
+{
     std::mt19937 generator(SEED);
-    std::gamma_distribution<real> mass(2.0,1.0);
-    for (int i=0;i<count;++i) sizes[i]=std::cbrt(mass(generator));
+    std::gamma_distribution<real> mass(2.0, 1.0);
+    for (int i = 0; i < count; ++i) sizes[i] = std::cbrt(mass(generator));
 }

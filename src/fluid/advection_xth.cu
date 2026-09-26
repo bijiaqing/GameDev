@@ -2,7 +2,7 @@
 #include <fluid_kern.cuh>
 #include <param_grid.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // kernel: advection_xth
 // purpose: periodic azimuthal transport with FARGO, PPM, pressureless HLL fluxes, and invariant-domain limiting
 //
@@ -13,7 +13,7 @@
 //   2 PPM high-order and cell-centred low-order HLL flux construction
 //   3 low-order conservative update
 //   4 invariant-domain-limited antidiffusive correction
-// =========================================================================================================================
+// =====================================================================================================================
 
 __global__
 void advection_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, real *dev_dustmomz, real dt)
@@ -112,7 +112,7 @@ void advection_xth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         int ixp2 = (ix + 2) % N_X;
 
         real cfl_L = fabs(lx_res[ix]  /(R*R))*dt / dx;
-        real cfl_R = fabs(lx_res[ixp1]/(R*R))*dt / dx;
+        real cfl_R = fabs(lx_res[ixp1] / (R*R))*dt / dx;
 
         // clamp reconstructed density nonnegative while preserving the signs of the reconstructed primitive quantities
         real rhod_L = fmax(_thread_ppm_state(face_rhod, rhod_shift, ix,   ixp1, true,  cfl_L), 0.0);

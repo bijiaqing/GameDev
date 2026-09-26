@@ -11,8 +11,9 @@
 #include <swarm_kern.cuh>
 
 // test-only driver for multi-step drag trajectories
-// three controlled stopping times span stiff, intermediate, and weak relaxation; the model-local transport specialization
-// supplies constant coefficients so both velocity and integrated displacement have closed analytical solutions
+// three controlled stopping times span stiff, intermediate, and weak relaxation; the model-local transport
+// specialization supplies constant coefficients so both velocity and integrated displacement have closed analytical
+// solutions
 
 namespace
 {
@@ -44,17 +45,19 @@ int main ()
     }
 
     swarm *dev_particle;
-    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle), sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
+    if (gpuError_t status = gpuMalloc(reinterpret_cast<void **>(&dev_particle),
+        sizeof(*dev_particle)*(N_P)); status != gpuSuccess)
     {
         std::cerr << "allocate drag-path particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P), gpuMemcpyHostToDevice); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(dev_particle, particle.data(), sizeof(*(dev_particle))*(N_P),
+        gpuMemcpyHostToDevice); status != gpuSuccess)
     {
         std::cerr << "upload drag-path particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    real dt = time_end/static_cast<real>(VERIFY_RES);
+    real dt = time_end / static_cast<real>(VERIFY_RES);
     // refine only the integration step while keeping the same physical end time and particle ensemble
     for (int step = 0; step < VERIFY_RES; step++)
     {
@@ -70,7 +73,8 @@ int main ()
         std::cerr << "constant drag trajectory" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P), gpuMemcpyDeviceToHost); status != gpuSuccess)
+    if (gpuError_t status = gpuMemcpy(particle.data(), dev_particle, sizeof(*(particle.data()))*(N_P),
+        gpuMemcpyDeviceToHost); status != gpuSuccess)
     {
         std::cerr << "copy drag-path particles" << ": " << gpuGetErrorString(status) << std::endl;
         std::exit(EXIT_FAILURE);

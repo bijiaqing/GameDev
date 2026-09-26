@@ -6,7 +6,7 @@
 #undef get_total_dust_mass
 #undef rand_disk_mono
 #undef save_variable
-inline real get_total_dust_mass(const std::vector<real>&) { return BENCHMARK_MASS; }
+inline real get_total_dust_mass (const std::vector<real>&) { return BENCHMARK_MASS; }
 inline __host__
 void rand_disk_mono (
     real *randposx, real *randposy, real *randposz, real, int count
@@ -40,14 +40,16 @@ void rand_disk_mono (
     }
 }
 
-inline bool save_variable(const std::string &path, real mass) {
+inline bool save_variable (const std::string &path, real mass)
+{
     if (!_production_save_variable(path, mass)) return false;
     std::ofstream file(path, std::ios::app);
     file << "\n[CAMPAIGN]\nSEED = " << SEED
-         << "\nPOSITION_SEED = " << SEED+1 << "\nCOLLISION_SEED = " << SEED+1
-         << "\nPARTNER_SEED = " << SEED+COL_PARTNER_SEED
+         << "\nPOSITION_SEED = " << SEED + 1 << "\nCOLLISION_SEED = " << SEED + 1
+         << "\nPARTNER_SEED = " << SEED + COL_PARTNER_SEED
          << "\nPARTNER_RESHUFFLE = every_refresh\nPARTNER_GROUPS = 1"
-         << "\nUNIT_VOLUME = 1\nGEOMETRY_REUSE = 1\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
+         << "\nUNIT_VOLUME = 1\nGEOMETRY_REUSE = 1"
+            "\nSIZE_BIN_POLICY = moving_per_group\nSIZE_MIN_FACTOR = 0.5\nSIZE_MAX_FACTOR = 8\n";
     return static_cast<bool>(file);
 }
 
@@ -60,16 +62,20 @@ inline bool save_variable(const std::string &path, real mass) {
 #include <vector>
 
 // relabel cached geometric slots so they sample the whole population in this well-mixed test
-static __global__ void product_mix_partners(int *neighbors, const int *permutation) {
+static __global__ void product_mix_partners (int *neighbors, const int *permutation)
+{
     std::size_t slot = static_cast<std::size_t>(blockIdx.x)*blockDim.x + threadIdx.x;
     if (slot >= static_cast<std::size_t>(N_P)*N_K) return;
     int entry = neighbors[slot];
     if (entry >= 0)
+    {
         neighbors[slot] = _encode_col_neighbor(permutation[_get_col_idx_old(entry)],
                                                _get_col_image(entry));
+    }
 }
 
-inline void product_refresh_partners(int *neighbors, int *scratch, int count) {
+inline void product_refresh_partners (int *neighbors, int *scratch, int count)
+{
     static_assert(COAG_KERNEL == PRODUCT_KERNEL && COL_BIN_X == 1 && COL_BIN_Y == 1
                   && COL_BIN_Z == 1, "Partner mixing requires one well-mixed product group");
     if (count != N_P) throw std::runtime_error("partial product partner refresh");
@@ -79,7 +85,7 @@ inline void product_refresh_partners(int *neighbors, int *scratch, int count) {
     std::shuffle(permutation.begin(), permutation.end(), generator);
     // the continuation queue is idle at a refresh boundary and can hold the permutation
     GPU_CHECK(gpuMemcpy(scratch, permutation.data(), sizeof(int)*N_P, gpuMemcpyHostToDevice));
-    product_mix_partners<<<(static_cast<std::size_t>(N_P)*N_K+TPB-1)/TPB,TPB>>>(neighbors,scratch);
+    product_mix_partners <<< (static_cast<std::size_t>(N_P)*N_K + TPB - 1) / TPB, TPB >>> (neighbors, scratch);
     GPU_KERNEL_CHECK("product_mix_partners");
 }
 #define COL_PARTNER_REFRESH product_refresh_partners

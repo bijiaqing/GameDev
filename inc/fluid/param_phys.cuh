@@ -3,7 +3,7 @@
 
 #include <const_defs.cuh>
 
-// =========================================================================================================================
+// =====================================================================================================================
 // orbital and vertically isothermal gas profiles
 
 __device__ __forceinline__
@@ -24,7 +24,7 @@ __device__ __forceinline__
 real _get_gas_strat (real R, real Z, real h_g)
 { return exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g)); }
 
-// =========================================================================================================================
+// =====================================================================================================================
 // Epstein stopping-time profile
 
 // scale the reference midplane Stokes number by inverse surface density and vertical stratification
@@ -46,9 +46,9 @@ real _get_nu (real R, real h_g)
     #ifndef CONST_NU  // CONST_ALPHA
     real nu = ALPHA*h_g*h_g*R*R*_get_omegaK(R);
     return nu;
-    #else             // CONST_NU
+        #else             // CONST_NU
         return NU;
-    #endif // CONST_NU
+        #endif // CONST_NU
 }
 
 // return the local dust diffusivity, including finite-Stokes suppression in both flux modes
@@ -141,6 +141,6 @@ real _get_hd (real R, real h_g)
     #endif // DIFFUSION
 }
 
-// =========================================================================================================================
+// =====================================================================================================================
 
 #endif // PARAM_PHYS_CUH
