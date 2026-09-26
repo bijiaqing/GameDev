@@ -612,13 +612,16 @@ The strongest evidence is the combination of:
 ### 12.3 Cross-backend comparison
 
 `val/compare_backends.py` compares corresponding deterministic CUDA and ROCm swarm metric records
-field by field with a default relative tolerance of $10^{-5}$ and absolute tolerance of
-$10^{-11}$. The stochastic diffusion records need not agree; both backends must pass their own
-statistical validation for the same case and resolution. The KNN suite manifests must both pass
-with equal case counts, and each collision-chain model must pass on both backends with the same
-variant coverage; chain hashes are compared only within one backend. Both suite manifests must pass
-with equal tier counts and, unless explicitly disabled, the two campaign records must carry the
-same source fingerprint.
+field by field with a default relative tolerance of $10^{-5}$ and absolute tolerance of $10^{-11}$.
+The collision-physics KNN-measure diagnostics (`maximum_measure_relative_error` and
+`errors.knn_measure`) are excluded, because they carry the single-precision rounding of the search
+and differ between backends at about $10^{-5}$ relative; each backend judges them natively against
+the $2\times10^{-4}$ bound of Section 8.4. The stochastic diffusion records need not agree; both
+backends must pass their own statistical validation for the same case and resolution. The KNN suite
+manifests must both pass with equal case counts, and each collision-chain model must pass on both
+backends with the same variant coverage; chain hashes are compared only within one backend. Both
+suite manifests must pass with equal tier counts and, unless explicitly disabled, the two campaign
+records must carry the same source fingerprint.
 
 ### 12.4 Evidence boundary
 

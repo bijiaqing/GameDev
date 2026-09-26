@@ -37,6 +37,43 @@ BACKEND_DEPENDENT_FLUID_FIELDS = {
     "startup_3d": {"initial_mass"},
 }
 
+# Both KNN searches build the neighbor ball in single precision, so the size of its
+# rounding error against the exact double-precision measure depends on each vendor's
+# float arithmetic.  validate_colphys.py bounds that error natively (below 2e-4) on
+# each backend; the measures themselves and every physical value are still compared.
+BACKEND_DEPENDENT_SWARM_FIELDS = {
+    case: {"maximum_measure_relative_error", "errors.knn_measure"}
+    for case in ("colphys_code", "colphys_cgs", "colphys_3d")
+}
+
+
+def without_fields(record: dict[str, Any], fields: set[str]) -> dict[str, Any]:
+    """drop dotted field paths from a record and from each per-search sub-record"""
+
+    def drop(value: dict[str, Any], path: str) -> dict[str, Any]:
+        head, _, tail = path.partition(".")
+        if head not in value:
+            return value
+        if not tail:
+            return {key: item for key, item in value.items() if key != head}
+        if isinstance(value[head], dict):
+            return {**value, head: drop(value[head], tail)}
+        return value
+
+    result = record
+    for field in fields:
+        result = drop(result, field)
+        searches = result.get("searches")
+        if isinstance(searches, dict):
+            result = {
+                **result,
+                "searches": {
+                    name: drop(item, field) if isinstance(item, dict) else item
+                    for name, item in searches.items()
+                },
+            }
+    return result
+
 
 def load_json(path: Path) -> dict[str, Any]:
     """read one JSON object and reject malformed archive entries"""
@@ -278,6 +315,9 @@ def compare_metrics(
             excluded = BACKEND_DEPENDENT_FLUID_FIELDS[case]
             cuda = {key: value for key, value in cuda.items() if key not in excluded}
             rocm = {key: value for key, value in rocm.items() if key not in excluded}
+        if component == "swarm" and case in BACKEND_DEPENDENT_SWARM_FIELDS:
+            cuda = without_fields(cuda, BACKEND_DEPENDENT_SWARM_FIELDS[case])
+            rocm = without_fields(rocm, BACKEND_DEPENDENT_SWARM_FIELDS[case])
         compare_value(
             cuda,
             rocm,

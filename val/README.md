@@ -81,9 +81,11 @@ python3 -B val/compare_backends.py --cuda-root CUDA_VAL_COPY --cuda-sweep block_
 
 `CUDA_VAL_COPY` is the directory that received the copy. The comparison requires both campaign
 records to carry the same source fingerprint, compares deterministic metrics within numerical
-tolerances, and judges stochastic cases by each backend's own analytical test rather than by
-matching random streams. Alternatively, copy the counterpart into this checkout's own `val/`
-directory and rerun the native campaign with `run_all.py --compare`.
+tolerances (except diagnostics that carry single-precision rounding, such as the collision-physics
+KNN-measure errors, which each backend bounds natively), and judges stochastic cases by each
+backend's own analytical test rather than by matching random streams. Alternatively, copy the
+counterpart into this checkout's own `val/` directory and rerun the native campaign with
+`run_all.py --compare`.
 
 ## Running part of the suites
 
