@@ -130,7 +130,6 @@ with the Eriksson comparison at matching times.
 ## Evidence boundary
 
 The eight builds use only the constants and host overrides above with root numerical sources and
-have distinct executable and output paths. The ROCm specializations were tuned on MI300A (`gfx942`)
-at `N_K = 256` and `COL_BATH_EPS = 0.02`; their speedup at this campaign's 0.08 is unmeasured.
+have distinct executable and output paths.
 Native CUDA and ROCm builds and fresh scientific results from the current source are required
 before the campaign supports a scientific claim.

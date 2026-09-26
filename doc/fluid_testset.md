@@ -83,11 +83,15 @@ The shared analytical gate applies to cases without a model-local validator. It 
 - a finest-grid $L_1$ error of the primary field (density, or optical depth for `test_optdepth`) no
   larger than $2\times10^{-2}$;
 - a final observed order of that error of at least 1.5 (0.75 when fewer than four resolutions are
-  requested).
+  requested);
+- the same two conditions for each conserved momentum component `momx`, `momy`, and `momz`,
+  except that a component whose finest $L_1$ error is at most $10^{-12}$ is the roundoff of an
+  exactly vanishing solution and needs no observed order.
 
-`test_source_drag` replaces the last two conditions by a maximum error of $10^{-12}$ over every
-compared field. Apart from mass, the shared gate judges only the primary field; the momentum and
-velocity errors of these cases are archived with each record but do not enter the pass decision.
+Exact-solution cases (`test_x_transport_2d` with an integer shift, `test_optdepth` with a zero
+power) instead require every judged $L_1$ error to be at most $10^{-10}$, and `test_source_drag`
+replaces the accuracy and order conditions by a maximum error of $10^{-12}$ over every compared
+field. The velocity errors are archived with each record but do not enter the pass decision.
 
 A validator-owned gate applies to cases whose model directory supplies `validate_case.py`. Each
 metric record then carries its own `passed` flag, which combines an activation check (the tested
@@ -346,7 +350,8 @@ The initial momenta are fixed multiples of density, so the exact momenta are the
 the exact density. These cases jointly exercise Crank–Nicolson coefficients, cyclic or boundary
 closure, metric factors, density fluxes, and the donor-momentum closure. Density and all momentum
 and velocity components are archived. `test_x_diffusion_2d`, `test_y_diffusion_cyl`,
-`test_y_diffusion_sph`, and `test_z_diffusion_3d` use the shared gate, which judges density;
+`test_y_diffusion_sph`, and `test_z_diffusion_3d` use the shared gate, which judges density and
+the three momentum components;
 `test_x_wedge_diffusion_2d` uses the wedge validator.
 
 Acceptance of `test_x_wedge_diffusion_2d` (validator-owned): activation (a period that differs
@@ -478,8 +483,8 @@ angular momentum $\sqrt{(1-\beta)GMR}$ and zero radial motion.
 
 This case is intentionally retained even though its component operators are tested separately: it
 detects ordering, buffer, and conserved-to-primitive conversion errors that isolated operator
-tests cannot expose. It uses the shared gate on density; the momentum, velocity, and optical-depth
-errors are archived.
+tests cannot expose. It uses the shared gate on density and momentum; the velocity and
+optical-depth errors are archived.
 
 It is a short controlled coupled test, not a claim that an arbitrary nonlinear disk has a
 closed-form solution. The verification driver reproduces the operator composition while replacing
@@ -517,7 +522,7 @@ The strongest evidence is the combination of
 - the expected resolution trend rather than a single permissive tolerance;
 - conservation or exact escaped-mass accounting appropriate to the boundary;
 - activation checks showing that the tested boundary, limiter, or seam branch was exercised;
-- for the wedge and polar-boundary cases, momentum as well as density within tolerance;
+- momentum as well as density within tolerance;
 - consistent CUDA and ROCm archives from one source fingerprint.
 
 ### 10.3 Cross-backend comparison

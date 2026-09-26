@@ -58,8 +58,8 @@ constexpr real  T_BETA      = 2.0*M_PI;     // smoothly turn radiation on over t
 #endif // RADIATION
 
 #ifdef DIFFUSION
-constexpr real  SCHMIDT_X   = 1.0e+20;      // azimuthal Schmidt number in spherical X
-constexpr real  SCHMIDT_Y   = 1.0e+20;      // radial Schmidt number in spherical Y
+constexpr real  SCHMIDT_X   = 1.0;          // azimuthal Schmidt number in spherical X
+constexpr real  SCHMIDT_Y   = 1.0;          // radial Schmidt number in spherical Y
 constexpr real  SCHMIDT_Z   = 1.0;          // polar Schmidt number in spherical Z
 constexpr real  POS_LIMIT   = 0.9;          // limit for the dust density positivity limiter
 #endif // DIFFUSION

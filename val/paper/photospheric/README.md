@@ -140,7 +140,5 @@ $\langle e^{-\tau}\rangle\ne e^{-\langle\tau\rangle}$.
 
 ## Evidence boundary
 
-Native runs of both formulations report a swarm step of $1.627\times10^{-4}$, consistent with the
-orbital bound above, and a fluid step of $1.0365\times10^{-2}$. These are run observations, not
-convergence evidence. Matched-source outputs and timestep and resolution convergence are required to
+Matched-source outputs and timestep and resolution convergence are required to
 establish accuracy.

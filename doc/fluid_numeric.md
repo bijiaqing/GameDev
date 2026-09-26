@@ -312,7 +312,7 @@ with a flag exist only when that flag is defined.
 | `STOKES_0` | $10^{-3}$ | reference midplane Stokes number $\mathrm{St}_0$ at $R_0$ | always |
 | `ALPHA` | $10^{-3}$ | turbulent $\alpha$ | `DIFFUSION` without `CONST_NU` |
 | `NU` | $10^{-5}$ | constant kinematic viscosity $\nu$ | `DIFFUSION` and `CONST_NU` |
-| `SCHMIDT_X`, `SCHMIDT_Y`, `SCHMIDT_Z` | $10^{20}$, $10^{20}$, 1 | directional Schmidt numbers $\mathrm{Sc}_{x,y,z}$ | `DIFFUSION` |
+| `SCHMIDT_X`, `SCHMIDT_Y`, `SCHMIDT_Z` | 1, 1, 1 | directional Schmidt numbers $\mathrm{Sc}_{x,y,z}$ | `DIFFUSION` |
 | `POS_LIMIT` | 0.9 | CN explicit-side coefficient-sum bound and exported old-donor mass fraction per diffusion substep | `DIFFUSION` |
 | `BETA_0` | 10 | unattenuated radiation ratio $\beta_0$ | `RADIATION` |
 | `KAPPA_0` | $5\times10^{4}$ | opacity $\kappa_0$ | `RADIATION` |
@@ -2026,8 +2026,8 @@ reduce them, so compiler resource reports (for example `-Xptxas -v` through `CUD
 
 When neither the command line nor the model's `flags.mk` sets `FLUID_SWEEP`, the Makefile uses
 `thread` on CUDA and `block` on ROCm. The choice changes only work decomposition, memory, and
-speed; the two sweeps are expected to differ only at roundoff level, and each is validated against
-the same acceptance criteria. The practical trade-offs are:
+speed; the two sweeps agree to rounding error, and each is validated against the same acceptance
+criteria. The practical trade-offs are:
 
 - **Exposed parallelism.** A thread-sweep directional launch runs only $N_{\rm line}$ threads,
   1024 for a $1024^2$ disk, which is a small fraction of a modern GPU's resident-thread capacity.

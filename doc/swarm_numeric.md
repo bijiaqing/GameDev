@@ -335,8 +335,7 @@ positive controller bin counts and `COL_BIN_MIN`, `COL_BATH_MAX > 0`, `0 < COL_B
 `0 < COL_BATH_ALPHA < 1`, a power-of-two `TPB` in collision builds, `N_K <= 4096` for the KD-tree
 heap, and `N_P <= INT_MAX/3` (715 827 882) in collision builds, because each neighbor code packs a
 particle index and an image index into one 32-bit integer (Section 9.5). The Morton builder
-rejects `MORTON_MAX_LEVEL` outside 1 to 20 at run time. Static shared memory further bounds `N_K`
-(Section 11.4).
+rejects `MORTON_MAX_LEVEL` outside 1 to 20 at run time.
 
 ### 2.5 Compile-time feature selection
 
@@ -3034,13 +3033,6 @@ On the host, the pinned particle array, the fresh-start sample arrays, and a few
 per-representative vectors used to rebuild controller owner lists are the main costs. A failed
 device allocation stops the run with the `Error: ...` message of `GPU_CHECK`, or with an exception
 from the Morton builder (Section 11.6).
-
-Static shared memory also bounds `N_K`. Per block, `col_chain_run` holds about $44N_K$ bytes of
-pair-rate, jump-moment, and reduction arrays and `col_bath_rate` about $33N_K$ bytes. Under the
-48 KiB static shared-memory limit per block of CUDA devices, the chain kernel limits `N_K` to
-roughly 1100; AMD devices provide 64 KiB of LDS per workgroup. The Morton query holds its padded
-merge workspace of 8 bytes per slot plus a 1 KiB traversal stack, and the CUDA KD-tree heap at most
-32 KiB (Section 9.3).
 
 ### 11.5 Random streams and reproducibility
 

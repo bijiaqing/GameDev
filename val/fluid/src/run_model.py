@@ -37,6 +37,9 @@ from val_config import (
     model_output,
 )
 
+# momentum L1 errors at or below this level are roundoff of an exactly vanishing component
+MOMENTUM_ROUNDOFF = 1.0e-12
+
 
 def observed_orders(errors: list[float]) -> list[float]:
     """return pairwise convergence orders for successive factor-of-two grids"""
@@ -239,6 +242,38 @@ def assess_records(
             bool(convergence_orders) and convergence_orders[-1] >= minimum_order
         )
 
+    # judge every conserved momentum component with the density rule; components whose exact
+    # solution vanishes stay at roundoff and need no observed order
+    momentum_checks = []
+    for field in ("momx", "momy", "momz"):
+        if model == "test_source_drag" or field not in records[0]["errors"]:
+            continue
+        values = [float(record["errors"][field]["l1"]) for record in records]
+        tolerance = 1.0e-10 if exact_case else 2.0e-2
+        roundoff = values[-1] <= MOMENTUM_ROUNDOFF
+        orders = (
+            observed_orders(values)
+            if len(values) > 1 and all(value > 0.0 for value in values)
+            else []
+        )
+        order_required = not exact_case and not roundoff and len(records) > 1
+        minimum_order = 1.5 if len(records) >= 4 else 0.75
+        order_passed = not order_required or (bool(orders) and orders[-1] >= minimum_order)
+        momentum_checks.append(
+            {
+                "field": field,
+                "finest_l1": values[-1],
+                "accuracy_tolerance": tolerance,
+                "accuracy_passed": values[-1] <= tolerance,
+                "roundoff": roundoff,
+                "orders": orders,
+                "minimum_order": minimum_order if order_required else None,
+                "order_passed": order_passed,
+                "passed": values[-1] <= tolerance and order_passed,
+            }
+        )
+    momentum_passed = all(check["passed"] for check in momentum_checks)
+
     return {
         "finite": finite,
         "mass_max": mass_max,
@@ -252,7 +287,13 @@ def assess_records(
         "accuracy_passed": accuracy_passed,
         "orders": convergence_orders,
         "convergence_passed": convergence_passed,
-        "passed": finite and mass_passed and accuracy_passed and convergence_passed,
+        "momentum_checks": momentum_checks,
+        "momentum_passed": momentum_passed,
+        "passed": finite
+        and mass_passed
+        and accuracy_passed
+        and convergence_passed
+        and momentum_passed,
     }
 
 
