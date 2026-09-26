@@ -248,5 +248,97 @@ __global__ void diffusion_pos (swarm *dev_particle, curs *dev_rngstate, real dt
 #endif // DIFFUSION
 
 // =====================================================================================================================
+// collision chain: bath controller, local scheduler, and frozen-bath event chain
+// =====================================================================================================================
+
+#if defined(COLLISION) && !defined(BERNOULLI)
+
+#include <_col_types.cuh>
+
+__global__
+void col_size_zero ();
+
+__global__
+void col_size_scan (const int *ids, int count, const swarm *particles,
+    const int *spatial, const unsigned char *active);
+
+__global__
+void col_size_bnds ();
+
+__global__
+void col_bath_init (const int *owner_ids, int owner_count, real *dev_size_old, real *dev_numr_old, real *dev_col_time,
+    int *dev_col_events, unsigned char *dev_col_complete, const swarm *dev_particle);
+
+__global__
+void col_space_bin (int *dev_col_spatial, const swarm *dev_particle);
+
+__global__
+void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, real *change_rate, real *second_rate,
+    const swarm *dev_particle, const int *dev_col_neighbor,
+    const real *dev_col_measure, const unsigned char *dev_col_active,
+    const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0, const query_environment *environment, cached_rate_moments *cached);
+
+__global__
+void col_count_bin (const int *owner_ids, int owner_count, int *dev_col_count, const swarm *dev_particle,
+    const int *dev_col_spatial, const unsigned char *dev_col_active);
+
+__global__
+void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col_bin, const swarm *dev_particle,
+    const real *dev_col_rate, const real *change_rate, const real *second_rate, const int *dev_col_spatial,
+    const int *dev_col_binmap,
+    const unsigned char *dev_col_active);
+
+__global__
+void col_skip_scan (const int *ids, int count, curs *rng,
+    const unsigned char *active, const real *measure, const int *spatial, const real *steps,
+    const cached_rate_moments *cached, real *time, int *events, unsigned char *complete,
+    real *hazard, real *jump1, real *jump2, real *jumpmax, int *queue, int *queued);
+
+__global__
+void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
+    int *dev_col_unfinished, real *dev_col_time, int *dev_col_events,
+    unsigned char *dev_col_complete, real *dev_col_hazard,
+    real *dev_col_jump1_int, real *dev_col_jump2_int, real *dev_col_jumpmax_int,
+    const int *dev_col_neighbor,
+    const real *dev_col_measure, const unsigned char *dev_col_active,
+    const real *dev_size_old, const real *dev_numr_old,
+    #ifdef IMPORTGAS
+    const real *dev_gas_dens,
+    #endif // IMPORTGAS
+    real lambda_0, const real *group_step, const int *spatial,
+    int *unfinished_ids, int *error_flag, event_work *work,
+    const query_environment *environment, const cached_rate_moments *cached);
+
+__global__
+void col_audit_bin (const int *owner_ids, int owner_count, col_audit_accum *dev_col_bin, const swarm *dev_particle,
+    const real *dev_size_old, const real *dev_numr_old, const real *dev_col_rate,
+    const real *dev_col_hazard, const real *dev_col_jump1_int,
+    const real *dev_col_jump2_int, const real *dev_col_jumpmax_int,
+    const int *dev_col_events, const int *dev_col_spatial, const int *dev_col_binmap,
+    const unsigned char *dev_col_active, const real *group_step);
+
+#ifdef COL_QUERY_ENV_CACHE
+__global__
+void col_env_cache (query_environment *env, const swarm *particle);
+#endif // COL_QUERY_ENV_CACHE
+
+__global__
+void col_dep_graph (unsigned int *edges, const int *spatial,
+    const int *neighbors, const unsigned char *active);
+
+__global__
+void col_comp_zero (const int *ids, int count, real *hazard,
+    real *jump1, real *jump2, real *jumpmax);
+
+__global__
+void col_event_sum (const event_work *work, event_work *sum);
+
+#endif // COLLISION && !BERNOULLI
+
+// =====================================================================================================================
 
 #endif // GAMEDEV_SWARM_KERN_CUH

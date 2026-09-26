@@ -2249,10 +2249,13 @@ checks. Diagnostic event storage is 112 bytes per particle (double precision).
 With diagnostics enabled, `bath_count` counts group records, `wave_count` counts refresh
 waves and `continuation_launches` counts all chain launches.
 
-Collision-chain physics, grouping, diagnostics and coefficient-cache helpers are consolidated
-in `_col_chain.cuh`, together with the scheduler, GPU workspace and
-`evolve_local_collisions()` host function. CUDA and ROCm runtimes call that shared
-function with explicit state arguments after geometry/cache construction.
+The collision chain is split by role. `_col_types.cuh` holds the records shared by kernels and
+host code, `_col_rates.cuh` the device pair rates and coefficient cache, `_col_event.cuh` the
+outcome sampling, `_col_sizes.cuh` the moving size-bin bounds, `_col_bound.cuh` the host bath
+controller and archive, and `_col_sched.cuh` the power-of-two scheduler. Each chain kernel
+lives in its own `src/swarm/col_*.cu` file. `_col_chain.cuh` keeps the GPU workspace and the
+`evolve_local_collisions()` host function, which CUDA and ROCm runtimes call with explicit
+state arguments after geometry/cache construction.
 
 Fresh start-rate totals and jump moments bypass the repeated neighbor pass when the
 first waiting time spans the whole interval. Event paths restore the RNG state and
@@ -2823,7 +2826,7 @@ The main numerical components map to the production source as follows:
 | stochastic diffusion | `src/swarm/diffusion_pos.cu` |
 | density and opacity deposition | `src/swarm/dustdens_*.cu`, `src/swarm/optdepth_*.cu` |
 | pairwise collision physics | `inc/swarm/_collision.cuh` |
-| neighbor caching and frozen-bath chain | `inc/swarm/_col_cache.cuh`, `inc/swarm/_col_chain.cuh` |
+| neighbor caching and frozen-bath chain | `inc/swarm/_col_cache.cuh`, `inc/swarm/_col_*.cuh`, `src/swarm/col_*.cu` |
 | collision rates and events | `src/swarm/col_rate_calc.cu`, `src/swarm/col_event_run.cu` |
 | KD-tree and Morton search | `inc/swarm/{kdtree,morton}/` |
 | operator driver and output clock | `src/swarm/swarm_runtime.cu` |

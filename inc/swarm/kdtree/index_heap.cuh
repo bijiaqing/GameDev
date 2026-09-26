@@ -5,7 +5,7 @@
 
 #include <gpu.cuh>
 
-#include <_col_neighbor.cuh>
+#include <_col_image.cuh>
 
 // retain the exact top-K physical neighbors while filtering inactive particles and periodic duplicate images
 template<int K, typename Node

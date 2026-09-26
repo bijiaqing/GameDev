@@ -4,19 +4,11 @@
 #if defined(COLLISION) && (!defined(BERNOULLI) || defined(KNN_CACHE))
 
 #include <climits>  // INT_MAX
-#include <cstddef>  // std::size_t
 
 #include <_collision.cuh>
 #ifdef COLLISION_MORTON
 #include <morton/morton_query.cuh>
 #endif // COLLISION_MORTON
-
-__host__ __device__ __forceinline__
-std::size_t _get_col_offset (int idx_owner, int idx_neighbor)
-{
-    return static_cast<std::size_t>(idx_owner)*static_cast<std::size_t>(N_K)
-        + static_cast<std::size_t>(idx_neighbor);
-}
 
 // cache the fixed physical top-K neighborhood for one geometry epoch
 #ifdef COLLISION_KDTREE

@@ -1,7 +1,7 @@
 #ifndef GAMEDEV_SWARM_COLLISION_CUH
 #define GAMEDEV_SWARM_COLLISION_CUH
 
-#include <_col_neighbor.cuh>
+#include <_col_image.cuh>
 #include <const_defs.cuh>
 
 #ifdef COLLISION
