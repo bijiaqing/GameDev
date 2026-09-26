@@ -1,4 +1,4 @@
-// Model constants; all collision evolution uses the current production implementation.
+// campaign constants; all collision evolution uses the current production implementation
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 
@@ -119,7 +119,7 @@ const real  CFL_COL     = 0.01;
 #ifndef BERNOULLI
 const int   COL_BATH_TPB  = 64;
 const int   COL_EVENT_CAP = 32;
-// Global partner mixing requires simultaneous publication of the whole population.
+// global partner mixing requires simultaneous publication of the whole population
 const int   COL_BIN_X     = 1;
 const int   COL_BIN_Y     = 1;
 const int   COL_BIN_Z     = 1;

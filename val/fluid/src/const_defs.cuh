@@ -159,7 +159,7 @@ const real STOKES_0 = 3.0e-2;
 #else
 const real METAL_Z = 1.0e-2;
 #if defined(VERIFY_X_DIFFUSION) || defined(VERIFY_X_WEDGE_DIFFUSION)  || defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)  || defined(VERIFY_Z_DIFFUSION) || defined(VERIFY_DIFFUSION_POSLIMIT)
-// Tracer limit keeps the isolated Fourier/Bessel/Legendre references at constant D=nu/Sc.
+// the tracer limit keeps the isolated Fourier/Bessel/Legendre references at constant D=nu/Sc
 const real STOKES_0 = 0.0;
 #else
 const real STOKES_0 = 1.0e-1;

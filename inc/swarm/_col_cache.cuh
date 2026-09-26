@@ -48,7 +48,7 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     // deduplicate overlapping wedge images using the same physical-id heap as direct search
     bool unique_ids = image_dist_min < 0.0f || image_dist_min > 2.0f*search_dist;
 #ifdef GAMEDEV_ROCM
-    // Keep mutable private keys in their own allocation so heap control fields can be scalarized.
+    // keep mutable private keys in their own allocation so heap control fields can be scalarized
     unsigned long long private_keys[N_K];
     using cache_heap = idx_old_heap<N_K,kdtree_node,true>;
     cache_heap near_result(search_dist,dev_kdtree_node,!unique_ids,dev_col_active,private_keys);
@@ -104,7 +104,7 @@ void col_cache_get (int *dev_col_neighbor, real *dev_col_measure,
     real R = _get_cyl_R(y, z);
     float search_dist = static_cast<float>(H_SEARCH*_get_hg(R)*R);
 
-    // No periodic images exist in a full disk. Compile only the required top-K path.
+    // a full disk has no periodic images, so compile only the required top-K path
     constexpr int fast_work = [] { int n=1; while(n<2*N_K || n<N_K+MORTON_TPB) n*=2; return n; }();
     constexpr int query_work = X_WEDGE ? MORTON_WORK_SIZE : fast_work;
     __shared__ float work_dist_sq[query_work];

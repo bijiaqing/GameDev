@@ -1,4 +1,4 @@
-// Model constants; all collision evolution uses the current production implementation.
+// campaign constants; all collision evolution uses the current production implementation
 #ifndef CONST_DEFS_CUH
 #define CONST_DEFS_CUH
 

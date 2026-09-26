@@ -8,7 +8,8 @@ CUDA and KD-tree only. Each of `const/` and `product/` contains 25 models:
 `k{16,32,64,128,256}_eps0p{01,02,04,08,16}`. `SEED=0` through `9`
 selects the ten independent realizations; position and collision seeds are `SEED+1`.
 The same seed gives matched initialization across parameter combinations.
-There are 500 planned runs. No Slurm or campaign orchestration scripts are included.
+Constant and product together define 500 runs; adding the 250 linear-kernel runs gives
+750 runs across all three families. No Slurm or campaign orchestration scripts are included.
 
 ## Layout and individual use
 
@@ -79,14 +80,14 @@ collision controller, physical velocity model or KD-tree implementation is retai
 Controller settings use 64 collision threads, 32 events per continuation,
 8x4 spatial bins for constant and one spatial group for product, 64 size bins,
 minimum merged population 64 and the selected eps.
-The absolute duration cap is effectively disabled (1e100), as in the old campaign.
+The absolute duration cap is effectively disabled (`COL_BATH_MAX = 1e100`).
 The campaign uses moving logarithmic size-bin bounds independently in each spatial
 group: [0.5*minimum_current_size, 8*maximum_current_size]. They update immediately
 before the group's size-bin mapping is rebuilt and remain fixed through collision
 execution and its audit. Groups not being refreshed retain their bounds. Extrema
 are reduced on the GPU; no new device-to-host copies are needed. This adds three
 kernel launches per rate/bin refresh. Tree and neighbor caching remain unchanged.
-Moving size bins now come directly from the production collision header; no campaign
+Moving size bins come directly from the production collision header; no campaign
 collision-controller override is needed. `COL_SIZE_BIN_POLICY = moving_per_group`
 and `COL_SIZE_RANGE_FACTORS = 0.5 8` record the policy in production output metadata.
 
@@ -99,8 +100,7 @@ Before every collision refresh (including the first), a seeded global permutatio
 relabels all cached neighbor indices. The tree and geometric neighbor search are
 still performed only once. The partner RNG uses `SEED + COL_PARTNER_SEED` (currently
 `SEED+2`), separately from the collision RNG. Negative sentinel entries and periodic
-image labels are preserved. This restores the old campaign's well-mixed sampling
-instead of keeping particles coupled to one fixed small partner population, which
+image labels are preserved. This gives well-mixed partner sampling instead of keeping particles coupled to one fixed small partner population, which
 can amplify product-kernel growth artificially.
 
 One spatial controller group makes every refresh publish all particles together;
@@ -111,13 +111,12 @@ continuation queue supplies GPU permutation storage. Each refresh adds one CPU
 shuffle, one N_P-integer host-to-device copy and one relabeling kernel, as a
 campaign-specific cost. Physical production models and the constant campaign do
 not enable the hook. `PARTNER_RESHUFFLE`, `PARTNER_SEED`, and `PARTNER_GROUPS` are
-recorded in `variables.txt`. A fresh CUDA run is required to confirm that the
-previous nonfinite-rate failure is resolved; reshuffling is not an overflow guard.
+recorded in `variables.txt`. Reshuffling changes partner sampling; it is not an overflow
+guard. Numerical success and distribution accuracy require fresh CUDA results.
 
 ## Verification status
 
 Local build dry runs and source routing checks cover all 50 models at seeds 0 and 9.
 The analytical scorers were exercised on synthetic samples drawn from their
 reference distributions. Neither is evidence of native CUDA compilation or GPU
-accuracy. Fresh CUDA runs remain required. No stale outputs were copied, and
-Python entry points disable bytecode caches.
+accuracy. Fresh CUDA runs remain required. Python entry points disable bytecode caches.

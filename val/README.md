@@ -1,8 +1,8 @@
 # Numerical validation
 
-This is a fresh source-only validation tree. No result, executable, object file,
-or qualification record has been carried over from `val_stale/`. That directory
-is an archive and is not a dependency of these tests.
+The numerical suites use current production operators. Any historical results retained separately as `val_stale/` are not dependencies or
+qualification records for this tree; that archive is not required in the checkout. Native runs generate results
+and disposable build products in the paths below.
 
 ## Layout
 
@@ -17,7 +17,9 @@ Runs create `fluid/out/<model>/<backend>/<sweep>/` and
 `swarm/out/<model>/<backend>/`. Builds create `fluid/obj/` and `swarm/obj/`.
 Fluid CUDA sweep directories are `thread_precise` and `block_precise`;
 ROCm uses `thread` and `block`. Collision-chain records use `groups/chain/`.
-`paper/` and previous output archives are intentionally not restored.
+`paper/` contains separate scientific campaigns: eccentric orbits, diffusion, photospheric
+transport, Smoluchowski kernels, and disk coagulation. Their local READMEs define commands
+and evidence boundaries; they are not stages of `run_all.py`.
 
 ## What is under test
 
@@ -48,15 +50,15 @@ necessarily test-specific. The operators being validated come from current
 - Particle orbit and constant-drag tests call production `_ssa_advance` stages.
   Orbit tests select the zero-drag coefficient limit with production gravity;
   the drag-path test prescribes stopping time, radial gas velocity and force.
-  They no longer carry separate copies of the kick/drift algorithm. Physical
+  They carry no separate copy of the kick/drift algorithm. Physical
   gas interpolation and size-to-Stokes conversion are outside these specializations.
 - Particle diffusion calls production `diffusion_pos`; its references include
   finite-Stokes suppression and diffusivity-gradient drift. Initialization uses
   the current production host initializer.
 - Physical collision references use query-local differential radial/azimuthal
   drift, capped settling, turbulence and Brownian motion. Periodic image
-  identity affects the neighbor search; it no longer changes the prescribed
-  pair speed at a fixed query environment.
+  identity affects the neighbor search but not the prescribed pair speed at a
+  fixed query environment.
 - Collision-chain models use the current production runtime and local controller,
   with `COL_DIAGNOSTICS` enabled for their short runs. Their tests cover represented
   mass, positivity, active collision/fragmentation, continuation behavior and
@@ -65,16 +67,15 @@ necessarily test-specific. The operators being validated come from current
   neighbor references. The optional topology target compares the Morton hierarchy
   with a CPU oracle. These drivers are retained as accuracy tests, not performance records.
 
-Thresholds for retained numerical checks have not been loosened. The removed
-swarm runtime/host clones and fluid viscosity wrapper are not needed. No local
-changes have been made to production collision physics or diffusion equations.
-The production SSA stages and fluid drag weights were extracted into existing
-headers so the tests and simulation can share those implementations.
+Test-specific constants and drivers never modify production collision physics
+or diffusion equations. The SSA stages (`_ssa_advance` in `inc/swarm/_transport.cuh`)
+and fluid drag weights (`_get_drag_weights` in `inc/fluid/fluid_kern.cuh`) are
+shared by the simulation and the tests rather than copied.
 
 ## Four independent jobs
 
 Use the same source checkout on both clusters. Requirements: Python 3.10+ with
-NumPy, Make, a C++17 CUDA/ROCm toolchain, and a GPU allocation. The prior targets
+NumPy, Make, a C++17 CUDA/ROCm toolchain, and a GPU allocation. The default targets
 are A100 `sm_80` and AMD `gfx942`; select the target matching the allocated GPU.
 Each fluid job runs thread then block; each swarm job covers both searches.
 The runners clean each tested build configuration before compiling. No global
@@ -130,6 +131,10 @@ points disable bytecode generation; no `__pycache__` is needed.
 
 ## Qualification status
 
-No fresh native CUDA or ROCm test has run in this reconstructed tree. Local path,
-import, and host arithmetic checks are not GPU compilation or numerical qualification.
+Current numerical-suite qualification requires fresh native CUDA and ROCm archives tied
+to this source. Local path, import, and host arithmetic checks are not GPU compilation or
+numerical qualification. A successful individual paper-model run does not qualify these suites.
 Do not reuse old PASS records as evidence for this version.
+
+No automatic static-check stage is part of the campaign. Keep block-source provenance and
+separate native production-build qualification pending until their evidence is available.

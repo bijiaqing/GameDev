@@ -1,7 +1,7 @@
 #ifndef COAG_SWARM_HOST_CUH
 #define COAG_SWARM_HOST_CUH
-// Reuse production I/O, size sampling, mass normalization and runtime helpers.
-// Replace only the settled/smoothed spatial initializer and its domain-mass integral.
+// reuse production I/O, size sampling, mass normalization, and runtime helpers
+// replace only the settled/smoothed spatial initializer and its domain-mass integral
 #define initmass_calc production_initmass_calc
 #define rand_disk_poly production_rand_disk_poly
 #include "../../../../inc/swarm/swarm_host.cuh"
@@ -11,8 +11,8 @@
 #include <random>
 #include <const_defs.cuh>
 
-// Well-mixed dust: rho_d = METAL_Z*rho_g, using the production spherical
-// hydrostatic gas profile. r is in au; the returned weight includes r^2 sin(theta).
+// return the well-mixed dust weight rho_d = METAL_Z*rho_g from the production spherical hydrostatic gas profile
+// r is in au and the returned weight includes the volume factor r^2 sin(theta)
 inline double initial_weight(double r, double theta)
 {
     double R = r*std::sin(theta);
@@ -21,7 +21,7 @@ inline double initial_weight(double r, double theta)
          * std::exp((std::sin(theta)-1.0)/h2);
 }
 
-// Simpson integration over the actual spherical domain, including both hemispheres.
+// integrate with Simpson's rule over the actual spherical domain, including both hemispheres
 inline double initial_integral(int n = 512, int radial_power = 0)
 {
     double dr = (Y_MAX-Y_MIN)/AU/n, dtheta = (Z_MAX-Z_MIN)/n;
@@ -46,8 +46,8 @@ inline double initial_dust_mass()
 inline void sample_initial_position(std::mt19937 &rng, double &r, double &theta)
 {
     std::uniform_real_distribution<double> uniform(0.0,1.0);
-    // For the fixed p=-1, q=-1/2 setup, stratification <=1 and this bounds
-    // r^-1/4 sin(theta)^-5/4 throughout the domain.
+    // bound the rejection-sampling weight: for the fixed p=-1, q=-1/2 setup, stratification <= 1 and
+    // r^-1/4 sin(theta)^-5/4 is largest at the inner radius and polar edge
     const double bound = std::pow(Y_MIN/AU,-0.25)*std::pow(std::sin(Z_MIN),-1.25);
     do {
         r = Y_MIN/AU + (Y_MAX-Y_MIN)/AU*uniform(rng);
@@ -59,7 +59,7 @@ static_assert(IDX_P == -1.0 && IDX_Q == -0.5 && R_0 == AU);
 
 inline void initmass_calc(std::vector<real> &mass_bank)
 {
-    // Every initial size has the same spatial distribution and containment.
+    // every initial size has the same spatial distribution and containment
     mass_bank.assign(1,initial_dust_mass());
 }
 

@@ -36,7 +36,7 @@ const real  S_0         = 1.0;              // reference grain diameter, indepen
 
 const int   N_P         = 1.0e+09;          // total number of representative particles
 
-constexpr int  N_X      = 1024;
+constexpr int  N_X      = 1536;
 constexpr real X_MIN    = 0.0;
 constexpr real X_MAX    = 0.5*M_PI;
 
@@ -124,7 +124,7 @@ const real  CFL_COL     = 0.01;             // maximum collision propensity per 
 #endif // BERNOULLI
 
 #ifndef BERNOULLI
-// Backend default; model const_defs.cuh overrides may choose another width.
+// backend default threads per owner chain; a model const_defs.cuh may choose another width
 #ifdef GAMEDEV_ROCM
 const int   COL_BATH_TPB  = 128;
 #else

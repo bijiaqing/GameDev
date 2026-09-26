@@ -1,5 +1,5 @@
 #pragma once
-// The well-mixed Smoluchowski problem uses unit volume, not the geometric neighbor area.
+// the well-mixed Smoluchowski problem uses unit volume, not the geometric neighbor measure
 #define _get_ball_measure _geometric_ball_measure
 #include "../../../../../inc/swarm/_collision.cuh"
 #undef _get_ball_measure

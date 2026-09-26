@@ -12,8 +12,8 @@ The common matrix is defined in `val/val_config.py`. For the standard resolution
 $N=32,64,128,256$, it contains 15 named entries: 14 analytical or statistical models producing
 42 metric records, plus the standalone KNN matrix. The all-in-one campaign also runs four native
 collision-chain models. CUDA and ROCm use the same
-backend-neutral definitions and validators wherever their runtime APIs permit.
-The larger analytical coagulation campaigns under `val/paper/coagulation/` are CUDA-only scientific campaigns
+backend-neutral definitions under `val/swarm/mod/` and shared drivers and validators under
+`val/swarm/src/`. The analytical coagulation campaigns under `val/paper/smoluchowski/` are CUDA-only scientific campaigns
 and deliberately remain outside this routine matrix.
 
 The production equations and numerical methods are documented in
@@ -76,7 +76,7 @@ The constant material-density factor cancels in relative conservation errors.
 | collision physics | `test_colphys_code`, `test_colphys_cgs`, `test_colphys_3d` | turbulent, Brownian, resolved, vertically integrated, and periodic-image collision rates |
 | neighbor search | `test_knn` | exact K-nearest-neighbor results for KD-tree and Morton backends |
 | collision chain | `test_colchain_2d`, `test_colchain_frag_2d`, `test_colchain_wedge_2d`, `test_colchain_3d` | production frozen-bath evolution and controller behavior |
-| analytical coagulation | `main/coagulation/test_const`, `main/coagulation/test_linear`, `main/coagulation/test_product` | constant-, additive-, and product-kernel mass distributions against Smoluchowski solutions |
+| analytical coagulation | `paper/smoluchowski/const`, `paper/smoluchowski/linear`, `paper/smoluchowski/product` | constant-, additive-, and product-kernel mass distributions against Smoluchowski solutions |
 
 The PR-drag and physical-collision cases use one fixed build because their test coordinate is a
 parameter index rather than a spatial resolution. `test_initial_3d` uses only the endpoint builds
@@ -176,8 +176,9 @@ $$
 dX=A(X)\,dt+\sqrt{2D(X)}\,dW,
 $$
 
-where $A$ contains the required diffusivity-gradient and coordinate drift. For the constant-$D$
-test problems,
+where $A$ contains the required diffusivity-gradient and coordinate drift. The retained cases
+apply one Euler–Maruyama step from prescribed initial positions. With $D$ evaluated at that
+initial position,
 
 $$
 \operatorname{Var}(\Delta X)=2D\Delta t.
@@ -197,8 +198,9 @@ $$
 \le 6(2D\Delta t)\sqrt{\frac{2}{N_P-1}}.
 $$
 
-It separately requires particle velocities to remain unchanged to roundoff. In the cylindrical
-cases, the expected geometric mean drift is included rather than assuming a Cartesian zero mean.
+It separately requires particle velocities to remain unchanged to roundoff. In the radial cases, the expected mean includes both the cylindrical $D/R$ term and the
+Stokes-dependent diffusivity gradient. These one-step density-mode tests do not establish
+concentration-mode equilibria or long-time convergence in arbitrary imported gas fields.
 
 These are distributional tests: differing random-number streams across GPU backends are acceptable
 when both ensembles satisfy the same law.
@@ -256,7 +258,7 @@ reconstructs the 128-entry mass bank, tests the logarithmic interpolation at the
 represented mass, and applies radial and vertical probability-integral transforms. For a correct
 sampler those transformed values are uniform; each population must satisfy a KS limit
 $6/\sqrt{N_{\rm population}}$. The endpoint resolution builds must produce the same continuous
-initialization result because the algorithm no longer integrates over polar cells.
+initialization result because the algorithm does not integrate over polar cells.
 
 ## 8. Physical collision rates
 
@@ -265,8 +267,11 @@ collision helpers for fixed particle pairs. The relative speed is assembled as
 
 $$
 \Delta v_{ij}=
-\sqrt{\Delta v_{\rm resolved}^2+\Delta v_{\rm turb}^2+\Delta v_{\rm Brown}^2},
+\sqrt{\Delta v_{\rm drift}^2+\Delta v_{\rm turb}^2+\Delta v_{\rm Brown}^2},
 $$
+
+where $\Delta v_{\rm drift}$ combines the query-local differential radial, azimuthal, and capped
+settling speeds evaluated at the owner's position for both grain sizes.
 
 For the vertically integrated planar model, the pair numerator is
 
@@ -303,20 +308,20 @@ specialization.
 
 An independent Python implementation evaluates all six Ormel--Cuzzi turbulent-velocity regimes and
 straddles all five branch boundaries. The physical-unit case additionally checks Brownian motion and
-its sound-speed cap. Both branches check the resolved Cartesian relative speed and the assembled
+its sound-speed cap. Both branches check the query-local drift speed and the assembled
 custom-kernel rate. The maximum relative discrepancy must remain below $2\times10^{-11}$.
 
-The code-unit planar and 3D paths additionally represent the same local pair once in the wedge
-interior and once across its rotational seam. The partner image code
+The planar and 3D paths additionally represent the same local pair once in the wedge interior and
+once across its rotational seam. The partner image code
 
 $$
 c=3j+a
 $$
 
-is decoded back to physical index $j$ and image $a$. The resolved speed and complete physical rate
-must equal the interior reference, while deliberately ignoring the image must produce a relative
-speed at least ten times larger. The 3D case uses nonzero radial and polar velocity so this is not a
-planar identity compiled on a three-dimensional grid.
+is decoded back to physical index $j$ and image $a$. Because the physical closure is query-local,
+the seam pair, the same pair evaluated with a deliberately wrong image, and the interior pair must
+all give the same relative speed to $2\times10^{-11}$. The image code must still be returned
+exactly, because it determines the selected neighbor and its search distance.
 
 The cache regression does not insert this code manually. It launches the production site
 initialization, builds the selected KD-tree or Morton/ghost index, launches the production KNN cache
@@ -378,8 +383,8 @@ publication KNN matrix; it does not replace the neighbor or collision tests.
 
 ## 10. Production frozen-bath collision chain
 
-The four `test_colchain_*` cases use a validation runtime copy that retains the production
-frozen-bath algorithm and adds deterministic seeds and diagnostics. They exercise complete event
+The four `test_colchain_*` cases compile `src/swarm/swarm_runtime.cu` and the production
+frozen-bath algorithm with validation constants. They exercise complete event
 histories, covering coagulation in a planar disk, fragmentation, a periodic wedge, and full 3D.
 Each case runs both KD-tree and Morton searches. The planar coagulation case also compares event caps
 1 and 32, forcing the continuation path.
@@ -396,9 +401,9 @@ For every realization, the validator requires:
 - pathwise identity between cap-1 and cap-32 results for the same search backend.
 
 The controller divides a collision operator interval into frozen baths. Within each bath the
-positions and KNN geometry are fixed, while the event chain updates particle properties. A bath is
-accepted only when its measured activity and distribution changes remain within the controller
-limits. The wedge chain must report `COAG_KERNEL=3`, ensuring that it exercises the physical
+positions and KNN geometry are fixed, while the event chain updates particle properties. The
+post-interval audit flags activity or distribution overshoots and adjusts later refreshes; it does
+not reject and replay the stochastic path. The validation criteria require no persistent overshoot. The wedge chain must report `COAG_KERNEL=3`, ensuring that it exercises the physical
 collision kernel rather than a synthetic rate. These tests establish conservation, deterministic
 continuation, search-backend coverage, and production-path integrity. They do not constitute a convergence proof for arbitrary physical
 coagulation histories. When a publication depends on such a history, its model-specific evidence
@@ -407,136 +412,36 @@ campaign outputs are scientific results, not additional permanent validation rec
 
 ## 11. Analytical coagulation distributions
 
-The standalone campaigns in `val/paper/coagulation/test_{const,linear,product}` evolve
-`N_P = 10^6` fixed representative particles by coagulation alone. Each kernel
-uses the complete Cartesian grid
+The separate CUDA/KD-tree campaigns live under
+[`val/paper/smoluchowski/`](../val/paper/smoluchowski/README.md), with `const`, `linear`,
+and `product` kernels. Each uses $10^6$ representatives, 25 combinations of
+`N_K = 16, 32, 64, 128, 256` and `COL_BATH_EPS = 0.01, 0.02, 0.04, 0.08, 0.16`,
+and ten seeds. These define 750 planned runs, not 750 completed or validated runs.
 
-```text
-N_K          = 10, 20, 50, 100, 200
-COL_BATH_EPS = 0.005, 0.01, 0.02, 0.04, 0.08
-```
+The normalized kernels are constant, additive, and multiplicative in grain mass. Constant and
+product start from unit monomers; linear samples equal-mass representatives from a gamma
+mass distribution of shape two and scale one, corresponding to an exponential physical number
+distribution. Grain material density $6/\pi$ makes the production mass formula $m=s^3$.
+Constant output times extend to $10^8$; linear uses $t=0,1,2,3,4$; product stops at
+$t=0.9$, before gelation at $t=1$.
 
-with ten paired stochastic realizations per model. This gives 250 completed
-runs per kernel and 750 runs in total. Position and collision seeds are shared
-across parameter settings within each realization; the linear campaign also
-varies its initialization seed, and the product campaign varies its bath-partner
-permutation seed.
+These campaigns compile the current production runtime, collision controller, cached rates,
+and event updates. Local overrides provide normalization, seeded initialization, unit-volume
+neighbor measures, and scoring. Fixed positions permit geometry reuse. Product additionally
+reshuffles cached partner identities at each collision refresh and uses one spatial controller
+group; its well-mixed evolution does not establish that a small fixed neighbor set suffices for
+the physical collision problem.
 
-### 11.1 Analytical setups
+The scorers record mass-weighted distributions, CDF and histogram distances, log-mass
+Wasserstein distance, and moment errors. They impose no formal accuracy pass threshold.
+Assess neighbor-count and refresh-tolerance dependence separately from seed scatter; a small
+controller tolerance is not a histogram-error bound. Current campaign definitions and output
+instructions are in their adjacent READMEs. Results from removed campaign layouts and older
+controllers must not be used as measurements of these configurations.
 
-The three normalized kernels and initial conditions are:
-
-| Campaign | Kernel | Initial physical distribution | Retained times |
-|---|---|---|---|
-| constant | $K=\Lambda_0$ | monodisperse, $m=m_0$ | $\tau=0,1,10,\ldots,10^8$ |
-| linear | $K=\Lambda_0(m_i+m_j)$ | $f(m,0)=N_0e^{-m/m_0}/m_0$ | $\tau=0,1,2,3,4$ |
-| product | $K=\Lambda_0m_im_j$ | monodisperse, $m=m_0$ | $\tau=0,0.1,\ldots,0.9$ |
-
-The product snapshots stop before gelation at $\tau=1$. Equal-mass
-representative swarms sample the linear initial condition from the
-mass-weighted gamma distribution with shape two and scale one. The constant
-and product cases start with unit-mass grains.
-
-All campaigns prescribe `total_dust_mass = 1e30` and use the model-local mass
-convention $m=s^3$. The sampled-neighbor coefficient is
-
-$$
-\lambda_0=\frac{N_P}{N_KM_{\rm dust}},
-$$
-
-so the corresponding full-ensemble kernel amplitude is
-$\Lambda_0=1/M_{\rm dust}$ and the saved time is the normalized coagulation
-time $\tau$. A model-local unit-volume branch returns one for every positive
-KNN radius, removing the spatial measure from this normalization. The constant
-and linear tests include the owner's own swarm among the `N_K` slots using the
-large-represented-number approximation; the product permutation instead gives
-self-selection its global probability. Synthetic kernels have zero relative
-velocity, so the positive fragmentation threshold sends every accepted event
-through coagulation.
-
-### 11.2 Reconstruction and scores
-
-The physical mass probability represented by particle $i$ is
-
-$$
-p_i=\frac{N_i m_i}{\sum_jN_jm_j}.
-$$
-
-Each completed realization is scored at its final snapshot with fixed
-logarithmic mass edges. The retained JSON records total-variation,
-Jensen--Shannon, log-mass Wasserstein, and CDF distances together with total
-number, represented mass, the second-moment ratio, controller diagnostics,
-and wall time. The Wasserstein distance is
-
-$$
-W_1=\int\left|F_{\rm sim}(x)-F_{\rm ana}(x)\right|\,dx,
-\qquad x=\log_{10}(m/m_0),
-$$
-
-and is reported in dex. Seed-zero raw outputs retain every listed time for
-figures; the automated multiseed score uses only the final time. A JSON status
-of `passed` means that execution, scoring, and controller checks completed. The
-magnitude of analytical agreement is given by the recorded distribution and
-moment errors rather than by a separate Boolean threshold. `COL_BATH_EPS` is a
-local frozen-bath controller tolerance, not a direct histogram-error bound; its
-accuracy--cost relation is therefore calibrated from these campaigns.
-
-Across all 750 runs, represented mass is conserved to better than
-$6.7\times10^{-15}$ and no persistent controller overshoot is recorded. The
-measured recommendations are:
-
-- constant kernel: `N_K = 200`, `COL_BATH_EPS = 0.02`;
-- linear kernel: `N_K = 200` is the best tested boundary but not a demonstrated
-  convergence knee; `COL_BATH_EPS = 0.04` is its linear-only cost knee, while
-  0.02 remains the conservative cross-kernel production setting;
-- product kernel: `COL_BATH_EPS = 0.02`; no general `N_K` conclusion is drawn.
-
-The full numerical assessments are in
-[`test_const/balance.md`](../val/paper/coagulation/test_const/balance.md),
-[`test_linear/balance.md`](../val/paper/coagulation/test_linear/balance.md), and
-[`test_product/balance.md`](../val/paper/coagulation/test_product/balance.md). Their adjacent
-READMEs specify the initializers, schedules, runners, and output layout.
-
-### 11.3 Model-local differences from the root code
-
-The campaigns retain the CUDA production collision kernels and frozen-bath
-event chain but compile model-local copies of the supporting headers and
-runtime. Relative to the root configuration, the common test setup:
-
-- enables `COLLISION_UNIT_VOLUME` and changes compact-grain mass from
-  $\pi\rho_0s^3/6$ to $s^3$;
-- prescribes a reproducibly jittered two-dimensional annular particle layout,
-  sets `H_SEARCH = 128`, and disables transport and diffusion;
-- fixes total dust mass, records independent runtime seeds, and omits density,
-  opacity, and RNG-state outputs;
-- removes the absolute `COL_BATH_MAX` cap, derives the controller size range
-  from the current minimum and maximum size before every bath, and records the
-  realized limits;
-- reuses the first KD-tree and physical-neighbor cache throughout each run
-  because particle positions never change.
-
-The linear runtime additionally installs its gamma-distributed size initializer.
-The product runtime additionally applies a global random permutation to cached
-partner labels before every bath. That product-only mixing prevents a fixed
-local reservoir from driving runaway timestep collapse, but it also lets even
-small `N_K` sample a broad partner population over many baths. Consequently,
-the product campaign validates the pre-gelation kernel evolution under this
-well-mixed test algorithm; it is not evidence that small `N_K` is sufficient
-for the unmodified fixed-neighbor or physical-kernel problem.
-
-### 11.4 Deliberate scope
-
-These campaigns do not establish convergence with `N_P`, because only
-$10^6$ representatives were used. They also do not test random spatial
-sampling, analytical evolution with Morton search, ROCm, Bernoulli integration,
-post-gelation product evolution, a physical kernel, restart behavior, or GPU
-performance and memory scaling. Those questions are not needed for the stated
-controlled numerical-versus-analytical comparison. KD-tree and Morton neighbor
-identity and production collision-chain behavior remain covered separately by
-`test_knn` and `test_colchain_*`.
-
-The analytical campaigns have independent runners and compact JSON manifests
-and are not registered with `val/run_all.py`.
+These campaigns do not establish convergence with representative count, Morton or ROCm
+accuracy, Bernoulli evolution, post-gelation product behavior, physical-kernel accuracy,
+restart behavior, or performance scaling. They are not registered with `val/run_all.py`.
 
 ## 12. Running and interpreting the suite
 
@@ -547,7 +452,7 @@ passing KNN suite manifest, and four passing collision-chain manifests.
 The analytical coagulation campaigns are run and interpreted separately from
 those standard archive counts.
 
-Source inspection, normalized CUDA/ROCm diffs, Makefile dry runs, and static checks establish code
+Source inspection, backend build routing, Makefile dry runs, and static checks establish code
 structure and routing but do not constitute native numerical qualification. Publication evidence
 requires a completed GPU campaign for the cited source snapshot. Cross-backend parity additionally
 requires matching campaign source fingerprints unless the comparison is explicitly exploratory.
@@ -564,53 +469,18 @@ The strongest evidence is the combination of:
   independent seeds;
 - matching CUDA and ROCm publication manifests from the same source fingerprint.
 
-### Native archive assessment, 2026-09-05
+### Evidence boundary
 
-The downloaded CUDA `sm_80` and ROCm `gfx942` campaigns each pass 42 analytical/statistical
-records, 48 KNN cases (7 ordinary, 15 edge, 14 periodic, 12 wedge), and all four collision-chain
-models. Physical-collision cases pass with both KD-tree and Morton. Swarm has no fluid
-`thread`/`block` sweep distinction. Both saved `run_all_BACKEND_thread.json` campaigns have matching
-initial/final source SHA-256 `cf5db5ba782419cc09b3a92eeaaf812114f25a78be329c06d86b0b1b7ae3beca`.
-
-The largest physical relative error is `4.2556241850646705e-14`, below `2e-11`; the largest
-KNN-measure relative error is `1.5479644551308843e-4`, below the existing float-geometry limit
-`2e-4`. Wedge diffusion has maximum velocity residual `2.220446049250313e-16`; mean and variance
-errors use at most 0.207 and 0.256 of their respective statistical limits. Wide-wedge 2D/3D
-disagreements number 911/801 on CUDA and 908/803 on ROCm. Every disagreement is checked, with zero
-candidate-reference or image-geometry mismatches.
-
-The unmodified backend comparator nevertheless reports 60 swarm mismatches: 31 compare
-vendor-dependent wedge crossing counts and stochastic sample errors, and 29 compare
-physical-collision absolute residuals or float-geometry measure errors. The wedge cases are absent
-from `STOCHASTIC_SWARM_CASES`; collision diagnostics are compared recursively with generic
-cross-backend tolerances despite passing their distinct native reference limits. These results do
-not establish a production numerical defect, but the formal comparator remains failed. No tolerance
-or comparator code was changed during this assessment.
-
-Local regeneration reproduces exactly 15 crossing-count, 16 sample-error, six absolute
-physical-residual, and 23 float-search-geometry differences. The last two groups include nested
-search records and aggregate diagnostics, so 29 differences do not mean 29 independent failed
-experiments. Rechecking the archived diagnostics uses at most 0.002128 of the physical relative
-limit and 0.773983 of the geometry limit. A future scoped comparator correction must retain
-wedge velocity/unwrap/crossing activation checks and both searches' native relative-error and
-image-activation checks; adding entire wedge records to the stochastic skip set would also skip
-their deterministic diagnostics. `assessment.json` records every mismatch category and the
-per-record margins; its adjacent `assess.py` reruns these local checks without modifying archives.
-
-Fresh evidence is in `val/logs/qualification_20260905/{archive_cuda_thread,archive_rocm_thread,comparison_thread,assessment}.json`.
-The top-level `run_all_BACKEND.json` files remain the failed static-only block attempts; they do
-not supersede the saved successful thread campaigns. This assessment reads native GPU archives;
-it is not a new local GPU run or proof of the separate production-runtime/build-routing gates.
-
-In particular, the wedge-diffusion wrappers compile the verification driver instead of the
-non-collision production runtime. Their passes establish the diffusion mapping, not compilation
-of the production controller guards; see [production build qualification](../val/README.md#production-build-qualification).
+These are source-defined tests and acceptance criteria. Historical archives from before the
+shared-source and validation-layout changes do not qualify the current tree. Fresh native runs
+with matching source fingerprints are required before claiming current CUDA or ROCm accuracy.
+Source inspection and build dry runs do not supply that numerical evidence.
 
 ## 13. Deliberate limits
 
 The suite does not provide an exhaustive flag matrix, a restart guarantee, or a
 hardware-performance claim. The analytical coagulation campaigns have the
-additional limits stated in Section 11.4. The suite does not retain one-off
+additional limits stated in Section 11. The suite does not retain one-off
 tests for indexing, guard clauses, or helper return values. A new test belongs
 in the publication matrix only when it validates a distinct scientific
 algorithm or physically relevant configuration not already covered here.

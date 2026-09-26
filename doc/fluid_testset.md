@@ -9,7 +9,8 @@ only claim is that one local expression returns the value written in the source.
 
 The canonical matrix is defined in `val/val_config.py`. With resolutions
 $N=32,64,128,256$, it contains 19 models and 76 metric records. CUDA and ROCm use the same
-backend-neutral model definitions and validators under `val/fluid/`.
+backend-neutral model definitions under `val/fluid/mod/` and shared drivers and validators
+under `val/fluid/src/`. The 19 models expand to 22 cases through the three fixed-grid limiter variants.
 
 This document explains what the cases establish. The fluid equations and production algorithms are
 described in [fluid_numeric.md](fluid_numeric.md); archive commands are summarized in
@@ -71,7 +72,7 @@ they do not incorrectly demand mass conservation in the computational domain.
 
 | Group | Models | Main claim |
 |---|---|---|
-| equilibrium | `test_startup_3d` | initialized stratified disk is a discrete steady state |
+| equilibrium | `test_startup_3d` | polar advection–diffusion balance of the initialized disk |
 | transport | `test_x_transport_2d`, `test_x_wedge_transport_2d`, `test_y_transport_cyl`, `test_y_transport_sph`, `test_y_outflow_2d`, `test_z_transport_3d`, `test_z_outflow_3d`, `test_z_reflect_3d` | conservative transport and physical boundaries in every active direction |
 | diffusion | `test_x_diffusion_2d`, `test_x_wedge_diffusion_2d`, `test_y_diffusion_cyl`, `test_y_diffusion_sph`, `test_z_diffusion_3d`, `test_diffusion_poslimit` | Crank--Nicolson diffusion, metric factors, periodic seams, and positivity control |
 | source | `test_source_drag` | stiff drag/source update matches a closed-form response |
@@ -190,7 +191,10 @@ $$
 \frac{\partial\rho_d}{\partial t}=\nabla\!\cdot(D\nabla\rho_d)
 $$
 
-with constant $D$ and zero imposed bulk transport. Smooth eigenmodes decay as
+with constant $D$ from production `CONST_NU` in the tracer limit (`STOKES_0 = 0`) and zero imposed
+bulk transport.
+These density-mode cases do not establish the concentration-mode equilibrium or general
+variable-coefficient accuracy. For constant $D$, smooth eigenmodes decay as
 
 $$
 \rho_d(\boldsymbol{x},t)=\rho_0+\epsilon q(\boldsymbol{x})e^{-D\lambda t},
@@ -252,8 +256,10 @@ closed form, including the small-argument series used to avoid cancellation. Eig
 range of $\Delta t/t_s$, so the test covers both weak and stiff drag without treating spatial
 resolution as a convergence parameter.
 
-This case replaces `source_update` with a test-local implementation of the coefficient algebra.
-It validates that stiff response, not the complete production source integration.
+This case replaces `source_update` with a test-local kernel that prescribes the gas velocity,
+stopping times, and force endpoints, then calls the production `_get_drag_weights` quadrature. It
+validates that stiff response, not the disk-dependent production source integration, which is
+exercised by the attenuation and coupled ring cases.
 
 ### 8.2 Optical depth
 
@@ -306,7 +312,9 @@ Run a native backend through `val/run_all.py` as shown in [`val/README.md`](../v
 The canonical fluid archive is below
 `val/fluid/out/MODEL/BACKEND/SWEEP/`. Disposable validation executables and object files are isolated below
 `val/fluid/obj/MODEL/BACKEND/`, never in the source-model directories. A complete default campaign contains 76 records and a passing
-`val/fluid/out/_suite/BACKEND/SWEEP/manifest_all.json`.
+`val/fluid/out/_suite/BACKEND/SWEEP/manifest_all.json`. Here `SWEEP` is `thread_precise`
+or `block_precise` for CUDA and `thread` or `block` for ROCm, as defined by
+`fluid_archive_sweep()` in `val/val_config.py`.
 
 The most important evidence is the combination of:
 
@@ -316,23 +324,12 @@ The most important evidence is the combination of:
 - agreement of density and momentum, not density alone;
 - matching CUDA and ROCm publication archives from one source fingerprint.
 
-### Native archive assessment, 2026-09-05
+### Evidence boundary
 
-The downloaded CUDA `sm_80` and ROCm `gfx942` archives each pass all 22 cases and 76 metric
-records for both `thread` and `block`. Fresh archive checks and CUDA/ROCm metric comparisons
-pass for each sweep, with zero fluid mismatches. The x/y/z limiter cases activate on all four
-configurations; their largest normalized conservation residual is `5.150797131870754e-16`, with
-zero primitive-range excess and zero quadratic growth.
-
-Evidence is saved under `val/logs/qualification_20260905/` in `archive_{cuda,rocm}_{thread,block}.json`,
-`comparison_{thread,block}.json`, and `assessment.json`. The thread comparison's fluid component
-passes, although its overall result fails on swarm diagnostics described in `swarm_testset.md`.
-Both saved thread campaigns have matching initial/final source SHA-256
-`cf5db5ba782419cc09b3a92eeaaf812114f25a78be329c06d86b0b1b7ae3beca`.
-The standalone block suites did not record a source fingerprint. Their native numerical passes
-therefore do not establish matching-source provenance; the comparator's reported fingerprint comes
-from earlier top-level campaign files, not the block runs. No GPU execution was performed during
-this local archive assessment.
+These are source-defined tests and acceptance criteria. Historical archives from before the
+shared-source and validation-layout changes do not qualify the current tree. Fresh native runs
+with matching source fingerprints are required before claiming current CUDA or ROCm accuracy.
+Source inspection and build dry runs do not supply that numerical evidence.
 
 ## 11. Deliberate limits
 

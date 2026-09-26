@@ -153,6 +153,8 @@ void _ssa_substep_1 (real dt, real x_i, real y_i, real z_i, real lx_i, real vy_i
     real &x_1, real &y_1, real &z_1)
 {
     // advance from the initial state i to the staggered midpoint position 1
+    // for planar motion with frozen radial velocity, integrating l_phi/r(t)^2 gives h*l_phi/(r_i*r_1), h=dt/2
+    // this is a continuous angular drift, with no integer-cell remap or residual FARGO velocity
     y_1 = y_i + 0.5*vy_i*dt;
     if constexpr (N_Z == 1)
     {
@@ -174,8 +176,8 @@ void _get_force_term (real y, real z, real R, real lx, real lz, real beta, real 
     torq_z = (N_Z > 1) ? lx*lx / R / R / sin(z)*cos(z) : 0.0;
 }
 
-// Integrator stages with prescribed midpoint environment; production and tests share this body.
-// DragFree selects the exact zero-relaxation limit for the Kepler reference tests.
+// advance the staggered drag-force stages with a prescribed midpoint environment; production and tests share this body
+// DragFree selects the exact zero-relaxation limit for the Kepler reference tests
 template<bool DragFree = false, typename Force>
 __device__ __forceinline__
 void _ssa_advance(real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,

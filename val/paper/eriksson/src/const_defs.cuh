@@ -11,7 +11,7 @@ using kdtree_boxf = kdtree::box_t<float3>;
 using real = double;
 using real3 = double3;
 
-// All dimensional values are CGS. CODE_UNIT must remain disabled for Brownian motion.
+// all dimensional values are CGS; CODE_UNIT must remain disabled for Brownian motion
 constexpr real AU = 1.495978707e13, YEAR = 31557600.0;
 constexpr real G = 6.67430e-8, M_S = 1.98847e33, R_0 = AU;
 constexpr real S_0 = 1.0e-4; // diameter, not the radius used by Eriksson et al.
@@ -35,7 +35,7 @@ constexpr real INIT_SMIN = 1.0e-4, INIT_SMAX = INIT_SMIN; // fixed 0.5-micron ra
 
 constexpr int COAG_KERNEL = 3, N_K = 256;
 constexpr real H_SEARCH = 1.0, V_FRAG = 100.0;
-// Use the production backend defaults.
+// use the production backend default chain widths
 #ifdef GAMEDEV_ROCM
 constexpr int COL_BATH_TPB = 128;
 #else

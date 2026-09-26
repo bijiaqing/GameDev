@@ -59,7 +59,7 @@ inline bool save_variable(const std::string &path, real mass) {
 #include <stdexcept>
 #include <vector>
 
-// Cached geometric slots sample the whole population in this well-mixed test.
+// relabel cached geometric slots so they sample the whole population in this well-mixed test
 static __global__ void product_mix_partners(int *neighbors, const int *permutation) {
     std::size_t slot = static_cast<std::size_t>(blockIdx.x)*blockDim.x + threadIdx.x;
     if (slot >= static_cast<std::size_t>(N_P)*N_K) return;
@@ -77,7 +77,7 @@ inline void product_refresh_partners(int *neighbors, int *scratch, int count) {
     static std::mt19937 generator(SEED + COL_PARTNER_SEED);
     std::iota(permutation.begin(), permutation.end(), 0);
     std::shuffle(permutation.begin(), permutation.end(), generator);
-    // The continuation queue is idle here and can hold the permutation.
+    // the continuation queue is idle at a refresh boundary and can hold the permutation
     GPU_CHECK(gpuMemcpy(scratch, permutation.data(), sizeof(int)*N_P, gpuMemcpyHostToDevice));
     product_mix_partners<<<(static_cast<std::size_t>(N_P)*N_K+TPB-1)/TPB,TPB>>>(neighbors,scratch);
     GPU_KERNEL_CHECK("product_mix_partners");

@@ -15,7 +15,7 @@
 // parallelization: one thread per representative particle followed by a host-side maximum reduction
 //
 // constraints:
-//   1 orbital and particle mesh-crossing rates
+//   1 orbital and particle mesh-crossing rates (accuracy guards, not an Eulerian advection CFL)
 //   2 imported-gas mesh-crossing rates at both temporal endpoints
 //   3 acceleration displacement from gravity, radiation, and centrifugal forces
 //   4 stochastic and deterministic diffusion displacement in every active direction
@@ -56,7 +56,8 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     iy = (iy >= N_Y) ? N_Y - 1 : iy;
     real dr = _get_yface(iy)*(dy - 1.0);
 
-    // limit orbital phase evolution and particle crossing of every active mesh direction
+    // retain the absolute orbital crossing guard for midpoint force and mesh-field sampling
+    // particle drift can cross cells, but no residual-orbit accuracy policy is implemented here
     // the radial scale is the exact width of the logarithmic cell containing the particle
     real omega = _get_omegaK(R);
     real rate = omega / CFL_DYN;
@@ -102,7 +103,8 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     beta = BETA_0 / (size / S_0);
     #endif // RADIATION
 
-    // require constant-acceleration displacement to remain below a local mesh fraction
+    // bound displacement using unattenuated radiation, before midpoint opacity is available
+    // exponential drag can reduce the actual displacement; this bound deliberately ignores that reduction
     real grav_y = -(1.0 - beta)*G*M_S / (y*y);
     real cent_y = lx*lx / (R*R*y) + lz*lz / (y*y*y);
     real accel_y = abs(grav_y + cent_y);
@@ -163,6 +165,7 @@ void dyn_rate_calc (real *dev_dyn_rate, const swarm *dev_particle
     real diff_y = diff_R*sin_z*sin_z + diff_Z*cos_z*cos_z;
     real drift_y = drift_R*sin_z + drift_Z*cos_z;
     
+    // bound RMS displacement, not every Gaussian draw; diffusion tails remain unbounded
     rate = fmax(rate, 2.0*diff_y / (CFL_DYN*CFL_DYN*dr*dr));
     rate = fmax(rate, abs(drift_y) / (CFL_DYN*dr));
 

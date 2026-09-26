@@ -158,6 +158,7 @@ void advection_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy, 
         }
         __syncthreads();
 
+        // publish the staged low-order density only after every cell has read the old neighbor densities
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             rhod[iy] = rhod_low[iy];

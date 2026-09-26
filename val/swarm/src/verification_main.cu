@@ -234,7 +234,7 @@ int main ()
         real seam_offset = 0.005;
         real x = (idx % 2 == 0) ? X_MIN + seam_offset : X_MAX - seam_offset;
 #ifdef TEST_DIFFUSION_WEDGE_3D
-        // Stay one gas scale height off the midplane so Stokes-dependent diffusion can cross the seam.
+        // stay one gas scale height off the midplane so Stokes-dependent diffusion can cross the seam
         real z = 0.5*M_PI - std::atan(ASPR_0);
         real lz = 0.12;
 #else

@@ -126,7 +126,7 @@ const real  CFL_COL     = 0.01;             // maximum collision propensity per 
 #endif // BERNOULLI
 
 #ifndef BERNOULLI
-// Backend default; model const_defs.cuh overrides may choose another width.
+// backend default threads per owner chain; a model const_defs.cuh may choose another width
 #ifdef GAMEDEV_ROCM
 const int   COL_BATH_TPB  = 128;
 #else

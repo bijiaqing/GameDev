@@ -17,7 +17,7 @@ constexpr real Y_MIN = 0.049787068367863944, Y_MAX = 20.085536923187668;
 const real Z_MIN = 0.5*M_PI, Z_MAX = 0.5*M_PI;
 const int N_G = N_X*N_Y*N_Z;
 
-// Root closure gives D_R = 1e-4 R^2/(1+St^2); deterministic motion is disabled.
+// the production closure gives D_R = 1e-4 R^2/(1+St^2); deterministic motion is disabled
 const real ASPR_0 = 0.05, IDX_P = -1.0, IDX_Q = 0.5;
 const real SIGMA_0 = 1.0, METAL_Z = 0.01, RHO_0 = 1.0;
 const real STOKES_0 = DIFFUSION_STOKES;

@@ -10,9 +10,9 @@ representations:
 - a Lagrangian dust-swarm solver for particle trajectories, stochastic diffusion, and optional
   representative-particle collisions
 
-Both branches use prescribed gas disks and one-way gas-to-dust coupling. They share coordinate and
-physical conventions, but intentionally own separate headers, kernels, runtimes, and optical-depth
-pipelines. A build selects exactly one representation through the model's `flags.mk` file.
+Both representations use prescribed gas disks and one-way gas-to-dust coupling. They share coordinate
+and physical conventions, but own separate headers, kernels, runtimes, and optical-depth pipelines.
+CUDA and ROCm compile the same representation sources through `inc/gpu.cuh`. A build selects exactly one representation through the model's `flags.mk` file.
 
 GameDev is an actively developed scientific code rather than a packaged application. Simulation
 setups, units, resolutions, physical switches, and output cadence are compile-time model choices.
@@ -152,6 +152,11 @@ The swarm solver uses:
 - exact top-$K$ nearest-neighbor candidates from either a KD tree or an adaptive Morton hierarchy
 - Strang composition of the enabled transport, diffusion, and collision operators
 
+Swarm currently limits absolute azimuthal mesh crossing; fluid FARGO limits residual rotation.
+Swarm stochastic diffusion also has a displacement-based timestep bound, while fluid diffusion
+is implicit. Equal physical parameters therefore do not imply equal timesteps. See
+[swarm timestep control](doc/swarm_numeric.md#52-dynamical-timestep).
+
 Smooth deterministic trajectory evolution is second-order in time. Stochastic diffusion and
 representative-particle collisions require weak/statistical convergence tests rather than a
 deterministic pointwise order claim.
@@ -229,7 +234,9 @@ mod/swarm_fiducial/gamedev
 ```
 
 Each production model selects one backend, sweep implementation, and collision-search method for
-its build. Rebuilding that model replaces its single `gamedev` executable, while internal object
+its build. When a model or command line leaves them unset, the Makefile uses `FLUID_SWEEP=thread`
+and `COLLISION_SEARCH=kdtree` on CUDA, and `FLUID_SWEEP=block` and `COLLISION_SEARCH=morton` on
+ROCm. Command-line values override assignments in `flags.mk`. Rebuilding that model replaces its single `gamedev` executable, while internal object
 directories retain enough configuration detail to prevent incompatible objects from being reused.
 The block sweep is explicit above because the production-scale fiducial azimuthal line exceeds the
 validated gfx942 linker limit of the thread sweep at `N_X = 1024`.
@@ -270,7 +277,7 @@ mod/
     └── const_defs.cuh    # optional
 ```
 
-The build searches `mod/`, `val/fluid/`, and `val/swarm/` for the requested `MODEL`.
+The build searches `mod/`, `val/fluid/mod/`, and `val/swarm/mod/` for the requested `MODEL`.
 The name must resolve to exactly one directory.
 
 ### Fluid model flags
@@ -293,7 +300,8 @@ GPU_FLAGS += -DRADIATION
 |---|---|
 | `FLUID_SWEEP := thread` | line-per-thread transport and diffusion kernels |
 | `FLUID_SWEEP := block` | cooperative line-per-block kernels with explicit workspace |
-| `DIFFUSION` | enable spherical dust-density diffusion |
+| `DIFFUSION` | enable spherical dust diffusion with Stokes-dependent diffusivity |
+| `DIFFUSE_CONCENTRATION` | diffuse dust/gas concentration instead of dust density; requires `DIFFUSION` |
 | `RADIATION` | enable attenuated radiation pressure |
 | `VISC_FLOW` | prescribe viscous gas radial flow; requires `DIFFUSION` |
 | `CONST_NU` | use constant kinematic viscosity instead of constant alpha |
@@ -318,7 +326,8 @@ GPU_FLAGS += -DCODE_UNIT
 | Flag or setting | Meaning |
 |---|---|
 | `TRANSPORT` | enable particle dynamics |
-| `DIFFUSION` | enable stochastic position diffusion; requires `TRANSPORT` |
+| `DIFFUSION` | enable stochastic position diffusion with Stokes-dependent diffusivity; requires `TRANSPORT` |
+| `DIFFUSE_CONCENTRATION` | include the gas-density-gradient drift for concentration diffusion; requires `DIFFUSION` |
 | `RADIATION` | enable attenuated radiation pressure; requires `TRANSPORT` |
 | `PR_EFFECT` | add Poynting-Robertson drag; requires `RADIATION` |
 | `VISC_FLOW` | use viscous gas radial flow; requires `DIFFUSION` and excludes `IMPORTGAS` |
@@ -336,9 +345,11 @@ GPU_FLAGS += -DCODE_UNIT
 | `LOGOUTPUT` | use logarithmic particle-output cadence; incompatible with `LOGTIMING` |
 | `COLLISION_SEARCH := kdtree` | use the bundled exact KD-tree collision search |
 | `COLLISION_SEARCH := morton` | use the adaptive Morton search with periodic ghost records |
+| `COL_DIAGNOSTICS` | write collision-controller and event diagnostics; used by the validation chain models |
 
-Collision-enabled builds must select exactly one search backend. The Makefile translates
-`COLLISION_SEARCH` into the corresponding internal backend macro.
+A collision-enabled build uses exactly one search backend. The Makefile translates
+`COLLISION_SEARCH` into the internal `COLLISION_KDTREE` or `COLLISION_MORTON` macro and, when the
+setting is absent, chooses the backend default given in [Building and running](#building-and-running).
 `COAG_KERNEL` is selected in `const_defs.cuh`: values `0`-`2` are normalized synthetic kernels,
 while value `3` enables the physical cross-section and relative-velocity prescription.
 
@@ -395,6 +406,8 @@ The physical restart time is reconstructed from the model's output schedule. The
 density and physical linear velocities, converts velocity files back to its internal angular state,
 and rebuilds conserved momentum and optical depth. The swarm branch loads its particle checkpoint
 and, when diffusion or collisions use random numbers, the matching backend random-state checkpoint.
+A swarm restart frame must therefore be one at which a particle checkpoint was written; with
+`LIN_BASE > 1` or `LOGOUTPUT`, mesh-only frames cannot be resumed.
 
 Restart files are not designed as a cross-version interchange format. In particular, raw swarm RNG
 state depends on the selected backend's RNG-state layout.
@@ -444,14 +457,20 @@ dustdens_00000.dat    # with SAVE_DENS
 optdepth_00000.dat    # with RADIATION
 ```
 
+Mesh fields are written at every output index. Particle and RNG checkpoints are written at the
+initial frame and then every `LIN_BASE` frames, at integer powers of `LOG_BASE` with `LOGOUTPUT`,
+or at every frame with `LOGTIMING`. Builds with `COL_DIAGNOSTICS` additionally write
+`collision_chain_<frame>.json` and `collision_local_<timestamp>.jsonl`.
+
 `particle_*.dat` stores physical positions and linear velocities. In a multisize build it also
 stores grain size and represented grain count. The exact structured dtype is written in the
 `[SWARM_DTYPE]` section of `variables.txt`; use that description rather than assuming a fixed
 record size.
 
-With `IMPORTGAS`, the swarm runtime expects matching input frames named `gasdens_*.dat`,
-`gasvelx_*.dat`, `gasvely_*.dat`, `gasvelz_*.dat`, and `epsilon_*.dat` in the configured output
-location. Imported density and dust-to-gas ratio values must be finite and nonnegative, and their
+With `IMPORTGAS`, the swarm runtime reads `gasdens_*.dat`, `gasvelx_*.dat`, `gasvely_*.dat`, and
+`gasvelz_*.dat` for the starting frame and every later output frame from the configured output
+location. A fresh start also reads `epsilon_00000.dat` to shape the initial dust sampling.
+Imported density and dust-to-gas ratio values must be finite and nonnegative, and their
 volume-weighted dust mass must be finite and positive. See the swarm numerical guide for
 calibration and interpolation semantics.
 
@@ -515,7 +534,7 @@ requirements, and remaining coverage are maintained in
 ├── README.md                 # project entry point
 ├── LICENSE                   # MIT license
 ├── inc/
-│   ├── gpu.cuh        # CUDA/ROCm compatibility mappings
+│   ├── gpu.cuh              # CUDA/ROCm compatibility mappings
 │   ├── fluid/               # shared fluid headers
 │   └── swarm/               # shared particle and search headers
 ├── src/
@@ -525,14 +544,15 @@ requirements, and remaining coverage are maintained in
 ├── val/
 │   ├── fluid/               # shared fluid tests and runners
 │   ├── swarm/               # shared particle tests and runners
-│   ├── main/                # publication models
-│   ├── tool/                 # backend-neutral validation and comparison utilities
-│   ├── logs/                 # generated, backend-separated validation records and fields
-│   └── temp/                 # generated validation executables, objects, and compiler stamps
+│   ├── paper/               # scientific campaigns with local build/output paths
+│   └── *.py                 # campaign, archive, comparison, and configuration utilities
 ├── doc/                      # canonical numerical and development documentation
 ├── obj/                      # generated model-specific object files
 └── out/                      # generated production outputs by model
 ```
+
+Each numerical suite stores model definitions in `mod/`, drivers in `src/`, results in `out/`,
+and disposable builds in `obj/`. Historical `val_stale/` results do not qualify the current source.
 
 Experimental work may use the ignored `lab/` directory. It is not part of the production or
 verification interface.

@@ -1,4 +1,4 @@
-// Active-owner dispatch, local refresh durations, compact continuations and cached rates.
+// frozen-bath collision chain: active-owner dispatch, local refresh durations, compact continuations, and cached rates
 #ifndef SWARM_COL_CHAIN_CUH
 #define SWARM_COL_CHAIN_CUH
 
@@ -17,12 +17,17 @@
 
 #include <_col_cache.cuh>
 #include <_collision.cuh>
+
+// owner-position gas coefficients reused by every pair evaluated for that owner
+// Z height, omega Keplerian frequency, vn pressure-drift speed, radial and strat Stokes scalings,
+// cs sound speed, re_inv_sqrt inverse square-root Reynolds number, vg_sq turbulent velocity scale squared
 struct query_environment {
     real Z, omega, vn, radial, strat, cs, re_inv_sqrt, vg_sq;
 };
 #if !defined(IMPORTGAS) && !defined(CODE_UNIT) && !defined(CONST_ST)
+// analytic physical-unit gas allows the environment to be cached once per collision half-operator
 #define COL_QUERY_ENV_CACHE
-// Positions and gas are fixed throughout one collision half-operator.
+// positions and gas are fixed throughout one collision half-operator
 __device__ __forceinline__ query_environment cache_query_environment(const swarm &p) {
     real R=_get_cyl_R(p.position.y,p.position.z);
     real Z=_get_cyl_Z(p.position.y,p.position.z),h=_get_hg(R);
@@ -31,10 +36,11 @@ __device__ __forceinline__ query_environment cache_query_environment(const swarm
     return {Z,omega,-_get_eta(R,Z,h)*R*omega,pow(R/R_0,IDX_P),strat,cs,
         _get_re_inv_sqrt(R,alpha,_get_sigma_g(R)*strat),1.5*alpha*cs*cs};
 }
+// reproduce _get_stokes for analytic gas from the cached radial and vertical scalings
 __device__ __forceinline__ real cached_stokes(const query_environment &e,real size) {
     real st=STOKES_0*(size/S_0); st/=e.radial; st/=e.strat; return st;
 }
-// Identical regime algebra to _get_vrel_t; only gas coefficients are precomputed.
+// reproduce the _get_vrel_t regime algebra with precomputed gas coefficients
 __device__ __forceinline__ real cached_turbulence(const query_environment &e,real stokes_i,real stokes_j) {
     real re_inv_sqrt=e.re_inv_sqrt,vg_sq=e.vg_sq;
     real stokes_large, stokes_small, eps;
@@ -125,6 +131,7 @@ __device__ __forceinline__ real cached_turbulence(const query_environment &e,rea
 }
 
 
+// reproduce _get_vrel_pair with drift, settling, turbulence, and Brownian terms from the cached environment
 __device__ __forceinline__ real cached_pair_velocity(const query_environment &e,real size_i,real size_j) {
     real si=cached_stokes(e,size_i),sj=cached_stokes(e,size_j);
     real fi=1.0/(1.0+si*si),fj=1.0/(1.0+sj*sj);
@@ -136,17 +143,20 @@ __device__ __forceinline__ real cached_pair_velocity(const query_environment &e,
     return sqrt(dvr*dvr+dvphi*dvphi+dvz*dvz+vt*vt+vb*vb);
 }
 #endif // COL_QUERY_ENV_CACHE
+// bath-start total rate, first and second log-size jump-rate moments, and largest single jump for one owner
+// a negative rate marks an invalid start state that must take the full chain path
 struct cached_rate_moments { real rate,first,second,maximum; };
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
+// requested refresh duration and its binding constraint: 0 horizon, 1 mean change, 2 fluctuation
 struct change_bound { double duration; int reason; };
 
-// A = mass-weighted mean absolute log-size jump rate.
-// B = mass-weighted second log-size jump moment rate (not variance of the mean).
-// Frozen-rate estimates: mean accumulated absolute change = h*A;
-// compound-Poisson fluctuation scale = sqrt(h*B). Bound each by epsilon.
+// A is the mass-weighted mean absolute log-size jump rate
+// B is the mass-weighted second log-size jump moment rate, not the variance of the mean
+// frozen rates give a mean accumulated absolute change h*A and a compound-Poisson fluctuation scale sqrt(h*B);
+// bound each by epsilon
 inline change_bound change_limit(double A, double B, double epsilon, double horizon) {
     if (!std::isfinite(A) || A<0 || !std::isfinite(B) || B<0
         || !std::isfinite(epsilon) || !(epsilon>0)
@@ -158,35 +168,39 @@ inline change_bound change_limit(double A, double B, double epsilon, double hori
     if (!(result.duration>0)) throw std::runtime_error("change-based timestep underflow");
     return result;
 }
+// per-owner event counts and log-mass changes by outcome category, recorded only with COL_DIAGNOSTICS
 constexpr int EVENT_CATEGORIES=7;
 struct event_work { unsigned long long count[EVENT_CATEGORIES]; real log_mass[EVENT_CATEGORIES]; };
 __host__ __device__ inline void record_event_work(event_work &work, int category, real log_mass) {
     ++work.count[category];
     work.log_mass[category]+=log_mass;
 }
-// Only tiny sticking projectiles; each packet adds at most 0.01% target mass.
+// group G identical tiny sticking projectiles into one event so each packet adds at most 0.01% target mass
 __host__ __device__ inline real sticking_packet(real q, bool fragmentation) {
     return !fragmentation && q>0.0 && q<=1.e-6
         ? fmax(1.0,floor(1.e-4/q)) : 1.0;
 }
+// projectile-to-target grain mass ratio q for compact grains of equal material density
 __host__ __device__ inline real sticking_mass_ratio(real size_i, real size_j) {
     real ratio=size_j/size_i;
     return ratio*ratio*ratio;
 }
-// ponytail: packets preserve frozen-state mean mass growth but inflate variance;
-// lower the 1e-4 packet bound if distribution comparisons show a bias.
+// packets preserve the frozen-state mean mass growth but inflate its variance
+// lower the 1e-4 packet bound if distribution comparisons show a bias
 
 
-// Return sampled-rate / physical-rate and conditional absolute log-diameter moments.
-// Erosion is the superposition of remnant packets and ungrouped debris transitions.
+// return the sampled-to-physical rate factor and conditional absolute log-diameter jump moments
+// erosion superposes grouped remnant transitions and ungrouped debris transitions
 __host__ __device__ inline real erosion_outcome_moments(real si, real sj,
     bool high_speed, real &mean, real &second, real &maximum) {
     real q=sticking_mass_ratio(si,sj);
     real G=sticking_packet(q,false);
+    // low-speed sticking: one packet of G projectiles at rate lambda/G
     if (!high_speed) {
         mean=log1p(G*q)/3.0; second=mean*mean; maximum=mean;
         return 1.0/G;
     }
+    // high-speed erosion of a much larger target: remnant loses G*q of its mass or the owner becomes debris
     if (q<=0.1) {
         real remnant=(1.0-q)/G, debris=q, factor=remnant+debris;
         real jr=-log1p(-G*q)/3.0, jd=-log(q)/3.0;
@@ -195,11 +209,11 @@ __host__ __device__ inline real erosion_outcome_moments(real si, real sj,
         maximum=fmax(jr,jd);
         return factor;
     }
-    // Fragment diameter: [sqrt(s_min)+U*(sqrt(si)-sqrt(s_min))]^2.
-    // For L=log(si/s_min)/2, integrate -2 log(y) over y in [exp(-L),1].
+    // catastrophic fragmentation draws diameter [sqrt(s_min)+U*(sqrt(si)-sqrt(s_min))]^2
+    // with L=log(si/s_min)/2, the moments integrate -2*log(y) over y in [exp(-L),1]
     real L=0.5*log(si/INIT_SMIN);
     if (L<1.e-3) {
-        // Series avoid cancellation when the target is near the monomer floor.
+        // use series to avoid cancellation when the target is near the monomer floor
         mean=L-L*L/6.0+L*L*L*L/360.0;
         second=L*L*(4.0/3.0-L/3.0+L*L/90.0+L*L*L/180.0);
     } else {
@@ -211,8 +225,9 @@ __host__ __device__ inline real erosion_outcome_moments(real si, real sj,
     return 1.0;
 }
 
-// Categories: four sticking q bins, fragmentation, remnant erosion, debris erosion.
-// u is used only for high-speed events; the caller supplies one independent draw.
+// sample one outcome and return the new owner diameter; categories are four sticking q bins,
+// fragmentation, remnant erosion, and debris erosion
+// u is used only for high-speed events, and the caller supplies one independent draw
 __host__ __device__ inline real sample_erosion_outcome(real si, real sj,
     bool high_speed, real u, int &category, real &log_mass) {
     real q=sticking_mass_ratio(si,sj);
@@ -329,7 +344,8 @@ struct col_controller_summary
     std::vector<col_bath_record> baths;
 };
 
-// Scratch extrema are reset globally; retained bounds change only for refreshed groups.
+// moving log-size bin bounds per spatial group
+// scratch extrema are reset globally; retained bounds change only for refreshed groups
 constexpr int moving_groups = ((N_X>1)?COL_BIN_X:1)*COL_BIN_Y*((N_Z>1)?COL_BIN_Z:1);
 static __device__ unsigned long long moving_min[moving_groups], moving_max[moving_groups];
 static __device__ real moving_lower[moving_groups], moving_upper[moving_groups];
@@ -345,11 +361,12 @@ static __global__ void reduce_size_extrema(const int *ids,int count,const swarm 
     int i=ids[slot];
     real size=particles[i].par_size;
     if (!active[i] || !(size>0) || !isfinite(size)) return;
-    // Positive doubles have the same ordering as their unsigned bit patterns.
+    // positive doubles have the same ordering as their unsigned bit patterns
     auto bits=static_cast<unsigned long long>(__double_as_longlong(size));
     atomicMin(&moving_min[spatial[i]],bits);
     atomicMax(&moving_max[spatial[i]],bits);
 }
+// widen the observed size range to [0.5*s_min, 8*s_max] so the next interval's growth stays inside the bins
 static __global__ void publish_size_bounds() {
     int g=threadIdx.x+blockIdx.x*blockDim.x;
     if (g<moving_groups && moving_max[g]!=0) {
@@ -357,12 +374,14 @@ static __global__ void publish_size_bounds() {
         moving_upper[g]=8.0*__longlong_as_double(moving_max[g]);
     }
 }
+// map a grain diameter to its logarithmic controller bin inside one spatial group, clamping outliers
 __device__ __forceinline__ int _get_col_sizebin(real size,int group) {
     if (!isfinite(size) || !(size>0)) return 0;
     real fraction=log(size/moving_lower[group])/log(moving_upper[group]/moving_lower[group]);
     return max(0,min(COL_BIN_S-1,static_cast<int>(floor(fraction*COL_BIN_S))));
 }
 
+// draw a uniform deviate strictly below one so -log(U) and inverse-CDF selection stay finite
 __device__ __forceinline__
 real _get_col_uniform (curs *rngstate)
 {
@@ -373,6 +392,7 @@ real _get_col_uniform (curs *rngstate)
     #endif // GAMEDEV_CUDA
 }
 
+// atomically raise a double to value with a compare-and-swap loop
 __device__ __forceinline__
 void _col_atomic_max (real *address, real value)
 {
@@ -502,6 +522,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
     if (slot >= owner_count) return;
     int idx_old_i = owner_ids[slot];
 
+    // evaluate every cached pair against the frozen reservoir, one neighbor slot per thread
     __shared__ real rate_work[N_K];
     __shared__ real change_work[N_K], second_work[N_K], maximum_work[N_K];
     for (int idx_neighbor = threadIdx.x; idx_neighbor < N_K; idx_neighbor += blockDim.x)
@@ -532,6 +553,7 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
         rate_work[idx_neighbor] = pair_rate;
     }
 #if defined(GAMEDEV_ROCM) && defined(__gfx942__)
+    // MI300A fast path: fold 256 slots to 64 in shared memory, then reduce one 64-lane wavefront by shuffles
     if constexpr(N_K==256 && COL_BATH_TPB==128) {
         const int t=threadIdx.x;
         __shared__ unsigned char validity[128];
@@ -554,13 +576,13 @@ void col_bath_rate (const int *owner_ids, int owner_count, real *dev_col_rate, r
     } else
 #endif
     {
-    // Reduce rate moments cooperatively; pair calculations are unchanged.
+    // reduce the rate moments cooperatively for general N_K and block widths
     __shared__ unsigned char valid_work[N_K];
     for (int j = threadIdx.x; j < N_K; j += blockDim.x)
         valid_work[j] = isfinite(rate_work[j]) && rate_work[j] >= 0.0;
     __syncthreads();
 
-    // Fold the upper half into the lower half, including odd active counts.
+    // fold the upper half into the lower half, including odd active counts
     for (int count = N_K; count > 1; count = (count + 1)/2)
     {
         int half = (count + 1)/2;
@@ -625,8 +647,8 @@ void col_rate_bins (const int *owner_ids, int owner_count, col_rate_bin *dev_col
     atomicAdd(&dev_col_bin[idx_bin].weighted_second,weight*second_rate[idx]);
 }
 
-// Evaluate the existing cached no-event path with one thread per owner.
-// Only unfinished owners enter the expensive cooperative event-chain kernel.
+// evaluate the cached no-event path with one thread per owner
+// complete owners whose first waiting time spans the interval and queue only the rest for col_chain_run
 __global__ void col_cached_screen(const int *ids,int count,curs *rng,
     const unsigned char *active,const real *measure,const int *spatial,const real *steps,
     const cached_rate_moments *cached,real *time,int *events,unsigned char *complete,
@@ -649,7 +671,7 @@ __global__ void col_cached_screen(const int *ids,int count,curs *rng,
                 jumpmax[i]=fmax(jumpmax[i],c.maximum);
                 time[i]=end;complete[i]=1;rng[i]=state;return;
             }
-            // Do not commit the trial RNG draw: normal chain takes the same draw.
+            // leave the trial RNG draw uncommitted because the full chain repeats the same draw
         }
     }
     queue[atomicAdd(queued,1)]=i;
@@ -657,6 +679,14 @@ __global__ void col_cached_screen(const int *ids,int count,curs *rng,
 
 
 // evolve every owner against one frozen reservoir with bounded continuation
+//
+// parallelization: one block per queued owner; threads evaluate neighbor pair rates and thread 0 advances the chain
+//
+// per loop iteration:
+//   1 recompute all owner-dependent pair rates and jump moments from the current owner size
+//   2 reduce the total rate, jump moments, and last positive slot
+//   3 draw one waiting time; stop at the bath end or apply one sampled event and update owner size and number
+// the loop stops after COL_EVENT_CAP accepted events; unfinished owners are appended to the next continuation queue
 __global__
 void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, curs *dev_rngstate, int *dev_col_error,
     int *dev_col_unfinished, real *dev_col_time, int *dev_col_events,
@@ -725,8 +755,8 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
     }
     __syncthreads();
 
-    // Rates were computed after this wave's publication, with no intervening writes
-    // to reservoir arrays. Never use the start cache after an event/continuation.
+    // use the bath-start cache only before the first event of this bath, because it matches the published reservoir
+    // after an event or in a continuation the owner has changed and every rate must be recomputed
     if (threadIdx.x==0 && keep_running && time_i==0.0 && event_count==0) {
         const auto c=cached[idx_old_i];
         if (isfinite(c.rate) && c.rate>=0.0) {
@@ -742,7 +772,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                     jumpmax_i=fmax(jumpmax_i,c.maximum);
                     time_i=bath_end; dev_col_complete[idx_old_i]=1; keep_running=false;
                 } else {
-                    // Normal path handles both events and invalid waits with its original draw.
+                    // restore the draw so the full path handles events and invalid waits with the same deviate
                     rngstate=before;
                 }
             }
@@ -786,7 +816,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
             }
         }
         constexpr bool wave_reduction_shape=N_K==256 && COL_BATH_TPB==128;
-        // Keep the generic allocation on other wave sizes; shape choice is compile-time.
+        // keep the generic allocation for other shapes; the shape choice is compile-time
 #if defined(GAMEDEV_ROCM) && defined(__gfx942__)
         constexpr int total_slots=wave_reduction_shape?128:N_K;
 #else
@@ -795,6 +825,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
         __shared__ real total_work[total_slots];
         __shared__ int last_work[total_slots];
 #if defined(GAMEDEV_ROCM) && defined(__gfx942__)
+        // MI300A fast path for N_K=256 and 128 threads, as in col_bath_rate
         if constexpr(wave_reduction_shape) {
           const int t=threadIdx.x;
           __syncthreads();
@@ -817,11 +848,11 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
         } else
 #endif
         {
-        // Parallel chain reduction: preserve pair_rate for serial partner sampling.
+        // reduce into separate arrays so pair_rate stays intact for serial partner sampling
         for (int j = threadIdx.x; j < N_K; j += blockDim.x)
         {
             total_work[j] = pair_rate[j];
-            // -2 propagates invalid input; -1 denotes no positive contribution.
+            // -2 propagates invalid input; -1 denotes no positive contribution
             last_work[j] = (!isfinite(pair_rate[j]) || pair_rate[j] < 0.0)
                 ? -2 : (pair_rate[j] > 0.0 ? j : -1);
         }
@@ -904,6 +935,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                         jump1_i += total_jump1*wait;
                         jump2_i += total_jump2*wait;
                         jumpmax_i = fmax(jumpmax_i, total_jumpmax);
+                        // select the partner by walking cumulative pair rates, falling back to the last positive slot on roundoff
                         real target = _get_col_uniform(&rngstate)*total_rate;
                         real cumulative = 0.0;
                         int idx_slot = -1;
@@ -943,6 +975,7 @@ void col_chain_run (const int *owner_ids, int owner_count, swarm *dev_particle, 
                                 );
                                 #endif
                             }
+                            // apply the outcome while conserving represented mass through the grain count
                             real mass_before = numr_i*size_i*size_i*size_i;
                             bool high_speed=vrel>=V_FRAG;
                             real sample=high_speed ? _get_col_uniform(&rngstate) : 0.0;
@@ -1100,7 +1133,7 @@ int _build_col_binmap (const std::vector<int> &raw_count, std::vector<int> &raw_
     return merged_count;
 }
 
-// Mean absolute log-size change and compound-Poisson variance constraints.
+// choose a bath duration from the mean absolute log-size change and compound-Poisson variance constraints
 inline
 real _choose_col_bath (const std::vector<col_rate_bin> &bin, int bin_count,
     real remaining, real limit_scale, int *binding=nullptr)
@@ -1169,8 +1202,8 @@ col_bath_result _finish_col_bath (const std::vector<col_audit_accum> &bin,
         result.max_events = std::max(result.max_events, events);
         result.max_g = std::max(result.max_g, growth);
         result.max_g_upper = std::max(result.max_g_upper, upper_g);
-        // Independent weight sums can put a fully touched fraction a few ulps
-        // above one. Keep the raw diagnostic, but enforce its physical ceiling.
+        // independent weight sums can put a fully touched fraction a few ulps above one
+        // keep the raw diagnostic, but enforce its physical ceiling in the overshoot test
         result.activity_overshoot = result.activity_overshoot
             || std::min(touched, real(1.0)) > upper_f || events > upper_e;
         result.distribution_overshoot = result.distribution_overshoot
@@ -1292,7 +1325,7 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
     return static_cast<bool>(file);
 }
 
-// Local collision scheduling, workspace and host orchestration.
+// local collision scheduling, workspace, and host orchestration
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -1301,13 +1334,14 @@ bool save_col_controller (const std::string &file_name, const col_controller_sum
 #include <vector>
 #include <utility>
 
-// Integer endpoints avoid rounding drift between power-of-two timestep levels.
+// schedule spatial groups on power-of-two subdivisions of one collision operator horizon
+// integer endpoints avoid rounding drift between power-of-two timestep levels
 struct local_schedule {
-    double horizon;
-    std::vector<std::pair<int,int>> links;
-    std::vector<int> level;
-    std::vector<std::uint64_t> step, next;
-    std::uint64_t end;
+    double horizon;                              // physical duration of the collision operator
+    std::vector<std::pair<int,int>> links;       // undirected group pairs joined by any KNN dependency
+    std::vector<int> level;                      // group step is horizon/2^level
+    std::vector<std::uint64_t> step, next;       // group step and next endpoint in integer ticks
+    std::uint64_t end;                           // horizon in ticks of the finest level 2^52
 
     local_schedule(double h, const std::vector<double>& requested,
                    const std::vector<unsigned int>& edges)
@@ -1316,6 +1350,7 @@ struct local_schedule {
         if (!(h > 0) || !std::isfinite(h))
             throw std::runtime_error("invalid local collision horizon");
         const int n = static_cast<int>(level.size()), words = (n+31)/32;
+        // choose the coarsest power-of-two level not exceeding each requested duration
         for (int c=0; c<n; ++c) {
             if (!(requested[c] > 0) || !std::isfinite(requested[c]))
                 throw std::runtime_error("invalid local collision timestep");
@@ -1326,10 +1361,11 @@ struct local_schedule {
                 dt *= 0.5;
             }
         }
+        // symmetrize the bit-packed dependency matrix into an edge list
         for (int c=0;c<n;++c) for (int d=c+1;d<n;++d)
             if ((edges[c*words+d/32] & (1u<<(d%32))) ||
                 (edges[d*words+c/32] & (1u<<(c%32)))) links.emplace_back(c,d);
-        // Symmetric compatibility on every directed KNN dependency: ratio <= 16.
+        // enforce symmetric compatibility on every directed KNN dependency: step ratio <= 16
         bool changed;
         do {
             changed = false;
@@ -1339,25 +1375,27 @@ struct local_schedule {
                 if (level[d] < level[c]-4) { level[d]=level[c]-4; changed=true; }
             }
         } while (changed);
-        // A fixed lattice permits later refinement without moving pending endpoints.
+        // a fixed lattice permits later refinement without moving pending endpoints
         int finest = 52;
         end = std::uint64_t(1) << finest;
         for (int c=0; c<n; ++c) step[c] = std::uint64_t(1) << (finest-level[c]);
     }
+    // earliest pending endpoint, which is the next scheduler tick
     std::uint64_t time() const { return *std::min_element(next.begin(),next.end()); }
     double seconds(std::uint64_t tick) const { return horizon*(double(tick)/double(end)); }
+    // groups whose pending endpoint equals this tick
     std::vector<int> due(std::uint64_t tick) const {
         std::vector<int> out;
         for (int c=0; c<int(next.size()); ++c) if (next[c]==tick) out.push_back(c);
         return out;
     }
-    // Only due groups may change: other groups already hold computed endpoints.
+    // change only due groups because other groups already hold computed endpoints
     void adapt(std::uint64_t tick, const std::vector<int>& groups,
                const std::vector<double>& requested, const std::vector<bool>& passed) {
         const int n=level.size();
         std::vector<bool> active(n,false);
         for (int c:groups) active[c]=true;
-        // Largest permitted level, propagated from immutable pending neighbors.
+        // propagate the coarsest permitted level from immutable pending neighbors
         std::vector<int> cap(n,52), candidate=level;
         for (int c=0;c<n;++c) if (!active[c]) cap[c]=level[c];
         bool changed;
@@ -1378,13 +1416,13 @@ struct local_schedule {
                 if (++want>52) throw std::runtime_error("adaptive collision time resolution exceeded");
                 h*=0.5;
             }
-            // After a passing audit, recover directly; alignment and neighbors still constrain it.
+            // recover directly after a passing audit; alignment and neighbors still constrain the level
             candidate[c]=passed[c] ? want : std::max(want,level[c]);
             while (tick % (std::uint64_t(1)<<(52-candidate[c]))) ++candidate[c];
             candidate[c]=std::min(candidate[c],cap[c]);
         }
-        // Refine due groups until all directed dependencies satisfy ratio <= 16.
-        // Caps above ensure this never requires changing an in-flight endpoint.
+        // refine due groups until all directed dependencies satisfy ratio <= 16
+        // the caps above ensure this never requires changing an in-flight endpoint
         do {
             changed=false;
             for (const auto &edge:links) {
@@ -1402,6 +1440,7 @@ struct local_schedule {
             step[c]=std::uint64_t(1)<<(52-level[c]);
         }
     }
+    // move each due group to its next endpoint
     void advance(const std::vector<int>& groups) {
         for (int c:groups) next[c] += step[c];
     }
@@ -1409,6 +1448,7 @@ struct local_schedule {
 #include <chrono>
 #include <numeric>
 
+// map the host workflow's runtime calls to the selected backend
 #ifdef GAMEDEV_CUDA
 #define LOCAL_CHECK CUDA_CHECK
 #define LOCAL_KERNEL CUDA_KERNEL_CHECK
@@ -1429,10 +1469,12 @@ struct local_schedule {
 #define localD2H hipMemcpyDeviceToHost
 #endif
 
+// spatial controller groups and the 32-bit words of one bit-packed group dependency row
 constexpr int LOCAL_GROUPS = ((N_X>1)?COL_BIN_X:1)*COL_BIN_Y*((N_Z>1)?COL_BIN_Z:1);
 constexpr int LOCAL_WORDS = (LOCAL_GROUPS+31)/32;
 
 #ifdef COL_QUERY_ENV_CACHE
+// cache every active owner's gas environment; absorbed particles at y=0 are skipped
 __global__ void cache_query_environments(query_environment *env,const swarm *particle) {
     int i=blockIdx.x*blockDim.x+threadIdx.x;
     if (i<N_P && particle[i].position.y>0.0) env[i]=cache_query_environment(particle[i]);
@@ -1440,11 +1482,12 @@ __global__ void cache_query_environments(query_environment *env,const swarm *par
 
 #endif // COL_QUERY_ENV_CACHE
 
-// One geometry-epoch pass. Reduce duplicate neighbor-group edges within each owner
-// before issuing atomics; no per-neighbor transfer to the CPU is needed.
+// build the group dependency graph once per geometry epoch: edge c->d when an owner in c has a neighbor in d
+// duplicate edges are reduced within each owner before issuing atomics, so no per-neighbor data reaches the host
 __global__ void local_graph(unsigned int *edges, const int *spatial,
     const int *neighbors, const unsigned char *active) {
 #ifdef GAMEDEV_ROCM
+    // assign 32 lanes to each owner and OR-reduce their neighbor masks by shuffles
     if constexpr(TPB%32==0) {
     const int lane=threadIdx.x%32;
     const int i=(blockIdx.x*blockDim.x+threadIdx.x)/32;
@@ -1478,6 +1521,7 @@ __global__ void local_graph(unsigned int *edges, const int *spatial,
     }
 }
 
+// clear the path-integrated compensators of owners entering a new bath
 __global__ void local_reset(const int *ids, int count, real *hazard,
     real *jump1, real *jump2, real *jumpmax) {
     int slot=blockIdx.x*blockDim.x+threadIdx.x;
@@ -1486,7 +1530,7 @@ __global__ void local_reset(const int *ids, int count, real *hazard,
     hazard[i]=jump1[i]=jump2[i]=jumpmax[i]=0;
 }
 
-// One block per category reduces per-owner diagnostics once per collision half-step.
+// reduce per-owner diagnostics once per collision half-step with one block per event category
 __global__ void summarize_event_work(const event_work *work, event_work *sum) {
     const int k=blockIdx.x, t=threadIdx.x;
     __shared__ unsigned long long counts[TPB];
@@ -1502,14 +1546,16 @@ __global__ void summarize_event_work(const event_work *work, event_work *sum) {
 }
 static_assert(TPB>0 && (TPB & (TPB-1))==0,"event reduction needs power-of-two TPB");
 
+// per-group scheduler statistics written to the COL_DIAGNOSTICS JSONL record
 struct local_group_stats {
     std::uint64_t updates=0;
     int overshoots=0, persistent=0;
     real max_age=0, max_growth=0, max_activity=0, max_requested_ratio=0;
 };
 
-// Scratch allocations survive all operator calls. Particle IDs retain their RNG
-// identity even when continuation queues are reordered by atomic append.
+// persistent device scratch and host scheduler state for the local collision workflow
+// scratch allocations survive all operator calls; particle IDs retain their RNG identity even when
+// continuation queues are reordered by atomic append
 struct local_workspace {
     query_environment *environment=nullptr;
     cached_rate_moments *cached=nullptr;
@@ -1562,6 +1608,16 @@ struct local_workspace {
     }
 };
 
+// =========================================================================================================================
+// host function: evolve_local_collisions
+// purpose: advance all owners through one fixed-position collision operator with local power-of-two bath durations
+//
+// per call:
+//   1 cache gas environments and, once per geometry epoch, the owner-group lists and dependency graph
+//   2 publish every reservoir, compute bath-start rates and merged size bins, and request per-group durations
+//   3 repeatedly advance the earliest due groups: republish and rerate them, adapt their levels,
+//     screen no-event owners, run chain continuations until none remain, and audit the completed baths
+// =========================================================================================================================
 inline void evolve_local_collisions(
     local_workspace & local,
     bool & local_geometry_valid,
@@ -1601,9 +1657,9 @@ inline void evolve_local_collisions(
 #endif
 )
 {
-// Included inside evolve_collisions after production geometry/cache construction.
-// All launches below use the default stream. No publication occurs while an
-// event chain or its audit can still be reading the previous reservoir.
+// called by evolve_collisions after production geometry/cache construction
+// all launches below use the default stream; no publication occurs while an event chain or its audit can
+// still be reading the previous reservoir
 #ifdef COL_DIAGNOSTICS
 using local_clock = std::chrono::steady_clock;
 const auto local_begin=local_clock::now();
@@ -1615,6 +1671,7 @@ LOCAL_KERNEL("cache_query_environments");
 #ifdef COL_DIAGNOSTICS
 LOCAL_CHECK(localZero(local.work,0,sizeof(event_work)*N_P));
 #endif
+// rebuild owner lists and the group dependency graph only after positions change
 if (!local_geometry_valid) {
     std::vector<int> spatial(N_P);
     LOCAL_CHECK(localCopy(spatial.data(),dev_col_spatial,sizeof(int)*N_P,localD2H));
@@ -1641,9 +1698,10 @@ std::vector<col_rate_bin> ratebin(col_raw_count);
 std::vector<col_audit_accum> audit(col_raw_count);
 const real lambda0=N_P/static_cast<real>(N_K)/total_dust_mass;
 
+// publish the listed owners' current sizes and counts as the frozen reservoir and reset their bath clocks
 auto initialize = [&](int count) {
 #ifdef COL_PARTNER_REFRESH
-    // Campaign hook: only at refresh boundaries, before snapshots and cached rates.
+    // campaign hook: only at refresh boundaries, before snapshots and cached rates
     COL_PARTNER_REFRESH(dev_col_neighbor,local.queue_a,count);
 #endif
     int blocks=(count+TPB-1)/TPB;
@@ -1654,8 +1712,9 @@ auto initialize = [&](int count) {
         dev_col_jump2_int,dev_col_jumpmax_int);
     LOCAL_KERNEL("local_reset");
 };
+// recompute bath-start rates, merge sparse size bins, and copy mass-weighted rate moments to the host
 auto rates_and_bins = [&](int count) {
-    // Keep each refreshed group's bounds unchanged until its collision interval and audit finish.
+    // keep each refreshed group's bounds unchanged until its collision interval and audit finish
     reset_size_extrema<<<(moving_groups+TPB-1)/TPB,TPB>>>();
     LOCAL_KERNEL("reset_size_extrema");
     reduce_size_extrema<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_particle,dev_col_spatial,dev_col_active);
@@ -1690,6 +1749,7 @@ auto rates_and_bins = [&](int count) {
     #endif
     return merged;
 };
+// merged bins of group c occupy the contiguous range [binmap[c*COL_BIN_S], bin_end(c))
 auto bin_end = [&](int c,int merged) {
     return c+1<LOCAL_GROUPS ? binmap[(c+1)*COL_BIN_S] : merged;
 };
@@ -1699,6 +1759,7 @@ auto requested_step = [&](int c,int merged,int *binding=nullptr) {
     return _choose_col_bath(slice,int(slice.size()),duration,local.state[c].limit_scale,binding);
 };
 
+// start every group from the same published reservoir at tick zero
 initialize(N_P);
 int merged=rates_and_bins(N_P);
 std::vector<double> requested(LOCAL_GROUPS);
@@ -1744,7 +1805,7 @@ while (schedule.time()<schedule.end) {
     }
     int count=static_cast<int>(ids.size());
     if (count==0) { schedule.advance(groups); continue; }
-    // At tick zero the complete population was already initialized and rated.
+    // at tick zero the complete population was already initialized and rated
     if (tick!=0) {
         LOCAL_CHECK(localCopy(local.ids,ids.data(),sizeof(int)*count,localH2D));
         initialize(count);
@@ -1791,6 +1852,7 @@ while (schedule.time()<schedule.end) {
 #ifdef COL_DIAGNOSTICS
     const auto chain_begin=local_clock::now();
 #endif
+    // screen owners with no event in the interval, then relaunch the chain on the shrinking unfinished queue
     LOCAL_CHECK(localZero(local.error,0,sizeof(int)));
     LOCAL_CHECK(localZero(dev_col_unfinished,0,sizeof(int)));
     col_cached_screen<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_rngstate,
@@ -1837,6 +1899,7 @@ while (schedule.time()<schedule.end) {
 #ifdef COL_DIAGNOSTICS
     const auto audit_begin=local_clock::now();
 #endif
+    // compare realized activity and size change with the predicted envelopes and adapt each group's safety factor
     LOCAL_CHECK(localZero(dev_col_audit,0,sizeof(col_audit_accum)*col_raw_count));
     col_audit_bin<<<(count+TPB-1)/TPB,TPB>>>(local.ids,count,dev_col_audit,
         dev_particle,dev_size_old,dev_numr_old,dev_col_rate,dev_col_hazard,
@@ -1867,7 +1930,7 @@ while (schedule.time()<schedule.end) {
         s.persistent+=result.persistent_overshoot;
         s.max_growth=std::max(s.max_growth,result.max_g);
         s.max_activity=std::max(s.max_activity,result.max_f);
-        // Audit feedback controls the next due update; pending neighbors stay fixed.
+        // audit feedback controls the next due update; pending neighbors stay fixed
         col_bath_record record;
         record.group_index=c;
         record.operator_index=operator_index; record.bath_index=++batch_index;
@@ -1877,7 +1940,7 @@ while (schedule.time()<schedule.end) {
         _record_col_bath(col_summary,record);
 #endif
     }
-    // Count physical launches once per wave, not once per group in that wave.
+    // count physical launches once per wave, not once per group in that wave
 #ifdef COL_DIAGNOSTICS
     col_summary.continuation_launches+=continuations;
     audit_seconds+=std::chrono::duration<double>(local_clock::now()-audit_begin).count();
@@ -1896,7 +1959,7 @@ while (schedule.time()<schedule.end) {
     schedule.advance(groups);
     clock_dyn=schedule.seconds(schedule.time());
 }
-// Every pending endpoint has now reached H; transport may read all particle states.
+// every pending endpoint has reached the horizon; transport may read all particle states
 clock_dyn=duration;
 #ifdef COL_DIAGNOSTICS
 local.log << "{\"schema\":1,\"method\":\"local_cached_collision\",\"operator\":" << ++local.operator_id

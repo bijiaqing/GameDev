@@ -6,7 +6,7 @@
 #include <limits>        // std::numeric_limits
 #endif
 
-#include <gpu.cuh>  // CUDA vector types and device qualifiers
+#include <gpu.cuh>  // GPU vector types and device qualifiers
 #ifdef GAMEDEV_ROCM
 
 inline constexpr float MORTON_INF_F = std::numeric_limits<float>::infinity();

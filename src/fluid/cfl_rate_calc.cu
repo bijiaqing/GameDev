@@ -92,6 +92,8 @@ void cfl_rate_calc (
         real vy = dev_dustvely[idx_cell];
         real lz = dev_dustvelz[idx_cell];
 
+        // FARGO removes the ring mean from the explicit flux speed, unlike particle mesh-crossing limits
+        // diffusion is absent here because its implicit line solves enforce their own substeps
         // convert angular primitives to residual azimuthal and linear polar speeds
         real vz = lz / y;
 

@@ -1,5 +1,4 @@
 #include <gpu.cuh>
-// Root transport with local collision scheduling.
 #include <cmath>            // std::fabs, std::fmin, std::sin
 #include <cstdlib>          // EXIT_FAILURE, std::exit
 #include <filesystem>       // std::filesystem::create_directories
@@ -355,6 +354,8 @@ int main (int argc, char **argv)
 #endif
     #endif // COLLISION && !BERNOULLI
 
+    // size/weight changes refresh collision rates without rebuilding spatial neighbors
+    // collision-only runs keep this geometry across output intervals; transport or diffusion invalidates it
     // invalidate the search package only when a position update ends its current geometry epoch
     auto invalidate_col_geometry = [&] ()
     {

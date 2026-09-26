@@ -287,8 +287,8 @@ real _get_vrel_t (real R, real stokes_i, real stokes_j, real h_g, real sigma_g)
     return sqrt(vrel_sq);
 }
 
-// Query-local drift, settling, Brownian and turbulence closure for explicit grain sizes.
-// Partner position, image and instantaneous velocities do not enter this closure.
+// combine query-local drift, settling, Brownian, and turbulent relative speeds for two explicit grain sizes
+// both Stokes numbers use the owner's position; partner position, image, and instantaneous velocities do not enter
 __device__ __forceinline__
 real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     int idx_old_i, int idx_old_j, int image_j
@@ -311,13 +311,14 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
         , dev_particle[idx_old_i].position.x, y, z, dev_gas_dens
         #endif
     );
-    // mcdust uses vn = (dP/dR)/(2 rho Omega); use the analytic derivative.
+    // use the analytic pressure-drift speed vn = (dP/dR)/(2 rho Omega), as in mcdust
     real vn = -_get_eta(R, Z, h)*R*omega;
     real fi = 1.0/(1.0 + si*si), fj = 1.0/(1.0 + sj*sj);
     real dvr = 2.0*vn*(si*fi - sj*fj); // benchmark gas radial velocity is zero
     real dvphi = vn*(fi - fj);
+    // cap the terminal settling speed at St = 0.5, beyond which grains oscillate about the midplane
     real dvz = Z*omega*(fmin(si, 0.5) - fmin(sj, 0.5));
-    // Effective column gives Re = sqrt(pi/2)*alpha*rho*cs*sigma/(Omega*m_mol).
+    // use the effective local column so Re = sqrt(pi/2)*alpha*rho*cs*sigma/(Omega*m_mol)
     real sigma_local = _get_sigma_g(R)*_get_gas_strat(R, Z, h);
     #ifdef IMPORTGAS
     real density = _interp_field(dev_gas_dens,
@@ -326,7 +327,7 @@ real _get_vrel_pair (const swarm *dev_particle, real size_i, real size_j,
     else sigma_local = sqrt(2.0*M_PI)*density*h*R;
     #endif
     real vt = _get_vrel_t(R, si, sj, h, sigma_local);
-    // Code-unit models do not provide a molecular mass in simulation mass units.
+    // omit Brownian motion in code units, which provide no molecular mass in simulation mass units
     real vb = 0.0;
     #ifndef CODE_UNIT
     vb = _get_vrel_b(R, size_i, size_j, h);

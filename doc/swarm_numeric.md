@@ -6,9 +6,9 @@ The Lagrangian branch represents dust with computational swarms, each carrying o
 location and, in multisize models, one grain size and a represented physical grain count. Gas is
 prescribed analytically or imported, dust does not back-react on it, and enabled operators advance
 particle trajectories, stochastic spatial diffusion, radiation forces, and representative-particle
-collisions. Backend-neutral complete files live under `inc/swarm/` and `src/swarm/`;
-runtime, random-number, collision-search, declaration, and launch-policy files live under the
-corresponding `cuda/swarm/` or `rocm/swarm/` branch.
+collisions. Shared headers, collision-search libraries, and application sources live under
+`inc/swarm/` and `src/swarm/`; `inc/gpu.cuh` selects the CUDA or HIP runtime and
+random-number APIs.
 
 ### 1.1 Supported configurations
 
@@ -29,11 +29,9 @@ requires `DIFFUSION` and cannot be combined with imported gas velocities; collis
 `MULTISIZE` and exactly one KNN backend. Any model with `N_Z > 1` also requires `DIFFUSION` to
 prevent an unsupported indefinitely settling dust layer.
 
-The active tree includes the corrected axisymmetric measure, well-mixed vertically integrated
-closures, imported-gas Stokes calibration, frozen collision snapshots, random-state restart
-semantics, and an explicit radial-only path with `N_X == 1 && N_Z == 1`. The CUDA and ROCm suite
-definitions and acceptance criteria, including the radial analytical and KNN cases, are documented in
-[`swarm_testset.md`](swarm_testset.md).
+The radial-only path with `N_X == 1 && N_Z == 1` is selected by the grid alone. The CUDA and ROCm
+suite definitions and acceptance criteria, including the radial analytical and KNN cases, are
+documented in [`swarm_testset.md`](swarm_testset.md).
 
 ### 1.2 Physical assumptions and relation to the fluid branch
 
@@ -49,7 +47,7 @@ single-valued velocity closure. Their common and distinct closures are
 | velocity at one position | single valued | multiple representatives may cross with different velocities |
 | gas response to dust | absent | absent |
 | dust pressure and self-gravity | absent | absent |
-| density diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
+| density or concentration diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
 | collisions | absent | optional coagulation and fragmentation |
 | imported gas fields | absent | optional |
 | radiation pressure | optional | optional, with optional Poynting–Robertson drag |
@@ -318,7 +316,11 @@ dimensional formula consistently.
 | `C_LIGHT` | light speed used by `PR_EFFECT` |
 | `N_P`, `N_K`, `H_SEARCH` | representative count, retained KNN count, and local search cap in $H_g$ units |
 | `CFL_DYN`, `DT_MAX` | dynamics Courant factor and timestep ceiling |
-| `CFL_COL`, `V_FRAG` | collision-leap control and fragmentation threshold speed |
+| `V_FRAG` | fragmentation threshold speed |
+| `CFL_COL` | Bernoulli collision-leap control; defined only with `BERNOULLI` |
+| `COL_BATH_MAX`, `COL_BATH_EPS`, `COL_BATH_ALPHA` | frozen-bath duration cap, refresh tolerance, and audit confidence tail |
+| `COL_BIN_X/Y/Z/S`, `COL_BIN_MIN` | frozen-bath spatial and size controller bins and minimum bin occupancy |
+| `COL_BATH_TPB`, `COL_EVENT_CAP` | threads per owner chain block and accepted events per continuation launch |
 | `DT_OUT`, `SAVE_MAX` | output-interval scale and final mesh-output index |
 | `LOG_BASE`, `LIN_BASE` | logarithmic output base or linear particle-checkpoint stride |
 | `COAG_KERNEL` | constant, additive, product, or physical collision-kernel selection |
@@ -348,15 +350,15 @@ The swarm executable is likewise a compile-time specialization:
 | `CODE_UNIT` | select the code-unit calibration of collision microphysics |
 | `HALF_DISK` | reflect deterministic transport at the midplane |
 | `SAVE_DENS` | write the particle-deposited dust-density mesh field |
+| `COL_DIAGNOSTICS` | record frozen-bath controller schedules and event statistics in JSON diagnostics |
 | `LOGTIMING` | use logarithmically spaced mesh-output times |
 | `LOGOUTPUT` | retain linear evolution times but save particle checkpoints at logarithmic frame indices |
 | `COLLISION_SEARCH=kdtree` or `morton` | select the exact KNN implementation used by collisions |
 
 `DIFFUSION` and `RADIATION` require `TRANSPORT`, `PR_EFFECT` requires `RADIATION`, and `COLLISION`
 requires `MULTISIZE` plus exactly one search backend. `BERNOULLI` requires `COLLISION`, and
-`KNN_CACHE` requires both. The former `COL_CHAIN` selector is obsolete: `COLLISION` without
-`BERNOULLI` now selects the frozen-bath chain, and explicitly defining `COL_CHAIN` is a compilation
-error. These dependencies specify which equations exist in an executable; they do not dynamically
+`KNN_CACHE` requires both. `COLLISION` without `BERNOULLI` selects the frozen-bath chain; the
+obsolete `COL_CHAIN` selector is rejected at compile time. These dependencies specify which equations exist in an executable; they do not dynamically
 turn operators on or off during a run.
 
 ## 3. Disk model, mass normalization, and initialization
@@ -569,6 +571,10 @@ H_d(R,s)=H_g(R)
 \alpha_Z=\frac{\alpha}{\mathrm{Sc}_Z}.
 $$
 
+This is the initializer implemented in `inc/swarm/swarm_host.cuh`. Unlike the current fluid
+initializer, it does not include finite-Stokes diffusivity suppression or switch with
+`DIFFUSE_CONCENTRATION`; it is not an exact equilibrium of the evolved diffusion operator.
+
 The spatial template for one size is
 
 $$
@@ -604,8 +610,8 @@ $$
 is numerically tabulated. Here $\Delta\phi=X_{\max}-X_{\min}$ for an active azimuth and $2\pi$
 for an axisymmetric model. The auxiliary radial CDF has at least 2048 intervals, and the common
 logarithmic grain-size axis has 128 entries whenever size-dependent 3D settling is active. Neither
-resolution depends on the simulation polar grid, so a dust layer with $H_d\ll y\Delta z$ no longer
-loses mass or collapses onto polar-cell centers during initialization.
+resolution depends on the simulation polar grid, so a dust layer with $H_d\ll y\Delta z$ neither
+loses mass nor collapses onto polar-cell centers during initialization.
 
 The allowed vertical intervals follow directly from the spherical domain. At fixed cylindrical
 radius $R$, the polar faces require
@@ -997,7 +1003,7 @@ above `STOKES_0` rather than resetting the depleted midplane to the reference va
 
 **Core swarm equations.** Let $f_d(\boldsymbol x,\boldsymbol v,s,t)$ be the mass-weighted dust
 distribution introduced in Section 1.2. The continuum equation represented by the swarm is the
-kinetic equation
+kinetic equation (written here for the default density-diffusion mode)
 
 $$
 \frac{\partial f_d}{\partial t}
@@ -1011,7 +1017,9 @@ $$
 where $\boldsymbol a$ contains gravity, gas drag, radiation pressure, and Poynting–Robertson drag,
 $\boldsymbol D$ is the cylindrical spatial-diffusion tensor, and $\mathcal C_s$ is the
 representative-particle coagulation–fragmentation operator. Disabled physics removes its
-corresponding term.
+corresponding term. In concentration mode replace $\boldsymbol D\nabla f_d$ by
+$w\boldsymbol D\nabla(f_d/w)$, where $w$ is the prescribed gas density in the
+appropriate dimension. Diffusivity depends on grain size through the local Stokes number.
 
 Define the velocity-dispersion tensor and mass-weighted acceleration by
 
@@ -1023,7 +1031,7 @@ $$
 =\int\boldsymbol a f_d\,d^3v\,ds.
 $$
 
-Taking the zeroth and first velocity moments gives
+For a monodisperse population in density mode, taking the zeroth and first velocity moments gives
 
 $$
 \frac{\partial\rho_d}{\partial t}
@@ -1040,8 +1048,11 @@ $$
  [\boldsymbol D\nabla(\rho_d\boldsymbol u_d)].
 $$
 
-These moment equations are exact for the current size-independent diffusivity away from absorbing
-boundaries. The implemented collision event preserves each representative's mass and velocity, so
+For multiple sizes, diffusivity cannot be taken outside the size integrals. The mass and
+momentum diffusion terms are respectively $\nabla\cdot\int\boldsymbol D(s)\nabla f_d\,d^3v\,ds$
+and $\nabla\cdot\int\boldsymbol v\boldsymbol D(s)\nabla f_d\,d^3v\,ds$, with the
+concentration gradient substituted in concentration mode. The implemented collision event
+preserves each representative's mass and velocity, so
 $\mathcal C_s$ has zero mass and momentum moments even though it redistributes mass in grain-size
 space. Drag and radiation depend on size, so $\overline{\boldsymbol a}$ generally contains
 size–velocity correlations and cannot be reconstructed from $\rho_d$ and $\boldsymbol u_d$ alone.
@@ -1837,11 +1848,12 @@ In 3D,
 $$
 \lambda_{ij}=\frac{N_jK_{ij}}{V_{K,i}},
 \qquad
-\lambda_i=\sum_{j\in\mathcal N_i\setminus\{i\}}\lambda_{ij},
+\lambda_i=\sum_{j\in\mathcal N_i}\lambda_{ij},
 $$
 
 where $V_{K,i}$ is the accessible measure of the ball whose radius is the farthest retained KNN
-distance. In a vertically integrated model, the neighborhood measure is an area $A_{K,i}$ and the
+distance. The retained set $\mathcal N_i$ includes the owner's own swarm, using $N_i-1\simeq N_i$.
+Every $j$ in these sums is an active particle. In a vertically integrated model, the neighborhood measure is an area $A_{K,i}$ and the
 assumed Gaussian vertical overlap gives
 
 $$
@@ -1879,7 +1891,7 @@ overlap factor and therefore must not be interpreted as the physical collision p
 shipped backend headers currently default to `COAG_KERNEL = 0`; a physical collision model must
 provide `COAG_KERNEL = 3` through its model-specific `const_defs.cuh`.
 
-All physical collision paths use the lab query-local closure, on CUDA and ROCm,
+All physical collision paths use the same query-local closure, on CUDA and ROCm,
 with either neighbor search and with analytic or imported gas. Both grain sizes use
 owner $i$'s position and gas environment; partner position, image orientation and
 instantaneous particle velocities do not enter the relative speed. Let
@@ -1901,8 +1913,10 @@ density is sampled at the query for both Stokes numbers. The turbulent Reynolds
 normalization uses the query surface density in 2D and the effective column
 $\sqrt{2\pi}\rho_g h_gR$ in 3D; analytic gas uses
 $\Sigma_g(R)$ times the local stratification factor. `CONST_ST` retains its prescribed
-size-to-Stokes relation. `COLLISION_QUERY_LOCAL` is no longer required to select this
-closure. Synthetic kernels 0–2 remain independent of physical relative velocities.
+size-to-Stokes relation. Synthetic kernels 0–2 remain independent of physical relative velocities.
+In a vertically integrated model the Gaussian overlap factor above uses the partner's own
+cylindrical radius for $H_{g,j}$; this is the only place a partner position enters the physical
+rate.
 
 Brownian motion is included only in physical-unit builds:
 
@@ -2066,8 +2080,8 @@ which preserves the mass represented by $i$ but is a model-specific one-fragment
 
 #### Default GPU continuous-time collision chain
 
-The root CUDA/ROCm implementation now uses the promoted local change-based
-`erosion_cached_rates` workflow. The Bernoulli reference above retains its own
+The default chain uses local, change-based refresh durations, cached bath-start rates, and the
+sticking/erosion outcome law below. The Bernoulli reference above retains its own
 sticking/fragmentation law. For the default chain, let q=m_j/m_i and let G=1,
 except for q<=1e-6 where G=max(1,floor(1e-4/q)). Low-speed sticking uses rate
 lambda/G and target mass m_i+G*m_j. At speed >= V_FRAG and q<=0.1, erosion uses
@@ -2115,8 +2129,12 @@ continuation launches, and the cap is checked before drawing another clock.
 
 The driver uses integer power-of-two endpoints to prevent floating-point scheduler
 stagnation. Geometry is checked for nonfinite particle state before construction/reuse.
-Owners are dispatched only when their spatial group is due; continuation queues contain
-only unfinished owners. Root defaults to 64 threads per owner and 32 events per launch.
+The spatial groups are the `COL_BIN_X`×`COL_BIN_Y`×`COL_BIN_Z` controller bins, with inactive
+azimuthal or polar dimensions collapsed to one bin. Owners are dispatched only when their spatial
+group is due; continuation queues contain only unfinished owners. A cheap one-thread-per-owner
+screen first completes owners whose first cached waiting time spans the whole interval, so only the
+remaining owners enter the cooperative chain kernel. The defaults are 64 threads per owner on CUDA,
+128 on ROCm, and 32 events per launch.
 
 For each merged size bin, define A and B as represented-mass-weighted first and
 second absolute log-diameter jump rates. The requested local duration is
@@ -2214,8 +2232,7 @@ The next bath's safety factor is reduced after persistent activity or distributi
 relaxed only after three quiet baths. Completed baths are not rejected and replayed, because
 conditioning acceptance on a random post-bath fluctuation would bias the stochastic process.
 Controller memory persists across split collision operators within one checkpoint interval.
-Persistent overshoots at the minimum safety factor do not abort the run, matching the
-promoted lab workflow. Invalid particle states, rates and event-clock progress still
+Persistent overshoots at the minimum safety factor are recorded but do not abort the run. Invalid particle states, rates and event-clock progress still
 produce errors. Evolution can therefore continue outside the requested audit tolerance.
 Controller memory resets at output boundaries so particle restart files remain sufficient.
 
@@ -2414,9 +2431,7 @@ $3N_K$ records, deduplicates physical identifiers, and performs a final ordered 
 All threads in a query block consume a shared traversal-node index. A block barrier precedes every
 replacement of that index, while the existing following barrier publishes the replacement. Both
 halves are required: a following barrier alone allows a fast warp to begin the next iteration and
-overwrite the index while a slower warp is still reading the preceding value. CUDA Racecheck
-identified this hazard during the top-$K$ validation; the corrected traversal reports zero
-Racecheck hazards on the 100,000-particle three-dimensional ring case.
+overwrite the index while a slower warp is still reading the preceding value.
 
 The block-parallel sorted merge is the only Morton top-$K$ implementation and requires no secondary
 selection flag.
@@ -2441,9 +2456,9 @@ $$
 $$
 
 otherwise it is treated as a complete period and no image records are constructed. This convention
-matches the single-precision Cartesian search coordinates. It changes only deliberately configured
+matches the single-precision Cartesian search coordinates. It affects only deliberately configured
 near-full wedges whose missing angle is at most $10^{-6}$ radians; exact $2\pi$ domains and ordinary
-partial wedges retain their previous behavior. If the omitted angle is $\delta\phi$, the largest
+partial wedges are unaffected. If the omitted angle is $\delta\phi$, the largest
 seam displacement introduced by this convention is
 
 $$
@@ -2499,8 +2514,8 @@ image. The persistent collision cache stores the same code in its existing four-
 entry, so retaining image orientation adds no cache array or per-neighbor memory.
 
 Collision searches retain partner image codes for spatial neighbor selection. The physical
-relative-speed closure now uses only the query environment and the two grain sizes, so
-it does not reconstruct or subtract partner image velocities. This applies to direct
+relative-speed closure uses only the query environment and the two grain sizes, so it does not
+reconstruct or subtract partner image velocities. This applies to direct
 Bernoulli queries, cached Bernoulli queries and frozen-neighbor chains.
 
 The two search representations need not admit identical image sets. KD-tree stores both adjacent
@@ -2599,7 +2614,7 @@ retained publication suite and must not be cited as current qualification eviden
 
 Finite-bath convergence is a separate scientific requirement. Exploratory compact-population
 refinements are not retained as publication qualification evidence and do not define a universal
-tolerance. The production header value `COL_BATH_EPS = 0.06` remains a model parameter that must be
+tolerance. The production header value `COL_BATH_EPS = 0.02` remains a model parameter that must be
 calibrated together with `N_K`, `H_SEARCH`, and `N_P` before a scientific production campaign. A
 study that relies on the collisional size distribution should compare at least two successively
 smaller bath tolerances across independent seeds, using distributional observables at equal physical
@@ -2799,15 +2814,15 @@ The main numerical components map to the production source as follows:
 
 | Scientific operation | Principal implementation |
 |---|---|
-| mass bank, size sampling, and spatial CDFs | `inc/{cuda,rocm}/swarm/swarm_host.cuh` |
+| mass bank, size sampling, and spatial CDFs | `inc/swarm/swarm_host.cuh` |
 | particle state initialization | `src/swarm/particle_init.cu` |
 | semi-analytic dynamics | `src/swarm/ssa_substep_1.cu`, `src/swarm/ssa_substep_2.cu`, `src/swarm/ssa_transport.cu` |
 | stochastic diffusion | `src/swarm/diffusion_pos.cu` |
 | density and opacity deposition | `src/swarm/dustdens_*.cu`, `src/swarm/optdepth_*.cu` |
 | pairwise collision physics | `inc/swarm/_collision.cuh` |
 | neighbor caching and frozen-bath chain | `inc/swarm/_col_cache.cuh`, `inc/swarm/_col_chain.cuh` |
-| collision rates and events | `src/{cuda,rocm}/swarm/col_rate_calc.*`, `src/{cuda,rocm}/swarm/col_event_run.*` |
-| KD-tree and Morton search | `inc/swarm/{kdtree,morton}/`, backend builder/types under `inc/{cuda,rocm}/swarm/` |
+| collision rates and events | `src/swarm/col_rate_calc.cu`, `src/swarm/col_event_run.cu` |
+| KD-tree and Morton search | `inc/swarm/{kdtree,morton}/` |
 | operator driver and output clock | `src/swarm/swarm_runtime.cu` |
 
 The particle state is stored in double precision, while both collision-search backends use
@@ -3031,21 +3046,17 @@ model itself rather than current test coverage.
 
 ### Shared CUDA/ROCm application source
 
-Root application kernels and runtimes are maintained in `src/`; representation
-constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
-compile the same `.cu` files (ROCm uses `hipcc -x hip`).
-`inc/gpu.cuh` maps runtime allocation/copy/error APIs and random sampling
-to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
-does not alter stream initialization or make raw RNG checkpoints interchangeable.
+Swarm kernels and the runtime are maintained in `src/swarm/`; constants, host/kernel declarations,
+and both search libraries are in `inc/swarm/`, with the search code under
+`inc/swarm/{kdtree,morton}/`. Both backends compile the same `.cu` files, with ROCm using
+`hipcc -x hip`. `inc/gpu.cuh` maps runtime allocation, copy, error, Thrust-policy, and
+random-number APIs to CUDA/cuRAND or HIP/hipRAND; RNG stream initialization is unchanged and raw
+RNG checkpoints remain backend-specific. Builds do not invoke HIPIFY or generate HIP sources, and
+model overrides retain precedence.
 
-Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
-and collision RNG storage. Both complete search libraries now
-live under `inc/swarm/{kdtree,morton}/`. Runtime API spelling and Thrust policy
-use the compatibility header. Explicit branches retain CUDA/ROCm allocator choices,
-compiler-specific host/device qualifiers, and CUB/hipCUB calls. Model overrides
-retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
-
-Standalone host sanity checks and migration snapshots were removed. Native accuracy
-validation is run through `val/run_all.py`; analytical references remain with the tests.
-
-Launch defaults remain unchanged; there is no automatic performance tuning.
+Explicit backend branches remain where hardware or toolchain behavior differs: shared versus
+register storage of the collision RNG state, the MI300A wavefront reductions in `col_bath_rate`
+and `col_chain_run`, the private-heap KD-tree layout and query width, ballot intrinsics in the
+Morton tile packing, and Thrust execution policies. Launch widths are compile-time constants;
+there is no automatic performance tuning. Native accuracy validation is run through
+`val/run_all.py`; analytical references remain with the tests.

@@ -74,8 +74,8 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         real cn_i = (iz > 0)       ? (0.5*dt*sin(z_i)*diff_zi / (y*dz_len*vol_z)) : 0.0;
         real cn_o = (iz < N_Z - 1) ? (0.5*dt*sin(z_o)*diff_zo / (y*dz_len*vol_z)) : 0.0;
 
-        // Solve concentration with gas-weighted face conductances; the diagonal
-        // is also the density outgoing sum used by positivity subcycling.
+        // weight each face conductance by the gas weight so the solve advances rho_d/w
+        // the resulting diagonal is also the outgoing coefficient sum used by positivity subcycling
         real gas = _get_diffusion_weight(y, _get_zcent(iz));
         cn_i *= _get_diffusion_weight(y, z_i) / gas;
         cn_o *= _get_diffusion_weight(y, z_o) / gas;
@@ -105,7 +105,7 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real upper_work[N_Z], rhod_rhs[N_Z];
 
-            // Build the RHS for density (weight=1) or concentration; boundary fluxes vanish.
+            // build the explicit CN right-hand side for density (w = 1) or concentration; boundary fluxes vanish
             for (int iz = 0; iz < N_Z; iz++)
             {
                 real cn_i = -cn_lower[iz];
@@ -130,7 +130,7 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
                 rhod_work[iz] = (rhod_rhs[iz] - cn_lower[iz]*rhod_work[iz - 1]) / pivot;
             }
 
-            // Back-substitute the selected density or concentration solution.
+            // back-substitute the selected density or concentration solution
             for (int iz = N_Z - 2; iz >= 0; iz--)
             {
                 rhod_work[iz] -= upper_work[iz]*rhod_work[iz + 1];
@@ -140,7 +140,7 @@ void diffusion_zth (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         {
             real mass_flux[N_Z], moment_flux[N_Z];
 
-            // Reconstruct mass flux from old density/weight and the solved diffused variable, with zero boundary fluxes
+            // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary fluxes
             for (int iz = 0; iz < N_Z; iz++)
             {
                 if (iz == N_Z - 1)

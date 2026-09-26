@@ -51,7 +51,7 @@ real _get_nu (real R, real h_g)
     #endif // CONST_NU
 }
 
-// Local dust diffusivity, including the finite-Stokes suppression in both flux modes.
+// return the local dust diffusivity, including finite-Stokes suppression in both flux modes
 __device__ __forceinline__
 real _get_diffusivity (real R, real Z, real h_g, real schmidt)
 {
@@ -59,7 +59,8 @@ real _get_diffusivity (real R, real Z, real h_g, real schmidt)
     return _get_nu(R, h_g) / (schmidt*(1.0 + stokes*stokes));
 }
 
-// Normalization cancels between face weight and concentration. In 2D use surface density.
+// return the concentration weight w proportional to rho_g, or Sigma_g in 2D, and w = 1 for density diffusion
+// its normalization cancels between face weights and concentration
 __device__ __forceinline__
 real _get_diffusion_weight (real y, real z)
 {
@@ -120,7 +121,7 @@ real _get_alpha (real R, real h_g)
 }
 #endif // DIFFUSION
 
-// Midplane, small-height settling equilibrium approximation used by 3D initialization.
+// return the midplane, small-height settling-equilibrium dust scale height used by 3D initialization
 __device__ __forceinline__
 real _get_hd (real R, real h_g)
 {

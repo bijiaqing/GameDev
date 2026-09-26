@@ -53,7 +53,7 @@ inline bool save_variable(const std::string &path, real mass) {
     return static_cast<bool>(file);
 }
 
-// Equal represented masses require mass-weighted exponential sampling, p(m)=m*exp(-m).
+// equal represented masses require mass-weighted exponential sampling, p(m)=m*exp(-m)
 inline void rand_powerlaw(real *sizes, int count, real, real, real) {
     std::mt19937 generator(SEED);
     std::gamma_distribution<real> mass(2.0,1.0);

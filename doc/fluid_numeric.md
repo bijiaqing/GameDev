@@ -4,9 +4,9 @@
 
 The Eulerian branch represents monodisperse, pressureless dust as a finite-volume continuum on the
 disk grid. Gas is prescribed analytically, dust does not back-react on it, and the solver combines
-conservative transport with local forces and optional density diffusion. Backend-neutral complete
-files live under `inc/fluid/` and `src/fluid/`; runtime, random-number, declaration, and
-launch-policy files live under the corresponding `cuda/fluid/` or `rocm/fluid/` branch.
+conservative transport with local forces and optional density or concentration diffusion. Shared
+headers and application sources live under `inc/fluid/` and `src/fluid/`; `inc/gpu.cuh`
+selects the CUDA or HIP runtime and random-number APIs.
 
 ### 1.1 Supported configurations
 
@@ -16,7 +16,7 @@ The branch supports:
 - a full three-dimensional spherical grid with `N_Z > 1`
 - pressureless dust transport
 - gas drag, gravity, spherical geometric forces, and optional radiation pressure
-- optional turbulent diffusion of dust density
+- optional turbulent diffusion of dust density or dust-to-gas concentration
 - optional viscous gas accretion when diffusion is enabled
 
 Radial–polar two-dimensional models are not supported. The azimuthal dimension is always active.
@@ -47,7 +47,7 @@ Their common and distinct closures are
 | velocity at one position | single valued | multiple representatives may cross with different velocities |
 | gas response to dust | absent | absent |
 | dust pressure and self-gravity | absent | absent |
-| density diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
+| density or concentration diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
 | collisions | absent | optional coagulation and fragmentation |
 | imported gas fields | absent | optional |
 | radiation pressure | optional | optional, with optional Poynting–Robertson drag |
@@ -558,9 +558,11 @@ in a Gaussian dust layer using the settling–diffusion balance discussed by
 [Youdin & Lithwick (2007)](https://arxiv.org/abs/0707.2975),
 
 $$
-H_d=H_g\sqrt{\frac{\alpha_z}{\mathrm{St}_{\rm mid}}},
+H_d=H_g\sqrt{\frac{\alpha_{z,d}}{\mathrm{St}_{\rm mid}+\chi\alpha_{z,d}}},
 \qquad
-\alpha_z=\frac{\alpha}{\mathrm{Sc}_z}.
+\alpha_{z,d}=\frac{\alpha}{\mathrm{Sc}_z(1+\mathrm{St}_{\rm mid}^2)},
+\qquad
+\chi=\begin{cases}0,&\text{density diffusion},\\1,&\text{concentration diffusion}.\end{cases}
 $$
 
 Specifically,
@@ -571,8 +573,8 @@ $$
 \exp\left[-\frac{Z^2}{2H_d(R)^2}\right].
 $$
 
-This is the equilibrium implied by the selected internal density-diffusion equation, not the
-standard gas-concentration diffusion closure. Initialization then applies
+This is the midplane, small-height settling approximation for the selected flux mode, not an
+exact equilibrium of the height-dependent diffusivity. Initialization then applies
 
 $$
 \varrho_d(x_i,y_j,z_k)
@@ -665,10 +667,11 @@ needed to approximately balance the initialized polar diffusive flux,
 
 $$
 v_{\theta,\mathrm{diff}}
-=\frac{D_z}{r\rho_d}\frac{\partial\rho_d}{\partial\theta},
+=\frac{D_z w}{r\rho_d}\frac{\partial(\rho_d/w)}{\partial\theta},
 $$
 
-evaluated with one-sided boundary differences and centered interior differences.
+where $w=1$ for density diffusion and $w=\rho_g$ for concentration diffusion, evaluated with
+one-sided boundary differences and centered interior differences.
 
 This initial vertical closure is not the same as the swarm initialization. The fluid adds this
 polar diffusive-balance velocity but does not add the swarm's terminal-settling velocity
@@ -694,7 +697,7 @@ $$
 Let $\varrho_d$ denote the evolved dust density: $\varrho_d=\Sigma_d$ in 2D and
 $\varrho_d=\rho_d$ in 3D.
 
-**Core fluid equations.** In coordinate-independent conservation form, the model advances
+**Core fluid equations.** In coordinate-independent conservation form, the default density mode advances
 
 $$
 \frac{\partial\varrho_d}{\partial t}
@@ -720,7 +723,9 @@ $\varrho_d\boldsymbol v_d\boldsymbol v_d$ rather than
 $\varrho_d\boldsymbol v_d\boldsymbol v_d+\boldsymbol P_d$. The term
 $\boldsymbol S_{m,D}$ denotes the conservative donor-momentum flux paired with diffusive mass
 transport and vanishes when `DIFFUSION` is disabled; Section 7 gives its discrete definition and
-limitations. Disabling `RADIATION` sets $\boldsymbol a_{\rm rad}=0$.
+limitations. In concentration mode replace $\boldsymbol D\nabla\varrho_d$ by
+$w\boldsymbol D\nabla(\varrho_d/w)$ throughout the mass-diffusion operator, with the
+corresponding donor-momentum flux. Disabling `RADIATION` sets $\boldsymbol a_{\rm rad}=0$.
 
 The coordinate-free equations are common to both supported geometries, but their differential
 operators and physical closures are not identical. Their relationship is
@@ -1596,14 +1601,15 @@ scaling; the nonuniform-front tests establish bounds and conservation, not gener
 
 ### 7.4 Physical meaning and the rejected Reynolds alternative
 
-The selected density-diffusion flux is
+The default density-diffusion flux is
 
 $$
 \boldsymbol J=-\boldsymbol D\cdot\boldsymbol\nabla\varrho_d,
 $$
 
-where $\varrho_d$ denotes $\Sigma_d$ in the vertically integrated model and $\rho_d$ in 3D. The
-mass equation fixes the total transport flux $\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does
+where $\varrho_d$ denotes $\Sigma_d$ in the vertically integrated model and $\rho_d$ in 3D.
+Concentration mode instead uses $\boldsymbol J=-w\boldsymbol D\cdot\nabla(\varrho_d/w)$;
+the same donor-momentum closure applies to either flux. The mass equation fixes the total transport flux $\varrho_d\boldsymbol v_d+\boldsymbol J$, but it does
 not uniquely determine which momentum an unresolved diffusive exchange carries. GameDev closes
 that ambiguity by treating each stored generalized velocity
 
@@ -1649,7 +1655,7 @@ model with $\mathcal R_{ij}=0$. A Reynolds density-diffusion model should be rec
 separate physical model and must be implemented and verified as a complete system. Relevant
 derivations of conservative mean dust momentum include
 [Huang & Bai (2022)](https://arxiv.org/abs/2206.01023), whose published model diffuses dust
-concentration rather than GameDev's selected density.
+concentration; GameDev supports that mass flux but retains its distinct donor-momentum closure.
 
 ## 8. Global integrator and timestep control
 
@@ -1816,14 +1822,14 @@ The main numerical components map to the production source as follows:
 
 | Scientific operation | Principal implementation |
 |---|---|
-| convolved profile and PPM geometry setup | `inc/{cuda,rocm}/fluid/fluid_host.cuh` |
-| density and velocity initialization | `src/{cuda,rocm}/fluid/init_rho_calc.*`, `src/fluid/init_vel_calc.cu` |
+| convolved profile and PPM geometry setup | `inc/fluid/fluid_host.cuh` |
+| density and velocity initialization | `src/fluid/init_rho_calc.cu`, `src/fluid/init_vel_calc.cu` |
 | conservative transport | `src/fluid/advection_[xyz]{th,bl}.cu` |
 | drag, gravity, geometry, and radiation | `src/fluid/source_update.cu` |
 | density and donor-momentum diffusion | `src/fluid/diffusion_[xyz]{th,bl}.cu` |
 | optical-depth increment and prefix sum | `src/fluid/optdepth_calc.cu`, `src/fluid/optdepth_csum.cu` |
 | primitive/conserved conversion | `src/fluid/momentum_getv.cu`, `src/fluid/momentum_setv.cu` |
-| operator driver and output clock | `src/{cuda,rocm}/fluid/fluid_runtime.*` |
+| operator driver and output clock | `src/fluid/fluid_runtime.cu` |
 
 The same PPM/HLL and Crank–Nicolson discretizations have two compile-time GPU implementations:
 
@@ -1844,7 +1850,7 @@ memory. Eleven advection fields hold the conserved state, recovered primitives, 
 fluxes; the twelfth stages the low-order density update so cells can advance cooperatively without
 reading density already overwritten by another thread. Cellwise reconstruction, low-order update,
 and SSPRK combinations are cooperative, while the face-ordered invariant-domain correction and
-Thomas or Sherman–Morrison recurrence remain serial within each line to preserve the verified
+Thomas or Sherman–Morrison recurrence remain serial within each line to preserve the discrete
 numerical ordering. This is an implementation and memory-layout choice, not a different numerical
 method.
 
@@ -1858,8 +1864,8 @@ velocity norms rather than requiring byte equality.
 On ROCm, dynamic shared memory is AMD LDS. The host checks both the device LDS capacity and the
 kernel's static-plus-dynamic allocation before launching a block diffusion line. For double
 precision the directional dynamic requests are the values below; a six-array line of length 1366
-already exceeds a 64-KiB limit. The thread-line azimuthal advection stack is also too large for the
-validated gfx942 linker at `N_X = 1024`, making the block sweep the supported large-2D ROCm path.
+already exceeds a 64-KiB limit. Thread-line azimuthal advection also has a large per-thread
+stack at `N_X = 1024`; compiler resource limits must be checked for the intended GPU and grid.
 These are hardware resource constraints, not changes to the numerical operator.
 
 Performance is grid dependent, so the intended production grid should be benchmarked before
@@ -1883,8 +1889,7 @@ $$
 M_{\rm adv,work}=12N_G\,\mathrm{sizeof}(\mathtt{real}).
 $$
 
-For double precision this is 96 MiB at $1024^2$ and 192 MiB at $128^3$. The extra staged-density
-field costs one additional full-grid array relative to the former serial low-order block update.
+For double precision this is 96 MiB at $1024^2$ and 192 MiB at $128^3$.
 
 The dynamic shared-memory requirements per diffusion block are
 
@@ -1961,7 +1966,7 @@ model itself rather than current test coverage.
   momentum exchange at zero net mass flux is omitted. It must not be described as a complete
   Reynolds-averaged momentum tensor. A future Reynolds option would be a different physical model,
   not a correction term that can be added independently to the present kernels.
-- The 3D initializer balances polar advection and density diffusion only to discretization error. The
+- The 3D initializer balances polar advection and the selected diffusion flux only to discretization error. The
   normalized instantaneous mismatch and its polar-resolution convergence are measured by
   `test_startup_3d`; later momentum relaxation can still produce a physical startup transient and is
   not assumed to vanish under mesh refinement.
@@ -1996,22 +2001,19 @@ model itself rather than current test coverage.
 
 ### Shared CUDA/ROCm application source
 
-Root application kernels and runtimes are maintained in `src/`; representation
-constants and host/kernel declarations are in `inc/{swarm,fluid}/`. Both builds
-compile the same `.cu` files (ROCm uses `hipcc -x hip`).
-`inc/gpu.cuh` maps runtime allocation/copy/error APIs and random sampling
-to the selected backend. CUDA retains cuRAND and ROCm retains hipRAND; this change
-does not alter stream initialization or make raw RNG checkpoints interchangeable.
+Fluid kernels and the runtime are maintained in `src/fluid/`; constants and host/kernel
+declarations are in `inc/fluid/`. Both backends compile the same `.cu` files, with ROCm using
+`hipcc -x hip`. `inc/gpu.cuh` maps runtime allocation, copy, error, Thrust-policy, and
+random-number APIs to CUDA/cuRAND or HIP/hipRAND. Builds do not invoke HIPIFY or generate HIP
+sources, and model overrides retain precedence.
 
-Explicit backend branches preserve fluid block width, dynamic shared-memory handling,
-and collision RNG storage. The bundled KD-tree library remains
-under backend directories, as do Morton backend type/ghost helpers. Model overrides
-retain precedence. Builds do not invoke HIPIFY or generate HIP source files.
+Explicit backend branches remain only where the hardware differs: the block-sweep width
+(`TPB_BLOCK`), and the dynamic shared-memory opt-in on CUDA versus the LDS capacity check on ROCm.
+The azimuthal density perturbation uses the vendor generator, so CUDA and ROCm initialize
+different noise realizations.
 
-Standalone host sanity checks and migration snapshots were removed. Native accuracy
-validation is run through `val/run_all.py`; analytical references remain with the tests.
-
-The top-level CFL calculation is quiet on both backends: it retains the CFL-rate
-reduction and nonfinite-state checks, but skips the three diagnostic velocity
-copies, ring-velocity reduction, and limiting-cell printout. Explicit trace
-diagnostics remain available.
+The global CFL reduction is quiet by default. It retains the nonfinite-state check but skips the
+three diagnostic velocity copies, ring-velocity reduction, and limiting-cell printout, which are
+enabled with `CUDA_SYNC_TRACE` or `HIP_SYNC_TRACE`. Those trace builds also synchronize after every
+kernel launch. Native accuracy validation is run through `val/run_all.py`; analytical references
+remain with the tests.

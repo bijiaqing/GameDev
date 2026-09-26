@@ -1,6 +1,6 @@
 #include <swarm_kern.cuh>
 
-// Independent initialization streams; evolution uses the production RNG seed (1).
+// draw the initial log-normal ring from independent streams; evolution uses the production RNG seed 1
 __global__ void particle_init(swarm *particle, const real *, const real *, const real *)
 {
     const int i = threadIdx.x + blockDim.x*blockIdx.x;

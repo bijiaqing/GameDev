@@ -16,7 +16,7 @@ struct idx_old_heap
     const unsigned char *dev_active;
     static_assert(K > 0 && K <= 4096, "KD-tree requires 0 < K <= 4096");
 #ifdef GAMEDEV_ROCM
-    // MI300A tuning: private heaps and 64 queries per block are a paired choice.
+    // MI300A tuning: private heaps and 64 queries per block are a paired choice
     static constexpr int threads = 64;
     using private_keys = std::conditional_t<ExternalStorage,unsigned long long*,unsigned long long[K]>;
     private_keys near_key;
@@ -25,7 +25,7 @@ struct idx_old_heap
     __device__ __forceinline__ void set_key(int slot, unsigned long long value)
     { near_key[slot] = value; }
 #else
-    // Keep per-block heap storage at or below 32 KiB as K increases.
+    // keep per-block heap storage at or below 32 KiB as K increases
     static constexpr int threads = K <= 256 ? 16 : K <= 512 ? 8 : K <= 1024 ? 4 : K <= 2048 ? 2 : 1;
     unsigned long long *near_key;
     __device__ __forceinline__ unsigned long long get_key(int slot) const
@@ -50,7 +50,7 @@ struct idx_old_heap
 #ifndef GAMEDEV_ROCM
         __shared__ unsigned long long shared_key[K*threads];
         near_key = shared_key + threadIdx.x;
-        // No barrier: each thread initializes and accesses only its own column.
+        // no barrier is needed because each thread initializes and accesses only its own column
 #endif
         // initialize a finite max-heap whose invalid identifiers sort after every physical candidate
         unsigned long long empty = encode(search_dist*search_dist, 0xffffffffU);
@@ -142,7 +142,7 @@ struct idx_old_heap
             idx_slot = 0;
         }
 
-        // Retain the selected child value to avoid a dependent scratch reload.
+        // retain the selected child value to avoid a dependent scratch reload
         while (true)
         {
             int idx_child = 2*idx_slot + 1;

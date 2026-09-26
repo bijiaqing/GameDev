@@ -13,24 +13,26 @@ superseded test inventories are not part of the public documentation.
 | [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm equations, initialization, trajectories, diffusion, collisions, and limitations |
 | [`swarm_testset.md`](swarm_testset.md) | retained swarm publication cases, statistical references, KNN validation, and collision-chain criteria |
 
+The naming and commenting contract for production source is kept in the local, untracked
+`doc/MEMORY.md`. The untracked `doc/extension/`, `doc/proposal/`, and `doc/publication/`
+directories hold proposals, manuscript planning, and dated development records; they do not
+describe current behavior unless a statement is confirmed against the source.
+
 Physical equations and production algorithms belong in the numerical guides. Test definitions and
 evidence rules belong in the test guides. The paired fluid/swarm derivations remain independent even
 where their gas-disk assumptions are physically identical.
 
 ## Source and validation layout
 
-- `inc/fluid/`, `inc/swarm/`, `src/fluid/`, and `src/swarm/` contain complete
-  backend-neutral files.
-- `inc/cuda/`, `inc/rocm/`, `src/cuda/`, and `src/rocm/` contain complete backend-owned files.
-- `mod/` contains the published production model configuration.
+- `inc/fluid/`, `inc/swarm/`, `src/fluid/`, and `src/swarm/` own the two numerical representations.
+- `inc/gpu.cuh` maps GPU APIs and execution policies; CUDA and ROCm compile the same numerical sources.
+- `mod/` contains production model configurations.
 - `val/{fluid,swarm}/mod/` contains test definitions; `src/` contains shared drivers and validators.
 - `val/*.py` contains native campaign, archive, and cross-backend utilities.
-- Numerical evidence is retained under `val/{fluid,swarm}/out/` and campaign summaries under
-  `val/*.json`; disposable builds use each suite's `obj/` directory.
+- `val/{fluid,swarm}/out/` holds backend-separated results; `obj/` holds disposable builds.
+- `val/paper/` contains scientific campaigns with their own READMEs, model overrides, and outputs.
 
-The build shares a file only when the complete file is backend-neutral. It does not split partially
-portable translation units. Fluid and swarm files are also kept separate rather than creating a
-cross-representation shared layer.
+Fluid and swarm retain separate physical operators even though they use the same GPU API mappings.
 
 Production models select one GPU backend, one fluid sweep implementation where applicable, and one
 collision-search backend. Their executable is written beside the model flags. Validation archives retain
@@ -41,42 +43,24 @@ are not portable across backends.
 
 The current source defines a deliberately compact publication suite:
 
-- fluid: 19 models and 76 analytical or invariant-based metric records;
-- swarm: 15 common entries, including 14 analytical/statistical models with 42 records and the KNN matrix;
-- one standalone KNN correctness matrix at $10^5$ particles;
-- four production frozen-bath collision-chain models.
+- fluid: 19 models, expanded to 22 cases by three fixed-grid limiter variants, with 76
+  analytical or invariant-based metric records;
+- swarm: 15 common entries, namely 14 analytical/statistical models with 42 records plus the
+  standalone KNN correctness matrix at $10^5$ particles;
+- four production frozen-bath collision-chain models run as the separate `chain` group.
 
-The former expanded archives and their micro-tests were retired. The current retained matrices
-have passing native CUDA and ROCm records; the dated assessments in the test guides distinguish
-those numerical passes from unresolved comparison and source-provenance checks. Results apply to
-their recorded source snapshot. Commands, archive rules, and separate production-build checks are
-documented in [`val/README.md`](../val/README.md).
+The case lists and expected record counts are defined in `val/val_config.py`.
 
-### Repair qualification, 2026-09-05
+The active validation tree was reconstructed around current production operators. Previous native
+passes, including the September Morton integration campaign, describe their recorded source and
+configuration; they do not qualify the present shared-source implementation or rebuilt tests.
+Use [`val/README.md`](../val/README.md) for current commands, archive paths, and evidence status.
+A model run reported by the user is not a complete validation campaign.
 
-Commit `9cdb96a` contains the six source repairs below. Numerical methods and acceptance criteria
-are maintained in the linked guides; native results apply to the source snapshots recorded there.
-
-| Repaired defect | Current behavior and evidence |
-|---|---|
-| Unbounded old-donor diffusion transfer | All six fluid directional sweeps limit outgoing mass before transporting momentum; native limiter and smooth-diffusion cases pass on both backends and sweeps ([method](fluid_numeric.md#73-conservative-donor-momentum-closure), [tests](fluid_testset.md#native-archive-assessment-2026-09-05)) |
-| Wrong collision-partner image orientation | Queries and caches retain the selected image for physical rates; native cache-rate, KNN, and collision-chain cases pass ([method](swarm_numeric.md#85-periodic-boundary-ghosts), [tests](swarm_testset.md#8-physical-collision-rates)) |
-| Diffusion velocity projected at the wrapped wedge angle | Velocity uses the unwrapped stochastic endpoint; native planar and 3D seam cases pass ([method](swarm_numeric.md#72-boundaries-and-velocity-reprojection), [tests](swarm_testset.md#6-stochastic-diffusion)) |
-| Model override bypassed by ROCm extension preference | Directory-first source selection and source-identity sidecars handle override changes; native override/amplitude evidence remains outstanding |
-| Stale executable after returning to cached objects | Every configured build relinks the selected objects; native cached A → B → A evidence remains outstanding |
-| Collision bookkeeping compiled without collisions | Controller declarations, reset, and output require `COLLISION && !BERNOULLI`; native non-collision production-runtime evidence remains outstanding |
-
-The build contract is in the root [README](../README.md#source-and-header-overrides), and the
-remaining native build gates are in the [validation guide](../val/README.md#production-build-qualification).
-Full qualification also remains open on the swarm comparator's 60 diagnostic mismatches and the
-missing block-run source fingerprints, as detailed in the dated testset assessments. Completed
-numerical campaigns need not be rerun solely because older aggregate files report static failures.
-
-The underlying source review examined fluid/swarm operators, helpers, runtimes, build routing,
-model overrides, and validation references, with CUDA/ROCm differences inspected separately.
-Vendored KD-tree support received dependency/difference inspection rather than an exhaustive
-independent proof. Host algebra and mock-build reproductions established specific defects and
-build-graph behavior; the later downloaded GPU archives provide the distinct native evidence.
+Block-run source provenance and the separate native build checks remain unresolved without matching
+evidence. The latter cover model-override selection, cached A → B → A relinking, and non-collision
+production builds. Old comparator mismatch counts are historical diagnostics, not results for the
+current comparator. Do not restart completed historical campaigns merely to regenerate reports.
 
 ## Current cross-representation conventions
 
@@ -102,7 +86,7 @@ updating qualification claims.
 When statements disagree, use this authority order:
 
 1. current production source, flags, and constants;
-2. freshly generated machine-readable evidence under `val/*.json`;
+2. matching-source machine-readable evidence under `val/{fluid,swarm}/out/` and `val/*.json`;
 3. the canonical documents in this directory;
 4. historical results and development notes.
 

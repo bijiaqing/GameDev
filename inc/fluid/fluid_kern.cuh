@@ -8,7 +8,7 @@
 
 #include <const_defs.cuh>
 
-// Frozen-coefficient drag quadrature shared by source_update and analytical tests.
+// compute frozen-coefficient drag relaxation and force weights shared by source_update and analytical tests
 __device__ __forceinline__
 void _get_drag_weights(real dt, real ts, real &drag_relax, real &drag_decay,
     real &force_weight_old, real &force_weight_new)

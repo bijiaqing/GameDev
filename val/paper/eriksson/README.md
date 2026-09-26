@@ -37,16 +37,14 @@ are not enabled. There is no artificial global partner reshuffling.
 
 All runtime and device sources come directly from the root, including dynamics,
 St-dependent concentration diffusion, query-local collision velocities, cached
-rates, sticking/erosion grouping, adaptive size bins, local refreshes, and optimized
-KD-tree/Morton implementations. No old runtime, collision header, or backend tree
-is copied. No collision JSONL diagnostics are enabled.
+rates, sticking/erosion grouping, adaptive size bins, local refreshes, and the
+KD-tree/Morton implementations. `COL_DIAGNOSTICS` is not enabled, so no collision JSON
+or JSONL diagnostics are written.
 
-ROCm builds inherit the root parallel rate/chain reductions and 128-thread
-collision launches. KD-tree uses private heaps with 64 queries per block;
-Morton retains compacted queries. CUDA retains its existing implementation.
-Model `COL_BATH_TPB` follows the root defaults: 128 on ROCm and 64 on CUDA.
-An explicit model width is honored by both launches and saved metadata. `COL_BATH_EPS` remains 0.08 here;
-the root default is 0.02. ROCm tuning was measured on MI300A/gfx942 at N_K=256
+`COL_BATH_TPB` follows the root defaults: 128 on ROCm and 64 on CUDA. On ROCm, the root
+also uses wavefront rate/chain reductions for this N_K=256, 128-thread shape and private
+KD-tree heaps with 64 queries per block. The Morton backend uses the same compacted query on
+both GPU backends. `COL_BATH_EPS` is 0.08 here; the root default is 0.02. ROCm tuning was measured on MI300A/gfx942 at N_K=256
 and epsilon=0.02; its speedup at this campaign's epsilon=0.08 is unmeasured.
 
 `src/swarm_host.cuh` includes the root host header and replaces only initmass_calc
@@ -56,23 +54,23 @@ Simpson integral over the same finite spherical domain. The initial-profile help
 is merged into this header. Root monodisperse size sampling gives the exact monomer
 diameter. All other host and output helpers are reused.
 
-The previous campaign's physical constants, 16x8 spatial controller groups,
-32 adaptive size bins, one-year maximum collision interval, one-year maximum
-dynamics timestep, and 100-year output strategy are retained. COL_BATH_EPS changes
-from 0.02 to 0.08; fixed size-bin limits are removed in favor of current production
-moving bins. The tolerance controls refreshes and is not an 8% accuracy guarantee.
+The controller uses 16x8 radial/polar spatial groups and 32 adaptive size bins.
+Maximum collision and dynamics intervals are one year, and outputs are separated by
+100 years. `COL_BATH_EPS=0.08`; size-bin bounds follow the current production moving-bin
+policy. The tolerance controls refreshes and is not an 8% accuracy guarantee.
 
-These setups preserve our previous comparison's physical ingredients, not identical
+These setups follow the physical ingredients of the Eriksson comparison, not identical
 MCDUST equations. In particular, production hydrostatic gas stratification, fixed
 spherical boundaries, relative-velocity prescriptions and Gaussian diffusion noise
 are retained. No MCDUST gas-density floor or extra noise normalization is imported.
 
 ## Fresh runs
 
-From the repository root. Each command pair is one independent GPU run. No restart
-argument is supplied. Upload this directory and the current root Makefile/inc/src;
-no val_stale or lab files are required. Avoid rerunning into an existing output
-path unless intentionally replacing its results.
+From the repository root. Each command pair is one independent GPU run with no restart
+argument. Only this directory and the root `Makefile`, `inc/`, and `src/` are required.
+The campaign Makefile defaults to `COLLISION_SEARCH=kdtree` on both backends, so the
+commands below always name the search explicitly. Rerunning into an existing output path
+replaces its results.
 
 ### CUDA
 
@@ -136,9 +134,6 @@ val/paper/eriksson/obj/alpha_1e-4/rocm/morton/gamedev
 
 ## Verification status
 
-All eight make dry runs select only the constants/host overrides and root numerical
-sources, with distinct executable/output paths. Host checks verified domain support,
-the sampled distribution against the hydrostatic density, radial sample moments,
-vertical symmetry, mass-integral convergence, and the requested parameters.
-Native CUDA/ROCm compilation and fresh scientific results are still required.
-No stale output, old plots, archived reports or validation scaffolding is copied.
+The eight builds select only the constants/host overrides and root numerical sources,
+with distinct executable and output paths. Native CUDA/ROCm compilation and fresh
+scientific results are required before the campaign supports a scientific claim.

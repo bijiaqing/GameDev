@@ -240,7 +240,7 @@ constexpr real DT_OUT = TEST_DT_OUT;
 #elif defined(TEST_COLCHAIN_3D)
 constexpr real DT_OUT = 1.0e-2;
 #elif defined(TEST_COLCHAIN_WEDGE_2D) || defined(TEST_COLCHAIN_FRAG_2D)
-// The query-local physical kernel needs more time than the synthetic-kernel chain test to produce events.
+// the query-local physical kernel needs more time than the synthetic-kernel chain test to produce events
 constexpr real DT_OUT = 1.0;
 #elif defined(TEST_COLCHAIN_2D)
 constexpr real DT_OUT = 1.0e-3;

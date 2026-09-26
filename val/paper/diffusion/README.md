@@ -2,7 +2,7 @@
 
 Eight models use the production diffusion kernel, coordinate drift, Stokes-dependent
 coefficient, boundaries, random-number generator, and two half-steps per runtime step.
-Root source is unchanged. `src/` overrides only constants, the initial ring, the fixed
+`src/` overrides only constants, the initial ring, the fixed
 timestep, and deterministic transport (a no-op to isolate diffusion).
 
 | Mode | St=0 | St=0.1 | St=1 | St=10 |
@@ -35,9 +35,10 @@ The surface density per total dust mass is
 
     Σd/Md = exp[-(u-mean)²/(2*variance)] / [2*pi*R²*sqrt(2*pi*variance)].
 
-`analyze.py` compares empirical CDFs, log-radius moments, and area-averaged density
-bins with this solution. `--mode` must match the flags used to build the model.
-This is an unbounded-domain reference; the simulation reflects at exp(±3).
+No analysis script is included in this directory. Compare empirical CDFs, log-radius
+moments, and area-averaged density bins with this solution, choosing chi to match the
+`DIFFUSE_CONCENTRATION` setting of the model. Each particle record contains six doubles
+(position and physical velocity; no size fields). This is an unbounded-domain reference; the simulation reflects at exp(±3).
 At the final diffusion age a*t=0.1, boundary tails are tiny, but timestep and
 particle-number convergence remain necessary for a publication accuracy claim.
 These cases test constant-St suppression and the gas-density-gradient term;
@@ -52,12 +53,12 @@ This keeps the diffusion age and numerical resolution equal across St.
 ```sh
 make -C val/paper/diffusion -j8 MODEL=concentration_st1 GPU_BACKEND=rocm GPU_TARGET=gfx942
 val/paper/diffusion/obj/concentration_st1/rocm/gamedev
-python3 -B val/paper/diffusion/analyze.py val/paper/diffusion/out/concentration_st1/rocm --mode concentration
 ```
 
 For CUDA use `GPU_BACKEND=cuda GPU_TARGET=sm_80` and the `cuda` executable/output directory.
 Models live in `mod/`, shared overrides in `src/`, results in `out/<model>/<backend>/`,
-and build products in `obj/<model>/`. No stale outputs or build products are copied.
+and build products in `obj/<model>/`. Results from a different source snapshot must be
+kept separate from fresh runs.
 
-Build routing and analytical-reference checks are performed locally. Native CUDA
-and ROCm compilation and fresh numerical results are still required.
+Native CUDA and ROCm compilation and fresh numerical results are required before claiming
+accuracy for the current source.

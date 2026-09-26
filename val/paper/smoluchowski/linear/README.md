@@ -40,7 +40,7 @@ For g=exp(-t), the continuous mass-probability density is
     p(m,t) = g exp(-(2-g)m) I1(2m sqrt(1-g)) / sqrt(1-g).
 
 At t=0, p(m,0)=m exp(-m). The normalized physical moments are
-M0=exp(-t), M1=1, M2=2 exp(2t). The scorer uses the old exponentially scaled
+M0=exp(-t), M1=1, M2=2 exp(2t). The scorer uses an exponentially scaled
 Bessel approximation, checks normalization before integrating the CDF, and saves
 final-time W1 (dex), histogram distances, mass, number and second-moment errors.
 Histogram/CDF support is 10^-8 to 10^8, with explicit underflow/overflow bins;
@@ -52,8 +52,8 @@ and the N_K sweep must be assessed separately from refresh convergence.
 
 ## Verification
 
-Host checks verified the million-particle Gamma initializer and repeatability,
-the scaled Bessel approximation against its angular integral, analytical moments
-at all five times, and scoring of a synthetic analytical final distribution.
-Build dry runs covered all 25 models at seeds 0 and 9. Native CUDA compilation
-and simulation are still required; these checks do not establish GPU accuracy.
+The scorer can be exercised on a synthetic sample drawn from the analytical final
+distribution, and the host Gamma initializer is deterministic for a given seed.
+These checks do not establish GPU accuracy; native CUDA compilation and simulation
+are required. The campaign's build file is named `makefile`, which GNU Make finds
+with `make -C val/paper/smoluchowski/linear`.

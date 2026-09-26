@@ -56,8 +56,8 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
             0.5*dt*_get_area_y(iy)*diff_yi / (_block_dr_cent_i(iy)*vol_y) : 0.0;
         real cn_o = (iy < N_Y - 1) ?
             0.5*dt*_get_area_y(iy + 1)*diff_yo / (_block_dr_cent_o(iy)*vol_y) : 0.0;
-        // Solve concentration with gas-weighted face conductances; the diagonal
-        // is also the density outgoing sum used by positivity subcycling.
+        // weight each face conductance by the gas weight so the solve advances rho_d/w
+        // the resulting diagonal is also the outgoing coefficient sum used by positivity subcycling
         real gas = _get_diffusion_weight(_get_ycent(iy), z);
         cn_i *= _get_diffusion_weight(y_i, z) / gas;
         cn_o *= _get_diffusion_weight(y_o, z) / gas;
@@ -103,7 +103,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
 
         if (threadIdx.x == 0)
         {
-            // Solve density (weight=1) or concentration with Thomas elimination.
+            // solve density (w = 1) or concentration with serial Thomas elimination
             temp_work[0] = cn_upper[0] / cn_diag[0];
             rhod_work[0] /= cn_diag[0];
             for (int iy = 1; iy < N_Y; iy++)
@@ -119,7 +119,7 @@ void diffusion_ybl (real *dev_dustdens, real *dev_dustmomx, real *dev_dustmomy,
         }
         __syncthreads();
 
-        // Reconstruct mass flux from old density/weight and the solved diffused variable, with zero boundary flux
+        // reconstruct the time-centred mass flux from the old and solved diffused variables, with zero boundary flux
         for (int iy = threadIdx.x; iy < N_Y; iy += blockDim.x)
         {
             if (iy == N_Y - 1)

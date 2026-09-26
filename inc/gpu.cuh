@@ -5,7 +5,7 @@
 #define GAMEDEV_GPU_DEVICE
 #endif
 
-// API spelling only; hardware-dependent algorithms remain explicit at their call sites.
+// map API spellings only; hardware-dependent algorithms remain explicit at their call sites
 #ifdef GAMEDEV_ROCM
 #include <hip/hip_runtime.h>
 #include <hiprand/hiprand_kernel.h>
