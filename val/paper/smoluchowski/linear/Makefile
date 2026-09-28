@@ -10,7 +10,7 @@ $(error This campaign uses KD-tree only)
 endif
 override MOD_ROOT := $(PAPER_ROOT)/mod
 override OUT_ROOT := $(PAPER_ROOT)/out
-override OUT_DIR = $(if $(filter 0,$(SEED)),$(OUT_ROOT)/$(MODEL)/seed0,$(OBJ_ROOT)/$(MODEL)/out)
+override OUT_DIR = $(OUT_ROOT)/$(MODEL)/seed$(SEED)
 override OBJ_ROOT := $(PAPER_ROOT)/obj/seed$(SEED)
 override EXEC = $(OBJ_ROOT)/$(MODEL)/gamedev
 override MODEL_EXECUTABLES = $(wildcard $(PAPER_ROOT)/obj/seed*/*/gamedev)
