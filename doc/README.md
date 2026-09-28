@@ -2,62 +2,172 @@
 
 This directory holds the reference documentation for GameDev. The top-level
 [`README.md`](../README.md) is the user guide for building, configuring, running, and reading
-output; the guides here state the equations, algorithms, and validation evidence behind it.
+output; the guides here state the disk model, equations, algorithms, and validation evidence behind
+it. This page maps the guides, says which one owns each fact, and defines the project's terms.
 
-## Document map
+## Contents
+
+- [Documentation map](#documentation-map)
+- [Glossary](#glossary)
+- [Shared conventions](#shared-conventions)
+- [Authority order](#authority-order)
+- [Maintaining the documentation](#maintaining-the-documentation)
+
+## Documentation map
 
 | Document | Contents |
 |---|---|
-| [`swarm_numeric.md`](swarm_numeric.md) | Lagrangian swarm: particle state and mass weighting, initialization, trajectories, radiation, diffusion, collisions, nearest-neighbor search, time stepping, GPU implementation, limitations |
-| [`fluid_numeric.md`](fluid_numeric.md) | Eulerian dust fluid: coordinates and state, gas disk and initialization, continuum equations, transport, sources, diffusion, time stepping, boundaries, GPU implementation, limitations |
-| [`swarm_testset.md`](swarm_testset.md) | swarm validation cases, statistical references, neighbor-search and collision-chain criteria |
-| [`fluid_testset.md`](fluid_testset.md) | fluid validation cases, analytical references, measurements, and acceptance criteria |
-| [`../val/README.md`](../val/README.md) | running, archiving, and comparing the validation suites |
+| [`../README.md`](../README.md) | user guide: requirements, building, feature flags, constants, running, failure messages, restarts, output files, reproducibility, repository layout |
+| [`numerics_basis.md`](numerics_basis.md) | shared disk model: units and notation, coordinates and grid, supported geometries, gas disk, stopping time, turbulent diffusivity, initial dust surface density, drift velocity, radiation pressure and optical depth |
+| [`numerics_swarm.md`](numerics_swarm.md) | Lagrangian swarm: particle state and mass weighting, initialization, transport, forces and radiation, stochastic diffusion, representative-particle collisions (pair rates, outcomes, frozen-bath event chain, bath controller), nearest-neighbor search, time integration and boundaries, accuracy, GPU implementation |
+| [`numerics_fluid.md`](numerics_fluid.md) | Eulerian dust fluid: state, initialization, finite-volume transport, sources and radiation, diffusion and momentum closure, time integration and boundaries, accuracy, GPU implementation |
+| [`testsets.md`](testsets.md) | swarm and fluid validation cases, references, and acceptance criteria |
+| [`../val/README.md`](../val/README.md) | running, checking, and comparing the validation suites; archive acceptance and qualification rules |
+| `../val/paper/*/README.md` | scientific campaigns and how to reproduce them |
 
-Typical questions and where they are answered:
+### Where to find an answer
 
 | Question | Where |
 |---|---|
-| Which flags and constants does a model use, and how do I build and run it? | [`README.md`](../README.md) |
-| What equation does an operator solve, and with which discretization and accuracy? | the representation's `*_numeric.md` |
-| Which claim does a validation case establish, and how is it judged? | the representation's `*_testset.md` |
-| How do I run the validation campaign and compare CUDA with ROCm? | [`val/README.md`](../val/README.md) |
+| Which flags and constants does a model use, and how do I build, run, and restart it? | [`README.md`](../README.md) |
+| How is the gas disk defined, and which coordinates, units, and geometries exist? | [`numerics_basis.md`](numerics_basis.md) |
+| What equation does a swarm or fluid operator solve, with which discretization and accuracy? | [`numerics_swarm.md`](numerics_swarm.md) or [`numerics_fluid.md`](numerics_fluid.md) |
+| How are collision rates, events, bath durations, and neighbors computed? | [swarm collisions](numerics_swarm.md#8-collisions) and [neighbor search](numerics_swarm.md#9-nearest-neighbor-search) |
+| Which claim does a validation case establish, and how is it judged? | [`testsets.md`](testsets.md) |
+| How do I run the validation campaign, check an archive, and compare CUDA with ROCm? | [`val/README.md`](../val/README.md) |
 | How is a scientific campaign reproduced? | the campaign README under `val/paper/` |
 
-Physical equations and production algorithms belong in the numerical guides, and test definitions
-and evidence rules in the test-set guides. The paired swarm and fluid derivations are kept
-independent even where their gas-disk assumptions are identical.
+### Where each fact lives
 
-The code style, naming, and commenting rules are kept in the local, untracked
-`doc/code_style.md` and checked by `val/tools/check_style.py`.
+Every fact has one owner. Other files state it in a sentence at most and link to the owner.
 
-## Source layout
+| Topic | Owner |
+|---|---|
+| comparison of the two representations | [README: Dust representations](../README.md#dust-representations) |
+| Make variables, search and sweep selection, build directories | [README: Make variables](../README.md#make-variables) |
+| feature flags and their `#error` rules | [README: swarm flags](../README.md#swarm-feature-flags), [fluid flags](../README.md#fluid-feature-flags) |
+| model directories and overrides | [README: Model directories](../README.md#model-directories), [overrides](../README.md#source-and-header-overrides) |
+| commonly changed constants | [README: Constants](../README.md#constants) |
+| every constant with its default | [swarm](numerics_swarm.md#24-parameters), [collision](numerics_swarm.md#24-parameters), and [fluid](numerics_fluid.md#24-parameters) parameters |
+| console output and failure messages | [README: Running](../README.md#console-output) |
+| output times, checkpoints, and file contents | [README: Output times](../README.md#output-times-and-checkpoints) |
+| restart rules | [README: Restarting](../README.md#restarting-a-simulation) |
+| what saved fields mean numerically, restart numerics | [swarm](numerics_swarm.md#128-output-and-restart-semantics) and [fluid](numerics_fluid.md#106-output-and-restart-semantics) output semantics |
+| where finite-state checks run | [swarm](numerics_swarm.md#127-finite-state-and-error-checks) and [fluid](numerics_fluid.md#105-finite-state-checks) finite-state checks |
+| collision error codes | [collision error checks](numerics_swarm.md#127-finite-state-and-error-checks) |
+| repository layout | [README: Repository layout](../README.md#repository-layout) |
+| units, notation, coordinates, grid, geometries, continuity equations | [disk: scope and notation](numerics_basis.md#1-scope-and-notation), [coordinates and grid](numerics_basis.md#2-coordinates-and-grid) |
+| gas disk, viscosity, viscous flow, one-way coupling | [disk: gas disk](numerics_basis.md#3-gas-disk) |
+| Stokes number, diffusivities, initial dust surface density, drift velocity | [disk: stopping time](numerics_basis.md#4-stopping-time-and-stokes-number), [diffusivity](numerics_basis.md#5-turbulent-diffusivity), [dust surface density](numerics_basis.md#6-dust-surface-density), [drift velocity](numerics_basis.md#7-steady-drift-velocity) |
+| radiation ratio, startup ramp, optical depth | [disk: radiation](numerics_basis.md#8-radiation-pressure-and-optical-depth) |
+| swarm state, initialization, transport, forces, diffusion, time stepping | [`numerics_swarm.md`](numerics_swarm.md) |
+| collision rates, outcomes, bath controller, neighbor search | [swarm collisions](numerics_swarm.md#8-collisions), [neighbor search](numerics_swarm.md#9-nearest-neighbor-search) |
+| fluid state, initialization, transport, sources, diffusion, time stepping | [`numerics_fluid.md`](numerics_fluid.md) |
+| validation cases, per-suite record counts, file tables, and exclusions | [`testsets.md`](testsets.md) |
+| archive acceptance, comparison rules, qualification, adding a case | [`val/README.md`](../val/README.md) |
+| terms, shared conventions, authority order | this page |
 
-- `inc/swarm/`, `src/swarm/` and `inc/fluid/`, `src/fluid/` own the two representations; kernels
-  launched by the runtimes mostly have one source file each, named after the kernel.
-- `inc/gpu.cuh` maps the CUDA and HIP runtime, RNG, and Thrust APIs and defines the `GPU_CHECK` and
-  `GPU_KERNEL_CHECK` error checks, so both backends compile the same numerical sources.
-- `mod/` holds production model configurations.
-- `val/swarm/` and `val/fluid/` hold the validation models (`mod/`), shared drivers and validators
-  (`src/`), and generated results (`out/`, `obj/`); `val/*.py` are the campaign, archive, and
-  comparison utilities; `val/paper/` holds the scientific campaigns.
+## Glossary
 
-A build selects one GPU backend and, where applicable, one collision search or one fluid sweep.
-Validation outputs keep backend-separated paths so that CUDA and ROCm results can coexist for
-comparison; checkpoints are not portable between backends.
+| Term | Meaning | Defined in |
+|---|---|---|
+| representative particle (swarm particle) | computational particle standing for $N_p$ identical grains with represented mass $W_p$ | [state](numerics_swarm.md#21-stored-state), [representatives](numerics_swarm.md#81-representative-particles) |
+| represented mass $W_p$, grain count $N_p$ | physical mass and number of grains a representative carries; collisions keep $W_p$ fixed | [weights](numerics_swarm.md#34-grain-sizes-and-representative-weights) |
+| mass bank | 128-entry table of the domain mass $I(s)$ on a logarithmic size axis | [domain mass](numerics_swarm.md#33-dust-mass-in-the-domain) |
+| equal-area proposal | grain-size sampling law used with radiation, corrected by importance weights | [weights](numerics_swarm.md#34-grain-sizes-and-representative-weights) |
+| absorbed representative (sentinel state) | particle that left through an absorbing boundary and is skipped afterwards | [boundaries](numerics_swarm.md#103-boundary-conditions) |
+| radial-only closure | `N_X == 1`, `N_Z == 1` swarm model with midplane dynamics and a retained $\ell_\phi$ | [closure](numerics_swarm.md#25-radial-only-closure) |
+| stored angular variables $(\ell_\phi,v_r,\ell_\theta)$ | internal velocity state of both representations | [swarm](numerics_swarm.md#21-stored-state), [fluid](numerics_fluid.md#21-stored-state) |
+| evolved density $\varrho_d$ | surface density $\Sigma_d$ when `N_Z == 1`, volume density $\rho_d$ otherwise | [notation](numerics_basis.md#14-notation) |
+| geometry names | radial-only, radial–azimuthal, radial–polar, full 3D | [geometries](numerics_basis.md#24-supported-geometries) |
+| well-mixed closure | 2D assumption that dust shares the vertical profile of the gas | [optical depth](numerics_basis.md#82-radial-optical-depth) |
+| containment factor $\mathcal C_g$ | fraction of the gas column inside a finite spherical domain | [vertical structure](numerics_basis.md#32-vertical-structure) |
+| rotation-support parameter $\eta$ | effective sub-Keplerian parameter, including off-midplane gravity | [rotation](numerics_basis.md#34-rotation-support) |
+| edge taper | Gaussian convolution of the initial dust profile near the radial edges | [edge taper](numerics_basis.md#62-edge-taper) |
+| Stokes number, stopping time | drag coupling $\mathrm{St}=\Omega_Kt_s$ | [stopping time](numerics_basis.md#4-stopping-time-and-stokes-number) |
+| Schmidt number | ratio of gas viscosity to dust diffusivity before Stokes suppression | [diffusivities](numerics_basis.md#51-directional-diffusivities) |
+| density or concentration diffusion | whether the dust density or the dust-to-gas ratio is diffused (`DIFFUSE_CONCENTRATION`) | [diffusion](numerics_basis.md#52-density-and-concentration-diffusion) |
+| code units (`CODE_UNIT`) | collision-microphysics calibration without molecular gas constants | [collision parameters](numerics_swarm.md#24-parameters) |
+| owner | particle whose collision rate and size are being evolved | [representatives](numerics_swarm.md#81-representative-particles) |
+| partner | neighbor sampled for an event; never modified by it | [representatives](numerics_swarm.md#81-representative-particles) |
+| retained neighbors ($N_K$) | an owner's exact $N_K$ nearest neighbors inside the search cap | [search contract](numerics_swarm.md#92-search-contract) |
+| search cap (`H_SEARCH`) | largest neighbor distance, in local gas scale heights | [search contract](numerics_swarm.md#92-search-contract) |
+| KNN measure | boundary-corrected area or volume of the ball reaching the farthest retained neighbor | [KNN measure](numerics_swarm.md#842-knn-measure) |
+| image code | $c=3i+a$, packing a particle index $i$ and a periodic image $a$ | [periodic images](numerics_swarm.md#95-periodic-images) |
+| ghost record | Morton copy of a particle across a wedge seam | [periodic images](numerics_swarm.md#95-periodic-images) |
+| physical or synthetic kernel | `COAG_KERNEL = 3` versus the normalized kernels `0`–`2` | [kernels](numerics_swarm.md#841-collision-kernels) |
+| sticking packet | several tiny projectiles merged into one sticking event | [outcomes](numerics_swarm.md#851-outcome-channels) |
+| bath (frozen bath) | interval with fixed positions, neighbors, and published partner properties | [frozen reservoir](numerics_swarm.md#861-frozen-reservoir) |
+| reservoir publication | snapshot of partner sizes and numbers used during a bath | [frozen reservoir](numerics_swarm.md#861-frozen-reservoir) |
+| event cap, continuation launch | events allowed per kernel launch; unfinished owners continue in the next launch | [event cap](numerics_swarm.md#863-event-cap-and-continuation) |
+| no-event screen | quick draw that completes owners with no event in the interval | [screen](numerics_swarm.md#864-cached-rates-and-the-no-event-screen) |
+| controller group | spatial bin whose bath durations are scheduled together | [groups](numerics_swarm.md#871-controller-groups-and-size-bins) |
+| merged size bin | logarithmic size bin merged with neighbors to reach a target of `COL_BIN_MIN` owners | [groups](numerics_swarm.md#871-controller-groups-and-size-bins) |
+| operator horizon $h_{\rm op}$ | duration of one collision operator: half a dynamics step, or the whole output interval in collision-only runs | [bath duration](numerics_swarm.md#872-requested-bath-duration) |
+| bath level, tick lattice | power-of-two bath durations on a grid of $2^{52}$ ticks | [scheduler](numerics_swarm.md#873-power-of-two-scheduler) |
+| refresh wave | one advance of all currently due controller groups | [scheduler](numerics_swarm.md#873-power-of-two-scheduler) |
+| compensator | path-integrated hazard used by the audit | [audit](numerics_swarm.md#874-post-bath-audit) |
+| overshoot (activity, distribution, persistent) | audit exceedance; recorded, never rejected | [overshoots](numerics_swarm.md#875-safety-factor-and-overshoots) |
+| safety factor $\ell_c$ | per-group multiplier in $[0.25,1]$ on the bath tolerance | [overshoots](numerics_swarm.md#875-safety-factor-and-overshoots) |
+| geometry epoch | interval with unchanged positions, over which the search and neighbor cache are reused | [epochs](numerics_swarm.md#125-geometry-epochs) |
+| Strang (palindromic) composition | symmetric ordering of the operators within one step | [swarm](numerics_swarm.md#101-operator-composition), [fluid](numerics_fluid.md#81-operator-composition) |
+| Itô process, Euler–Maruyama step | stochastic diffusion process and its one-step scheme | [Euler–Maruyama](numerics_swarm.md#72-eulermaruyama-step) |
+| velocity reprojection | keeping the Cartesian velocity through a diffusion displacement | [reprojection](numerics_swarm.md#74-velocity-reprojection) |
+| sweep (thread or block) | work decomposition of the fluid line kernels (`FLUID_SWEEP`) | [parallel mapping](numerics_fluid.md#102-parallel-mapping) |
+| directional operator ($A_x$, $D_y$, …) | one-direction advection or diffusion step | [composition](numerics_fluid.md#81-operator-composition) |
+| PPM, HLL | parabolic face reconstruction; two-wave flux | [PPM](numerics_fluid.md#52-ppm-reconstruction), [HLL](numerics_fluid.md#53-pressureless-hll-flux) |
+| invariant-domain correction | face limiter keeping density nonnegative and primitives bounded | [correction](numerics_fluid.md#54-invariant-domain-correction) |
+| FARGO | integer orbital shift plus residual azimuthal transport | [FARGO](numerics_fluid.md#55-fargo-azimuthal-transport) |
+| SSPRK(3,3) | three-stage strong-stability-preserving Runge–Kutta scheme | [time integration](numerics_fluid.md#56-radial-and-polar-time-integration) |
+| vacuum state (`RHO_VAC`) | regularized velocity of near-empty cells | [state](numerics_fluid.md#21-stored-state) |
+| positivity subcycling (`POS_LIMIT`) | Crank–Nicolson substep count and donor-export bound | [Crank–Nicolson](numerics_fluid.md#72-cranknicolson-solve) |
+| donor-momentum closure | diffusive mass flux carries the donor cell's velocity | [closure](numerics_fluid.md#74-donor-momentum-closure) |
+| outer-face optical depth | cumulative $\tau$ stored at the outer radial cell faces | [optical depth](numerics_basis.md#82-radial-optical-depth) |
+| radiation ramp | smooth startup $f_\beta$ of radiation pressure over `T_BETA` | [ramp](numerics_basis.md#81-radiation-ratio-and-startup-ramp) |
+| frame, particle checkpoint, mesh-only frame | output index; frames with and without swarm particle files | [output times](../README.md#output-times-and-checkpoints) |
+| RNG-state checkpoint | each representative's raw backend random-number state, saved with a particle checkpoint | [restarting](../README.md#restarting-a-simulation) |
+| model directory, override, `MODEL_PARENT` | build configuration mechanism | [model directories](../README.md#model-directories), [overrides](../README.md#source-and-header-overrides) |
+| metric record, model manifest, suite manifest | archive files, from one resolution up to the whole suite | [archive acceptance](../val/README.md#archive-acceptance) |
+| tier | evidence label on records and manifests; only `publication` exists | [archive acceptance](../val/README.md#archive-acceptance) |
+| source fingerprint | hash of the sources a campaign ran on | [qualification](../val/README.md#what-qualifies-a-result) |
+| campaign record | `run_all_<backend>_<sweep>.json`, the record of one native campaign | [campaign](../val/README.md#running-a-complete-campaign) |
+| activation check | test condition proving that the targeted branch was exercised | [swarm](testsets.md#12-what-passing-means), [fluid gates](testsets.md#25-fluid-acceptance-gates) |
+| shared gate, validator-owned gate | the two acceptance paths of the fluid cases | [fluid gates](testsets.md#25-fluid-acceptance-gates) |
 
-## Conventions shared by both representations
+## Shared conventions
 
-Both representations use spherical computational coordinates, the same cylindrical conversions,
-the same gas-profile convention, and the same dust surface-density normalization. They
-intentionally differ in:
+### Common to both representations
 
-- Lagrangian representative particles versus Eulerian conserved fields
+Both representations use the disk model of [`numerics_basis.md`](numerics_basis.md):
+
+- the spherical computational coordinates and cylindrical conversions of
+  [coordinates](numerics_basis.md#21-computational-coordinates), with the mesh and geometries of
+  [supported geometries](numerics_basis.md#24-supported-geometries);
+- the same prescribed gas disk, with one-way coupling ([gas disk](numerics_basis.md#3-gas-disk));
+- the same Stokes-number and diffusivity definitions
+  ([stopping time](numerics_basis.md#4-stopping-time-and-stokes-number),
+  [diffusivities](numerics_basis.md#51-directional-diffusivities));
+- the same initial dust surface density with its edge taper
+  ([edge taper](numerics_basis.md#62-edge-taper));
+- the same radiation ramp and outer-face optical depth
+  ([radiation](numerics_basis.md#81-radiation-ratio-and-startup-ramp)).
+
+### Where the representations differ
+
+The representations intentionally differ in:
+
+- Lagrangian representative particles versus Eulerian conserved fields;
 - cylindrical swarm diffusion versus spherical fluid diffusion, which give different radial
-  equilibria away from the midplane
-- semi-analytic particle trajectories versus conservative finite-volume transport
-- velocity-preserving stochastic displacement versus diffusive fluid momentum transport
-- neighbor-based stochastic collisions versus pressureless Riemann evolution
+  equilibria away from the midplane ([why the bases
+  differ](numerics_basis.md#53-why-the-diffusion-bases-differ));
+- semi-analytic particle trajectories versus conservative finite-volume transport;
+- velocity-preserving stochastic displacement
+  ([reprojection](numerics_swarm.md#74-velocity-reprojection)) versus diffusive fluid momentum
+  transport ([donor momentum](numerics_fluid.md#74-donor-momentum-closure));
+- the initial vertical velocity: terminal settling in the swarm
+  ([swarm](numerics_swarm.md#32-initial-velocity)) versus the diffusive balance in the fluid
+  ([fluid](numerics_fluid.md#32-initial-velocity));
+- neighbor-based stochastic collisions versus pressureless Riemann evolution.
 
 These are paired scientific conventions, not shared-code interfaces.
 
@@ -71,15 +181,23 @@ When statements disagree, use this order:
 3. the documents in this directory and the READMEs
 4. historical results and development notes
 
-A validation result qualifies only the source it was produced from: `val/run_all.py` records a
-source fingerprint, and a model run reported on its own is not a validation campaign.
+A validation result qualifies only the source it was produced from; [what qualifies a
+result](../val/README.md#what-qualifies-a-result) defines the source fingerprint and the
+qualification rules.
 
 ## Maintaining the documentation
 
 - Check a statement against the source before changing it, and state current behavior in the
   present tense; development history belongs in version control.
-- Update the numerical guide together with any change to an equation, algorithm, or default, and
-  the test-set guide together with any change to a validation case or criterion.
-- Add a validation case only when it establishes a physical or numerical claim that the retained
-  matrix does not already cover; helper checks, failure injection, restart plumbing, and
-  performance experiments stay outside the scientific suite unless a claim depends on them.
+- Change a fact in its owner ([Where each fact lives](#where-each-fact-lives)) and link to it from
+  elsewhere rather than repeating it.
+- Update the owning numerical guide together with any change to an equation, algorithm, or
+  default, and the test-set guide together with any change to a validation case or criterion.
+- Add a validation case only as described in [Adding a validation
+  case](../val/README.md#adding-a-validation-case).
+- Define each project term at its first use in a file and link it once to the
+  [glossary](#glossary); add new terms here.
+
+The code style, naming, and commenting rules are kept in the local, untracked
+`doc/code_style.md` and checked by `val/tools/check_style.py`; `val/tools/check_github_md.py`
+reports Markdown that GitHub renders incorrectly.

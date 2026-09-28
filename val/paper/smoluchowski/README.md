@@ -63,7 +63,7 @@ and mass densities are both one. For integer monomer mass $k$:
 The root runtime, particle initializer, KD-tree builder and search, collision controller, cached
 rates, sticking grouping, event updates, and moving size-bin bounds are compiled directly; the
 bounds follow the production per-group policy described in [the frozen-bath collision
-chain](../../../doc/swarm_numeric.md#85-frozen-bath-continuous-time-chain). With neither
+chain](../../../doc/numerics_swarm.md#86-frozen-bath-event-chain). With neither
 dynamics nor diffusion enabled, geometry is never invalidated: tree build, neighbor search, and
 neighbor-dependency graph construction occur once per fresh run, while grain properties, rates, and
 collision refreshes continue to evolve.
