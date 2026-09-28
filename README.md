@@ -64,7 +64,7 @@ interchangeable discretizations of every physical closure.
 - **Swarm:** staggered semi-analytic drag and gravity trajectories, radiation pressure and optional
   Poynting–Robertson drag, Itô Euler–Maruyama diffusion, and Strang composition of the enabled
   operators ([`doc/numerics_swarm.md`](doc/numerics_swarm.md)). Collisions use a frozen-bath
-  continuous-time event chain with exact top-$K$ neighbors from a KD tree or an adaptive Morton
+  continuous-time event chain with exact top-$`K`$ neighbors from a KD tree or an adaptive Morton
   hierarchy ([swarm collisions](doc/numerics_swarm.md#8-collisions)). Stochastic diffusion and
   collisions need statistical convergence tests rather than a pointwise order claim.
 - **Fluid:** finite-volume PPM reconstruction with HLL fluxes and invariant-domain limiting, integer
@@ -238,7 +238,7 @@ header, so a violating model fails to build.
 | `COLLISION` | evolve representative-particle coagulation and fragmentation with the frozen-bath chain | requires `MULTISIZE` and one `COLLISION_SEARCH` |
 | `MULTISIZE` | store and evolve each representative's grain size and represented grain count | none |
 | `IMPORTGAS` | read gridded gas density and velocity fields ([Imported gas input](#imported-gas-input)) | excludes `CONST_ST` and `VISC_FLOW` |
-| `CONST_ST` | fix the Stokes number at $\mathrm{St}_0\,s/S_0$, keeping only its grain-size factor | excludes `IMPORTGAS` |
+| `CONST_ST` | fix the Stokes number at $`\mathrm{St}_0\,s/S_0`$, keeping only its grain-size factor | excludes `IMPORTGAS` |
 | `CONST_NU` | use a constant kinematic viscosity instead of a constant $\alpha$ | acts only with `DIFFUSION` or `COLLISION` |
 | `CODE_UNIT` | use the code-unit collision calibration instead of physical gas microphysics | acts only with `COLLISION` |
 | `HALF_DISK` | 3D upper half disk with a reflecting midplane | with `N_Z > 1`, `Z_MAX` must be $\pi/2$ (checked at run time) |
@@ -415,7 +415,7 @@ rewrite it.
   and neighbor geometry are rebuilt, so no other state is needed.
 - **Fluid.** The runtime reloads density and the physical linear velocities, converts them to its
   internal angular state, rebuilds momentum and, with `RADIATION`, optical depth, and checks the
-  restored state for nonfinite values. The time is reset to $n\,\mathrm{DT\_OUT}$. The fluid holds
+  restored state for nonfinite values. The time is reset to $`n\,\mathrm{DT\_OUT}`$. The fluid holds
   no random state.
 
 A resumed run is not bitwise identical to an uninterrupted one, because the checkpoints store
@@ -434,22 +434,22 @@ parameters needed to interpret them in INI format.
 
 ### Output times and checkpoints
 
-A frame is an output index $n=0,\dots,\mathrm{SAVE\_MAX}$. Each branch shortens the last step of an
-output interval so that the saved state lies exactly at the output time; no interpolation is used.
-Output times are linear,
+A frame is an output index $`n=0,\dots,\mathrm{SAVE\_MAX}`$. Each branch shortens the last step of
+an output interval so that the saved state lies exactly at the output time; no interpolation is
+used. Output times are linear,
 
-$$
+```math
 t_n=n\,\mathrm{DT\_OUT},
-$$
+```
 
 in the swarm branch by default and in the fluid branch. With the swarm flag `LOGTIMING` they are
 logarithmic,
 
-$$
+```math
 t_0=0,
 \qquad
 t_n=\mathrm{DT\_OUT}\,\mathrm{LOG\_BASE}^{\,n}\quad(n\ge1).
-$$
+```
 
 A restart from frame $n$ resumes at $t_n$.
 
@@ -471,11 +471,11 @@ the evolution nor the mesh diagnostics at that time.
 | swarm | `particle`, `rngstate` (with `DIFFUSION` or `COLLISION`), `dustdens` (with `SAVE_DENS`), `optdepth` (with `RADIATION`) | `particle` and `rngstate` only at checkpoint frames |
 | fluid | `dustdens`, `dustvelx`, `dustvely`, `dustvelz`, `optdepth` (with `RADIATION`) | velocities are physical linear components $v_\phi$, $v_r$, $v_\theta$ |
 
-Each file is named `<field>_<frame>.dat`. Mesh fields hold `N_X*N_Y*N_Z` values stored $x$-first,
+Each file is named `<field>_<frame>.dat`. Mesh fields hold `N_X*N_Y*N_Z` values stored $`x`$-first,
 
-$$
+```math
 \mathrm{index}=i_x+i_yN_X+i_zN_XN_Y.
-$$
+```
 
 `dustdens` is a surface density for `N_Z == 1` and a volume density for `N_Z > 1`. `optdepth` is the
 cumulative optical depth at the outer radial cell faces, rebuilt from the saved state.

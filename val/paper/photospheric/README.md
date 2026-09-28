@@ -105,13 +105,13 @@ and start from the steady drag-coupled drift velocities
 ([steady drift](../../../doc/numerics_basis.md#7-steady-drift-velocity)).
 
 The swarm reuses the root initializer: it samples radius with probability proportional to
-$R\,\Sigma_d(R)$ and azimuth uniformly, with equal represented masses and no size distribution. The
-fluid interpolates the profile onto its mesh and multiplies each azimuthal column by
+$`R\,\Sigma_d(R)`$ and azimuth uniformly, with equal represented masses and no size distribution.
+The fluid interpolates the profile onto its mesh and multiplies each azimuthal column by
 $1+10^{-10}\xi$, where $\xi$ is a standard normal deviate shared across radius.
 
 ### Optical depth
 
-Both optical-depth calculations use the 2D well-mixed closure $\rho_d=\Sigma_d/(\sqrt{2\pi}\,H_g)$
+Both optical-depth calculations use the 2D well-mixed closure $`\rho_d=\Sigma_d/(\sqrt{2\pi}\,H_g)`$
 and integrate $\kappa_0\rho_d$ radially outward from the inner boundary
 ([radial optical depth](../../../doc/numerics_basis.md#82-radial-optical-depth)). The swarm deposits
 each particle's extinction with the gas scale height at its own radius; the fluid uses cell-center
@@ -127,9 +127,9 @@ cell-crossing bounds and explicit stochastic-displacement bounds; its particle d
 fluid FARGO advection limits the step by the residual azimuthal motion. On the swarm mesh the
 orbital bound at the inner edge is
 
-$$
+```math
 \Delta t=0.45\,\frac{(\pi/2)/1536}{\Omega_K(0.5)}=1.62703\times10^{-4}.
-$$
+```
 
 Both schemes evaluate radiation at their intermediate state: the swarm reconstructs it at the
 midpoint of its staggered transport step, and the fluid rebuilds the optical depth at the midpoint

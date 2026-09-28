@@ -62,20 +62,20 @@ flowchart LR
 
 All dynamics uses orbital code units. The default constants set
 
-$$
+```math
 G=M_\star=R_0=1,
-$$
+```
 
 and the conversion to a chosen physical stellar mass $M_\star$ and reference radius $R_0$ uses the
 scales
 
-$$
+```math
 t_0=\sqrt{\frac{R_0^3}{GM_\star}},
 \qquad
 v_0=\sqrt{\frac{GM_\star}{R_0}},
 \qquad
 \Omega_0=t_0^{-1}.
-$$
+```
 
 Lengths are in units of $R_0$, times in units of $t_0$, and angles in radians. With the defaults,
 one orbit at $R_0$ lasts $2\pi$ code time units. Setting the constants to one does not remove the
@@ -103,21 +103,21 @@ Six dimensionless numbers control the coupling between dust and gas: the Stokes 
 aspect ratio, the radiation ratio, the metallicity, the viscosity parameter, and the Schmidt
 numbers. They are defined as
 
-$$
+```math
 \mathrm{St}=\Omega_Kt_s,
 \qquad
 h_g=\frac{H_g}{R}=\frac{c_s}{R\Omega_K},
 \qquad
 \beta=\frac{|a_{\rm rad}|}{|a_{\rm grav}|},
-$$
+```
 
-$$
+```math
 Z_{\rm metal}=\frac{\Sigma_d}{\Sigma_g},
 \qquad
 \alpha=\frac{\nu}{H_g^2\Omega_K},
 \qquad
 \mathrm{Sc}_a=\frac{\nu}{D_a(1+\mathrm{St}^2)}.
-$$
+```
 
 $H_g$ is the gas scale height, $t_s$ the drag stopping time ([Section
 4](#4-stopping-time-and-stokes-number)), and $D_a$ the dust diffusivity along direction $a$
@@ -151,38 +151,38 @@ Both representations work in spherical coordinates centered on the star, so that
 can be logarithmic and the polar grid can follow the disk's flaring. The computational coordinates
 and their cylindrical counterparts are
 
-$$
+```math
 (x,y,z)=(\phi,r,\theta),
 \qquad
 R=y\sin z,
 \qquad
 Z=y\cos z.
-$$
+```
 
 When `N_Z == 1`, the polar coordinate is fixed at the midplane $z=\pi/2$, so $R=y$ and $Z=0$.
 
 ### 2.2 Mesh
 
 The mesh is uniform in azimuth and polar angle and logarithmic in radius, so that every radial cell
-spans the same fraction of its radius. With the domain $[X_{\min},X_{\max}]\times
-[Y_{\min},Y_{\max}]\times[Z_{\min},Z_{\max}]$ and $N_X\times N_Y\times N_Z$ cells, the spacings
-are
+spans the same fraction of its radius. With the domain
+$[X_{\min},X_{\max}]\times[Y_{\min},Y_{\max}]\times[Z_{\min},Z_{\max}]$ and
+$N_X\times N_Y\times N_Z$ cells, the spacings are
 
-$$
+```math
 \Delta x=\frac{X_{\max}-X_{\min}}{N_X},
 \qquad
 a_y=\left(\frac{Y_{\max}}{Y_{\min}}\right)^{1/N_Y},
 \qquad
 \Delta z=\frac{Z_{\max}-Z_{\min}}{N_Z},
-$$
+```
 
 and the radial and polar faces are
 
-$$
+```math
 y_{j-1/2}=Y_{\min}a_y^j,
 \qquad
 z_{k-1/2}=Z_{\min}+k\Delta z,
-$$
+```
 
 for $j=0,\dots,N_Y$ and $k=0,\dots,N_Z$. The ratio $a_y$ of neighboring radial faces is the
 code's `_get_dy()`. Where each representation places the value of a cell differs: the fluid uses
@@ -249,23 +249,23 @@ representation accepts is listed in
 
 In a resolved volume the dust mass obeys the continuity equation
 
-$$
+```math
 \frac{\partial\rho_d}{\partial t}
 +\frac{1}{r^2}\frac{\partial}{\partial r}(r^2\rho_d u_r)
 +\frac{1}{r\sin\theta}\frac{\partial}{\partial\theta}
  (\sin\theta\rho_d u_\theta)
 +\frac{1}{r\sin\theta}\frac{\partial}{\partial\phi}(\rho_d u_\phi)
 =\mathcal D_{3D}[\rho_d],
-$$
+```
 
 and vertical integration gives
 
-$$
+```math
 \frac{\partial\Sigma_d}{\partial t}
 +\frac{1}{R}\frac{\partial}{\partial R}(R\Sigma_d u_R)
 +\frac{1}{R}\frac{\partial}{\partial\phi}(\Sigma_d u_\phi)
 =\mathcal D_{2D}[\Sigma_d].
-$$
+```
 
 Here $(u_r,u_\theta,u_\phi)$ and $(u_R,u_\phi)$ are components of the mean dust velocity
 $\boldsymbol u_d$ ([Section 9](#9-dust-distribution-and-its-moments)), which the fluid writes as
@@ -293,20 +293,20 @@ below stay analytic in that case.
 The disk is described by two power laws: the gas surface density and the aspect ratio, which
 follows from the temperature. They are
 
-$$
+```math
 \Sigma_g(R)=\Sigma_0\left(\frac{R}{R_0}\right)^p,
 \qquad
 h_g(R)=h_0\left(\frac{R}{R_0}\right)^{(q+1)/2},
-$$
+```
 
 with $p=d\ln\Sigma_g/d\ln R$ (`IDX_P`) and $q=d\ln T/d\ln R$ (`IDX_Q`), and with $\Sigma_0$
 (`SIGMA_0`) and $h_0$ (`ASPR_0`) the values at $R_0$. Because the disk is vertically isothermal,
 
-$$
+```math
 c_s\propto T^{1/2}\propto R^{q/2},
 \qquad
 h_g=\frac{c_s}{v_K}\propto R^{(q+1)/2}.
-$$
+```
 
 ### 3.2 Vertical structure
 
@@ -314,20 +314,20 @@ The gas density off the midplane sets the local drag strength, so the model uses
 hydrostatic profile around a point mass rather than the usual Gaussian approximation. The
 stratification relative to the midplane is
 
-$$
+```math
 \mathcal G(R,Z)
 =\frac{\rho_g(R,Z)}{\rho_g(R,0)}
 =\exp\left[
 \frac{R/\sqrt{R^2+Z^2}-1}{h_g(R)^2}
 \right],
-$$
+```
 
 and the gas volume density is
 
-$$
+```math
 \rho_g(R,Z)=\frac{\Sigma_g(R)}{\sqrt{2\pi}H_g(R)}\mathcal G(R,Z),
 \qquad H_g=h_gR.
-$$
+```
 
 The Gaussian prefactor fixes the reference midplane density. Because $\mathcal G$ is the exact
 profile and not its Gaussian approximation, integrating $\rho_g$ over $Z$ does not return
@@ -335,31 +335,31 @@ $\Sigma_g$ exactly. The [containment factor](README.md#glossary) $\mathcal C_g$ 
 fraction of the nominal column that lies inside a finite resolved domain. If the domain meets the
 vertical line at cylindrical radius $R$ in the intervals $[Z_{k,a},Z_{k,b}]$, the implied column is
 
-$$
+```math
 \Sigma_{g,\mathcal D}(R)=\Sigma_g(R)\,\mathcal C_g(R),
-$$
+```
 
-$$
+```math
 \mathcal C_g(R)=\frac{1}{\sqrt{2\pi}H_g(R)}
 \sum_k\int_{Z_{k,a}}^{Z_{k,b}}\mathcal G(R,Z)\,dZ.
-$$
+```
 
 A vertically integrated model uses $\Sigma_g$ directly and has no containment factor.
 
 For comparison, on an untruncated vertical line with $\zeta=Z/H_g$, the thin-disk expansion of the
 exact profile is
 
-$$
+```math
 \mathcal G(R,Z)
 =e^{-\zeta^2/2}
 \left[1+\frac{3}{8}h_g^2\zeta^4+O(h_g^4)\right],
-$$
+```
 
 and the Gaussian fourth moment gives
 
-$$
+```math
 \mathcal C_{g,\infty}=1+\frac{9}{8}h_g^2+O(h_g^4).
-$$
+```
 
 **Limits.** $\mathcal C_g$ depends on the finite spherical radial and polar domain and need not
 equal one. Near a radial or polar edge, the exact containment factor can differ from the
@@ -370,13 +370,13 @@ asymptotic $\mathcal C_{g,\infty}$ by much more than the $h_g^2$ correction.
 The Keplerian frequency sets the time scale of every drag and diffusion coefficient. The local
 orbital and sound-speed scales are
 
-$$
+```math
 \Omega_K(R)=\sqrt{\frac{GM_\star}{R^3}},
 \qquad
 v_K=R\Omega_K,
 \qquad
 c_s=h_gR\Omega_K.
-$$
+```
 
 All three are evaluated at the cylindrical radius $R$, so $H_g=c_s/\Omega_K$ at every height.
 
@@ -387,56 +387,56 @@ because of that difference. The [rotation-support parameter](README.md#glossary)
 it. At the midplane, for the vertically isothermal pressure $P_g=\rho_gc_s^2$, it is the usual
 pressure-support parameter
 
-$$
+```math
 \eta_{\rm mid}=-\frac{1}{2\rho_gR\Omega_K^2}\frac{\partial P_g}{\partial R}\bigg|_{Z=0},
 \qquad
 \eta_{\rm mid}
 =-\frac{h_g^2}{2}\left(p+\frac q2-\frac32\right).
-$$
+```
 
 Away from the midplane, the code's `eta` (`_get_eta`) is the effective rotation-support parameter
 that combines the cylindrical stellar gravity with the pressure gradient, following the vertically
 structured force balance of [Takeuchi & Lin (2002)](https://arxiv.org/abs/astro-ph/0208552).
 Define
 
-$$
+```math
 u=\frac{R}{\sqrt{R^2+Z^2}},
 \qquad
 A=p+\frac q2-\frac32.
-$$
+```
 
 At fixed cylindrical height, differentiating the exact hydrostatic profile gives
 
-$$
+```math
 h_g^2\frac{\partial\ln P_g}{\partial\ln R}
 =Ah_g^2+q(1-u)+(1-u^3).
-$$
+```
 
 The cylindrical component of the stellar gravity is $u^3$ times its midplane value, so radial force
 balance becomes
 
-$$
+```math
 \frac{v_{\phi,g}^2}{v_K^2}
 =u^3+h_g^2\frac{\partial\ln P_g}{\partial\ln R}
 =1+Ah_g^2+q(1-u)
 =1-2\eta(R,Z),
-$$
+```
 
 with
 
-$$
+```math
 \eta(R,Z)=-\frac12\left[Ah_g^2+q(1-u)\right].
-$$
+```
 
 The $(1-u^3)$ pressure term cancels the off-midplane weakening of cylindrical gravity exactly. At
 $Z=0$, $u=1$ and $\eta$ reduces to $\eta_{\rm mid}$. The gas azimuthal velocity used for the
 initial drift and as the drag target is
 
-$$
+```math
 v_{\phi,g}=v_K\sqrt{\max(1-2\eta,0)},
 \qquad
 \ell_{\phi,g}=Rv_{\phi,g}.
-$$
+```
 
 **Limits.** The $\max(\cdot,0)$ guard sets $v_{\phi,g}=0$ wherever $1-2\eta$ would be negative,
 instead of stopping the run.
@@ -458,9 +458,9 @@ the turbulent collision velocity. For constant `ALPHA` it follows the $\alpha$ p
 
 For constant $\nu$, the equivalent local turbulence parameter is
 
-$$
+```math
 \alpha(R)=\frac{\nu}{h_g^2R^2\Omega_K}.
-$$
+```
 
 The flags that define $\nu$ differ between the representations and are listed in each guide's
 §2.4 ([swarm](numerics_swarm.md#24-parameters), [fluid](numerics_fluid.md#24-parameters)).
@@ -490,31 +490,31 @@ q+\frac32,&\alpha=\mathrm{constant}.
 In a resolved vertical domain, with $u=R/\sqrt{R^2+Z^2}$ as in
 [Section 3.4](#34-rotation-support), define
 
-$$
+```math
 S=\frac{u-1}{h_g^2},
-$$
+```
 
-$$
+```math
 g_{\rho R}=p-\frac{q+3}{2}
 +\frac{u(1-u^2)}{h_g^2}-(q+1)S,
 \qquad
 g_{\rho Z}=-\frac{u(1-u^2)}{h_g^2}.
-$$
+```
 
 The implemented velocity is
 
-$$
+```math
 v_{R,g}=-\frac{\nu}{R}
 \left[3\left(g_\nu+g_{\rho R}+\frac12\right)-q(1+g_{\rho Z})\right].
-$$
+```
 
 It enters the spherical drag targets through the projections
 
-$$
+```math
 v_{r,g}=v_{R,g}\sin z,
 \qquad
 \ell_{\theta,g}=yv_{R,g}\cos z,
-$$
+```
 
 and $\ell_{\theta,g}=0$ when `N_Z == 1`.
 
@@ -523,11 +523,11 @@ and $\ell_{\theta,g}=0$ when `N_Z == 1`.
 The dust never acts back on the gas. In the gas equations, which this code does not evolve, the
 dust contributions are
 
-$$
+```math
 \left.\frac{\partial\rho_g}{\partial t}\right|_{\rm dust}=0,
 \qquad
 \left.\frac{\partial(\rho_g\boldsymbol v_g)}{\partial t}\right|_{\rm dust}=0.
-$$
+```
 
 Drag changes the dust momentum but applies no equal and opposite force to the gas, and swarm
 collisions do not change the gas either. Gas viscosity enters only through the viscous target
@@ -545,18 +545,18 @@ drag, $t_s\propto s/(\rho_gc_s)$ for grain size $s$, after
 $\mathrm{St}_0$ (`STOKES_0`) of a grain of reference size $S_0$ at the midplane of $R_0$, this
 gives
 
-$$
+```math
 \mathrm{St}(R,Z,s)
 =\mathrm{St}_0\frac{s}{S_0}
 \left(\frac{R}{R_0}\right)^{-p}
 \mathcal G(R,Z)^{-1},
-$$
+```
 
 and the stopping time used by the drag update is
 
-$$
+```math
 t_s(R,Z,s)=\frac{\mathrm{St}(R,Z,s)}{\Omega_K(R)}.
-$$
+```
 
 The swarm evaluates the size factor for each particle's grain size; its `CONST_ST` option and its
 Stokes number for imported gas are in [`numerics_swarm.md`](numerics_swarm.md#61-drag-and-gravity)
@@ -573,9 +573,9 @@ density, or of the dust-to-gas ratio, with a diffusivity that weakens for weakly
 The diffusivity along each direction $a$ is the gas viscosity divided by a directional
 [Schmidt number](README.md#glossary) and reduced for finite Stokes number:
 
-$$
+```math
 D_a=\frac{\nu}{\mathrm{Sc}_a(1+\mathrm{St}^2)}.
-$$
+```
 
 The Schmidt numbers describe the gas mixing before the Stokes suppression, and the local Stokes
 number of [Section 4](#4-stopping-time-and-stokes-number) enters in both diffusion modes. The two
@@ -592,9 +592,9 @@ The target equation says what is being mixed: either the dust density itself or 
 concentration ([glossary](README.md#glossary)). Let $w=1$ for density diffusion and $w=\varrho_g$
 for concentration diffusion, selected by `DIFFUSE_CONCENTRATION`. The target equation is
 
-$$
+```math
 \partial_t\varrho_d=\nabla\cdot\left[w\boldsymbol D\nabla(\varrho_d/w)\right],
-$$
+```
 
 with the diagonal tensor $\boldsymbol D=\mathrm{diag}(D_a)$ in the representation's basis. Density
 diffusion therefore reads $\partial_t\varrho_d=\nabla\cdot(\boldsymbol D\nabla\varrho_d)$, and
@@ -626,9 +626,9 @@ lies initially; how that mass is spread vertically and normalized is representat
 The dust follows the gas with a constant dust-to-gas ratio, the metallicity $Z_{\rm metal}$
 (`METAL_Z`):
 
-$$
+```math
 \Sigma_d(R)=Z_{\rm metal}\Sigma_g(R).
-$$
+```
 
 ### 6.2 Edge taper
 
@@ -636,22 +636,22 @@ A power law cut off sharply at the domain edges would start the run with a densi
 radial boundary. The [edge taper](README.md#glossary) instead convolves the profile with a Gaussian
 whose source is restricted to lie at least $2L_s$ inside the edges:
 
-$$
+```math
 \Sigma_{d,\rm conv}(R)
 =\int_{Y_{\min}+2L_s}^{Y_{\max}-2L_s}
 \Sigma_d(R')
 \frac{\exp[-(R-R')^2/(2\sigma_s^2)]}{\sqrt{2\pi}\sigma_s}\,dR',
 \qquad
 L_s=0.05R_0,\qquad \sigma_s=\frac{L_s}{2}.
-$$
+```
 
 The code evaluates the convolution on a uniform cylindrical-radius axis. Its lower end is the
 smallest cylindrical radius the spherical domain covers (`_get_init_Rmin()`),
 
-$$
+```math
 R_{\min,\mathrm{init}}
 =Y_{\min}\min[\sin(Z_{\min}),\sin(Z_{\max})],
-$$
+```
 
 and $R_{\min,\mathrm{init}}=Y_{\min}$ when `N_Z == 1`. Starting there, and not at $Y_{\min}$, keeps
 high-latitude cells with $R\lt Y_{\min}$ from being clipped to an unrelated profile value. The axis
@@ -659,13 +659,13 @@ has `N_Y + 1` points $R_m=R_{\min,\rm init}+m\Delta R$ with
 $\Delta R=(Y_{\max}-R_{\min,\rm init})/N_Y$, which serve as both source and destination points.
 The implemented rectangular sum is
 
-$$
+```math
 \Sigma_{d,\rm conv}(R_m)
 \approx\sum_{n\in\mathcal S}
 \Sigma_d(R_n)
 \frac{\exp[-(R_m-R_n)^2/(2\sigma_s^2)]}{\sqrt{2\pi}\sigma_s}
 \Delta R,
-$$
+```
 
 where $\mathcal S$ holds the source points in $[Y_{\min}+2L_s,Y_{\max}-2L_s]$. Both representations
 read this table by linear interpolation in $R$, with zero outside
@@ -687,12 +687,12 @@ azimuthal velocity $v_{\phi,g}$ of [Section 3.4](#34-rotation-support) and the g
 $v_{R,g}$ of [Section 3.6](#36-viscous-radial-flow) (zero without `VISC_FLOW`), the cylindrical
 dust drift is
 
-$$
+```math
 v_{R,d}
 =\frac{v_{R,g}+2\mathrm{St}(v_{\phi,g}-v_K)}{1+\mathrm{St}^2},
 \qquad
 v_{\phi,d}=v_{\phi,g}-\frac{\mathrm{St}}{2}v_{R,d}.
-$$
+```
 
 The vertical part of the initial velocity differs by design: the swarm adds terminal settling,
 the fluid a polar velocity that balances its diffusive flux. Each guide gives its vertical term and
@@ -710,11 +710,11 @@ The radiation ratio $\beta$ of [Section 1.3](#13-dimensionless-parameters) is th
 acceleration in units of the stellar gravity. The [radiation ramp](README.md#glossary) raises it
 smoothly from zero over the time `T_BETA`, so that a run does not start with a sudden force:
 
-$$
+```math
 f_\beta=s_t^2(3-2s_t),
 \qquad
 s_t=\mathrm{clip}(t/T_\beta,0,1).
-$$
+```
 
 The ramp is evaluated at the midpoint time $t^n+\Delta t/2$ of each step, and a value
 $T_\beta\le0$ disables it ($f_\beta=1$). Both representations write the radiation ratio as
@@ -722,17 +722,17 @@ $\beta=\beta_0f_\beta(t)e^{-\tau}$ times a size factor: $S_0/s$ in the swarm and
 monodisperse fluid ([swarm](numerics_swarm.md#62-radiation-pressure-and-optical-depth),
 [fluid](numerics_fluid.md#62-radiation-pressure-and-optical-depth)). The radial acceleration is
 
-$$
+```math
 \boldsymbol a_{\rm rad}
 =\beta\frac{GM_\star}{r^2}\boldsymbol e_r,
-$$
+```
 
 so gravity and radiation combine to
 
-$$
+```math
 \boldsymbol a_{\rm grav+rad}
 =-(1-\beta)\frac{GM_\star}{r^2}\boldsymbol e_r.
-$$
+```
 
 The swarm's optional Poynting–Robertson drag adds velocity-dependent terms to this acceleration
 ([`numerics_swarm.md`](numerics_swarm.md#63-poyntingrobertson-drag)).
@@ -742,19 +742,19 @@ The swarm's optional Poynting–Robertson drag adds velocity-dependent terms to 
 The optical depth $\tau$ measures how much dust lies between the star and a point along the radial
 ray; it attenuates radiation by $e^{-\tau}$. In continuum form,
 
-$$
+```math
 \tau(\phi,r,\theta)
 =\int_{Y_{\min}}^r\kappa_0\rho_{\rm ext}(\phi,r',\theta)\,dr',
-$$
+```
 
 where $\kappa_0$ is the opacity (`KAPPA_0`) and $\rho_{\rm ext}$ the extinction density. In cell
 $(i,j,k)$ the local radial increment is
 
-$$
+```math
 \Delta\tau_{ijk}=\kappa_0\rho_{{\rm ext},ijk}\Delta r_j,
 \qquad
 \Delta r_j=y_{j-1/2}(a_y-1),
-$$
+```
 
 where $\Delta r_j=y_{j+1/2}-y_{j-1/2}$ is the radial width of the cell and
 
@@ -779,17 +779,17 @@ Models with `N_Z > 1` resolve the vertical structure and settling and do not use
 The [outer-face optical depth](README.md#glossary) is the inclusive radial prefix sum, stored at the
 outer radial face of each cell:
 
-$$
+```math
 \tau_{i,j+1/2,k}=\sum_{m=0}^{j}\Delta\tau_{imk},
 \qquad
 \tau_{i,-1/2,k}=0.
-$$
+```
 
 The zero at the inner face assumes that no material lies inside the domain,
 
-$$
+```math
 \tau(Y_{\min})=0.
-$$
+```
 
 Each representation interpolates the stored face values to where it needs them, particles or cell
 centers ([swarm](numerics_swarm.md#62-radiation-pressure-and-optical-depth),
@@ -806,16 +806,16 @@ its velocity moments connect them. Let $f_d(\boldsymbol x,\boldsymbol v,s,t)$ be
 distribution over position, velocity, and grain size. Its moments are the dust density, the mass
 flux, and the momentum flux:
 
-$$
+```math
 \rho_d=\int f_d\,d^3v\,ds,
 \qquad
 \rho_d\boldsymbol u_d=\int\boldsymbol v f_d\,d^3v\,ds,
-$$
+```
 
-$$
+```math
 \int\boldsymbol v\boldsymbol v f_d\,d^3v\,ds
 =\rho_d\boldsymbol u_d\boldsymbol u_d+\boldsymbol P_d.
-$$
+```
 
 Here $\boldsymbol u_d$ is the mass-weighted mean dust velocity and $\boldsymbol P_d$ the
 velocity-dispersion tensor. The swarm samples $f_d$ itself with weighted particles, so it keeps a
@@ -831,6 +831,6 @@ hierarchy with $\boldsymbol P_d=0$ and a single velocity at each point
 - Nakagawa, Sekiya & Hayashi (1986),
   [steady dust–gas drift](<https://doi.org/10.1016/0019-1035(86)90121-1>)
 - Shakura & Sunyaev (1973),
-  [$\alpha$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)
+  [$`\alpha`$ viscosity](https://ui.adsabs.harvard.edu/abs/1973A%26A....24..337S)
 - Takeuchi & Lin (2002),
   [vertically structured gas and dust drift](https://arxiv.org/abs/astro-ph/0208552)

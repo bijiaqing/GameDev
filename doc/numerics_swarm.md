@@ -72,19 +72,19 @@ by setting the velocity dispersion $\boldsymbol P_d$ to zero
 approximates the whole mass distribution $f_d(\boldsymbol x,\boldsymbol v,s,t)$ by the empirical
 measure
 
-$$
+```math
 f_d^{N_P}(\boldsymbol x,\boldsymbol v,s,t)
 =\sum_{p=1}^{N_P}W_p
 \,\delta(\boldsymbol x-\boldsymbol x_p)
 \,\delta(\boldsymbol v-\boldsymbol v_p)
 \,\delta(s-s_p),
-$$
+```
 
 where $W_p$ is the physical mass that particle $p$ represents. Several particles with different
 velocities may occupy the same position, so the swarm continues through trajectory crossing
-(multistreaming), which a single-valued fluid velocity cannot represent. Its errors are finite-$N_P$
-sampling noise and, with collisions, the variance of the collision estimator, in place of the
-fluid model's closure error.
+(multistreaming), which a single-valued fluid velocity cannot represent. Its errors are
+finite-$`N_P`$ sampling noise and, with collisions, the variance of the collision estimator, in
+place of the fluid model's closure error.
 
 The two models also diffuse along different radial directions: the swarm along cylindrical radius,
 the fluid along spherical radius. [Why the diffusion bases
@@ -100,23 +100,23 @@ Each particle stores its position in the
 [computational coordinates](numerics_basis.md#21-computational-coordinates) and three velocity
 variables chosen so that the drift of the angles is a simple ratio:
 
-$$
+```math
 \boldsymbol q=(x,y,z)=(\phi,r,\theta),
 \qquad
 \boldsymbol u=(\ell_\phi,v_r,\ell_\theta)
 =(Rv_\phi,v_r,rv_\theta).
-$$
+```
 
 These are the [stored angular variables](README.md#glossary): $\ell_\phi$ and $\ell_\theta$ are
 specific angular momenta and $v_r$ is the spherical radial velocity. A multisize build
 (`MULTISIZE`) adds the grain diameter $s_p$ (`par_size`) and the number of physical grains $N_p$
 (`par_numr`), so that the [represented mass](README.md#glossary) is
 
-$$
+```math
 W_p=N_p\,m_g(s_p),
 \qquad
 m_g(s)=\frac{\pi}{6}\rho_0s^3.
-$$
+```
 
 A monodisperse build stores neither; every particle has $s_p=S_0$ and the implicit equal weight
 $W_p=M_{\rm dust}/N_P$ ([Section 3.3](#33-dust-mass-in-the-domain)).
@@ -157,12 +157,12 @@ the numerical width $X_{\max}-X_{\min}$.
 
 **Radial cell location.** A cell value is placed at the centroid of its measure,
 
-$$
+```math
 \bar y_j
 =\frac{d}{d+1}
 \frac{y_{j+1/2}^{d+1}-y_{j-1/2}^{d+1}}
 {y_{j+1/2}^{d}-y_{j-1/2}^{d}},
-$$
+```
 
 which lies slightly off the geometric midpoint of a logarithmic cell. Cell selection uses the
 continuous logarithmic coordinate $\xi_y=\ln(y/Y_{\min})/\ln a_y$, while the interpolation weight is
@@ -173,13 +173,13 @@ coordinates with cell centers at half-integer positions.
 eight cell centers around it. With one-dimensional fractions $(f_x,f_y,f_z)$ toward the neighboring
 centers, the weights are
 
-$$
+```math
 w_{abc}=f_x^a(1-f_x)^{1-a}
 f_y^b(1-f_y)^{1-b}
 f_z^c(1-f_z)^{1-c},
 \qquad a,b,c\in\lbrace 0,1\rbrace,
 \qquad \sum_{abc}w_{abc}=1.
-$$
+```
 
 Azimuth wraps periodically. An inactive dimension has fraction zero. Between a radial or polar edge
 and the center of the adjacent cell, the fraction in that direction is set to zero, so the whole
@@ -305,9 +305,9 @@ meaningful collision configuration.
 The radial-only model describes an axisymmetric, vertically integrated disk with a single radial
 line of cells. The grid alone selects it,
 
-$$
+```math
 N_X=1,\qquad N_Y>1,\qquad N_Z=1;
-$$
+```
 
 the code tests `N_X == 1 && N_Z == 1`, and there is no separate flag. Dust and gas densities are
 surface densities $\Sigma_d$ and $\Sigma_g$, and drag, gravity, radiation, and particle dynamics are
@@ -316,17 +316,17 @@ rigid rings.
 
 The active state is
 
-$$
+```math
 R,\qquad v_R,\qquad \ell_\phi=Rv_\phi,
-$$
+```
 
 and the inactive variables keep exact values:
 
-$$
+```math
 x=\frac{X_{\min}+X_{\max}}{2},\qquad
 z=\frac{\pi}{2},\qquad
 \ell_\theta=v_\theta=0.
-$$
+```
 
 Azimuth is spatially inactive, but $\ell_\phi$ remains dynamical because it supplies the centrifugal
 support, the azimuthal drag, the collision velocity, and the Poynting–Robertson damping.
@@ -348,21 +348,21 @@ from its tabulated axis. A vertically integrated model uses $\Sigma_{d,\rm conv}
 resolved polar dimension, the dust scale height of a grain of size $s$ follows the
 settling–diffusion balance of [Youdin & Lithwick (2007)](https://arxiv.org/abs/0707.2975),
 
-$$
+```math
 H_d(R,s)=H_g(R)
 \sqrt{\frac{\alpha_Z}{\mathrm{St}_{\rm mid}(R,s)}},
 \qquad
 \alpha_Z=\frac{\alpha}{\mathrm{Sc}_Z},
-$$
+```
 
 where $\mathrm{St}_{\rm mid}$ is the midplane Stokes number (with its size factor, and without the
 radial power law under `CONST_ST`). The spatial template for one size is
 
-$$
+```math
 \rho_d(R,Z\mid s)
 =\frac{\Sigma_{d,\rm conv}(R)}{\sqrt{2\pi}H_d(R,s)}
 \exp\left[-\frac{Z^2}{2H_d(R,s)^2}\right].
-$$
+```
 
 This is one full-column template shared by all sizes; the mass spectrum $f_M(s)$ of
 [Section 3.3](#33-dust-mass-in-the-domain) supplies the fraction of each size.
@@ -370,30 +370,30 @@ This is one full-column template shared by all sizes; the mass spectrum $f_M(s)$
 The spherical domain cuts each vertical line. At fixed cylindrical radius $R$, the polar faces
 require
 
-$$
+```math
 R\cot Z_{\max}\le Z\le R\cot Z_{\min},
-$$
+```
 
 and the outer shell requires
 
-$$
+```math
 |Z|\le\sqrt{Y_{\max}^2-R^2}.
-$$
+```
 
 If $R\lt Y_{\min}$, the inner shell removes
 
-$$
+```math
 |Z|\lt\sqrt{Y_{\min}^2-R^2},
-$$
+```
 
 so the allowed set can split into a lower and an upper interval. A retained interval $[Z_a,Z_b]$
 holds the Gaussian fraction
 
-$$
+```math
 \Delta\Phi(R,s;Z_a,Z_b)
 =\Phi\left(\frac{Z_b}{H_d(R,s)}\right)
 -\Phi\left(\frac{Z_a}{H_d(R,s)}\right),
-$$
+```
 
 where $\Phi$ is the standard normal CDF. The code evaluates it with `erf` or `erfc` branches chosen
 to avoid subtracting two nearly equal tail probabilities.
@@ -411,19 +411,19 @@ position and Stokes number. With `VISC_FLOW`, the gas radial velocity of that dr
 flow of [Viscous radial flow](numerics_basis.md#36-viscous-radial-flow). A resolved polar dimension
 adds terminal settling,
 
-$$
+```math
 v_Z=-\mathrm{St}\,\Omega_KZ,
-$$
+```
 
 and the cylindrical velocities are stored as
 
-$$
+```math
 \ell_\phi=Rv_{\phi,d},
 \qquad
 v_r=v_{R,d}\sin z+v_Z\cos z,
 \qquad
 \ell_\theta=y(v_{R,d}\cos z-v_Z\sin z).
-$$
+```
 
 The swarm adds terminal settling but no velocity that balances its diffusive flux; the fluid does
 the opposite ([fluid model, Section 3.2](numerics_fluid.md#32-initial-velocity)). This difference
@@ -444,19 +444,19 @@ wherever the two differ.
 The initial mass is the mass that the dust profile places inside the finite domain; there is no
 separate dust-mass parameter. For one grain size,
 
-$$
+```math
 I(s)=\int_{\mathcal D}\rho_d(\boldsymbol{x}\mid s)\,dV
-$$
+```
 
 is the mass of the template inside the domain $\mathcal D$. Integrating the vertical Gaussian
 analytically over the allowed intervals of [Section 3.1](#31-dust-density-profile) leaves the
 radial marginal
 
-$$
+```math
 \frac{dI}{dR}
 =\Delta\phi\,R\,\Sigma_{d,\rm conv}(R)
 \sum_k\Delta\Phi_k(R,s),
-$$
+```
 
 with $\Delta\phi=X_{\max}-X_{\min}$ for an active azimuth and $2\pi$ otherwise. The code integrates
 it with the trapezoidal rule on $\max(2048,4N_Y)$ uniform intervals from $R_{\min,\rm init}$
@@ -470,30 +470,30 @@ centers.
 The initial number spectrum is the power law of
 [Mathis, Rumpl & Nordsieck (1977)](https://ui.adsabs.harvard.edu/abs/1977ApJ...217..425M),
 
-$$
+```math
 \frac{dN}{ds}\propto s^{-3.5},
-$$
+```
 
 so for $s_{\min}\lt s_{\max}$ the normalized mass spectrum is
 
-$$
+```math
 f_M(s)=
 \frac{s^{-1/2}}
 {2\left(\sqrt{s_{\max}}-\sqrt{s_{\min}}\right)},
 \qquad
 \int_{s_{\min}}^{s_{\max}}f_M(s)\,ds=1.
-$$
+```
 
 The dust mass in the domain is
 
-$$
+```math
 M_{\rm dust}
 =\int_{s_{\min}}^{s_{\max}}f_M(s)I(s)\,ds
 =\frac{1}{u_{\max}-u_{\min}}
 \int_{u_{\min}}^{u_{\max}}I(u^2)\,du,
 \qquad
 u=\sqrt{s}.
-$$
+```
 
 The code evaluates the last form with the Simpson rule on $N_q=1024$ intervals,
 $u_n=u_{\min}+n\Delta u$, $\Delta u=(u_{\max}-u_{\min})/N_q$:
@@ -516,8 +516,8 @@ of radial CDFs used for sampling ([Section 3.5](#35-spatial-sampling)).
 | Case | Mass used by the code |
 |---|---|
 | monodisperse | $M_{\rm dust}=I(S_0)$ |
-| vertically integrated | $I(s)=\Delta\phi\int R\,\Sigma_{d,\rm conv}(R)\,dR$ for every size, so $M_{\rm dust}=I$ |
-| finite radial–polar or 3D domain | $M_{\rm dust}=\int f_M(s)I(s)\,ds$ with the vertical containment above |
+| vertically integrated | $`I(s)=\Delta\phi\int R\,\Sigma_{d,\rm conv}(R)\,dR`$ for every size, so $M_{\rm dust}=I$ |
+| finite radial–polar or 3D domain | $`M_{\rm dust}=\int f_M(s)I(s)\,ds`$ with the vertical containment above |
 | vertically complete 3D domain | $I(s)$ tends to the common full-column value, and so does $M_{\rm dust}$ |
 | imported gas | $M_{\rm dust}=I(S_0)$ from the analytic reference disk; the imported field sets only the shape ([Section 3.6](#36-imported-gas)) |
 
@@ -530,17 +530,17 @@ Grain sizes are drawn from a proposal law $q(s)$ and corrected by importance wei
 represented masses follow $f_M(s)$ exactly while the sample spends its particles where they matter.
 Without radiation the proposal is the mass spectrum itself:
 
-$$
+```math
 q_{\rm mass}(s)=f_M(s),
 \qquad
 w(s)=\frac{f_M(s)}{q_{\rm mass}(s)}=1.
-$$
+```
 
 With radiation, the [equal-area proposal](README.md#glossary) gives each particle the same
 full-column geometric cross section, so that small grains, which dominate the extinction, are well
 sampled:
 
-$$
+```math
 q_{\rm area}(s)
 =\frac{s^{-3/2}}
 {2\left(s_{\min}^{-1/2}-s_{\max}^{-1/2}\right)},
@@ -550,25 +550,25 @@ w_{\rm area}(s)
 =s\,
 \frac{s_{\min}^{-1/2}-s_{\max}^{-1/2}}
 {\sqrt{s_{\max}}-\sqrt{s_{\min}}}.
-$$
+```
 
 Positions are then drawn from $p(\boldsymbol{x}\mid s,\boldsymbol{x}\in\mathcal D)=\rho_d/I(s)$
 ([Section 3.5](#35-spatial-sampling)), so a finite sample uses, with $i$ and $j$ labeling
 particles here,
 
-$$
+```math
 \widetilde W_i=w(s_i)I(s_i),
 \qquad
 \mathcal N_M=
 \frac{N_PM_{\rm dust}}{\sum_j\widetilde W_j},
-$$
+```
 
-$$
+```math
 W_i=\frac{\mathcal N_M}{N_P}\widetilde W_i
 =M_{\rm dust}\frac{\widetilde W_i}{\sum_j\widetilde W_j},
 \qquad
 N_i=\frac{W_i}{m_g(s_i)}.
-$$
+```
 
 $\mathcal N_M$ is the code variable `mass_norm` and $N_i$ is stored as `par_numr`. The construction
 gives $\sum_iW_i=M_{\rm dust}$ to roundoff.
@@ -576,11 +576,11 @@ gives $\sum_iW_i=M_{\rm dust}$ to roundoff.
 Both proposals are sampled by inverse transformation. For $q(s)\propto s^a$ with $a\ne-1$ and
 $U\sim\mathcal U(0,1)$,
 
-$$
+```math
 s=\left[s_{\min}^{a+1}
 +U\left(s_{\max}^{a+1}-s_{\min}^{a+1}\right)
 \right]^{1/(a+1)},
-$$
+```
 
 with $a=-1/2$ for the mass proposal and $a=-3/2$ for the equal-area proposal. Sizes are drawn before
 positions, so the position of each particle can depend on its size.
@@ -594,54 +594,54 @@ cylindrical Jacobian $R$ enters once, in the radial marginal.
 
 For one tabulated size, the normalized cylindrical-radius CDF is
 
-$$
+```math
 P_R(R\mid s)
 =\frac{\displaystyle
 \int_{R_{\min,\rm init}}^R R'\Sigma_{d,\rm conv}(R')F(R',s)\,dR'}
 {\displaystyle
 \int_{R_{\min,\rm init}}^{Y_{\max}}R'\Sigma_{d,\rm conv}(R')F(R',s)\,dR'},
-$$
+```
 
 where $F(R,s)=\sum_k\Delta\Phi_k$ is the vertical containment. A uniform deviate $U_R$ is inverted
 in a linearly interpolated CDF bin. For a size $s$ between the logarithmic knots $s_a$ and $s_b$ of
 the mass bank, the two neighboring CDFs are averaged arithmetically:
 
-$$
+```math
 P_R(R\mid s)=(1-f_s)P_R(R\mid s_a)+f_sP_R(R\mid s_b),
 \qquad
 f_s=\frac{\ln s-\ln s_a}{\ln s_b-\ln s_a}.
-$$
+```
 
 After drawing $R$, interval $k$ is chosen with probability
 
-$$
+```math
 P(k\mid R,s)=\frac{\Delta\Phi_k(R,s)}{F(R,s)},
-$$
+```
 
 and a second deviate $U_Z$ gives the truncated-normal height, evaluated with the particle's own
 size rather than a knot size:
 
-$$
+```math
 Z=H_d\Phi^{-1}\left[
 \Phi\left(\frac{Z_{k,a}}{H_d}\right)
 +U_Z\Delta\Phi_k
 \right].
-$$
+```
 
 $\Phi^{-1}$ uses the rational approximation of Acklam (2000). Finally,
 
-$$
+```math
 y=\sqrt{R^2+Z^2},
 \qquad
 z=\mathrm{atan2}(R,Z),
-$$
+```
 
 and $x$ is uniform over the active azimuthal range or centered when azimuth is inactive. A
 monodisperse model, a model without a resolved polar dimension, or one with $s_{\min}=s_{\max}$
 uses a single CDF.
 
 No azimuthal density perturbation is added, unlike in the fluid initializer. The random sampling
-supplies the finite-$N_P$ seed fluctuations. The initialization tests are described in
+supplies the finite-$`N_P`$ seed fluctuations. The initialization tests are described in
 [Initialization](testsets.md#5-swarm-initialization).
 
 ### 3.6 Imported gas
@@ -653,10 +653,10 @@ reference disk ([Section 3.3](#33-dust-mass-in-the-domain)). The file formats ar
 
 A cell $c$ is chosen with probability
 
-$$
+```math
 P_c=\frac{\epsilon_c\rho_{g,c}V_c}
 {\sum_m\epsilon_m\rho_{g,m}V_m},
-$$
+```
 
 where $\rho_g$ is a surface density when `N_Z == 1` and $V_c$ is the cell measure of
 [Section 2.2](#22-mesh-measures-and-particlemesh-transfer). Every imported density and dust-to-gas
@@ -666,27 +666,27 @@ chosen.
 
 Inside the chosen cell the position is uniform in the volume coordinates
 
-$$
+```math
 s_y=\frac{y^d}{d},
 \qquad
 s_z=-\cos z,
-$$
+```
 
 so with independent $U_x,U_y,U_z\sim\mathcal U(0,1)$,
 
-$$
+```math
 x=x_{i-1/2}+U_x\Delta x,
 \qquad
 y=\left[y_{j-1/2}^d+U_y
 \left(y_{j+1/2}^d-y_{j-1/2}^d\right)\right]^{1/d},
-$$
+```
 
-$$
+```math
 z=\cos^{-1}\left[
 \cos z_{k-1/2}-U_z
 \left(\cos z_{k-1/2}-\cos z_{k+1/2}\right)
 \right].
-$$
+```
 
 An active azimuth is sampled uniformly across the cell width $\Delta x$ (`_get_dx()`); inactive
 coordinates take their centered values. One spatial distribution serves all sizes.
@@ -694,15 +694,15 @@ coordinates take their centered values. One spatial distribution serves all size
 The imported density also sets the Stokes number. When `N_Z == 1` the imported field is $\Sigma_g$,
 and
 
-$$
+```math
 \mathrm{St}(R,s)
 =\mathrm{St}_0\frac{s}{S_0}\frac{\Sigma_0}{\Sigma_g(R)}.
-$$
+```
 
 When `N_Z > 1` the imported field is $\rho_g$, and `STOKES_0` refers to the analytic reference
 midplane:
 
-$$
+```math
 \mathrm{St}(R,Z,s)
 =\mathrm{St}_0\frac{s}{S_0}
 \frac{\rho_{g,0}H_{g,0}}{\rho_g(R,Z)H_g(R)},
@@ -710,7 +710,7 @@ $$
 \rho_{g,0}=\frac{\Sigma_0}{\sqrt{2\pi}H_{g,0}},
 \qquad
 H_{g,0}=h_0R_0.
-$$
+```
 
 The imported density is assumed to be calibrated to that reference disk, so a gap raises the
 local Stokes number above `STOKES_0`. Because the imported density sets the Stokes number,
@@ -729,14 +729,14 @@ initial drift ([Section 3.2](#32-initial-velocity)) stay analytic.
 The swarm solves the characteristics of a kinetic equation for the mass distribution
 $f_d(\boldsymbol x,\boldsymbol v,s,t)$. In the default density-diffusion mode it reads
 
-$$
+```math
 \frac{\partial f_d}{\partial t}
 +\nabla_{\boldsymbol x}\cdot(\boldsymbol v f_d)
 +\nabla_{\boldsymbol v}\cdot(\boldsymbol a f_d)
 =\nabla_{\boldsymbol x}\cdot
  (\boldsymbol D\nabla_{\boldsymbol x}f_d)
 +\mathcal C_s[f_d],
-$$
+```
 
 where $\boldsymbol a$ contains gravity, gas drag, radiation pressure, and Poynting–Robertson drag,
 $\boldsymbol D$ is the cylindrical diffusion tensor ([Section 7](#7-diffusion)), and $\mathcal C_s$
@@ -747,41 +747,41 @@ grain size through the Stokes number.
 
 With the velocity dispersion and the mass-weighted acceleration
 
-$$
+```math
 \boldsymbol P_d
 =\int(\boldsymbol v-\boldsymbol u_d)(\boldsymbol v-\boldsymbol u_d)f_d\,d^3v\,ds,
 \qquad
 \rho_d\overline{\boldsymbol a}
 =\int\boldsymbol a f_d\,d^3v\,ds,
-$$
+```
 
 the zeroth and first velocity moments of a monodisperse population in density mode are
 
-$$
+```math
 \frac{\partial\rho_d}{\partial t}
 +\nabla\cdot(\rho_d\boldsymbol u_d)
 =\nabla\cdot(\boldsymbol D\nabla\rho_d),
-$$
+```
 
-$$
+```math
 \frac{\partial(\rho_d\boldsymbol u_d)}{\partial t}
 +\nabla\cdot
  (\rho_d\boldsymbol u_d\boldsymbol u_d+\boldsymbol P_d)
 =\rho_d\overline{\boldsymbol a}
 +\nabla\cdot
  [\boldsymbol D\nabla(\rho_d\boldsymbol u_d)].
-$$
+```
 
 The moments themselves are defined in
 [Dust distribution and its moments](numerics_basis.md#9-dust-distribution-and-its-moments).
 
-With several sizes, the diffusivity stays inside the size integrals: the mass and momentum
-diffusion terms are $\nabla\cdot\int\boldsymbol D(s)\nabla f_d\,d^3v\,ds$ and
-$\nabla\cdot\int\boldsymbol v\boldsymbol D(s)\nabla f_d\,d^3v\,ds$, with the concentration gradient
-in concentration mode. A collision event keeps each particle's represented mass and velocity, so
-$\mathcal C_s$ has zero mass and momentum moments while it moves mass in size space. Drag and
-radiation depend on size, so $\overline{\boldsymbol a}$ contains size–velocity correlations that
-$\rho_d$ and $\boldsymbol u_d$ cannot express, and $\boldsymbol P_d$ need not vanish after
+With several sizes, the diffusivity stays inside the size integrals: the mass and momentum diffusion
+terms are $`\nabla\cdot\int\boldsymbol D(s)\nabla f_d\,d^3v\,ds`$ and
+$`\nabla\cdot\int\boldsymbol v\boldsymbol D(s)\nabla f_d\,d^3v\,ds`$, with the concentration
+gradient in concentration mode. A collision event keeps each particle's represented mass and
+velocity, so $\mathcal C_s$ has zero mass and momentum moments while it moves mass in size space.
+Drag and radiation depend on size, so $\overline{\boldsymbol a}$ contains size–velocity correlations
+that $\rho_d$ and $\boldsymbol u_d$ cannot express, and $\boldsymbol P_d$ need not vanish after
 trajectory crossing. The swarm samples these unclosed moments instead of evolving a momentum
 equation on a mesh.
 
@@ -806,16 +806,16 @@ even though one set of particle equations serves all four.
 
 Between diffusion displacements and collision events, every active particle follows
 
-$$
+```math
 \frac{d\boldsymbol r}{dt}=\boldsymbol v,
-$$
+```
 
-$$
+```math
 \frac{d\boldsymbol v}{dt}
 =-\frac{GM_\star}{r^2}\boldsymbol e_r
 -\frac{\boldsymbol v-\boldsymbol v_g}{t_s}
 +\boldsymbol a_{\rm rad+PR}.
-$$
+```
 
 Without radiation, $\boldsymbol a_{\rm rad+PR}=0$. With radiation but without `PR_EFFECT`, it is the
 attenuated outward acceleration $\beta GM_\star\boldsymbol e_r/r^2$
@@ -823,26 +823,26 @@ attenuated outward acceleration $\beta GM_\star\boldsymbol e_r/r^2$
 adds the Poynting–Robertson terms. In the stored variables the centrifugal and polar geometric
 terms appear explicitly:
 
-$$
+```math
 \frac{d\ell_\phi}{dt}
 =-\frac{\ell_\phi-\ell_{\phi,g}}{t_s}-\gamma_{\rm PR}\ell_\phi,
-$$
+```
 
-$$
+```math
 \frac{d\ell_\theta}{dt}
 =-\frac{\ell_\theta-\ell_{\theta,g}}{t_s}
 +\frac{\ell_\phi^2\cos\theta}{R^2\sin\theta}
 -\gamma_{\rm PR}\ell_\theta,
-$$
+```
 
-$$
+```math
 \frac{dv_r}{dt}
 =-\frac{v_r-v_{r,g}}{t_s}
 -(1-\beta)\frac{GM_\star}{r^2}
 +\frac{\ell_\phi^2}{R^2r}
 +\frac{\ell_\theta^2}{r^3}
 -2\gamma_{\rm PR}v_r.
-$$
+```
 
 Here $\gamma_{\rm PR}=0$ unless `PR_EFFECT` is enabled, and $\beta=0$ without `RADIATION`. For
 `N_Z == 1`, $\ell_\theta=\ell_{\theta,g}=0$ and the polar equation is dropped.
@@ -856,24 +856,24 @@ collisions change grain properties at a fixed position.
 The represented mass is conserved exactly by every operator except an absorbing boundary.
 Integrating the empirical measure over velocity and size gives the represented density
 
-$$
+```math
 \rho_d^{N_P}(\boldsymbol x,t)
 =\sum_{p=1}^{N_P}W_p\delta(\boldsymbol x-\boldsymbol x_p),
-$$
+```
 
 or its surface-density analogue in 1D and 2D. The active mass is
 
-$$
+```math
 M_{d,\rm active}^{N_P}=\sum_{p\in\mathcal A}W_p,
-$$
+```
 
 where $\mathcal A$ excludes [absorbed particles](README.md#glossary), those that left through an
 absorbing boundary ([Section 10.3](#103-boundary-conditions)). Transport and diffusion move
 particles without changing $W_p$. Collisions change size and grain number so that
 
-$$
+```math
 W_p=N_pm_g(s_p)=\text{constant}
-$$
+```
 
 at every event. The sampled collision partner is not consumed
 ([Section 8.1](#81-representative-particles)).
@@ -881,9 +881,9 @@ at every event. The sampled collision partner is not consumed
 Deposition onto the mesh is a diagnostic projection of this measure. If every stencil weight stays
 inside the domain and $\sum_cw_{pc}=1$, then
 
-$$
+```math
 \sum_c\rho_{d,c}V_c=\sum_{p\in\mathcal A}W_p.
-$$
+```
 
 **Limits.** The deposited total matches the particle total only up to atomic-addition roundoff.
 
@@ -891,32 +891,32 @@ $$
 
 In the radial-only closure ([Section 2.5](#25-radial-only-closure)) the surface density obeys
 
-$$
+```math
 \frac{\partial\Sigma_d}{\partial t}
 +\frac{1}{R}\frac{\partial}{\partial R}(R\Sigma_dv_R)
 =\frac{1}{R}\frac{\partial}{\partial R}
 \left(RD_R\frac{\partial\Sigma_d}{\partial R}\right),
-$$
+```
 
 where the particle characteristics carry the transport and stochastic diffusion represents the
 right-hand side. The midplane characteristics satisfy
 
-$$
+```math
 \frac{dR}{dt}=v_R,
-$$
+```
 
-$$
+```math
 \frac{d\ell_\phi}{dt}
 =-\frac{\ell_\phi-\ell_{\phi,g}}{t_s}-\gamma_{\rm PR}\ell_\phi,
-$$
+```
 
-$$
+```math
 \frac{dv_R}{dt}
 =\frac{\ell_\phi^2}{R^3}
 -(1-\beta)\frac{GM_\star}{R^2}
 -\frac{v_R-v_{R,g}}{t_s}
 -2\gamma_{\rm PR}v_R.
-$$
+```
 
 ## 5. Transport
 
@@ -935,17 +935,17 @@ keeps the step second-order accurate.
 For an initial state $i$, a midpoint position $1$, and a final state $j$ (state labels, not grid
 indices), the first drift is
 
-$$
+```math
 y_1=y_i+\frac{\Delta t}{2}v_{r,i},
-$$
+```
 
-$$
+```math
 z_1=z_i+\frac{\Delta t}{2}
 \frac{\ell_{\theta,i}}{y_iy_1},
 \qquad
 x_1=x_i+\frac{\Delta t}{2}
 \frac{\ell_{\phi,i}}{y_iy_1\sin z_i\sin z_1}.
-$$
+```
 
 For a vertically integrated model, $z_1=\pi/2$ and the azimuthal drift reduces to
 $x_1=x_i+\ell_{\phi,i}\Delta t/(2y_iy_1)$; in the radial-only model $x_1$ stays fixed. The product
@@ -955,17 +955,17 @@ radial velocity; there is no integer-cell remap.
 At the midpoint, [Section 6.1](#61-drag-and-gravity) turns $\boldsymbol u_i$ into $\boldsymbol u_j$.
 The second drift then uses the new velocity:
 
-$$
+```math
 y_j=y_1+\frac{\Delta t}{2}v_{r,j},
-$$
+```
 
-$$
+```math
 z_j=z_1+\frac{\Delta t}{2}
 \frac{\ell_{\theta,j}}{y_1y_j},
 \qquad
 x_j=x_1+\frac{\Delta t}{2}
 \frac{\ell_{\phi,j}}{y_1y_j\sin z_1\sin z_j}.
-$$
+```
 
 The response and the second drift share one device function, `_ssa_advance`, which the orbit and
 drag-path tests reuse with their own forcing ([Section 12.1](#121-source-map)). Boundary rules are
@@ -981,20 +981,20 @@ Imported gas is given as snapshots at the output times. So that the gas does not
 a whole output interval, the code interpolates the two bracketing snapshots $g_n$ and $g_{n+1}$
 linearly to the midpoint of each dynamics step,
 
-$$
+```math
 g(f)=(1-f)g_n+fg_{n+1},
 \qquad
 f=\frac{t_m-t_n}{t_{n+1}-t_n},
-$$
+```
 
 where $t_m$ is the step midpoint. The working field already holds the value at the previous
 fraction $f_{\rm old}$, so the kernel applies the incremental blend
 
-$$
+```math
 b=\frac{f-f_{\rm old}}{1-f_{\rm old}},
 \qquad
 g\leftarrow(1-b)g+b g_{n+1},
-$$
+```
 
 which is algebraically identical to the direct form. It acts on the gas density and on all three
 gas velocity components. At the end of each output interval the working field is replaced by the
@@ -1016,14 +1016,14 @@ At the midpoint position of [Section 5.1](#51-staggered-update), the velocity up
 exactly for coefficients frozen at that point. The stopping time is $t_s=\mathrm{St}/\Omega_K(R)$
 with the Stokes number of [Stopping time and Stokes
 number](numerics_basis.md#4-stopping-time-and-stokes-number), including its size factor $s/S_0$.
-`CONST_ST` keeps only that size factor, $\mathrm{St}=\mathrm{St}_0\,s/S_0$; imported gas uses the
+`CONST_ST` keeps only that size factor, $`\mathrm{St}=\mathrm{St}_0\,s/S_0`$; imported gas uses the
 variants of [Section 3.6](#36-imported-gas).
 
 The drag targets are the gas velocities in the stored variables. For analytic gas,
 
-$$
+```math
 \ell_{\phi,g}=Rv_{\phi,g},
-$$
+```
 
 with the gas rotation $v_{\phi,g}$ of [Rotation support](numerics_basis.md#34-rotation-support), and
 $v_{r,g}=\ell_{\theta,g}=0$ unless `VISC_FLOW` supplies the projected viscous flow of
@@ -1033,34 +1033,34 @@ $\ell_{\theta,g}=yv_{\theta,g}$, while $\Omega_K$ in $t_s$ stays analytic.
 
 Without Poynting–Robertson drag, define
 
-$$
+```math
 \mathcal R(h)=1-e^{-h/t_s}.
-$$
+```
 
 For a component with frozen non-drag force $F$, the exact response over a time $h$ is
 
-$$
+```math
 u(h)=u_i+\left(u_g+t_sF-u_i\right)\mathcal R(h).
-$$
+```
 
 The forces per component are the radial gravity, reduced by radiation, plus the centrifugal terms,
 
-$$
+```math
 F_r=-(1-\beta)\frac{GM_\star}{y^2}+\frac{\ell_\phi^2}{R^2y}+\frac{\ell_\theta^2}{y^3},
 \qquad
 F_\theta=\frac{\ell_\phi^2\cos z}{R^2\sin z},
 \qquad
 F_\phi=0,
-$$
+```
 
 all evaluated at the midpoint position. The centrifugal terms depend on the velocity, so the code
 uses two stages. It evaluates forces $F_1$ with the initial angular momenta and forms a midpoint
 velocity with $h=\Delta t/2$. It then reevaluates the forces $F_2$ with those midpoint angular
 momenta and computes the full velocity from the original state:
 
-$$
+```math
 u_j=u_i+\left(u_g+t_sF_2-u_i\right)\mathcal R(\Delta t).
-$$
+```
 
 The radiation ratio $\beta$ ([Section 6.2](#62-radiation-pressure-and-optical-depth)) and the gas
 targets are the same in both stages.
@@ -1083,10 +1083,10 @@ to particles.
 
 For geometric opacity $\kappa\propto s^{-1}$, each particle's radiation ratio is
 
-$$
+```math
 \beta(s,t,\tau)
 =\beta_0\frac{S_0}{s}\,f_\beta(t)\,e^{-\tau},
-$$
+```
 
 with the startup ramp $f_\beta$ of
 [Radiation ratio and startup ramp](numerics_basis.md#81-radiation-ratio-and-startup-ramp).
@@ -1103,34 +1103,34 @@ M_{\rm dust}/N_P,&\text{monodisperse},
 
 and carries the extinction weight
 
-$$
+```math
 Q_p=\kappa_0W_p\frac{S_0}{s_p}.
-$$
+```
 
 In a vertically integrated model this becomes the midplane-equivalent weight
 
-$$
+```math
 Q_p^{\rm 2D}=\frac{Q_p}{\sqrt{2\pi}H_g(R_p)},
-$$
+```
 
 which applies the [well-mixed closure](README.md#glossary): every size shares the gas vertical
 profile, with $H_g$ evaluated at each particle's own radius $R_p$. With $\widehat Q_p=Q_p^{\rm 2D}$
 when `N_Z == 1` and $\widehat Q_p=Q_p$ otherwise, the stencil of
 [Section 2.2](#22-mesh-measures-and-particlemesh-transfer) deposits
 
-$$
+```math
 E_c=\sum_p w_{pc}\widehat Q_p
-$$
+```
 
 into cell $c=(i,j,k)$, and, with the cell measure $V_c$ of
 [Section 2.2](#22-mesh-measures-and-particlemesh-transfer) ($2\pi$ in place of $\Delta x$ for an
 inactive azimuth), the radial increment is
 
-$$
+```math
 \Delta\tau_c=\frac{E_c}{V_c}\Delta r_j,
 \qquad
 \Delta r_j=y_{j-1/2}(a_y-1).
-$$
+```
 
 Because $Q_p$ already contains $\kappa_0$, $E_c/V_c$ is the product $\kappa_0\rho_{\rm ext}$ of the
 shared notation $\Delta\tau=\kappa_0\rho_{\rm ext}\Delta r$, with $\rho_{\rm ext}$ the size-weighted
@@ -1143,15 +1143,15 @@ $\tau_{i,j+1/2,k}$ at every outer radial face, with $\tau_{i,-1/2,k}=0$ at the i
 linearly in physical radius. If its logarithmic coordinate is $\xi_y=j+\delta$ with
 $0\le\delta\lt1$, its fraction toward the inner face is
 
-$$
+```math
 f_{\rm in}=\frac{a_y-a_y^\delta}{a_y-1},
-$$
+```
 
 and
 
-$$
+```math
 \tau(y)=(1-f_{\rm in})\tau_{j+1/2}+f_{\rm in}\tau_{j-1/2},
-$$
+```
 
 with $\tau_{-1/2}=0$ inserted for $j=0$. Azimuth and polar angle use the cell-centered fractions of
 [Section 2.2](#22-mesh-measures-and-particlemesh-transfer). The optical depth is rebuilt from the
@@ -1169,13 +1169,13 @@ Poynting–Robertson drag of
 [Burns, Lamy & Soter (1979)](<https://doi.org/10.1016/0019-1035(79)90050-2>), which damps the motion
 relative to the star at the rate
 
-$$
+```math
 \gamma_{\rm PR}=\frac{\beta GM_\star}{C_{\rm LIGHT}y^2}.
-$$
+```
 
 The implemented first-order acceleration is
 
-$$
+```math
 \boldsymbol a_{\rm grav+rad}
 =-\frac{GM_\star}{y^2}\boldsymbol e_y
 +\beta\frac{GM_\star}{y^2}
@@ -1183,47 +1183,47 @@ $$
 \left(1-\frac{v_y}{C_{\rm LIGHT}}\right)\boldsymbol e_y
 -\frac{\boldsymbol v}{C_{\rm LIGHT}}
 \right],
-$$
+```
 
 or equivalently
 
-$$
+```math
 \boldsymbol a_{\rm grav+rad}
 =-(1-\beta)\frac{GM_\star}{y^2}\boldsymbol e_y
 -\gamma_{\rm PR}
 \left(
 v_x\boldsymbol e_x+2v_y\boldsymbol e_y+v_z\boldsymbol e_z
 \right).
-$$
+```
 
 The tangential variables $\ell_\phi$ and $\ell_\theta$ are damped at $\gamma_{\rm PR}$ and the
 radial velocity at $2\gamma_{\rm PR}$. Gas drag and Poynting–Robertson drag are integrated together
 in the frozen-midpoint response of [Section 6.1](#61-drag-and-gravity), with the rates
 
-$$
+```math
 k_x=\frac{1}{t_s}+\gamma_{\rm PR},
 \qquad
 k_y=\frac{1}{t_s}+2\gamma_{\rm PR},
 \qquad
 k_z=\frac{1}{t_s}+\gamma_{\rm PR}.
-$$
+```
 
 For a frozen component equation
 
-$$
+```math
 \frac{du}{dt}=-ku+\frac{u_g}{t_s}+F,
-$$
+```
 
 the code evaluates
 
-$$
+```math
 u(h)
 =e^{-kh}u(0)
 +\frac{1-e^{-kh}}{k}
 \left(
 \frac{u_g}{t_s}+F
 \right),
-$$
+```
 
 with the same two stages as without Poynting–Robertson drag ($h=\Delta t/2$ with $F_1$, then
 $h=\Delta t$ from the original state with $F_2$). The factor $1-e^{-kh}$ is computed with `expm1` to
@@ -1254,16 +1254,16 @@ The target equation and the directional diffusivities are defined in
 [Directional diffusivities](numerics_basis.md#51-directional-diffusivities). For the swarm the
 diffusion tensor is diagonal in cylindrical coordinates $(\phi,R,Z)$,
 
-$$
+```math
 D_a=\frac{\nu}{\mathrm{Sc}_a(1+\mathrm{St}^2)},\qquad a=\phi,R,Z,
-$$
+```
 
 with the Schmidt numbers `SCHMIDT_X`, `SCHMIDT_R`, and `SCHMIDT_Z` and the Stokes number at the
 particle's current size. The target is
 
-$$
+```math
 \partial_t\varrho_d=\nabla\cdot\left[w\boldsymbol D\nabla(\varrho_d/w)\right],
-$$
+```
 
 with $w=1$ for density diffusion and $w=\varrho_g$ for concentration diffusion
 (`DIFFUSE_CONCENTRATION`, [Section 7.3](#73-concentration-diffusion)).
@@ -1273,27 +1273,27 @@ with $w=1$ for density diffusion and $w=\varrho_g$ for concentration diffusion
 The target equation is the forward equation of an [Itô process](README.md#glossary) with independent
 Wiener increments in the three cylindrical directions:
 
-$$
+```math
 d\phi=\frac{\partial_\phi D_\phi+D_\phi\partial_\phi\ln w}{R^2}\,dt
  +\frac{\sqrt{2D_\phi}}{R}\,dW_\phi,
-$$
+```
 
-$$
+```math
 dR=\left(\partial_RD_R+\frac{D_R}{R}+D_R\partial_R\ln w\right)dt
  +\sqrt{2D_R}\,dW_R,
-$$
+```
 
-$$
+```math
 dZ=\left(\partial_ZD_Z+D_Z\partial_Z\ln w\right)dt
  +\sqrt{2D_Z}\,dW_Z.
-$$
+```
 
 Inactive coordinates are omitted. The cylindrical measure term $D_R/R$ appears in both modes.
 Derivatives hold the grain size fixed and include the Stokes dependence,
 
-$$
+```math
 \nabla\ln D_a=\nabla\ln\nu-\frac{2\mathrm{St}^2}{1+\mathrm{St}^2}\nabla\ln\mathrm{St},
-$$
+```
 
 so the vertical diffusivity has a gradient even when $\nu$ depends only on $R$. Analytic gas
 gradients follow the spherical stratification used by drag. With `IMPORTGAS`, the gradients
@@ -1326,54 +1326,54 @@ basis of the new position ([velocity reprojection](README.md#glossary)).
 
 Before the displacement,
 
-$$
+```math
 v_\phi=\frac{\ell_\phi}{R},
 \qquad
 v_\theta=\frac{\ell_\theta}{y},
-$$
+```
 
-$$
+```math
 v_R=v_r\sin z+v_\theta\cos z,
 \qquad
 v_Z=v_r\cos z-v_\theta\sin z,
-$$
+```
 
-$$
+```math
 v_X=v_R\cos x-v_\phi\sin x,
 \qquad
 v_Y=v_R\sin x+v_\phi\cos x.
-$$
+```
 
 After moving to $(x',R',Z')$, the same Cartesian components give
 
-$$
+```math
 v_R'=v_X\cos x'+v_Y\sin x',
 \qquad
 v_\phi'=v_Y\cos x'-v_X\sin x',
-$$
+```
 
-$$
+```math
 y'=\sqrt{R'^2+Z'^2},
 \qquad
 \sin z'=\frac{R'}{y'},
 \qquad
 \cos z'=\frac{Z'}{y'},
-$$
+```
 
-$$
+```math
 \ell_\phi'=R'v_\phi',
 \qquad
 v_r'=v_R'\sin z'+v_Z\cos z',
 \qquad
 \ell_\theta'=y'(v_R'\cos z'-v_Z\sin z').
-$$
+```
 
 In a periodic wedge, let $x_u$ be the unwrapped angle after the displacement and
 
-$$
+```math
 x_w=x_u-m\Delta\phi_w,
 \qquad m\in\mathbb Z,
-$$
+```
 
 the stored angle. The projection uses $x_u$, before the position is wrapped to $x_w$. This is
 equivalent to rotating both the position and the velocity by the wedge identification
@@ -1399,7 +1399,7 @@ collision partners is described in [Section 9](#9-nearest-neighbor-search).
 The collision update follows the representative-particle Monte Carlo method of
 [Zsom & Dullemond (2008)](https://arxiv.org/abs/0807.5052). Each computational particle (a
 representative) stands for $N_p$ identical physical grains of diameter $s_p$, so it carries the
-represented mass $W_p=N_p\,m(s_p)$ of [Section 2.1](#21-stored-state), where
+represented mass $`W_p=N_p\,m(s_p)`$ of [Section 2.1](#21-stored-state), where
 $m(s)=m_g(s)=\pi\rho_0s^3/6$ is the mass of one compact grain and $\rho_0$ is the compact-grain
 density `RHO_0`.
 
@@ -1425,11 +1425,11 @@ all representatives with one leap, in the spirit of explicit Poisson tau-leaping
 Petzold 2005](https://people.cs.vt.edu/~ycao/publication/JChemPhys_123_054104.pdf)), would use the
 batch step
 
-$$
+```math
 \Delta t_{\mathrm{col}}=
-\min\left(\frac{\mathrm{CFL}_{\mathrm{COL}}}{\max_i\lambda_i},\
+\min\left(\frac{\mathrm{CFL}_{\mathrm{COL}}}{\max_i\lambda_i},\;
 \Delta t_{\mathrm{remaining}}\right),
-$$
+```
 
 where $\lambda_i$ is owner $i$'s total collision rate. Raising the Courant factor does not remove
 this bottleneck: when $\lambda_i\Delta t$ is large, collapsing several expected physical events into
@@ -1441,9 +1441,9 @@ are held fixed (a bath, [Section 8.6.1](#861-frozen-reservoir)), each owner keep
 draws exact waiting times with the direct method of
 [Gillespie (1977)](https://doi.org/10.1021/j100540a008),
 
-$$
+```math
 \delta t_i=-\frac{\ln U}{\lambda_i},
-$$
+```
 
 with $U$ a uniform deviate. It processes zero, one, or many events and recomputes its own rate and
 partner weights after each one. This removes the fastest-particle global microstep, and the result
@@ -1519,20 +1519,20 @@ the space the owner's neighbors occupy.
 
 For a pair $i,j$, the physical collision kernel is
 
-$$
+```math
 K_{ij}=\sigma_{ij}\Delta v_{ij},
 \qquad
 \sigma_{ij}=\frac{\pi}{4}(s_i+s_j)^2,
-$$
+```
 
 with the relative speed $\Delta v_{ij}$ of [Section 8.4.3](#843-relative-velocities). In a resolved
 vertical model the pair rate and the owner rate are
 
-$$
+```math
 \lambda_{ij}=\frac{N_jK_{ij}}{V_{K,i}},
 \qquad
 \lambda_i=\sum_{j\in\mathcal N_i}\lambda_{ij},
-$$
+```
 
 where $\mathcal N_i$ is the owner's retained neighbor set ([Section 9.2](#92-search-contract)) and
 $V_{K,i}$ its KNN measure, the part of the farthest-neighbor ball that lies inside the domain
@@ -1541,11 +1541,11 @@ includes the owner's own representative, using $N_i-1\simeq N_i$ for large grain
 vertically integrated model the measure is an area $A_{K,i}$, and an assumed Gaussian vertical
 overlap of the two species gives
 
-$$
+```math
 \lambda_{ij}
 =\frac{N_jK_{ij}}
 {A_{K,i}\sqrt{2\pi(H_{g,i}^2+H_{g,j}^2)}},
-$$
+```
 
 where $H_{g,i}$ and $H_{g,j}$ are the gas scale heights at the two particles' own cylindrical radii
 ([`numerics_basis.md`](numerics_basis.md#32-vertical-structure)).
@@ -1554,23 +1554,23 @@ This physical prescription is selected by `COAG_KERNEL = 3`. The values `0`, `1`
 normalized synthetic kernel shapes for controlled coagulation studies, such as the Smoluchowski
 campaigns of [`testsets.md`](testsets.md#9-swarm-coagulation-campaigns):
 
-$$
+```math
 \kappa_0(m_i,m_j)=1,
 \qquad
 \kappa_1(m_i,m_j)=m_i+m_j,
 \qquad
 \kappa_2(m_i,m_j)=m_im_j,
-$$
+```
 
 with the pair rate
 
-$$
+```math
 \lambda_{ij}^{(q)}
 =\frac{\lambda_0N_j\kappa_q(m_i,m_j)}{V_{K,i}},
 \qquad
 \lambda_0=\frac{N_P}{N_KM_{\rm dust}},
 \qquad q\in\lbrace 0,1,2\rbrace,
-$$
+```
 
 where $M_{\rm dust}$ is the initialized dust mass in the domain and $V_{K,i}$ is the active KNN
 measure (an area in a vertically integrated model). `variables.txt` records $\lambda_0$ as
@@ -1598,35 +1598,35 @@ are handled by periodic images ([Section 9.5](#95-periodic-images)).
 In the radial-only model both searches work on the collinear points $(R,0,0)$, and the exact
 accessible area of the annulus is
 
-$$
+```math
 A_K=\pi\left[
 \min(Y_{\max},R+a)^2-
 \max(Y_{\min},R-a)^2
 \right].
-$$
+```
 
 In the other geometries the correction treats each nearby radial or polar face as locally planar.
 The distance to a radial face is the spherical-radius difference $|r-Y_{\min}|$ or
 $|Y_{\max}-r|$, and the distance to a polar face is the arc length $r(\theta-Z_{\min})$ or
 $r(Z_{\max}-\theta)$. For a face at distance $0\le d\lt a$ the excluded cap is
 
-$$
+```math
 C_2(a,d)=a^2\cos^{-1}\left(\frac{d}{a}\right)
 -d\sqrt{a^2-d^2}
-$$
+```
 
 in a two-dimensional search and
 
-$$
+```math
 C_3(a,d)=\frac{\pi}{3}(a-d)^2(2a+d)
-$$
+```
 
 in a three-dimensional one. Starting from $B_2=\pi a^2$ or $B_3=4\pi a^3/3$, every intersected face
 multiplies the measure by
 
-$$
+```math
 1-\frac{C_D(a,d)}{B_D}.
-$$
+```
 
 The measure uses $D=2$ for the radial–azimuthal and radial–polar geometries and $D=3$ for full
 3D. For the axisymmetric radial–polar search, the corrected meridional area is finally
@@ -1649,60 +1649,60 @@ partner's position, its periodic image, and the instantaneous particle velocitie
 
 The speed combines drift, settling, Brownian, and turbulent contributions:
 
-$$
+```math
 \Delta v_{ij}^2=\Delta v_R^2+\Delta v_\phi^2+\Delta v_Z^2
 +\Delta v_{B,ij}^2+\Delta v_{T,ij}^2.
-$$
+```
 
 **Drift and settling.** Let $f_k=(1+\mathrm{St}_k^2)^{-1}$ and $v_n=-\eta R\Omega_K$ at the owner's
 position, with the Stokes numbers of
 [`numerics_basis.md`](numerics_basis.md#4-stopping-time-and-stokes-number) and the rotation-support
 parameter $\eta$ of [`numerics_basis.md`](numerics_basis.md#34-rotation-support). Then
 
-$$
+```math
 \Delta v_R=2v_n(\mathrm{St}_if_i-\mathrm{St}_jf_j),\qquad
 \Delta v_\phi=v_n(f_i-f_j),
-$$
+```
 
-$$
+```math
 \Delta v_Z=Z\Omega_K[\min(\mathrm{St}_i,0.5)-\min(\mathrm{St}_j,0.5)].
-$$
+```
 
 The settling speed is capped at $\mathrm{St}=0.5$, beyond which grains oscillate about the midplane.
 
 **Brownian motion.** Physical-unit builds (without `CODE_UNIT`) add
 
-$$
+```math
 \Delta v_{B,ij}
 =\min\left[
 c_s,
 \sqrt{\frac{8c_s^2M_{\rm mol}}{\pi}
 \frac{m_i+m_j}{m_im_j}}
 \right].
-$$
+```
 
 **Turbulence.** Turbulent relative speeds follow the closed-form regimes of
 [Ormel & Cuzzi (2007)](https://arxiv.org/abs/astro-ph/0702303). Let
 
-$$
+```math
 S=\max(\mathrm{St}_i,\mathrm{St}_j),
 \qquad
 s=\min(\mathrm{St}_i,\mathrm{St}_j),
 \qquad
 \epsilon=\frac{s}{S},
-$$
+```
 
-$$
+```math
 r_\eta=\mathrm{Re}^{-1/2},
 \qquad
 v_g^2=\frac32\alpha c_s^2,
 \qquad
 y_a=1.6,
-$$
+```
 
-$$
+```math
 y_s=1.6015125-0.63119577S+0.32938936S^2-0.29847604S^3,
-$$
+```
 
 with $\alpha$ from [`numerics_basis.md`](numerics_basis.md#35-viscosity). The turbulent Reynolds
 number is calibrated as
@@ -1738,9 +1738,9 @@ S\left[2y_s-(1+\epsilon)+\dfrac{2}{1+\epsilon}\left(\dfrac{1}{1+y_s}+\dfrac{\eps
 
 where the transition coefficient is
 
-$$
+```math
 B_3=\frac{S-s}{S+s}\left(\frac{S}{1+y_a}-\frac{s^2}{s+y_aS}\right)+2(y_aS-r_\eta)+\frac{S}{1+y_a}-\frac{S^2}{S+r_\eta}+\frac{s^2}{y_aS+s}-\frac{s^2}{s+r_\eta}.
-$$
+```
 
 Imported gas density is sampled at the owner's position for both Stokes numbers, and `CONST_ST`
 keeps its prescribed size-to-Stokes relation. In a vertically integrated model the Gaussian overlap
@@ -1762,9 +1762,9 @@ ratio. Each channel has its own event rate, and the chain samples channels in pr
 
 Let the projectile-to-target mass ratio of compact grains be
 
-$$
+```math
 q=\frac{m_j}{m_i}=\left(\frac{s_j}{s_i}\right)^3,
-$$
+```
 
 and let the sticking packet size be
 
@@ -1792,9 +1792,9 @@ event turns the owner into grains of the projectile mass $m_j$. Catastrophic fra
 diameter whose upper limit is the old target diameter; the draw is clipped to
 $[s_{\rm floor},s_i]$. The effective event rate that enters the chain is therefore
 
-$$
+```math
 \widetilde\lambda_{ij}=\varphi_{ij}\lambda_{ij},
-$$
+```
 
 with $\varphi_{ij}=1/G$ for sticking, $\varphi_{ij}=(1-q)/G+q$ for erosion, and $\varphi_{ij}=1$ for
 fragmentation. Given an erosion event, the debris branch is selected with probability
@@ -1809,11 +1809,11 @@ disk parameters.
 
 Every event keeps the owner's represented mass by changing its grain count:
 
-$$
+```math
 N_i'=N_i\frac{m(s_i)}{m(s_i')},
 \qquad
 W_i'=N_i'm(s_i')=W_i.
-$$
+```
 
 The chain rejects an event whose new size or grain count is nonfinite or nonpositive, or whose
 represented mass changes by more than $2\times10^{-12}$ relative; this stops the run with chain
@@ -1833,15 +1833,15 @@ sums them over its neighbors.
 - **Fragmentation.** With $L=\tfrac12\ln(s_i/s_{\rm floor})$, the first and second moments and the
   largest jump are
 
-$$
-\operatorname E\left|\ln\frac{s_i'}{s_i}\right|
+```math
+\mathrm{E}\left|\ln\frac{s_i'}{s_i}\right|
 =2\left(1-\frac{Le^{-L}}{1-e^{-L}}\right),
 \qquad
-\operatorname E\left(\ln\frac{s_i'}{s_i}\right)^2
+\mathrm{E}\left(\ln\frac{s_i'}{s_i}\right)^2
 =8-\frac{(4L^2+8L)e^{-L}}{1-e^{-L}},
 \qquad
 \max\left|\ln\frac{s_i'}{s_i}\right|=2L.
-$$
+```
 
 For $L\lt10^{-3}$, near the fragment floor, the code uses the series
 $L-L^2/6+L^4/360$ and $L^2\left(4/3-L/3+L^2/90+L^3/180\right)$ instead, which avoid cancellation.
@@ -1878,17 +1878,17 @@ whole operator. Both effects shrink as bath durations and dynamics steps are ref
 Owner $i$ evolves by the Gillespie direct method against the reservoir. Its total rate and waiting
 time are
 
-$$
+```math
 \lambda_i(s_i)=\sum_{j\in\mathcal N_i}\widetilde\lambda_{ij}(s_i;s_j^{(b)},N_j^{(b)}),
 \qquad
 \delta t_i=-\frac{\ln U_1}{\lambda_i},
-$$
+```
 
 and, when the sampled event time lies inside the bath, the partner is drawn from
 
-$$
+```math
 P(j\mid i,s_i)=\frac{\widetilde\lambda_{ij}(s_i;s_j^{(b)},N_j^{(b)})}{\lambda_i(s_i)}.
-$$
+```
 
 One step of the chain for an owner with local time $t_i$ and bath duration $\tau_b$ is:
 
@@ -1986,26 +1986,26 @@ For each merged size bin $q$ with represented mass $M_q=\sum_{i\in q}w_i$, where
 the owner's represented mass at bath start, define the mass-weighted first and second absolute
 log-diameter jump rates
 
-$$
+```math
 A_q=\frac{1}{M_q}\sum_{i\in q}w_i\sum_{j\in\mathcal N_i}\widetilde\lambda_{ij}
-\operatorname E\left|\ln\frac{s_i'}{s_i}\right|,
+\mathrm{E}\left|\ln\frac{s_i'}{s_i}\right|,
 \qquad
 B_q=\frac{1}{M_q}\sum_{i\in q}w_i\sum_{j\in\mathcal N_i}\widetilde\lambda_{ij}
-\operatorname E\left(\ln\frac{s_i'}{s_i}\right)^2,
-$$
+\mathrm{E}\left(\ln\frac{s_i'}{s_i}\right)^2,
+```
 
 evaluated at bath start with the moments of [Section 8.5.3](#853-size-jump-moments). With frozen
 rates, a bath of length $h$ gives a mean accumulated absolute change $hA_q$ and a compound-Poisson
 fluctuation scale $\sqrt{hB_q}$. The requested duration of the group bounds both by the tolerance:
 
-$$
+```math
 h_{\rm requested}=\min\left(
-h_{\rm op},\ \mathtt{COL\_BATH\_MAX},\
+h_{\rm op},\ \mathtt{COL\_BATH\_MAX},\;
 \min_q\frac{\varepsilon}{A_q},\ \min_q\frac{\varepsilon^2}{B_q}
 \right),
 \qquad
 \varepsilon=\mathtt{COL\_BATH\_EPS}\,\ell_c,
-$$
+```
 
 where $h_{\rm op}$ is the operator horizon ([Section 8.3](#83-one-collision-operator-at-a-glance)),
 terms with a vanishing denominator or an empty bin are omitted, and $\ell_c\in[0.25,1]$ is the
@@ -2039,9 +2039,9 @@ When a due group adapts its level at a refresh:
 Because every step is a power-of-two fraction on one lattice, the bath durations of every group
 exactly tile each collision operator:
 
-$$
+```math
 \sum_m\Delta t_{{\rm col},m}=h_{\rm op}.
-$$
+```
 
 In a transported run each half-step operator is tiled, so all clocks meet at the end of every
 dynamics step ([Section 10.1](#101-operator-composition)); in a collision-only
@@ -2060,29 +2060,29 @@ envelope.
 **Predictions.** For the actual bath duration $\tau_b$, the predicted mass-weighted touched fraction
 and event activity are
 
-$$
+```math
 F_q=\frac{1}{M_q}\sum_{i\in q}w_i
 \left[1-\exp(-\lambda_i^{(b)}\tau_b)\right],
 \qquad
 E_q=\frac{1}{M_q}\sum_{i\in q}w_iH_i,
-$$
+```
 
 where $\lambda_i^{(b)}$ is the bath-start rate. The first-event probability depends only on the
 bath-start state, because the owner cannot change before that event. The expected activity must
 follow the whole owner path, so the chain accumulates, along the piecewise-constant path, the exact
 predictable **compensators**, the time integrals of the owner's current rates:
 
-$$
+```math
 H_i=\int_0^{\tau_b}\lambda_i[s_i(t)]\,dt,
-$$
+```
 
-$$
+```math
 J_{1,i}=\int_0^{\tau_b}\sum_j\widetilde\lambda_{ij}[s_i(t)]
-\operatorname E\left|\ln\frac{s_i'}{s_i}\right|dt,
+\mathrm{E}\left|\ln\frac{s_i'}{s_i}\right|dt,
 \qquad
 J_{2,i}=\int_0^{\tau_b}\sum_j\widetilde\lambda_{ij}[s_i(t)]
-\operatorname E\left(\ln\frac{s_i'}{s_i}\right)^2dt.
-$$
+\mathrm{E}\left(\ln\frac{s_i'}{s_i}\right)^2dt.
+```
 
 Event activity is compared with $H_i$, and absolute logarithmic size change with $J_{1,i}$ and its
 second-moment compensator $J_{2,i}$. Because the compensators follow the realized path, these
@@ -2092,22 +2092,22 @@ predicted logarithmic activity is $G_q^{\rm pred}=M_q^{-1}\sum_{i\in q}w_iJ_{1,i
 **Realized summaries.** With $n_i$ the realized number of events and $s_i^{(0)},s_i^{(1)}$ the bath
 endpoints,
 
-$$
+```math
 \widehat F_q=\frac{1}{M_q}\sum_{i\in q}w_i\mathbf 1_{n_i\gt0},
 \qquad
 \widehat E_q=\frac{1}{M_q}\sum_{i\in q}w_in_i,
 \qquad
 \widehat G_q=\frac{1}{M_q}\sum_{i\in q}w_i
 \left|\ln\frac{s_i^{(1)}}{s_i^{(0)}}\right|.
-$$
+```
 
 **Envelopes.** The controller builds Bernstein envelopes for $F_q$, $E_q$, and $G_q^{\rm pred}$. For
-$Q$ occupied merged bins of the group and $\mathcal L=\ln(2Q/\mathtt{COL\_BATH\_ALPHA})$, each
+$Q$ occupied merged bins of the group and $`\mathcal L=\ln(2Q/\mathtt{COL\_BATH\_ALPHA})`$, each
 envelope has the form
 
-$$
+```math
 U_{X,q}=X_q^{\rm pred}+\sqrt{2V_{X,q}\mathcal L}+\frac{b_{X,q}\mathcal L}{3}.
-$$
+```
 
 The mass-normalized variances $V_{X,q}$ are assembled from $w_i^2p_i(1-p_i)$ with
 $p_i=1-\exp(-\lambda_i^{(b)}\tau_b)$ for the touched fraction, $w_i^2H_i$ for event activity, and
@@ -2118,10 +2118,10 @@ touched-fraction envelope is additionally capped at one.
 **Bin migration.** To measure how much represented mass moved between the size bins held fixed
 during the bath, the code also records
 
-$$
+```math
 D_{\rm bath}=\frac{1}{2M_{\rm tot}}
 \sum_q\left|M_q^{(1)}-M_q^{(0)}\right|,
-$$
+```
 
 where the sum runs over the group's merged bins and $M_{\rm tot}$ is the group's represented mass.
 Owners keep their bath-start bin for the $F$, $E$, and $G$ summaries, whereas the end state is
@@ -2182,7 +2182,7 @@ Collision neighborhoods use one exact search, selected by the Makefile variable 
   reference ([Section 9.3](#93-kd-tree));
 - the Morton hierarchy (`morton`), an adaptive pointer-free hierarchy over the spatial ordering of
   [Morton (1966)](https://dominoweb.draco.res.ibm.com/0dabf9473b9c86d48525779800566a39.html), with
-  cooperative top-$K$ selection and periodic ghosts only at the wedge seams
+  cooperative top-$`K`$ selection and periodic ghosts only at the wedge seams
   ([Section 9.4](#94-morton-hierarchy)).
 
 The Makefile translates the choice into the macro `COLLISION_KDTREE` or `COLLISION_MORTON`, and both
@@ -2203,27 +2203,27 @@ performance, not the collision model.
 
 For particle $i$ at cylindrical radius $R_i$, the search cap is
 
-$$
+```math
 q_i=H_{\mathrm{SEARCH}}h_g(R_i)R_i
 =H_{\mathrm{SEARCH}}H_g(R_i),
-$$
+```
 
 and the searched point and distance are
 
-$$
+```math
 \boldsymbol X_i=(R_i\cos\phi_i,R_i\sin\phi_i,Z_i),
 \qquad
 d_{ij}^2=|\boldsymbol X_i-\boldsymbol X_j|^2,
-$$
+```
 
 in single precision; the radial-only model searches $(R_i,0,0)$. Candidates farther than $q_i$ are
 never retained. Among the rest, candidate $u$ precedes candidate $v$ exactly when
 
-$$
+```math
 d_u^2\lt d_v^2
 \quad\text{or}\quad
 \left(d_u^2=d_v^2\ \text{and}\ c_u\lt c_v\right),
-$$
+```
 
 where $c$ is the packed code $c=3i+a$ of the physical index and the periodic image
 ([Section 9.5](#95-periodic-images)). Equal-distance ties therefore order by physical index, then
@@ -2265,10 +2265,10 @@ packed so that integer comparison gives the $(d^2,c)$ order; the reordered tree 
 The heap starts full of empty entries at the cap distance $q_i^2$. It expands its culling distance
 by one floating-point unit,
 
-$$
+```math
 d_{\rm cull}^2
 \leftarrow\mathtt{nextafterf}(d_K^2,+\infty),
-$$
+```
 
 so a candidate exactly at the current cutoff is still offered and resolved by the tie rule. Using
 the stable code rather than the mutable tree slot keeps tie resolution independent of the tree
@@ -2279,9 +2279,9 @@ In a partial wedge, a query must scan the heap for an earlier image of the same 
 two images can both fall inside its ball. The scan runs when the smallest separation between a
 point and its periodic image,
 
-$$
+```math
 d_{\rm img}=2Y_{\min}\min(\sin Z_{\min},\sin Z_{\max})\left|\sin\frac{\Delta\phi_w}{2}\right|,
-$$
+```
 
 is no larger than twice the owner's search cap $q_i$. Otherwise the heap uses ordinary
 $O(\log N_K)$ insertion without the $O(N_K)$ duplicate scan.
@@ -2298,22 +2298,22 @@ the GPU. The implementation is in `inc/swarm/morton/`.
 **Keys.** For root origin $\boldsymbol o$, root width $W$, and maximum level
 $L=$ `MORTON_MAX_LEVEL`, each Cartesian coordinate is quantized as
 
-$$
+```math
 I_\alpha=\mathrm{clip}\left(
 \left\lfloor\frac{2^L(x_\alpha-o_\alpha)}{W}\right\rfloor,
 0,2^L-1
 \right).
-$$
+```
 
 If $b_n(I)$ is bit $n$ of integer $I$, the 64-bit key is
 
-$$
+```math
 M=\sum_{n=0}^{L-1}
 \left[b_n(I_x)2^{3n}+b_n(I_y)2^{3n+1}+b_n(I_z)2^{3n+2}\right].
-$$
+```
 
 A two-dimensional search (every geometry with `N_Z == 1`) uses $I_z=0$. The root is a cube of width
-$2.0002\,Y_{\max}$ centered on the star.
+$`2.0002\,Y_{\max}`$ centered on the star.
 
 **Construction.** The builder computes the keys, stable-sorts the records by key (equal keys keep
 their input order), and refines every cell holding more than `MORTON_LEAF_TARGET` records, level by
@@ -2328,24 +2328,24 @@ are copied to the host only when a benchmark asks for them.
 $\boldsymbol b_{\min}$ and $\boldsymbol b_{\max}$, traversal prunes with the conservative lower
 bound
 
-$$
+```math
 d_{\min}^2=\sum_\alpha
 \left[\max(b_{\min,\alpha}-x_\alpha-p,\ 0,\ x_\alpha-b_{\max,\alpha}-p)\right]^2,
-$$
+```
 
 with the single-precision padding
 
-$$
+```math
 p=2(L+2)\epsilon_{\rm float}
 \max\left(1,|\boldsymbol b_{\min}|_\infty,|\boldsymbol b_{\max}|_\infty\right),
-$$
+```
 
 which keeps accumulated roundoff of the recursive subdivision from making the bound too large. A
-node is skipped when $d_{\min}^2$ exceeds the smaller of $q_i^2$ and the current $N_K$-th
+node is skipped when $d_{\min}^2$ exceeds the smaller of $q_i^2$ and the current $`N_K`$-th
 distance. Surviving children are visited nearest first to tighten the cutoff early. Leaves are
 streamed through bounded shared-memory candidate tiles, and the block keeps the nearest $N_K$
 candidates in shared memory by a repeated block-parallel bitonic merge in $(d^2,c)$ order, the only
-Morton top-$K$ implementation. The merge reuses the sorted retained prefix, sorts only the new
+Morton top-$`K`$ implementation. The merge reuses the sorted retained prefix, sorts only the new
 candidates, keeps the lower half, and skips a batch that cannot improve the cutoff. Distances stay
 available because pruning, duplicate-image removal, and the KNN measure need them. When periodic
 images can overlap, the query temporarily keeps $3N_K$ candidates, removes duplicate physical
@@ -2368,23 +2368,23 @@ and the image a neighbor was found through is kept as part of the neighbor.
 
 **When a domain is a wedge.** Both searches use the float-scale tolerance
 
-$$
+```math
 \epsilon_{\rm period}=10^{-6}.
-$$
+```
 
 An active azimuthal domain (`N_X > 1`) is a partial periodic wedge only when
 
-$$
+```math
 \Delta\phi_w\lt2\pi-\epsilon_{\rm period},
-$$
+```
 
 evaluated in single precision; otherwise it is a complete period and no images are constructed.
 If the omitted angle is $\delta\phi$, the largest seam displacement this introduces is
 
-$$
+```math
 2R\sin\left(\frac{\delta\phi}{2}\right)
 \le R\epsilon_{\rm period}.
-$$
+```
 
 **Image maps.** For wedge width $\Delta\phi_w=X_{\max}-X_{\min}$, the two image maps are
 
@@ -2406,15 +2406,15 @@ the search records.
 **Image codes.** An **image code** packs a neighbor's physical index and its image into one 32-bit
 integer,
 
-$$
+```math
 c=3i+a,
 \qquad
 a=0,1,2,
-$$
+```
 
 where $a$ denotes the original, the $-\Delta\phi_w$, or the $+\Delta\phi_w$ image. Decoding uses
 $i=\lfloor c/3\rfloor$ and $a=c\bmod3$, and the invalid sentinel is $-1$. KD-tree heap entries and
-Morton record identifiers carry this code through top-$K$ selection, and the neighbor cache stores
+Morton record identifiers carry this code through top-$`K`$ selection, and the neighbor cache stores
 it in its four-byte entry, so keeping the image costs no extra memory. The packing is why collision
 builds require $N_P\le\lfloor(2^{31}-1)/3\rfloor$. The relative-speed closure uses only the owner's
 environment and the two grain sizes ([Section 8.4.3](#843-relative-velocities)), so it never
@@ -2424,9 +2424,9 @@ reconstructs a partner's image velocity.
 search instead adds a **ghost record**, a rotated copy of a particle across the opposite seam,
 only for particles whose Cartesian distance to a wedge face is at most
 
-$$
+```math
 q_{\max}=\max_i q_i.
-$$
+```
 
 Particles near the lower face are copied by one positive wedge width (image $a=2$) and particles
 near the upper face by one negative wedge width ($a=1$). Physical and ghost records are indexed
@@ -2470,7 +2470,7 @@ neighborhood in a wide wedge. Timing and memory must be measured for the intende
 backend, and GPU; the correctness checks are in
 [`testsets.md`](testsets.md#7-swarm-neighbor-search). For broader context on
 cooperative GPU similarity search, see
-[Johnson, Douze & Jégou (2017)](https://arxiv.org/abs/1702.08734); the exact top-$K$ and periodic
+[Johnson, Douze & Jégou (2017)](https://arxiv.org/abs/1702.08734); the exact top-$`K`$ and periodic
 deduplication procedures used here are specific to this code.
 
 ## 10. Time integration and boundaries
@@ -2480,9 +2480,9 @@ deduplication procedures used here are specific to this code.
 One dynamics step applies the enabled operators in the symmetric
 [Strang composition](README.md#glossary) of [Strang (1968)](https://doi.org/10.1137/0705041),
 
-$$
+```math
 C^{1/2}D^{1/2}T D^{1/2}C^{1/2},
-$$
+```
 
 where $C$ is collisions, $D$ diffusion, and $T$ transport. The symmetric order removes the
 first-order splitting error between the operators.
@@ -2527,16 +2527,16 @@ midpoint.
 
 The dynamics steps tile each output interval exactly,
 
-$$
+```math
 \sum_n\Delta t_{{\rm dyn},n}=\Delta t_{\rm out},
-$$
+```
 
 and within each collision half-step the power-of-two bath durations of every controller group tile
 that half-step exactly ([Section 8.7.3](#873-power-of-two-scheduler)),
 
-$$
+```math
 \sum_m\Delta t_{{\rm col},m}=\frac12\Delta t_{{\rm dyn},n}.
-$$
+```
 
 All clocks therefore meet at the end of every dynamics step. In a collision-only build the bath
 durations tile the output interval directly. Every operator that moves particles ends the current
@@ -2554,43 +2554,43 @@ travel in one step to the fraction `CFL_DYN` of a local cell length or orbit. Th
 
 For particle $p$ in radial cell $j(p)$, the local radial width is
 
-$$
+```math
 \Delta r_p=y_{j(p)-1/2}(a_y-1),
-$$
+```
 
 and the azimuthal and polar lengths are $R\Delta x$ and $y\Delta z$. The motion candidates are
 
-$$
+```math
 \lambda_{\rm orb}=\frac{\Omega_K}{\mathrm{CFL\_DYN}},
 \qquad
 \lambda_x=\frac{|\ell_\phi|}{R^2\Delta x\,\mathrm{CFL\_DYN}},
-$$
+```
 
-$$
+```math
 \lambda_y=\frac{|v_r|}{\Delta r_p\,\mathrm{CFL\_DYN}},
 \qquad
 \lambda_z=\frac{|\ell_\theta|}{y^2\Delta z\,\mathrm{CFL\_DYN}}.
-$$
+```
 
-When azimuth is active the code also includes $\Omega_K/(\Delta x\,\mathrm{CFL\_DYN})$. Imported
+When azimuth is active the code also includes $`\Omega_K/(\Delta x\,\mathrm{CFL\_DYN})`$. Imported
 and viscous gas velocities enter the same crossing bounds, because stiff drag can hand them to the
 dust within one step; imported velocities use the larger magnitude of the current working field
 and the next snapshot.
 
-For an acceleration $a$ along a length $L$, requiring $\tfrac12|a|\Delta t^2\le\mathrm{CFL\_DYN}L$
+For an acceleration $a$ along a length $L$, requiring $`\tfrac12|a|\Delta t^2\le\mathrm{CFL\_DYN}L`$
 gives
 
-$$
+```math
 \lambda_a=\sqrt{\frac{|a|}{2\,\mathrm{CFL\_DYN}L}}.
-$$
+```
 
 The radial candidate uses $L=\Delta r_p$ and the gravity-plus-centrifugal acceleration; the polar
 candidate uses $L=y\Delta z$ and the polar geometric acceleration. Radiation enters through the
 unattenuated upper bound
 
-$$
+```math
 \beta_{\max}=\beta_0\frac{S_0}{s_{\rm bound}},
-$$
+```
 
 where
 
@@ -2609,26 +2609,26 @@ future fragment, is known.
 For diffusion, requiring the RMS displacement $\sqrt{2D\Delta t}$ and the deterministic drift
 $|b|\Delta t$ to stay within a fraction of $L$ gives
 
-$$
+```math
 \lambda_{D}=\frac{2D}{\mathrm{CFL\_DYN}^2L^2},
 \qquad
 \lambda_b=\frac{|b|}{\mathrm{CFL\_DYN}L}.
-$$
+```
 
 The diffusion acts in cylindrical $(R,Z)$ while the cell lengths are spherical, so the code first
 projects the variance and the drift:
 
-$$
+```math
 D_r=D_R\sin^2\theta+D_Z\cos^2\theta,
 \qquad
 D_\theta=D_R\cos^2\theta+D_Z\sin^2\theta,
-$$
+```
 
-$$
+```math
 b_r=b_R\sin\theta+b_Z\cos\theta,
 \qquad
 b_\theta=b_R\cos\theta-b_Z\sin\theta.
-$$
+```
 
 The radial rate uses $(D_r,b_r,L=\Delta r)$ and the polar rate
 $(D_\theta,b_\theta,L=r\Delta\theta)$; azimuth keeps $D_\phi$ and the arc length $R\Delta\phi$. With
@@ -2640,14 +2640,14 @@ the radial crossing, acceleration, and diffusion rates; the azimuthal and polar 
 
 Taking the maximum over all candidates and particles,
 
-$$
+```math
 \Delta t_{\rm dyn}
 =\min\left(
 \frac{1}{\max_i\lambda_i},
 \mathrm{DT\_MAX},
 t_{\rm next\ output}-t
 \right).
-$$
+```
 
 **Limits.** The diffusion bound limits the RMS displacement, not every Gaussian draw. The imported
 gas is linear in time, so bounding its velocities at the two ends covers the rest of the interval;
@@ -2667,56 +2667,56 @@ Each operator has its own boundary rule:
 
 Periodic wrapping maps
 
-$$
+```math
 x\leftarrow X_{\min}+\mathrm{mod}(x-X_{\min},X_{\max}-X_{\min}).
-$$
+```
 
 **Diffusion.** A radial overshoot is folded back repeatedly,
 
-$$
+```math
 y\leftarrow2Y_{\min}-y
 \quad\text{or}\quad
 y\leftarrow2Y_{\max}-y,
-$$
+```
 
 and the polar angle likewise about $Z_{\min}$ or $Z_{\max}$, so an increment wider than the domain
 is handled. In a vertically integrated model $y=R$, so this is also the cylindrical radial boundary.
 If roundoff leaves a folded coordinate on its upper face, the code moves it inward,
 
-$$
+```math
 y\leftarrow Y_{\max}-10^{-12}(Y_{\max}-Y_{\min}),
 \qquad
 z\leftarrow Z_{\max}-10^{-12}(Z_{\max}-Z_{\min}),
-$$
+```
 
 with the polar clamp only when that dimension is active, so half-open cell indexing stays inside
 the domain. In 3D, a negative cylindrical radius after the displacement is continued through the
 axis before the spherical coordinates are rebuilt,
 
-$$
+```math
 (R,x)\leftarrow(-R,x+\pi);
-$$
+```
 
 this is a coordinate continuation, not a boundary condition.
 
 **Transport.** Boundaries are checked after the first half drift and after the full step. A
 midplane crossing in a half disk reflects
 
-$$
+```math
 z\leftarrow\pi-z,
 \qquad
 \ell_\theta\leftarrow-\ell_\theta.
-$$
+```
 
 An absorbing exit moves the particle to the inactive sentinel state
 
-$$
+```math
 y=0,
 \qquad
 z=\frac{\pi}{2},
 \qquad
 (\ell_\phi,v_r,\ell_\theta)=(0,0,0).
-$$
+```
 
 Every later transport, diffusion, deposition, optical-depth, timestep, and collision calculation
 skips it; in a multisize build it keeps its last size and grain number. The swarm accepts
@@ -2737,10 +2737,10 @@ its own boundary approximation ([Section 8.4.2](#842-knn-measure)).
 
 For smooth coefficients and no boundary event, the deterministic trajectory error behaves as
 
-$$
+```math
 \|\boldsymbol q_{\Delta t}-\boldsymbol q\|
 \lesssim C_t\Delta t^2,
-$$
+```
 
 because the drag response is centered at the midpoint. The other operators converge in different
 senses:
@@ -2752,25 +2752,25 @@ senses:
 | Euler–Maruyama diffusion | strong order $1/2$, weak order $1$ | finite step, boundary folding |
 | symmetric composition | second order for smooth deterministic operators | does not raise the stochastic or collision order |
 | initialization and deposition | deterministic quadrature plus Monte Carlo sampling | quadrature error, sampling noise |
-| frozen-bath event chain | exact local Gillespie path conditional on the frozen reservoir | finite bath duration, sticking packets, and the fixed top-$K$ reservoir |
-| exact KNN selection | no neighbor-approximation error under the search contract | finite-$N_P$ sampling and the approximate boundary measure |
+| frozen-bath event chain | exact local Gillespie path conditional on the frozen reservoir | finite bath duration, sticking packets, and the fixed top-$`K`$ reservoir |
+| exact KNN selection | no neighbor-approximation error under the search contract | finite-$`N_P`$ sampling and the approximate boundary measure |
 
 The finite bath duration of the collision chain needs its own convergence study
 ([Section 11.2](#112-finite-bath-convergence)).
 
 For an ensemble observable $A$, the sampling noise scales as
 
-$$
+```math
 \mathrm{SE}(\bar A)\simeq
 \sqrt{\frac{\mathrm{Var}(A)}{N_{\rm eff}}},
-$$
+```
 
 where $N_{\rm eff}$ can be smaller than $N_P$ for unequal weights, clustering, or correlated
 collision histories. A weight-only estimate is
 
-$$
+```math
 N_{\rm eff}=\frac{\left(\sum_pW_p\right)^2}{\sum_pW_p^2}.
-$$
+```
 
 After stochastic histories diverge, comparisons between backends should use conserved quantities,
 rate probes, distributional distances, and ensemble convergence, not byte equality of trajectories.
@@ -2830,7 +2830,7 @@ model in [Current limitations](../README.md#current-limitations).
 - [Section 10.2](#102-timestep-control): the timestep bounds RMS, not every diffusion draw.
 - [Section 10.3](#103-boundary-conditions): boundaries act at operator endpoints.
 - [Section 12.6](#126-memory-footprint): collision memory grows by $4N_K$ bytes per representative
-  for the neighbor cache alone, and collision builds require $N_P\le715\,827\,882$.
+  for the neighbor cache alone, and collision builds require $`N_P\le715\,827\,882`$.
 - [Section 12.8](#128-output-and-restart-semantics): a restart is not bitwise identical.
 
 Three refinements are not implemented:
@@ -2905,17 +2905,17 @@ The chain kernels, declared in `inc/swarm/swarm_kern.cuh` like all others, are:
 
 Most swarm kernels assign one GPU thread to one particle,
 
-$$
+```math
 p=\mathtt{threadIdx.x}+\mathtt{blockDim.x}\,\mathtt{blockIdx.x},
-$$
+```
 
 with `TPB` threads per block: transport, diffusion, initialization, timestep rates, and deposition.
 The global dynamics timestep is a Thrust maximum reduction of the per-particle rates. Deposition is
 a scatter with atomic additions,
 
-$$
+```math
 E_c\leftarrow E_c+w_{pc}\widehat Q_p,
-$$
+```
 
 whereas gas and optical-depth interpolation are gathers. The radial prefix sum of the optical depth
 assigns one thread to each independent $(x,z)$ ray, and the cell-wise kernels (clearing, dividing
@@ -2995,7 +2995,7 @@ mapping, and the default `COL_BATH_TPB` ([Section 12.3](#123-collision-and-searc
 A **geometry epoch** is the longest interval during which particle positions, active identities,
 and the mapping between particle identity and array index stay unchanged. Within an epoch the
 search coordinates, the hierarchy, periodic images and ghosts, the position-dependent caps, the
-top-$K$ identities, the KNN measures, the controller groups, the owner lists, and the group
+top-$`K`$ identities, the KNN measures, the controller groups, the owner lists, and the group
 dependency graph are all reused. Sizes, grain counts, pair rates, gas-dependent microphysics,
 random clocks, size bins, and controller state are not geometry and are refreshed at their normal
 frequency.
@@ -3011,7 +3011,7 @@ and inside `col_site_init` when it rebuilds.
 This rule keeps both collision half-operators of the symmetric step and reuses only their unchanged
 geometry. For $M$ transported dynamics steps,
 
-$$
+```math
 N_{\rm call}=2M,
 \qquad
 N_{\rm build}=M+1,
@@ -3019,7 +3019,7 @@ N_{\rm build}=M+1,
 N_{\rm reuse}=M-1,
 \qquad
 N_{\rm invalidate}=M.
-$$
+```
 
 Hierarchy construction thus approaches a factor-two reduction for long transported runs, which is
 not a factor-two reduction in total collision time. A collision-only run builds the geometry once
@@ -3062,9 +3062,9 @@ For example, a transported multisize physical-kernel model with `DIFFUSION`, ana
 default `N_K = 200`, and the KD tree over a full period needs, counting the particle state (64),
 dynamics rate (8), and CUDA random-number state (48),
 
-$$
+```math
 64+8+48+(146+4\cdot200)+64+24\approx1150\ \text{bytes}
-$$
+```
 
 per representative on CUDA: about 1.15 GB for $N_P=10^6$ and 11.5 GB for the default $N_P=10^7$,
 before transient buffers. The neighbor cache alone, $4N_PN_K+8N_P$ bytes, accounts for 0.808 GB
@@ -3158,26 +3158,26 @@ restart command are in [Output times and checkpoints](../README.md#output-times-
 
 **Particle checkpoints.** A multisize checkpoint holds
 
-$$
+```math
 (x,y,z,v_\phi,v_r,v_\theta,s,N_p)
-$$
+```
 
 per particle; a monodisperse checkpoint omits $(s,N_p)$. Every geometry uses this three-coordinate
 layout. The runtime stores $(\ell_\phi,v_r,\ell_\theta)$ and converts with
 
-$$
+```math
 v_\phi=\frac{\ell_\phi}{R},
 \qquad
 v_\theta=\frac{\ell_\theta}{y}
-$$
+```
 
 when saving, and
 
-$$
+```math
 \ell_\phi=Rv_\phi,
 \qquad
 \ell_\theta=yv_\theta
-$$
+```
 
 when loading. Saving and loading both reset the inactive coordinates, so a radial restart has exact
 $x=(X_{\min}+X_{\max})/2$, $z=\pi/2$, and $\ell_\theta=0$. Absorbed particles are written in the
@@ -3196,9 +3196,9 @@ The resumed clock is rebuilt from the output schedule.
 
 **Mesh fields.** The density diagnostic uses the stencil of the optical depth,
 
-$$
+```math
 \rho_{d,c}=\frac{1}{V_c}\sum_p w_{pc}W_p,
-$$
+```
 
 read as $\Sigma_{d,c}$ when `N_Z == 1`. Because $\sum_cw_{pc}=1$ for an active particle, the grid
 integral recovers the active represented mass up to atomic-addition roundoff. The written optical

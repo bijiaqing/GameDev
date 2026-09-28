@@ -46,7 +46,7 @@ without `LOGTIMING`.
 ### Initial mass distribution
 
 The physical initial number distribution is $n(m,0)=e^{-m}$. Equal represented masses therefore
-sample $m$ from a gamma distribution with shape 2 and scale 1, whose density $m\,e^{-m}$ is the
+sample $m$ from a gamma distribution with shape 2 and scale 1, whose density $`m\,e^{-m}`$ is the
 initial mass probability; sizes are $s=m^{1/3}$, with `RHO_0` $=6/\pi$ so that grain mass is $s^3$.
 The mass initializer uses its own `std::mt19937` seeded with `SEED`; the position and collision
 streams use `SEED + 1`, as in the other kernels. The normalized initial moments are $M_0=1$,
@@ -112,11 +112,11 @@ other seeds' raw output only after successful scoring and JSON retention
 
 For $g=e^{-t}$, the continuous mass-probability density is
 
-$$
+```math
 p(m,t)=\frac{g\,e^{-(2-g)m}\,I_1\left(2m\sqrt{1-g}\right)}{\sqrt{1-g}},
-$$
+```
 
-with $p(m,0)=m\,e^{-m}$. The normalized physical moments are $M_0=e^{-t}$, $M_1=1$, and
+with $`p(m,0)=m\,e^{-m}`$. The normalized physical moments are $M_0=e^{-t}$, $M_1=1$, and
 $M_2=2e^{2t}$.
 
 The scorer evaluates this density with a polynomial approximation of the exponentially scaled

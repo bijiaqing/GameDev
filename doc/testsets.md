@@ -136,9 +136,9 @@ counts equally in the swarm suite, and each cell counts by its volume in the flu
 
 For two resolutions $N_a\lt N_b$, the observed order is
 
-$$
+```math
 p=\frac{\log(E_{N_a}/E_{N_b})}{\log(N_b/N_a)}.
-$$
+```
 
 The swarm suite computes it from the $L_1$ errors of successive factor-of-two refinements. With the
 factor-of-two sequence, acceptance uses the order $p$ between the two finest grids.
@@ -146,17 +146,17 @@ factor-of-two sequence, acceptance uses the order $p$ between the two finest gri
 **Swarm suite.** For a deterministic particle quantity $q_p$ with error
 $e_p=q_p^{\rm num}-q_p^{\rm ref}$, the swarm validators report
 
-$$
+```math
 L_1=\frac{1}{N_P}\sum_p|e_p|,\qquad
 L_2=\left(\frac{1}{N_P}\sum_pe_p^2\right)^{1/2},\qquad
 L_\infty=\max_p|e_p|.
-$$
+```
 
 Angle differences are first wrapped into $[-\pi,\pi)$:
 
-$$
+```math
 \Delta\phi=\bigl[(\phi_{\rm num}-\phi_{\rm ref}+\pi)\bmod 2\pi\bigr]-\pi.
-$$
+```
 
 Stochastic results are judged statistically: diffusion by sampling limits on the mean and
 variance, and initialization by probability-integral transforms and Kolmogorov–Smirnov (KS)
@@ -165,9 +165,9 @@ the same law.
 
 Collision tests measure mass through the proxy
 
-$$
+```math
 M_{\rm rep}\propto\sum_p N_p s_p^3,
-$$
+```
 
 where $N_p$ is the number of physical grains a representative particle stands for and $s_p$ its
 grain size. The constant material-density factor cancels in relative errors.
@@ -175,11 +175,11 @@ grain size. The constant material-density factor cancels in relative errors.
 **Fluid suite.** For $e_i=q_i^{\rm num}-q_i^{\rm ref}$, the fluid validators report the
 geometry-weighted norms
 
-$$
+```math
 L_1=\frac{\sum_i V_i|e_i|}{\sum_iV_i},\qquad
 L_2=\left(\frac{\sum_iV_i e_i^2}{\sum_iV_i}\right)^{1/2},\qquad
 L_\infty=\max_i|e_i|.
-$$
+```
 
 On the uniform line of the smooth positivity test the weights are equal. Velocity errors exclude
 analytically empty cells: a cell enters only when both the analytical and the numerical density
@@ -254,9 +254,9 @@ denotes the two-dimensional midplane model.
 The fluid solver stores cell averages. The fluid validators therefore compare a numerical cell
 average $q_i^{\rm num}$ with an analytical cell average
 
-$$
+```math
 q_i^{\rm ref}=\frac{1}{V_i}\int_{V_i}q(\boldsymbol{x},t)\,dV,
-$$
+```
 
 not with a point sample at the cell center. The volume $V_i$ is the exact measure of the tested
 coordinate system, and the integrals use 16-point (shared validator) or 32-point (model-local
@@ -324,22 +324,22 @@ compensating errors that a comparison of radius alone would miss.
 **Reference.** The validator advances the mean anomaly, solves Kepler's equation, and reconstructs
 the position:
 
-$$
+```math
 M(t)=M_0+nt,\qquad n=\sqrt{\frac{GM}{a^3}},\qquad M=E-e\sin E,
-$$
+```
 
-$$
+```math
 R=a(1-e\cos E),\qquad
-\phi=\operatorname{atan2}\!\left(\sqrt{1-e^2}\sin E,\cos E-e\right).
-$$
+\phi=\mathrm{atan2}\!\left(\sqrt{1-e^2}\sin E,\cos E-e\right).
+```
 
 It also records the errors of the specific energy and the specific angular momentum,
 
-$$
+```math
 \mathcal{E}=\frac{v_R^2+v_\phi^2}{2}-\frac{GM}{R}=-\frac{GM}{2a},
 \qquad
 \ell=\sqrt{GMa(1-e^2)}.
-$$
+```
 
 **Passes if** the zero-drag specialization is active, the state is finite, the maximum state error
 is below $2\times10^{-2}$, and the final observed order of the state $L_1$ error is at least 1.8.
@@ -349,9 +349,9 @@ is below $2\times10^{-2}$, and the final observed order of the state $L_1$ error
 **Test.** `test_orbit_beta_2d` repeats the Kepler comparison with radiation pressure, which reduces
 the effective gravity to
 
-$$
+```math
 GM_{\rm eff}=GM(1-\beta),
-$$
+```
 
 for two grain sizes with different $\beta$, at zero optical depth and full radiation strength. It
 shows that radiation changes the orbital frequency and the conserved quantities consistently.
@@ -380,11 +380,11 @@ $t=1$.
 
 **Reference.** With terminal speed $v_\infty=v_g+Ft_s$, the exact velocity and radial path are
 
-$$
+```math
 v(t)=v_\infty+(v_0-v_\infty)e^{-t/t_s},
 \qquad
 R(t)=R_0+v_\infty t+(v_0-v_\infty)t_s\left(1-e^{-t/t_s}\right).
-$$
+```
 
 The azimuthal and polar variables, inactive in this radial-only model, must keep their fixed
 values.
@@ -402,11 +402,11 @@ over one step $\Delta t=0.1$
 **Reference.** To first order in $v/c$, Poynting–Robertson drag adds to the radial radiation
 pressure the acceleration
 
-$$
+```math
 \boldsymbol{a}_{\rm PR}
 =-\beta\frac{GM}{cR^2}
 \left(2v_R\,\hat{\boldsymbol{R}}+\boldsymbol{v}_{\perp}\right),
-$$
+```
 
 where $\boldsymbol{v}_\perp$ is the velocity perpendicular to $\hat{\boldsymbol{R}}$. It damps the
 tangential velocity at the rate $\gamma=\beta GM/(cR^2)$ and the radial velocity at $2\gamma$. The
@@ -420,18 +420,18 @@ momentum, the radial velocity, and the time-centered position update.
 These tests check that one production diffusion step draws displacements from the right
 distribution. The update represents the Itô process
 
-$$
+```math
 dX=A(X)\,dt+\sqrt{2D(X)}\,dW,
-$$
+```
 
 where the drift $A$ contains the diffusivity-gradient and coordinate terms. Each test applies one
 production `diffusion_pos` Euler–Maruyama step
 ([`numerics_swarm.md`](numerics_swarm.md#72-eulermaruyama-step)) from prescribed positions. With
 $D=\nu/(1+{\rm St}^2)$ at the starting position, the displacement variance is
 
-$$
-\operatorname{Var}(\Delta X)=2D\Delta t.
-$$
+```math
+\mathrm{Var}(\Delta X)=2D\Delta t.
+```
 
 ### 4.1 Point-source diffusion
 
@@ -443,11 +443,11 @@ Stokes-dependent diffusivity gradient.
 
 **Passes if**, for each sampled component (radius, azimuth, or radius and height),
 
-$$
+```math
 |\bar X-\mu|\le 6\sqrt{\frac{2D\Delta t}{N_P}}
 \qquad\text{and}\qquad
 |s_X^2-2D\Delta t|\le 6(2D\Delta t)\sqrt{\frac{2}{N_P-1}},
-$$
+```
 
 and the particle velocities are unchanged to $2\times10^{-12}$.
 
@@ -462,9 +462,9 @@ polar velocity, which exercises the full spherical basis transformation.
 vector must be rotated with it ([`numerics_swarm.md`](numerics_swarm.md#74-velocity-reprojection)).
 For each displacement the validator reconstructs the unique unwrapped endpoint $x_u$ with
 
-$$
+```math
 |x_u-x_0|\lt\frac{\Delta\phi_w}{2},
-$$
+```
 
 and independently projects the unchanged initial Cartesian velocity at $x_u$. If a particle moves
 so far that the number of wraps is ambiguous, the test fails instead of guessing.
@@ -484,7 +484,7 @@ populations at the grain sizes $s_{\min}$, $\sqrt{s_{\min}s_{\max}}$, and $s_{\m
 **Reference.** For grain size $s$, the radial distribution of mass inside the domain
 ([`numerics_swarm.md`](numerics_swarm.md#33-dust-mass-in-the-domain)) is
 
-$$
+```math
 \frac{dI}{dR}
 =\Delta\phi\,R\Sigma_{d,\rm conv}(R)
 \sum_k\left[
@@ -493,7 +493,7 @@ $$
 \right],
 \qquad
 I(s)=\int \frac{dI}{dR}\,dR,
-$$
+```
 
 where $\Sigma_{d,\rm conv}$ is the dust surface density after the Gaussian [edge
 taper](numerics_basis.md#62-edge-taper), which the validator rebuilds independently, $\Phi$ is the
@@ -502,9 +502,9 @@ draws $R$ from the normalized radial CDF and then $Z$ from the matching truncate
 ([`numerics_swarm.md`](numerics_swarm.md#35-spatial-sampling)). It sets the number of grains each
 particle represents so that
 
-$$
+```math
 \sum_p N_p\,m(s_p)=M_{d,\Omega},
-$$
+```
 
 the dust mass inside the domain integrated over the size distribution. The validator independently
 rebuilds the 128-entry mass table (the "mass bank"), interpolates it logarithmically for the middle
@@ -540,10 +540,10 @@ Brownian motion.
 The relative speed of a pair
 ([`numerics_swarm.md`](numerics_swarm.md#843-relative-velocities)) combines three contributions,
 
-$$
+```math
 \Delta v_{ij}=
 \sqrt{\Delta v_{\rm drift}^2+\Delta v_{\rm turb}^2+\Delta v_{\rm Brown}^2},
-$$
+```
 
 where the drift term combines the differential radial, azimuthal, and capped settling speeds of the
 two grain sizes at the owner's position. The owner is the particle whose collision rate is being
@@ -579,9 +579,9 @@ In a periodic wedge a neighbor can be the rotated copy (image) of a particle acr
 ([`numerics_swarm.md`](numerics_swarm.md#95-periodic-images)). The search returns such a neighbor
 as the image code
 
-$$
+```math
 c=3j+a,
-$$
+```
 
 which encodes the physical particle index $j$ and the image $a$. The planar and 3D tests place the
 same pair once inside the wedge $-0.5\le\phi\lt0.5$ and once across its seam. Because the rate is
@@ -631,12 +631,12 @@ timing is recorded for information only.
 
 The reference sorts candidates by the squared distance the collision model uses,
 
-$$
+```math
 d_{ij}^2=|\boldsymbol{x}_i-\boldsymbol{x}_j|^2,
-$$
+```
 
 after applying the periodic minimum image or the wedge ghosts, and compares the neighbor identities
-and the $K$th-neighbor radius. The 48 checks are:
+and the $`K`$th-neighbor radius. The 48 checks are:
 
 | Group | Count | Configurations (each in 2D and 3D unless noted) |
 |---|---|---|
@@ -779,9 +779,9 @@ flux, FARGO azimuthal transport, and the SSPRK radial and polar steps
 ([`numerics_fluid.md`](numerics_fluid.md#51-directional-finite-volume-update)). Each reduces the
 continuity equation to
 
-$$
+```math
 \frac{\partial\rho_d}{\partial t}+\nabla\!\cdot(\rho_d\boldsymbol{v})=0
-$$
+```
 
 with a velocity field that gives an exact characteristic solution, and advances only the production
 advection operator under test. The momentum components are initialized as fixed multiples of density
@@ -791,18 +791,18 @@ carried consistently with mass.
 ### 10.1 Periodic azimuthal transport
 
 **Test.** `test_x_transport_2d` (suite argument `--shift 3.25`, no feature flags) advects the smooth
-Fourier mode $\rho_d=1+0.1\,\overline{\sin2\phi}$, where the overbar denotes the cell average, with
-specific angular momentum $R^2$, that is, unit angular speed $\Omega$. Each step moves the profile
-by a prescribed noninteger FARGO shift of 3.25 cells, until one full orbit $t=2\pi$; the last step
-is shortened to end there. The case tests the FARGO integer shift, residual transport, PPM
+Fourier mode $`\rho_d=1+0.1\,\overline{\sin2\phi}`$, where the overbar denotes the cell average,
+with specific angular momentum $R^2$, that is, unit angular speed $\Omega$. Each step moves the
+profile by a prescribed noninteger FARGO shift of 3.25 cells, until one full orbit $t=2\pi$; the
+last step is shortened to end there. The case tests the FARGO integer shift, residual transport, PPM
 reconstruction ([`numerics_fluid.md`](numerics_fluid.md#55-fargo-azimuthal-transport)), momentum
 transport, and the periodic seam in one calculation.
 
 **Reference.** For constant angular speed,
 
-$$
+```math
 \rho_d(\phi,t)=\rho_d(\phi-\Omega t,0),
-$$
+```
 
 and the validator integrates the shifted mode over every finite-volume cell.
 
@@ -844,10 +844,10 @@ $t=0.25$ with the production CFL timestep at CFL number 0.05 and SSPRK integrati
 **Reference.** In effective radial dimension $d$ (2 for the cylindrical midplane, 3 for the
 spherical shell),
 
-$$
+```math
 \rho_d(R,t)=\lambda^{-d}\rho_d(R/\lambda,0),\qquad
 v_R(R,t)=\frac{aR}{\lambda}.
-$$
+```
 
 The validator integrates density and radial momentum with the exact cylindrical or spherical shell
 measures, so these cases test more than Cartesian advection on a relabeled coordinate.
@@ -860,17 +860,17 @@ $u=0.2$ until $t=1$.
 
 **Reference.** For constant speed in effective radial dimension $d$,
 
-$$
+```math
 R_0=R-ut,\qquad
 \rho_d(R,t)=\rho_d(R_0,0)\left(\frac{R_0}{R}\right)^{d-1}.
-$$
+```
 
 Gaussian quadrature builds exact cell averages of this solution. The validator also compares the
 exact remaining mass
 
-$$
+```math
 M_{\rm remain}(t)=\int_{\Omega} \rho_d(R,t)\,dV
-$$
+```
 
 with the numerical mass in the domain, relative to the initial mass. This validates radial outflow
 directly rather than checking a zero-flux boundary.
@@ -890,11 +890,11 @@ directly rather than checking a zero-flux boundary.
 **Test.** `test_z_transport_3d` (`DIFFUSION`, `CONST_NU`, `--cfl 0.05`) transports a smooth polar
 profile under the spherical-polar conservation law
 
-$$
+```math
 \frac{\partial\rho_d}{\partial t}
 +\frac{1}{r\sin\theta}\frac{\partial}{\partial\theta}
  \left(\sin\theta\,\rho_d v_\theta\right)=0.
-$$
+```
 
 The initial profile is a compact bump in $\rho_d\sin\theta$ on $0.80\le\theta\le1.30$ with constant
 angular rate $\omega=v_\theta/r=0.15$, advanced to $t=0.3$ with the production CFL timestep at CFL
@@ -903,9 +903,9 @@ face-area-to-volume factor gives the same angular rate in every shell.
 
 **Reference.** The polar line density $\rho_d\sin\theta$ is translated rigidly, so
 
-$$
+```math
 \rho_d(\theta,t)=\rho_d(\theta-\omega t,0)\,\frac{\sin(\theta-\omega t)}{\sin\theta},
-$$
+```
 
 integrated with the $\sin\theta$ cell measure.
 
@@ -929,10 +929,10 @@ largest angular rate.
 the validator compares the field and the remaining mass with the exact open-boundary solution. For
 the wall, the characteristics converge linearly,
 
-$$
+```math
 \theta_0=\frac{\pi}{2}-\frac{\pi/2-\theta}{1-at},\qquad
 \rho_d(\theta,t)\sin\theta=\frac{\rho_d(\theta_0,0)\sin\theta_0}{1-at}.
-$$
+```
 
 The analytical polar speed and wall flux vanish at the midplane, so the exact solution conserves
 mass, and the case tests whether the discrete wall preserves the symmetric solution.
@@ -958,9 +958,9 @@ These tests check the Crank–Nicolson diffusion solve
 ([`numerics_fluid.md`](numerics_fluid.md#72-cranknicolson-solve)) and the donor-momentum closure
 ([`numerics_fluid.md`](numerics_fluid.md#74-donor-momentum-closure)). They solve
 
-$$
+```math
 \frac{\partial\rho_d}{\partial t}=\nabla\!\cdot(D\nabla\rho_d)
-$$
+```
 
 with constant $D=5\times10^{-2}$ from `CONST_NU` in the tracer limit (`STOKES_0 = 0`) and no bulk
 transport. Every build uses `DIFFUSION` and `CONST_NU`. The Schmidt number is one in the tested
@@ -988,10 +988,10 @@ closure, metric factors, density fluxes, and the donor-momentum closure.
 
 **Reference.** For constant $D$, smooth eigenmodes decay as
 
-$$
+```math
 \rho_d(\boldsymbol{x},t)=\rho_0+\epsilon q(\boldsymbol{x})e^{-D\lambda t},
 \qquad -\nabla^2q=\lambda q.
-$$
+```
 
 The azimuthal decay rate is $4D/R^2$ for $\sin2\phi$ and depends on radius; the Legendre mode decays
 at $6D/R^2$. For the radial modes the validator does not reuse the driver's Bessel functions: it
@@ -1020,16 +1020,16 @@ and forms exact cell averages. The exact momenta are the same multiples of the e
 `POS_LIMIT = 0.9` on the radial range $0.9\le R\le1.1$.
 
 **Test.** The smooth branch (no suite arguments) takes one step $\Delta t=1$ from the high-contrast
-azimuthal mode $1+0.9\,\overline{\sin2\phi}$ on an $N\times1\times1$ line, which makes the solver
+azimuthal mode $`1+0.9\,\overline{\sin2\phi}`$ on an $N\times1\times1$ line, which makes the solver
 split the step into several positivity substeps automatically. The driver also applies the same
 substeps manually.
 
 **Reference.** The exact same-grid reference applies the Crank–Nicolson amplification factor of
 each substep with the eigenvalue of the discrete second-difference operator,
 
-$$
+```math
 \lambda_h=\frac{4}{\Delta x^2}\sin^2\!\left(\frac{k\Delta x}{2}\right),
-$$
+```
 
 and a continuum reference measures spatial convergence. Together they show that the positivity
 controller neither changes the intended Crank–Nicolson solution nor creates negative density.
@@ -1081,19 +1081,19 @@ production vertical settling–diffusion equilibrium.
 the advected and diffused densities, the validator forms the residual and the combined magnitude of
 the two tendencies,
 
-$$
+```math
 \mathcal{R}_i=\frac{\rho_i^A-\rho_i^0}{\Delta t}+\frac{\rho_i^D-\rho_i^0}{\Delta t},
 \qquad
 s_i=\frac{\vert\rho_i^A-\rho_i^0\vert}{\Delta t}+\frac{\vert\rho_i^D-\rho_i^0\vert}{\Delta t}.
-$$
+```
 
 Each residual norm is divided by the same norm of $s_i$, so the test measures cancellation of polar
 transport and diffusion rather than the smallness of an unevolved state. It also checks the
 volume-integrated residual mass rate,
 
-$$
+```math
 \epsilon_M=\frac{\left|\sum_iV_i\mathcal{R}_i\right|}{\sum_iV_is_i}.
-$$
+```
 
 Resolution convergence distinguishes a genuinely balanced discretization from an accidentally small
 coarse-grid residual.
@@ -1117,10 +1117,10 @@ from the cross-backend comparison ([Section 15.3](#153-comparing-cuda-and-rocm))
 
 **Test.** `test_source_drag` (no feature flags, `--res 8`) checks the stiff source equation
 
-$$
+```math
 \frac{d\boldsymbol{v}}{dt}
 =-\frac{\boldsymbol{v}-\boldsymbol{v}_g}{t_s}+\boldsymbol{a}(t)
-$$
+```
 
 over one step $\Delta t=1$ with a force that varies linearly over the step. The eight cells are a
 parameter index rather than a spatial grid: they carry $\Delta t/t_s=10^{-6}$, $10^{-3}$, $0.1$,
@@ -1147,15 +1147,15 @@ two-dimensional well-mixed closure
 
 **Reference.** The radial accumulation
 
-$$
+```math
 \tau(R)=\int_{R_{\min}}^R\kappa\rho_d(R')\,dR'
-$$
+```
 
 becomes, for unit opacity and $\rho_d\propto R^{-1}$,
 
-$$
+```math
 \tau(R)=\ln\!\left(\frac{R}{R_{\min}}\right).
-$$
+```
 
 The comparison evaluates the production inclusive radial scan at each cell's outer face against the
 exact integral to that face, so it checks both the local extinction increment and the cumulative
@@ -1169,9 +1169,9 @@ at most $2\times10^{-2}$ with final order at least 1.5. The case reports no mass
 **Test.** `test_attenuation_2d` (`RADIATION`, `--power -1.0`) couples the computed optical depth to
 the radiation force
 
-$$
+```math
 a_{\rm rad}(R)=\beta\frac{GM}{R^2}e^{-\tau(R)}
-$$
+```
 
 for one source step $\Delta t=0.2$ with $\beta=1$ and unit opacity. Transport and diffusion are
 absent, so their errors cannot obscure whether attenuation reaches `source_update` correctly.

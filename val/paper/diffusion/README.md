@@ -89,9 +89,9 @@ ratio $h=h_0(R/R_0)^{(q+1)/2}$ and the viscosity $\nu=\alpha h^2R^2\Omega_K$ of 
 model](../../../doc/numerics_basis.md#35-viscosity), $q=0.5$ gives $\nu=\alpha h_0^2R^2=10^{-4}R^2$,
 and the [directional diffusivity](../../../doc/numerics_basis.md#51-directional-diffusivities) is
 
-$$
+```math
 D(R)=aR^2,\qquad a=\frac{10^{-4}}{1+\mathrm{St}^2}.
-$$
+```
 
 `CONST_ST` removes the spatial variation of the Stokes number, so the Stokes part of the
 diffusivity gradient vanishes.
@@ -185,22 +185,22 @@ Python](../../../README.md#reading-output-with-python).
 The reference is the exact solution of the target equation for a log-normal initial ring. Let
 $\chi=0$ for density diffusion and $\chi=1$ for concentration diffusion. Both models obey
 
-$$
+```math
 \partial_t\Sigma_d=\frac{1}{R}\,\partial_R\left[RD\left(\partial_R\Sigma_d-\chi\,\Sigma_d\,\partial_R\ln\Sigma_g\right)\right].
-$$
+```
 
-The production radial stochastic drift is $(3+\chi p)aR$ and its noise amplitude is $\sqrt{2a}\,R$.
-Itô's formula therefore gives a Gaussian log radius $u=\ln(R/R_0)$ with
+The production radial stochastic drift is $(3+\chi p)aR$ and its noise amplitude is
+$`\sqrt{2a}\,R`$. Itô's formula therefore gives a Gaussian log radius $u=\ln(R/R_0)$ with
 
-$$
+```math
 \bar u(t)=(2+\chi p)\,at,\qquad \sigma_u^2(t)=0.05^2+2at .
-$$
+```
 
 The surface density per total dust mass $M_d$ is
 
-$$
+```math
 \frac{\Sigma_d}{M_d}=\frac{1}{2\pi R^2\sqrt{2\pi\sigma_u^2}}\exp\left[-\frac{(u-\bar u)^2}{2\sigma_u^2}\right].
-$$
+```
 
 No analysis script is included in this directory. Compare empirical CDFs, log-radius moments, and
 area-averaged density bins with this solution, choosing $\chi$ from the model's

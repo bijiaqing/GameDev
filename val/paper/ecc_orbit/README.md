@@ -158,15 +158,15 @@ The reference is the exact Kepler orbit through the initial pericenter. No postp
 reference solver is included in this directory. Compare each snapshot at its output time $t$ with
 the exact solution: solve
 
-$$
+```math
 u-e\sin u=\frac{2\pi t}{P}
-$$
+```
 
 for the eccentric anomaly $u$, then use
 
-$$
+```math
 X=a(\cos u-e),\qquad Y=a\sqrt{1-e^2}\,\sin u,
-$$
+```
 
 with the simulated Cartesian position $X=R\cos\phi$, $Y=R\sin\phi$. Also monitor the specific
 energy $E=\tfrac12(v_R^2+v_\phi^2)-GM/R$, whose exact value is $-GM/(2a)=-1/2$, and the specific

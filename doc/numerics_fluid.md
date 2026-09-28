@@ -73,9 +73,9 @@ momentum $\rho_d\boldsymbol u_d$ ([shared disk model
 closes the moment hierarchy with a zero pressure tensor, $\boldsymbol P_d=0$, so its momentum flux
 is
 
-$$
+```math
 \boldsymbol\Pi_d=\rho_d\boldsymbol u_d\boldsymbol u_d
-$$
+```
 
 and contains no velocity-dispersion tensor.
 
@@ -100,10 +100,10 @@ mesh, the units, and every compile-time parameter.
 The fluid stores angular variables, not three linear velocities. The primitive arrays `dustvelx`,
 `dustvely`, and `dustvelz` hold
 
-$$
+```math
 (\ell_\phi,v_r,\ell_\theta)
 =(Rv_\phi,v_r,rv_\theta),
-$$
+```
 
 the [stored angular variables](README.md#glossary): the specific angular momentum about the axis,
 the spherical radial velocity, and the polar specific angular momentum. The conserved arrays
@@ -132,7 +132,7 @@ For a 2D disk, $\rho_d$ in any later expression means the evolved surface densit
 **Vacuum state.** When $\varrho_d\lt\rho_{\rm vac}$ (`RHO_VAC`), the division is replaced by the
 regularized [vacuum state](README.md#glossary)
 
-$$
+```math
 \ell_\phi=\sqrt{GM_\star R},
 \qquad
 v_r=0,
@@ -140,7 +140,7 @@ v_r=0,
 \ell_\theta=0,
 \qquad
 m_a=\varrho_du_a,
-$$
+```
 
 where $u_a$ is the corresponding primitive. It keeps all later arithmetic finite without giving
 the velocity of an almost empty cell any scientific meaning. The reset is applied whenever
@@ -161,20 +161,20 @@ otherwise. This section adds the cell centers and face areas the finite-volume o
 
 The coordinate centers are
 
-$$
+```math
 y_j=Y_{\min}a_y^{j+1/2},
 \qquad
 z_k=Z_{\min}+\left(k+\frac12\right)\Delta z,
-$$
+```
 
 so the radial center is logarithmic, midway between the faces in $\ln y$. Radial fluxes use the
 face factor $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution to a polar face area is
 
-$$
+```math
 \Delta A_{z,j}
 =\int_{y_{j-1/2}}^{y_{j+1/2}}y\,dy
 =\frac{y_{j+1/2}^2-y_{j-1/2}^2}{2},
-$$
+```
 
 so the separated polar face factor is $A_{z,j,k+1/2}=\Delta A_{z,j}\sin z_{k+1/2}$.
 
@@ -303,21 +303,21 @@ H_d=H_g\sqrt{\frac{\alpha_{z,d}}{\mathrm{St}_{\rm mid}+\chi_c\alpha_{z,d}}},
 where $\mathrm{St}_{\rm mid}$ is the midplane Stokes number at radius $R$ and $\alpha$ the local
 turbulent parameter (the equivalent $\alpha(R)$ under `CONST_NU`). The initial density is
 
-$$
+```math
 \rho_d(R,Z)
 =\frac{\Sigma_{d,\rm conv}(R)}{\sqrt{2\pi}H_d(R)}
 \exp\left[-\frac{Z^2}{2H_d(R)^2}\right].
-$$
+```
 
 Initialization then multiplies the field by an azimuthal perturbation,
 
-$$
+```math
 \varrho_d(x_i,y_j,z_k)
 \leftarrow
 \varrho_d(x_i,y_j,z_k)\max(1+0.1\xi_i,0),
 \qquad
 \xi_i\sim\mathcal N(0,1),
-$$
+```
 
 with one deviate per azimuthal column, so every radial and polar cell at fixed $x_i$ receives the
 same factor. The deviate comes from the vendor generator seeded by the azimuthal index, which makes
@@ -351,28 +351,28 @@ the cylindrical components $v_{R,d}$ and $v_{\phi,d}$.
 In 3D the polar primitive also carries the velocity that approximately balances the initial polar
 diffusive flux,
 
-$$
+```math
 v_{\theta,\mathrm{diff}}
 =\frac{D_zw}{r\rho_d}\frac{\partial(\rho_d/w)}{\partial\theta},
-$$
+```
 
 where $w=1$ for density diffusion and $w=\rho_g$ for concentration diffusion. The derivative uses
 one-sided differences at the polar boundaries and centered differences inside.
 
 The fluid adds this polar diffusive-balance velocity but not the swarm's terminal-settling velocity
-$v_Z=-\mathrm{St}\,\Omega_KZ$ ([`numerics_swarm.md`](numerics_swarm.md#32-initial-velocity)). The
+$`v_Z=-\mathrm{St}\,\Omega_KZ`$ ([`numerics_swarm.md`](numerics_swarm.md#32-initial-velocity)). The
 asymmetry is intentional: the swarm evolves diffusion as a separate stochastic positional operator
 and does not encode it in its initial deterministic velocity.
 
 The cylindrical drift and the polar balance are stored as
 
-$$
+```math
 v_r=v_{R,d}\sin z,
 \qquad
 \ell_\theta=y\left(v_{R,d}\cos z+v_{\theta,\rm diff}\right),
 \qquad
 \ell_\phi=Rv_{\phi,d},
-$$
+```
 
 with $\ell_\theta=0$ when `N_Z == 1`. The conserved momenta are then built as $m_a=\varrho_du_a$,
 with the vacuum reset of [Section 2.1](#21-stored-state).
@@ -394,15 +394,15 @@ conserve.
 
 In coordinate-independent conservation form, the default density mode advances
 
-$$
+```math
 \frac{\partial\varrho_d}{\partial t}
 +\nabla\cdot(\varrho_d\boldsymbol v_d)
 =\nabla\cdot(\boldsymbol D\nabla\varrho_d)
-$$
+```
 
 and
 
-$$
+```math
 \frac{\partial(\varrho_d\boldsymbol v_d)}{\partial t}
 +\nabla\cdot(\varrho_d\boldsymbol v_d\boldsymbol v_d)
 =\varrho_d\left[
@@ -411,7 +411,7 @@ $$
 -\frac{\boldsymbol v_d-\boldsymbol v_g}{t_s}
 \right]
 +\boldsymbol S_{m,D}.
-$$
+```
 
 The pressure tensor is zero: the advective momentum flux is
 $\varrho_d\boldsymbol v_d\boldsymbol v_d$ rather than
@@ -446,18 +446,18 @@ variables $(\ell_\phi,v_r,\ell_\theta)$ of [Section 2.1](#21-stored-state). The 
 polar connection terms of that basis belong to the source operator. At a fixed cell, the source
 part is
 
-$$
+```math
 \frac{d\ell_\phi}{dt}
 =-\frac{\ell_\phi-\ell_{\phi,g}}{t_s},
-$$
+```
 
-$$
+```math
 \frac{d\ell_\theta}{dt}
 =-\frac{\ell_\theta-\ell_{\theta,g}}{t_s}
 +\frac{\ell_\phi^2\cos\theta}{R^2\sin\theta},
-$$
+```
 
-$$
+```math
 \frac{dv_r}{dt}
 =-\frac{v_r-v_{r,g}}{t_s}
 -(1-\beta)\frac{GM_\star}{r^2}
@@ -465,7 +465,7 @@ $$
 +\frac{\ell_\theta^2}{r^3},
 \qquad
 t_s=\frac{\mathrm{St}}{\Omega_K}.
-$$
+```
 
 Here $\ell_{\phi,g}=Rv_{\phi,g}$ is the gas azimuthal target ([shared disk model
 §3.4](numerics_basis.md#34-rotation-support)), and $v_{r,g}$ and $\ell_{\theta,g}$ are the spherical
@@ -477,28 +477,28 @@ radiation ratio $\beta$ is defined in [Section 6.2](#62-radiation-pressure-and-o
 
 For the cell measure $V_{ijk}$, the discrete dust mass and stored momenta are
 
-$$
+```math
 M_d^h=\sum_{ijk}\varrho_{d,ijk}V_{ijk},
 \qquad
 Q_a^h=\sum_{ijk}m_{a,ijk}V_{ijk},
 \quad
 a\in\lbrace x,y,z\rbrace.
-$$
+```
 
 Every internal transport or diffusive face adds equal and opposite fluxes to its two cells.
 Therefore, with periodic or zero-flux boundaries,
 
-$$
+```math
 \Delta M_d^h=0,
 \qquad
 \Delta Q_a^h=0
-$$
+```
 
 during those operators, up to floating-point summation error. Outflow boundaries change these sums
 by the computed boundary flux. The source operator preserves density exactly but changes the stored
 momenta through drag, gravity, radiation, and spherical geometry.
 
-These statements concern the variables actually stored. $Q_x^h=\int\rho_d\ell_\phi\,dV$ is axial
+These statements concern the variables actually stored. $`Q_x^h=\int\rho_d\ell_\phi\,dV`$ is axial
 angular momentum, while $Q_y^h$ is radial linear momentum; the prescribed external gas and stellar
 forces can break their physical conservation even though their numerical transport is conservative.
 
@@ -540,25 +540,25 @@ flowchart TB
 For a directional coordinate with cell measure $V_i$ and face factor $A_{i+1/2}$, every
 forward-Euler transport evaluation has the conservative form
 
-$$
+```math
 \boldsymbol U_i^{\rm FE}
 =\boldsymbol U_i^n
 -\frac{\Delta t}{V_i}
 \left(A_{i+1/2}\boldsymbol F_{i+1/2}
 -A_{i-1/2}\boldsymbol F_{i-1/2}\right).
-$$
+```
 
 For azimuth, $V_i=\Delta x$ and $A=1$. For radial transport, $V_i=\Delta V_{y,i}$ and
 $A_{i+1/2}=y_{i+1/2}^{d-1}$. For polar transport through radial cell $j$, the exact finite-volume
 update is
 
-$$
+```math
 \boldsymbol U_{j,k}^{\rm FE}
 =\boldsymbol U_{j,k}^n
 -\Delta t\frac{\Delta A_{z,j}}{\Delta V_{y,j}\Delta V_{z,k}}
 \left(\sin z_{k+1/2}\boldsymbol F_{k+1/2}
 -\sin z_{k-1/2}\boldsymbol F_{k-1/2}\right),
-$$
+```
 
 with $\Delta A_{z,j}=(y_{j+1/2}^2-y_{j-1/2}^2)/2$ and $\Delta V_{y,j}=(y_{j+1/2}^3-y_{j-1/2}^3)/3$.
 Their ratio is the exact radial face-area-to-volume factor, not the approximation $1/y_j$.
@@ -577,35 +577,35 @@ appear.
 
 **Face values.** On the uniform azimuthal mesh, the unlimited four-cell face estimate is
 
-$$
+```math
 q_{i+1/2}^{*}
 =\frac{7(q_i+q_{i+1})-(q_{i-1}+q_{i+2})}{12}.
-$$
+```
 
 On the logarithmic radial and spherical polar meshes, the host precomputes four face weights $w_m$
 from exact cubic moment constraints in the finite-volume coordinates
 
-$$
+```math
 s_y=\frac{y^d}{d},
 \qquad
 s_z=-\cos z,
-$$
+```
 
 and the face value is
 
-$$
+```math
 q_{i+1/2}^{*}=\sum_{m=-1}^{2}w_m\bar q_{i+m}.
-$$
+```
 
 If $s_f$ is the target face, $L$ a local stencil scale, and $t=(s-s_f)/L$, the weights solve
 
-$$
+```math
 \sum_{m=-1}^{2}w_m
 \frac{1}{t_{m,+}-t_{m,-}}
 \int_{t_{m,-}}^{t_{m,+}}t^n\,dt
 =\delta_{n0},
 \qquad n=0,1,2,3,
-$$
+```
 
 so the weighted cell averages reproduce the value at $t=0$ for every polynomial up to cubic degree.
 
@@ -613,11 +613,11 @@ Internal faces next to a boundary, where no complete four-cell stencil exists, u
 interpolation. With $s_L$ and $s_R$ the arithmetic centers of the adjacent cells in the volume
 coordinate and $s_f$ their common face,
 
-$$
+```math
 \omega=\frac{s_f-s_L}{s_R-s_L},
 \qquad
 q_f=(1-\omega)\bar q_L+\omega\bar q_R.
-$$
+```
 
 The physical boundary faces take the value of their single adjacent cell. Every face value, on every
 mesh, is clipped to $[\min(q_i,q_{i+1}),\max(q_i,q_{i+1})]$.
@@ -625,33 +625,33 @@ mesh, is clipped to $[\min(q_i,q_{i+1}),\max(q_i,q_{i+1})]$.
 **Cell profiles.** Inside one cell, PPM represents the parabola by its left and right face values
 $q_L,q_R$ and
 
-$$
+```math
 \Delta q=q_R-q_L,
 \qquad
 q_6=6\bar q-3(q_L+q_R).
-$$
+```
 
 The monotonicity correction is
 
-$$
+```math
 (q_R-\bar q)(\bar q-q_L)\le0
 \quad\Longrightarrow\quad
 q_L=q_R=\bar q.
-$$
+```
 
 Otherwise,
 
-$$
+```math
 \Delta q\,q_6>(\Delta q)^2
 \quad\Longrightarrow\quad
 q_L=3\bar q-2q_R,
-$$
+```
 
-$$
+```math
 -\Delta q\,q_6>(\Delta q)^2
 \quad\Longrightarrow\quad
 q_R=3\bar q-2q_L.
-$$
+```
 
 The code recomputes $\Delta q$ and $q_6$ after either correction. These conditions remove a newly
 created internal extremum and keep the parabola where it is locally monotone.
@@ -659,15 +659,15 @@ created internal extremum and keep the parabola where it is locally monotone.
 **Upwind states.** Integrating the corrected profile over a fraction $c\in[0,1]$ of the cell next
 to the right or left face gives the time-averaged upwind states
 
-$$
+```math
 q_R^{\rm tr}=q_R-\frac{c}{2}
 \left[\Delta q-\left(1-\frac{2c}{3}\right)q_6\right],
-$$
+```
 
-$$
+```math
 q_L^{\rm tr}=q_L+\frac{c}{2}
 \left[\Delta q+\left(1-\frac{2c}{3}\right)q_6\right].
-$$
+```
 
 Azimuthal FARGO transport uses a nonzero tracing fraction $c$, because one conservative orbital
 advection update spans its requested substep. Radial and polar transport pass $c=0$ and obtain
@@ -691,9 +691,9 @@ hyperbolic pressureless system. In one direction, the density and normal-momentu
 
 Its flux Jacobian has the repeated eigenvalue
 
-$$
+```math
 \lambda_1=\lambda_2=u,
-$$
+```
 
 so pressureless Euler is only weakly hyperbolic. Separating states can create vacuum, and converging
 characteristics can form a singular concentration in the ideal pressureless Riemann problem.
@@ -701,19 +701,19 @@ characteristics can form a singular concentration in the ideal pressureless Riem
 For a complete pressureless state $\boldsymbol U$ transported at normal speed $a$, the physical flux
 is $\boldsymbol F=a\boldsymbol U$. With
 
-$$
+```math
 s_L=\min(a_L,a_R),
 \qquad
 s_R=\max(a_L,a_R),
-$$
+```
 
 the two-wave branch is
 
-$$
+```math
 \boldsymbol F_{\rm HLL}
 =\frac{s_R\boldsymbol F_L-s_L\boldsymbol F_R
 +s_Ls_R(\boldsymbol U_R-\boldsymbol U_L)}{s_R-s_L}.
-$$
+```
 
 If both interface speeds are nonnegative, the code uses $\boldsymbol F_L$; if both are nonpositive,
 it uses $\boldsymbol F_R$. The high-order flux $\boldsymbol F^H$ evaluates this formula with the PPM
@@ -739,22 +739,22 @@ producing an undefined vacuum velocity; it does not replace the conservative lim
 Let $\delta\boldsymbol F=\boldsymbol F^H-\boldsymbol F^L$ be the antidiffusive PPM correction at an
 internal face. Proceeding face by face in increasing index order, each face applies
 
-$$
+```math
 \boldsymbol U_i\leftarrow
 \boldsymbol U_i-\lambda_i\alpha\,\delta\boldsymbol F,
 \qquad
 \boldsymbol U_{i+1}\leftarrow
 \boldsymbol U_{i+1}+\lambda_{i+1}\alpha\,\delta\boldsymbol F
-$$
+```
 
 to the current state, where $\lambda_i=\Delta t A_{i+1/2}/V_i$ and one shared $0\le\alpha\le1$ is
 the largest scale that satisfies
 
-$$
+```math
 \varrho_d\ge0,
 \qquad
 u_{a,\min}\varrho_d\le m_a\le u_{a,\max}\varrho_d
-$$
+```
 
 in both adjacent cells for $u_a\in\lbrace\ell_\phi,v_r,\ell_\theta\rbrace$. The bounds
 $u_{a,\min}$ and $u_{a,\max}$ are the minimum and maximum of $u_a$ over the cell and its immediate
@@ -765,13 +765,13 @@ Radial and polar boundary faces carry no correction.
 Every condition is an affine inequality $g(\boldsymbol U)\ge0$. If the proposed correction changes
 it by $\Delta g$, the admissible coefficient shrinks only when $\Delta g\lt0$:
 
-$$
+```math
 \alpha\leftarrow
 \min\left[
 \alpha,
 (1-10^{-12})\frac{g(\boldsymbol U)}{-\Delta g}
 \right],
-$$
+```
 
 and $\alpha=0$ when $g(\boldsymbol U)\le0$ and $\Delta g\lt0$. The face coefficient is the minimum
 over density and the lower and upper bounds of all three primitive ratios in both cells, clipped to
@@ -788,30 +788,30 @@ Azimuthal transport uses the FARGO orbital-advection decomposition of
 mean orbital displacement, plus PPM transport of the small residual. For a ring of $N_X$ cells at
 fixed $(r,\theta)$,
 
-$$
+```math
 \bar\ell_\phi=\frac{1}{N_X}\sum_{i=0}^{N_X-1}\ell_{\phi,i},
 \qquad
 \delta n=\frac{\bar\ell_\phi\Delta t}{R^2\Delta x},
 \qquad
 n=\mathrm{round}(\delta n).
-$$
+```
 
 The conserved arrays are first shifted periodically by $n$ cells. The angular speed of that integer
 frame and the residual speed are
 
-$$
+```math
 \Omega_{\rm frame}=\frac{n\Delta x}{\Delta t},
 \qquad
 \ell_{\rm frame}=R^2\Omega_{\rm frame},
 \qquad
 \Omega_i^{\rm res}=\frac{\ell_{\phi,i}-\ell_{\rm frame}}{R^2}.
-$$
+```
 
 PPM traces with
 
-$$
+```math
 c_i=\frac{|\Omega_i^{\rm res}|\Delta t}{\Delta x},
-$$
+```
 
 and the HLL normal speeds are the reconstructed residual angular speeds. PPM therefore transports
 the residual, including the fractional part of the ring-mean displacement. The whole decomposition
@@ -830,22 +830,22 @@ and the three-stage TVD Runge–Kutta scheme of
 [Shu & Osher (1988)](https://doi.org/10.1016/0021-9991(88)90177-5), SSPRK(3,3), the time
 integration. If $L(\boldsymbol U)$ is one limited flux-divergence evaluation, the stages are
 
-$$
+```math
 \boldsymbol U^{(1)}
 =\boldsymbol U^n+\Delta tL(\boldsymbol U^n),
-$$
+```
 
-$$
+```math
 \boldsymbol U^{(2)}
 =\frac34\boldsymbol U^n
 +\frac14\left[\boldsymbol U^{(1)}+\Delta tL(\boldsymbol U^{(1)})\right],
-$$
+```
 
-$$
+```math
 \boldsymbol U^{n+1}
 =\frac13\boldsymbol U^n
 +\frac23\left[\boldsymbol U^{(2)}+\Delta tL(\boldsymbol U^{(2)})\right].
-$$
+```
 
 Each bracket is a complete low-order update with invariant-domain correction, and the convex
 combinations preserve nonnegative density and the primitive bounds of their parts.
@@ -865,11 +865,11 @@ composition ([Section 8.1](#81-operator-composition)).
 The source update integrates drag relaxation exactly for a frozen stopping time and weights the
 other forces so that stiff drag suppresses stale values. At a fixed cell, each primitive satisfies
 
-$$
+```math
 \frac{d\boldsymbol u}{dt}
 =-\frac{\boldsymbol u-\boldsymbol u_g}{t_s}
 +\boldsymbol F(\boldsymbol u,t),
-$$
+```
 
 where the nondrag forces are central gravity, reduced by radiation when enabled, the radial
 centrifugal acceleration, and the polar geometric torque ([Section
@@ -878,57 +878,57 @@ state of [Section 2.1](#21-stored-state) and skip the update.
 
 Set
 
-$$
+```math
 \tau=\frac{\Delta t}{t_s},
 \qquad
 E=e^{-\tau},
 \qquad
 Q=1-E.
-$$
+```
 
 If a component obeys
 
-$$
+```math
 \frac{du}{dt}=-\frac{u-u_g}{t_s}+F(t)
-$$
+```
 
 and the nondrag force varies linearly from $F^n$ to $F^{n+1}$ during the step, the update is
 
-$$
+```math
 u^{n+1}=Eu^n+Qu_g+w_nF^n+w_{n+1}F^{n+1},
-$$
+```
 
 with
 
-$$
+```math
 w_{n+1}=t_s\frac{\tau-Q}{\tau},
 \qquad
 w_n=t_sQ-w_{n+1}.
-$$
+```
 
 These weights recover trapezoidal force integration as $\tau\rightarrow0$ and suppress the old force
 exponentially when drag is stiff. Direct evaluation subtracts nearly equal numbers for small $\tau$,
 so for $\tau\lt10^{-4}$ the code uses
 
-$$
+```math
 w_n=\Delta t\left(
 \frac12-\frac{\tau}{3}+\frac{\tau^2}{8}-\frac{\tau^3}{30}
 \right)+O(\tau^4),
-$$
+```
 
-$$
+```math
 w_{n+1}=\Delta t\left(
 \frac12-\frac{\tau}{6}+\frac{\tau^2}{24}-\frac{\tau^3}{120}
 \right)+O(\tau^4),
-$$
+```
 
 and it always evaluates $Q$ as $-\mathrm{expm1}(-\tau)$.
 
 The components are updated in sequence. Azimuthal angular momentum has no nondrag force, so
 
-$$
+```math
 \ell_\phi^{n+1}=E\ell_\phi^n+Q\ell_{\phi,g}.
-$$
+```
 
 The code then evaluates the old and new polar torques with $\ell_\phi^n$ and $\ell_\phi^{n+1}$,
 advances $\ell_\theta$, re-evaluates the centrifugal force with both updated angular momenta, and
@@ -945,9 +945,9 @@ With `RADIATION`, the radial radiation pressure of the geometric-optics prescrip
 [Burns, Lamy & Soter (1979)](https://doi.org/10.1016/0019-1035(79)90050-2) weakens gravity by the
 factor $1-\beta$. The fluid is monodisperse, so its radiation ratio has no grain-size factor:
 
-$$
+```math
 \beta(t,\tau)=\beta_0f_\beta(t)e^{-\tau}.
-$$
+```
 
 The startup ramp $f_\beta$ and the combined acceleration $\boldsymbol a_{\rm grav+rad}$ are defined
 in [shared disk model §8.1](numerics_basis.md#81-radiation-ratio-and-startup-ramp). The optical
@@ -961,9 +961,9 @@ $H_g$ it evaluates at the logarithmic cell center $y_j$. The inclusive radial pr
 The source update needs $\tau$ at cell centers. It interpolates the two face values of its own
 radial cell,
 
-$$
+```math
 \tau_c=\tau_{\rm in}+\frac{\tau_{\rm out}-\tau_{\rm in}}{\sqrt{a_y}+1},
-$$
+```
 
 which is exact when the optical depth is linear in physical radius within the logarithmic cell, and
 applies the attenuation $e^{-\tau_c}$. The optical depth is rebuilt from the density at the midpoint
@@ -992,17 +992,17 @@ normalization ([Section 7.3](#73-concentration-diffusion)).
 
 In the vertically integrated radial–azimuthal disk, the density operator is
 
-$$
+```math
 \frac{\partial\Sigma_d}{\partial t}
 =\frac{1}{R^2}\frac{\partial}{\partial\phi}
 \left(D_x\frac{\partial\Sigma_d}{\partial\phi}\right)
 +\frac{1}{R}\frac{\partial}{\partial R}
 \left(RD_y\frac{\partial\Sigma_d}{\partial R}\right).
-$$
+```
 
 In 3D spherical coordinates it is
 
-$$
+```math
 \frac{\partial\rho_d}{\partial t}
 =\frac{1}{r^2\sin^2\theta}\frac{\partial}{\partial\phi}
 \left(D_x\frac{\partial\rho_d}{\partial\phi}\right)
@@ -1010,7 +1010,7 @@ $$
 \left(r^2D_y\frac{\partial\rho_d}{\partial r}\right)
 +\frac{1}{r^2\sin\theta}\frac{\partial}{\partial\theta}
 \left(\sin\theta D_z\frac{\partial\rho_d}{\partial\theta}\right).
-$$
+```
 
 Both modes use the local Stokes number. The Schmidt numbers describe gas mixing before Stokes
 suppression. The disk profiles that set $\nu$ depend on cylindrical $R$; this does not change the
@@ -1030,33 +1030,33 @@ have zero diffusive flux at their physical boundaries.
 
 For a one-dimensional finite-volume line, define the outward diffusive face flux
 
-$$
+```math
 \mathcal F_{i+1/2}=-A_{i+1/2}D_{i+1/2}
 \frac{\rho_{i+1}-\rho_i}{\delta l_{i+1/2}}
-$$
+```
 
 and the discrete operator
 
-$$
+```math
 (L\rho)_i=-\frac{\mathcal F_{i+1/2}-\mathcal F_{i-1/2}}{V_i}.
-$$
+```
 
 One CN substep of length $\delta t$ is
 
-$$
+```math
 \left(I-\frac{\delta t}{2}L\right)\rho^{n+1}
 =\left(I+\frac{\delta t}{2}L\right)\rho^n.
-$$
+```
 
 With
 
-$$
+```math
 c_i^-=\frac{\delta t}{2}
 \frac{A_{i-1/2}D_{i-1/2}}{V_i\delta l_{i-1/2}},
 \qquad
 c_i^+=\frac{\delta t}{2}
 \frac{A_{i+1/2}D_{i+1/2}}{V_i\delta l_{i+1/2}},
-$$
+```
 
 the directional geometry is
 
@@ -1068,32 +1068,32 @@ the directional geometry is
 
 The radial and polar Thomas algorithm solves the row
 
-$$
+```math
 -c_i^-\rho_{i-1}^{n+1}
 +(1+c_i^-+c_i^+)\rho_i^{n+1}
 -c_i^+\rho_{i+1}^{n+1}
 =c_i^-\rho_{i-1}^{n}
 +(1-c_i^- - c_i^+)\rho_i^{n}
 +c_i^+\rho_{i+1}^{n}.
-$$
+```
 
 At a physical boundary the missing coefficient is zero, which is the discrete $\mathcal F=0$
 condition. In azimuth,
 
-$$
+```math
 c=\frac{\delta t}{2}\frac{D_x}{(R\Delta x)^2},
-$$
+```
 
 and the same equation is cyclic, with the first and last rows coupled. Sherman–Morrison reduces the
 cyclic system to two ordinary tridiagonal solves without changing the matrix. For the rank-one form
 $A+\boldsymbol u\boldsymbol v^T$,
 
-$$
+```math
 (A+\boldsymbol u\boldsymbol v^T)^{-1}\boldsymbol b
 =A^{-1}\boldsymbol b
 -\frac{A^{-1}\boldsymbol u\,\boldsymbol v^TA^{-1}\boldsymbol b}
 {1+\boldsymbol v^TA^{-1}\boldsymbol u}.
-$$
+```
 
 The two tridiagonal solves give $A^{-1}\boldsymbol b$ and $A^{-1}\boldsymbol u$; the rest is a
 scalar correction.
@@ -1101,14 +1101,14 @@ scalar correction.
 **Positivity subcycling.** For a requested interval $\Delta t$, each line forms its full-step
 coefficients and chooses
 
-$$
+```math
 N_{\rm sub}
 =\max\left(1,
 \left\lceil\frac{\max_i(c_i^-+c_i^+)}{\mathrm{POS\_LIMIT}}\right\rceil
 \right),
 \qquad
 \delta t=\frac{\Delta t}{N_{\rm sub}},
-$$
+```
 
 separately for every line; for the periodic azimuthal line this is based on
 $2c=\Delta tD_x/(R\Delta x)^2$. The subdivision keeps the explicit CN right-hand side nonnegative;
@@ -1127,12 +1127,12 @@ activates, the accepted update differs from the exact CN solution.
 In concentration mode the radial and polar solves use $q_i=\rho_{d,i}/w_i$ as the unknown, with
 $w_i=\rho_{g,i}$ up to an arbitrary common normalization:
 
-$$
+```math
 \mathcal F_{i+1/2}=-A_{i+1/2}D_{i+1/2}w_{i+1/2}
 \frac{q_{i+1}-q_i}{\delta l_{i+1/2}},\qquad
 c_i^\pm=\frac{\delta t}{2}\frac{A_{i\pm1/2}D_{i\pm1/2}w_{i\pm1/2}}
 {V_i\delta l_{i\pm1/2}w_i}.
-$$
+```
 
 The tridiagonal row of [Section 7.2](#72-cranknicolson-solve) then applies to $q$. Gas weights and
 diffusivities are evaluated at the corresponding centers and faces, and the positivity subcycling
@@ -1154,26 +1154,26 @@ a complete Reynolds-averaged momentum tensor ([Section 7.5](#75-why-not-a-reynol
 **Mass flux.** After solving the density, the code reconstructs the time-centered integrated mass
 flux
 
-$$
+```math
 \mathcal F_{\rho,i+1/2}^{n+1/2}
 =-\frac{A_{i+1/2}D_{i+1/2}}{2\delta l_{i+1/2}}
 \left[(\rho_{i+1}^{n}-\rho_i^{n})
 +(\rho_{i+1}^{n+1}-\rho_i^{n+1})\right].
-$$
+```
 
 **Donor limiter.** A positive CN density does not by itself make the old-state donor rule below a
 nonnegative mixture: opposing face transfers can each exceed the donor's old mass while the net
 density stays positive. The code therefore limits the face transfers before density or momentum is
 accepted. Let
 
-$$
+```math
 M_i^n=V_i\max(\rho_i^n,0),
 \qquad
 O_i=\delta t\left[
 \max(\mathcal F_{\rho,i+1/2},0)
 +\max(-\mathcal F_{\rho,i-1/2},0)
 \right]
-$$
+```
 
 be the old cell mass and its total raw outward transfer. The donor factor is
 
@@ -1201,18 +1201,18 @@ Each face is scaled exactly once, by the cell that supplies its mass:
 All donor factors are computed from the unchanged raw fluxes before any face is scaled. The
 accepted density follows conservatively,
 
-$$
+```math
 M_i^{n+1}=M_i^n-\delta t
 \left(\widehat{\mathcal F}_{\rho,i+1/2}
 -\widehat{\mathcal F}_{\rho,i-1/2}\right).
-$$
+```
 
 Because at most `POS_LIMIT` of each donor's old mass can leave during one substep,
 
-$$
+```math
 M_i^n-\theta_iO_i
 \ge (1-\mathrm{POS\_LIMIT})M_i^n\ge0.
-$$
+```
 
 This includes an exactly empty cell: every outward transfer from a zero-mass donor is suppressed.
 Internal faces stay conservative because the same accepted value enters both cells with opposite
@@ -1237,32 +1237,32 @@ u_{a,i+1},&\mathcal F_{\rho,i+1/2}<0,
 
 followed by
 
-$$
+```math
 m_{a,i}^{n+1}=m_{a,i}^n
 -\frac{\delta t}{V_i}
 \left(\mathcal F_{m_a,i+1/2}-\mathcal F_{m_a,i-1/2}\right).
-$$
+```
 
 The donor primitive comes from the old substep state, with the vacuum values of
 [Section 2.1](#21-stored-state) for a donor below $\rho_{\rm vac}$. Internal diffusive transfers
 therefore conserve mass and every stored momentum exactly up to roundoff. More strongly, the update
 can be written
 
-$$
+```math
 (M q)_i^{n+1}
 =(M_i^n-\theta_iO_i)q_i^n
 +\sum_j\widehat I_{ji}q_j^n,
-$$
+```
 
 where every retained and incoming mass weight is nonnegative and their sum is $M_i^{n+1}$. A
 nonempty cell's new primitive thus lies in the convex hull of its old primitive and the old
 primitives of its face donors. For any convex function $\eta(q)$, in particular $q^2$, the mixture
 also obeys
 
-$$
+```math
 \sum_iM_i^{n+1}\eta(q_i^{n+1})
 \le\sum_iM_i^n\eta(q_i^n)
-$$
+```
 
 under periodic or zero-flux boundaries.
 
@@ -1279,25 +1279,25 @@ The mass equation fixes the total transport flux but not which momentum an unres
 exchange carries; GameDev resolves this with the donor closure and keeps the unresolved stress at
 zero. The default density-diffusion flux is
 
-$$
+```math
 \boldsymbol J=-\boldsymbol D\cdot\boldsymbol\nabla\varrho_d,
-$$
+```
 
 and concentration mode uses $\boldsymbol J=-w\boldsymbol D\cdot\nabla(\varrho_d/w)$; the same
 closure applies to either. The mass equation fixes $\varrho_d\boldsymbol v_d+\boldsymbol J$. GameDev
 treats each stored generalized velocity
 
-$$
+```math
 q_a\in\lbrace\ell_\phi,v_r,\ell_\theta\rbrace
-$$
+```
 
 as a parcel property carried by the net diffusive mass flux:
 
-$$
+```math
 \frac{\partial(\varrho_d q_a)}{\partial t}
 +\boldsymbol\nabla\cdot(\boldsymbol Jq_a)=0
 \qquad\text{during an isolated diffusion step}.
-$$
+```
 
 A spatially uniform $q_a$ therefore stays uniform while density diffuses. Conversely, if
 $\boldsymbol J=0$, the closure mixes no momentum even when $q_a$ varies in space. This is a
@@ -1307,11 +1307,11 @@ flux are omitted.
 A Reynolds-averaged interpretation is a different continuum model. With unresolved stress
 $\mathcal R_{ij}$, its conserved momentum and flux would be
 
-$$
+```math
 P_j=\varrho_dv_j+J_j,
 \qquad
 T_{ij}=\varrho_dv_iv_j+J_iv_j+v_iJ_j+\mathcal R_{ij}.
-$$
+```
 
 Adapting this structure to density diffusion would require the corrected momentum state
 $\varrho_d\boldsymbol v_d+\boldsymbol J$, both cross fluxes, all cylindrical or spherical
@@ -1346,13 +1346,13 @@ One step uses the symmetric second-order composition of
 [Strang (1968)](https://doi.org/10.1137/0705041), a palindromic sequence of
 [directional operators](README.md#glossary) around the source update $S$:
 
-$$
+```math
 D_y^{1/2}D_x^{1/2}D_z^{1/2}
 A_x^{1/2}A_y^{1/2}A_z^{1/2}
 S
 A_z^{1/2}A_y^{1/2}A_x^{1/2}
 D_z^{1/2}D_x^{1/2}D_y^{1/2},
-$$
+```
 
 where $D_a$ is diffusion and $A_a$ transport in direction $a$, and the superscript $1/2$ marks a
 half step.
@@ -1383,13 +1383,13 @@ every advection launch the global CFL rate is recomputed from the current synchr
 source step or an earlier sweep cannot leave a later sweep with stale velocities. For a requested
 directional interval $h$, the driver repeatedly chooses
 
-$$
+```math
 \delta t_m=\min\left[
 h-\sum_{n\lt m}\delta t_n,
 \frac{\mathrm{CFL\_DYN}}{\max_{ijk}\lambda_{ijk}},
 \mathrm{DT\_MAX}
 \right]
-$$
+```
 
 and advances that direction until $\sum_m\delta t_m=h$, recovering the state and recomputing
 $\lambda_{ijk}$ between launches. Different directions may use different substep partitions, but all
@@ -1400,7 +1400,7 @@ end at the same composition time before the next operator begins.
 The global step is limited by the explicit transport rate and by `DT_MAX`; diffusion and the source
 update impose no bound of their own. The cell rate is
 
-$$
+```math
 \lambda_{ijk}=\max\left[
 \frac{|\ell_\phi-\bar\ell_\phi|}{R^2\Delta x},
 |v_r|\frac{A_{y,j+1/2}}{\Delta V_{y,j}},
@@ -1409,23 +1409,23 @@ $$
 \frac{\max_{z\in[z_{k-1/2},z_{k+1/2}]}\sin z}
 {\Delta V_{z,k}}
 \right],
-$$
+```
 
 where $\bar\ell_\phi$ is the ring mean of [Section 5.5](#55-fargo-azimuthal-transport) and the
 maximum sine is one if the polar cell straddles the midplane. With `VISC_FLOW`, the same radial and
 polar rates are also evaluated for the gas target velocity, which stiff drag can transfer to the
 dust within one step. Vacuum cells contribute zero. For finite states the host reduction gives
 
-$$
+```math
 \Delta t=\min\left(
 \frac{\mathrm{CFL\_DYN}}{\max_{ijk}\lambda_{ijk}},
 \mathrm{DT\_MAX}
 \right),
-$$
+```
 
-and $\Delta t=\mathrm{DT\_MAX}$ when every rate is zero. The global step is computed from the state
-at the beginning of the step and shortened when necessary to land exactly on the next output time.
-Diffusion and the source update use this global step; only the advection half-intervals are
+and $`\Delta t=\mathrm{DT\_MAX}`$ when every rate is zero. The global step is computed from the
+state at the beginning of the step and shortened when necessary to land exactly on the next output
+time. Diffusion and the source update use this global step; only the advection half-intervals are
 subdivided.
 
 `CFL_DYN <= 0.5` is required by the nearest-integer FARGO shift and enforced at compile time.
@@ -1453,16 +1453,16 @@ Transport lets material leave the domain, while diffusion is confined by a refle
 
 Periodicity identifies
 
-$$
+```math
 \boldsymbol U(X_{\min})=\boldsymbol U(X_{\max}),
-$$
+```
 
 including in a periodic wedge ([Section 2.2](#22-mesh-measures-and-face-areas)). The zero-flux
 diffusion condition is
 
-$$
+```math
 \boldsymbol n\cdot\boldsymbol D\nabla\varrho_d=0.
-$$
+```
 
 **Outflow.** At an outflow-only boundary, with $a_n$ the outward normal speed of the adjacent
 cell-centered state, the boundary mass flux is
@@ -1504,9 +1504,9 @@ in the sections above.
 For a smooth transport and source problem whose component updates are second order, a mesh scale
 $h$, and timestep $\Delta t$, the intended deterministic truncation error is
 
-$$
+```math
 \|e\|\lesssim C_xh^p+C_t\Delta t^2+C_{\rm split}\Delta t^2,
-$$
+```
 
 where PPM is nominally third order in smooth one-dimensional regions and Strang splitting limits the
 composed time order to second order. PPM is formally high order on smooth fields, but the Strang
@@ -1611,13 +1611,13 @@ the block sweep (`FLUID_BLOCK_SWEEP`) one cooperative block owns it.
 
 For directional sweeps, the independent line counts are
 
-$$
+```math
 N_{{\rm line},x}=N_YN_Z,
 \qquad
 N_{{\rm line},y}=N_XN_Z,
 \qquad
 N_{{\rm line},z}=N_XN_Y.
-$$
+```
 
 The thread implementation is the reference transcription and performs every step of a line
 serially. In the block implementation the threads of a block share
@@ -1684,9 +1684,9 @@ pinned host arrays (five with `RADIATION`) stage output and restart transfers, a
 polar PPM weights add $4(N_Y+1)+4(N_Z+1)$ values. The block sweep adds its persistent advection
 workspace
 
-$$
+```math
 M_{\rm adv,work}=12N_G\,\mathrm{sizeof}(\mathtt{real}).
-$$
+```
 
 In double precision one full-grid array is 8 MiB at $1024^2$ and 16 MiB at $128^3$, so
 
@@ -1700,13 +1700,13 @@ $128^3$. The user-level rule of thumb is in the [user guide](../README.md#gpu-me
 
 **Block diffusion.** Each block diffusion kernel needs dynamic shared memory
 
-$$
+```math
 M_{{\rm sh},x}=4N_X\,\mathrm{sizeof}(\mathtt{real}),
 \qquad
 M_{{\rm sh},y}=6N_Y\,\mathrm{sizeof}(\mathtt{real}),
 \qquad
 M_{{\rm sh},z}=6N_Z\,\mathrm{sizeof}(\mathtt{real}).
-$$
+```
 
 On CUDA the host opts each block diffusion kernel in to this size at startup; on ROCm it checks the
 device LDS capacity and the kernel's static-plus-dynamic allocation before any launch. A request
@@ -1771,11 +1771,11 @@ is not the midpoint optical depth used by the preceding source update.
 ([user guide](../README.md#restarting-a-simulation)), and the saved linear velocities are converted
 back with
 
-$$
+```math
 \ell_\phi=Rv_\phi,
 \qquad
 \ell_\theta=rv_\theta.
-$$
+```
 
 Then $m_a=\varrho_du_a$ rebuilds all conserved arrays, with the vacuum reset of
 [Section 2.1](#21-stored-state), before the next operator runs. The optical depth is rebuilt when
