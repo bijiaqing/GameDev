@@ -3,8 +3,8 @@
 The validation suites compile the current production kernels with test-specific constants and
 drivers and judge them against analytical, statistical, and invariant references. This file
 explains how to run, archive, and compare them. What each case establishes, and its acceptance
-criteria, are in [`doc/fluid_testset.md`](../doc/fluid_testset.md) and
-[`doc/swarm_testset.md`](../doc/swarm_testset.md).
+criteria, are in [`doc/swarm_testset.md`](../doc/swarm_testset.md) and
+[`doc/fluid_testset.md`](../doc/fluid_testset.md).
 
 ## Requirements
 
@@ -21,18 +21,18 @@ generation, so no `__pycache__` directories are written.
 
 | Path | Contents |
 |---|---|
-| `fluid/mod/`, `swarm/mod/` | validation models: `flags.mk`, constants, drivers, and per-model runners and validators |
-| `fluid/src/`, `swarm/src/` | shared drivers, suite runners, and validators |
+| `swarm/mod/`, `fluid/mod/` | validation models: `flags.mk`, constants, drivers, and per-model runners and validators |
+| `swarm/src/`, `fluid/src/` | shared drivers, suite runners, and validators |
 | `val_config.py` | case lists, groups, output paths, and the source fingerprint |
 | `run_all.py` | complete native campaign for one backend |
 | `check_archive.py` | require a complete, passing native archive |
 | `compare_backends.py` | compare a CUDA archive with a ROCm archive |
 | `paper/` | scientific campaigns with their own READMEs; not part of `run_all.py` |
 
-Results go to `fluid/out/<model>/<backend>/<sweep>/` and `swarm/out/<model>/<backend>/`, and builds
-to `fluid/obj/` and `swarm/obj/`. The fluid sweep directories are `thread_precise` and
+Results go to `swarm/out/<model>/<backend>/` and `fluid/out/<model>/<backend>/<sweep>/`, and builds
+to `swarm/obj/` and `fluid/obj/`. The fluid sweep directories are `thread_precise` and
 `block_precise` on CUDA and `thread` and `block` on ROCm. Suite manifests are under
-`fluid/out/_suite/` and `swarm/out/_suite/`, collision-chain records under `groups/chain/`. A rerun
+`swarm/out/_suite/` and `fluid/out/_suite/`, collision-chain records under `groups/chain/`. A rerun
 replaces the results of that model, backend, and sweep.
 
 ## Running a complete campaign
@@ -68,7 +68,7 @@ backends can share one checkout. Do not run `make clean` while a campaign is bui
 ## Comparing CUDA and ROCm
 
 Run the two native campaigns concurrently from the same commit. Afterwards, copy one system's
-`val/fluid/out/`, `val/swarm/out/`, and `val/*.json`, excluding `obj/` directories, into a separate
+`val/swarm/out/`, `val/fluid/out/`, and `val/*.json`, excluding `obj/` directories, into a separate
 directory on the other system and compare each sweep, for example on the ROCm system:
 
 ```bash
@@ -92,21 +92,21 @@ counterpart into this checkout's own `val/` directory and rerun the native campa
 The suite runners run one group; set the backend in the environment:
 
 ```bash
-GPU_BACKEND=rocm FLUID_SWEEP=block python3 -B val/fluid/src/run_suite.py --group diffusion --target gfx942
+GPU_BACKEND=cuda python3 -B val/swarm/src/run_suite.py --group chain --target sm_80
 ```
 
 ```bash
-GPU_BACKEND=cuda python3 -B val/swarm/src/run_suite.py --group chain --target sm_80
+GPU_BACKEND=rocm FLUID_SWEEP=block python3 -B val/fluid/src/run_suite.py --group diffusion --target gfx942
 ```
 
 | Runner | Groups |
 |---|---|
-| `val/fluid/src/run_suite.py` | `all`, `equilibrium`, `transport`, `diffusion`, `source`, `radiation`, `coupled` |
 | `val/swarm/src/run_suite.py` | `all`, `transport`, `diffusion`, `initialization`, `collision`, `knn`, `chain` |
+| `val/fluid/src/run_suite.py` | `all`, `equilibrium`, `transport`, `diffusion`, `source`, `radiation`, `coupled` |
 
 The swarm `all` group does not include `chain`; `run_all.py` runs both. A single model runs through
-its own runner, for example `GPU_BACKEND=cuda python3 -B val/fluid/mod/test_x_diffusion_2d/run.py`.
-`val/check_archive.py --backend <backend> --component fluid|swarm|all --fluid-sweep thread|block`
+its own runner, for example `GPU_BACKEND=cuda python3 -B val/swarm/mod/test_diffusion_2d/run.py`.
+`val/check_archive.py --backend <backend> --component swarm|fluid|all --fluid-sweep thread|block`
 checks an existing archive (the sweep maps to the backend's archive directory, `thread_precise` or
 `block_precise` on CUDA), and `val/swarm/src/run_suite.py --rebuild-manifest` rebuilds the swarm
 suite manifest from downloaded component manifests without rerunning.

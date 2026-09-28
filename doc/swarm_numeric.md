@@ -38,21 +38,21 @@ the dust distribution differently. The swarm branch advances a weighted empirica
 distribution, whereas the fluid branch advances cell-averaged density and momentum under a
 single-valued velocity closure. Their common and distinct closures are
 
-| Property | Eulerian fluid | Lagrangian swarm |
+| Property | Lagrangian swarm | Eulerian fluid |
 |---|---|---|
-| dust representation | cell-averaged density and momentum | weighted computational representatives |
-| grain sizes | one fixed Stokes species | monodisperse or multisize |
-| velocity at one position | single valued | multiple representatives may cross with different velocities |
+| dust representation | weighted computational representatives | cell-averaged density and momentum |
+| grain sizes | monodisperse or multisize | one fixed Stokes species |
+| velocity at one position | multiple representatives may cross with different velocities | single valued |
 | gas response to dust | absent | absent |
 | dust pressure and self-gravity | absent | absent |
-| density or concentration diffusion | spherical finite-volume PDE | cylindrical Itô displacement |
-| collisions | absent | optional coagulation and fragmentation |
-| imported gas fields | absent | optional |
-| radiation pressure | optional | optional, with optional Poynting–Robertson drag |
+| density or concentration diffusion | cylindrical Itô displacement | spherical finite-volume PDE |
+| collisions | optional coagulation and fragmentation | absent |
+| imported gas fields | optional | absent |
+| radiation pressure | optional, with optional Poynting–Robertson drag | optional |
 
 The diffusion-basis distinction is physical rather than merely an implementation detail. In a
-resolved vertical domain, fluid $D_y$ diffuses along spherical radius $r$, whereas swarm $D_R$
-diffuses along cylindrical radius $R$. Equal scalar coefficients therefore need not produce the
+resolved vertical domain, swarm $D_R$ diffuses along cylindrical radius $R$, whereas fluid $D_y$
+diffuses along spherical radius $r$. Equal scalar coefficients therefore need not produce the
 same radial equilibrium away from the midplane; the two closures coincide radially only where
 $r=R$, including the vertically integrated model.
 
@@ -1740,7 +1740,7 @@ $-m\Delta\phi_w$; projecting the unchanged vector at $x_w$ would instead introdu
 seam-local velocity kick. The same ordering is used after cylindrical-axis continuation in 3D.
 
 This velocity treatment is internally consistent, but it is not the same momentum
-closure as the fluid's donor-angular-momentum diffusion; density-only fluid–swarm diffusion
+closure as the fluid's donor-angular-momentum diffusion; density-only swarm–fluid diffusion
 comparisons are valid until a common momentum equation is derived.
 
 The reprojection is explicit. Before displacement,

@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This campaign runs the same photospheric transport problem with the Eulerian fluid and the
-Lagrangian swarm representations so that the two formulations can be compared. Both evolve a single
+This campaign runs the same photospheric transport problem with the Lagrangian swarm and the
+Eulerian fluid representations so that the two formulations can be compared. Both evolve a single
 dust species under stellar gravity, gas drag, attenuated radiation pressure, and density diffusion
 with Stokes-dependent diffusivity. Collisions, imported gas, viscous gas flow, concentration
 diffusion, and Poynting–Robertson drag are not enabled.
@@ -15,8 +15,8 @@ needed.
 
 | Formulation | Directory | `flags.mk` selections |
 |---|---|---|
-| Fluid | `fluid/` | `DUST_REPR := fluid`, `FLUID_SWEEP := block`, `DIFFUSION`, `RADIATION` |
 | Swarm | `swarm/` | `DUST_REPR := swarm`, `TRANSPORT`, `DIFFUSION`, `RADIATION`, `SAVE_DENS`, `CODE_UNIT` |
+| Fluid | `fluid/` | `DUST_REPR := fluid`, `FLUID_SWEEP := block`, `DIFFUSION`, `RADIATION` |
 
 Shared parameters, in code units with $G=M_\star=R_0=1$:
 
@@ -34,24 +34,24 @@ Shared parameters, in code units with $G=M_\star=R_0=1$:
 value at `R_0`, not a spatially constant Stokes number: $\mathrm{St}(R)=\mathrm{St}_0(R/R_0)^{1/2}$.
 Radiation ramps on over `T_BETA`.
 
-| Parameter | Fluid | Swarm |
+| Parameter | Swarm | Fluid |
 |---|---|---|
-| Mesh | `(4096, 3072, 1)` | `(1536, 1024, 1)` deposition mesh |
-| Representatives | not applicable | `N_P = 1000000000`, equal represented masses, one size |
-| Fluid limiter | `POS_LIMIT = 0.9`, `RHO_VAC = 1e-30` | not applicable |
-| Particle output | not applicable | every tenth frame (`LIN_BASE = 10`) |
+| Mesh | `(1536, 1024, 1)` deposition mesh | `(4096, 3072, 1)` |
+| Representatives | `N_P = 1000000000`, equal represented masses, one size | not applicable |
+| Particle output | every tenth frame (`LIN_BASE = 10`) | not applicable |
+| Fluid limiter | not applicable | `POS_LIMIT = 0.9`, `RHO_VAC = 1e-30` |
 
 ## Initialization
 
-The root fluid and swarm host initializers construct the same Gaussian-smoothed dust surface
+The root swarm and fluid host initializers construct the same Gaussian-smoothed dust surface
 density: $Z\Sigma_0(R/R_0)^{p}$ on $0.6\lt R/R_0\lt 1.4$, convolved with a Gaussian of standard
 deviation $0.025R_0$. Both use the same gas surface-density and pressure-support prescriptions and
 initial steady drag-coupled velocities.
 
-The fluid override `fluid/src/init_rho_calc.cu` interpolates this profile onto the mesh and adds
-azimuthal Gaussian density perturbations of relative amplitude $10^{-10}$. The swarm model reuses
-the root initializer, sampling radius with probability proportional to $R\,\Sigma_d(R)$ and uniform
-azimuth, with equal represented masses and no size distribution.
+The swarm model reuses the root initializer, sampling radius with probability proportional to
+$R\,\Sigma_d(R)$ and uniform azimuth, with equal represented masses and no size distribution. The
+fluid override `fluid/src/init_rho_calc.cu` interpolates this profile onto the mesh and adds
+azimuthal Gaussian density perturbations of relative amplitude $10^{-10}$.
 
 Both optical-depth calculations use the 2D closure $\rho_d=\Sigma_d/(\sqrt{2\pi}\,H_g)$ and
 integrate $\kappa_0\rho_d$ radially from the inner boundary. Swarm extinction is deposited using
@@ -60,10 +60,10 @@ therefore statistical and subject to mesh discretization.
 
 ## Timestep policies
 
-`DT_MAX` and `CFL_DYN` are shared, but the timestep criteria differ. Fluid FARGO advection limits
-the step by the residual azimuthal motion. The swarm retains absolute orbital and cell-crossing
-bounds and explicit stochastic-displacement bounds; its particle drift has no FARGO residual-step
-policy. For the swarm mesh the orbital bound at the inner edge is
+`DT_MAX` and `CFL_DYN` are shared, but the timestep criteria differ. The swarm retains absolute
+orbital and cell-crossing bounds and explicit stochastic-displacement bounds; its particle drift has
+no FARGO residual-step policy, whereas fluid FARGO advection limits the step by the residual
+azimuthal motion. For the swarm mesh the orbital bound at the inner edge is
 
 $$
 \Delta t=0.45\,\frac{(\pi/2)/1536}{\Omega_K(0.5)}=1.62703\times10^{-4}.
@@ -81,21 +81,21 @@ local `src/` overrides, and otherwise compiles production sources.
 CUDA (A100 target; use `sm_90` for H200 and its executable path):
 
 ```sh
-make -C val/paper/photospheric/fluid -j8 GPU_BACKEND=cuda GPU_TARGET=sm_80
-val/paper/photospheric/fluid/obj/cuda/sm_80/gamedev
-
 make -C val/paper/photospheric/swarm -j8 GPU_BACKEND=cuda GPU_TARGET=sm_80
 val/paper/photospheric/swarm/obj/cuda/sm_80/gamedev
+
+make -C val/paper/photospheric/fluid -j8 GPU_BACKEND=cuda GPU_TARGET=sm_80
+val/paper/photospheric/fluid/obj/cuda/sm_80/gamedev
 ```
 
 ROCm:
 
 ```sh
-make -C val/paper/photospheric/fluid -j8 GPU_BACKEND=rocm GPU_TARGET=gfx942
-val/paper/photospheric/fluid/obj/rocm/gfx942/gamedev
-
 make -C val/paper/photospheric/swarm -j8 GPU_BACKEND=rocm GPU_TARGET=gfx942
 val/paper/photospheric/swarm/obj/rocm/gfx942/gamedev
+
+make -C val/paper/photospheric/fluid -j8 GPU_BACKEND=rocm GPU_TARGET=gfx942
+val/paper/photospheric/fluid/obj/rocm/gfx942/gamedev
 ```
 
 | Item | Path under `val/paper/photospheric/` |
@@ -110,12 +110,12 @@ from a frame with a particle checkpoint (0, 10, or 20).
 
 ## Outputs
 
+The swarm writes `dustdens` and `optdepth` at every frame (about 12.6 MB each) and `particle` and
+`rngstate` checkpoints at frames 0, 10, and 20.
+
 The fluid writes `dustdens`, `dustvelx`, `dustvely`, `dustvelz`, and `optdepth` at every frame
 0–20, plus `variables.txt`. Each field holds one double per cell, about 101 MB, so a complete fluid
-run writes about 10.6 GB.
-
-The swarm writes `dustdens` and `optdepth` at every frame (about 12.6 MB each) and `particle` and
-`rngstate` checkpoints at frames 0, 10, and 20. File formats are described in
+run writes about 10.6 GB. File formats are described in
 [Output files](../../../README.md#output-files).
 
 Estimated swarm array sizes at one billion particles, in decimal GB and not measured peak usage:

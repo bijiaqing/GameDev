@@ -6,9 +6,9 @@ GameDev is a GPU research code for dust evolution in protoplanetary disks. One r
 Makefile build it for either NVIDIA CUDA or AMD HIP/ROCm, and each build selects one of two
 independent dust representations:
 
-- an Eulerian, pressureless **dust fluid** for conservative continuum evolution
 - a Lagrangian **dust swarm** for particle trajectories, stochastic diffusion, and
   representative-particle collisions
+- an Eulerian, pressureless **dust fluid** for conservative continuum evolution
 
 Both representations evolve dust in a prescribed gas disk with one-way gas-to-dust coupling. They
 share coordinate and physical conventions but own separate headers, kernels, and runtimes.
@@ -39,37 +39,37 @@ Read the numerical and test-set guides before using results for scientific analy
 
 ### Dust representations
 
-| Capability | Eulerian fluid | Lagrangian swarm |
+| Capability | Lagrangian swarm | Eulerian fluid |
 |---|---|---|
-| State | cell-averaged density and momentum | weighted computational representatives |
-| Grain sizes | one fixed species | monodisperse or multisize |
-| Velocity closure | one velocity per cell | multiple velocities can coexist locally |
-| Transport | conservative finite-volume sweeps | semi-analytic particle trajectories |
-| Diffusion | spherical finite-volume density diffusion | cylindrical stochastic displacement |
-| Radiation pressure | optional | optional, with optional Poynting–Robertson drag |
-| Collisions | not implemented | optional coagulation and fragmentation |
-| Imported gas fields | not implemented | optional |
+| State | weighted computational representatives | cell-averaged density and momentum |
+| Grain sizes | monodisperse or multisize | one fixed species |
+| Velocity closure | multiple velocities can coexist locally | one velocity per cell |
+| Transport | semi-analytic particle trajectories | conservative finite-volume sweeps |
+| Diffusion | cylindrical stochastic displacement | spherical finite-volume density diffusion |
+| Radiation pressure | optional, with optional Poynting–Robertson drag | optional |
+| Collisions | optional coagulation and fragmentation | not implemented |
+| Imported gas fields | optional | not implemented |
 | Gas backreaction, dust self-gravity | not implemented | not implemented |
 
-The fluid branch is most natural while the dust velocity remains approximately single valued. The
-swarm branch retains trajectory crossing and a size distribution, at the cost of sampling noise and
-more expensive neighborhood-based collisions. The two models are complementary rather than
+The swarm branch retains trajectory crossing and a size distribution, at the cost of sampling
+noise and more expensive neighborhood-based collisions. The fluid branch is most natural while the
+dust velocity remains approximately single valued. The two models are complementary rather than
 interchangeable discretizations of every physical closure.
 
 ### Numerical methods at a glance
 
-- **Fluid:** finite-volume PPM reconstruction with HLL fluxes and invariant-domain limiting, integer
-  FARGO orbital shifts, SSPRK(3,3) sweeps, exponentially weighted drag and force sources,
-  Crank–Nicolson diffusion with a conservative donor-momentum closure, and a palindromic operator
-  composition. Smooth transport is second order in time and space.
 - **Swarm:** staggered semi-analytic drag and gravity trajectories, radiation pressure and optional
   Poynting–Robertson drag, Itô Euler–Maruyama diffusion, a frozen-bath continuous-time collision
   chain with exact top-$K$ neighbors from a KD tree or an adaptive Morton hierarchy, and Strang
   composition of the enabled operators. Stochastic diffusion and collisions require statistical
   convergence tests rather than a pointwise order claim.
+- **Fluid:** finite-volume PPM reconstruction with HLL fluxes and invariant-domain limiting, integer
+  FARGO orbital shifts, SSPRK(3,3) sweeps, exponentially weighted drag and force sources,
+  Crank–Nicolson diffusion with a conservative donor-momentum closure, and a palindromic operator
+  composition. Smooth transport is second order in time and space.
 
 The equations, discretizations, accuracy statements, and GPU implementation details are in
-[`doc/fluid_numeric.md`](doc/fluid_numeric.md) and [`doc/swarm_numeric.md`](doc/swarm_numeric.md).
+[`doc/swarm_numeric.md`](doc/swarm_numeric.md) and [`doc/fluid_numeric.md`](doc/fluid_numeric.md).
 
 ### Coordinates and geometries
 
@@ -88,15 +88,15 @@ logarithmic in $y$, and arrays are stored $x$-first,
 $\mathrm{index}=i_x+i_yN_X+i_zN_XN_Y$. With `N_Z == 1` the evolved density is a vertically
 integrated surface density; with `N_Z > 1` it is a volume density.
 
-| Geometry | Grid condition | Fluid | Swarm | Interpretation |
+| Geometry | Grid condition | Swarm | Fluid | Interpretation |
 |---|---|:---:|:---:|---|
-| radial-only | `N_X == 1`, `N_Z == 1` | no | yes | axisymmetric, vertically integrated midplane dynamics |
+| radial-only | `N_X == 1`, `N_Z == 1` | yes | no | axisymmetric, vertically integrated midplane dynamics |
 | radial–azimuthal | `N_X > 1`, `N_Z == 1` | yes | yes | vertically integrated disk plane |
-| radial–polar | `N_X == 1`, `N_Z > 1` | no | yes | axisymmetric resolved vertical structure |
+| radial–polar | `N_X == 1`, `N_Z > 1` | yes | no | axisymmetric resolved vertical structure |
 | full 3D | `N_X > 1`, `N_Z > 1` | yes | yes | resolved spherical dynamics |
 
-The fluid branch always requires an active azimuthal dimension. Every three-dimensional fluid or
-swarm model requires `DIFFUSION`, which supports the vertically resolved dust layer.
+Every three-dimensional swarm or fluid model requires `DIFFUSION`, which supports the vertically
+resolved dust layer. The fluid branch always requires an active azimuthal dimension.
 
 ## Requirements
 
@@ -112,17 +112,7 @@ would invalidate the production NaN and Inf guards. There is no installation ste
 
 ## Quick start
 
-Run all commands from the repository root. Build and run the fiducial fluid model:
-
-```bash
-make MODEL=fluid_fiducial GPU_BACKEND=cuda
-```
-
-```bash
-mod/fluid_fiducial/gamedev
-```
-
-Build and run the fiducial swarm model on ROCm:
+Run all commands from the repository root. Build and run the fiducial swarm model on ROCm:
 
 ```bash
 make MODEL=swarm_fiducial GPU_BACKEND=rocm
@@ -132,9 +122,19 @@ make MODEL=swarm_fiducial GPU_BACKEND=rocm
 mod/swarm_fiducial/gamedev
 ```
 
-The fiducial models are production-scale examples (a $1024\times1024$ fluid grid and $10^7$ swarm
-representatives), not lightweight demonstrations. For a short installation check, run the
-validation workflow in quick mode:
+Build and run the fiducial fluid model on CUDA:
+
+```bash
+make MODEL=fluid_fiducial GPU_BACKEND=cuda
+```
+
+```bash
+mod/fluid_fiducial/gamedev
+```
+
+The fiducial models are production-scale examples ($10^7$ swarm representatives and a
+$1024\times1024$ fluid grid), not lightweight demonstrations. For a short installation check, run
+the validation workflow in quick mode:
 
 ```bash
 python3 -B val/run_all.py --backend cuda --quick
@@ -152,8 +152,8 @@ the model-level settings, in the model's `flags.mk`; command-line values take pr
 | `MODEL` | directory name, required | model to build; see [Configuring a model](#configuring-a-model) |
 | `GPU_BACKEND` | `cuda` (default) or `rocm` | selects `nvcc` or `hipcc` and the backend mappings in `inc/gpu.cuh` |
 | `GPU_TARGET` | `sm_80` on CUDA, `gfx942` on ROCm | GPU architecture passed to the compiler |
-| `FLUID_SWEEP` | `thread` on CUDA, `block` on ROCm | fluid line solver: one thread per line, or one cooperative block per line |
 | `COLLISION_SEARCH` | `kdtree` on CUDA, `morton` on ROCm | swarm collision-neighbor search |
+| `FLUID_SWEEP` | `thread` on CUDA, `block` on ROCm | fluid line solver: one thread per line, or one cooperative block per line |
 | `CUDA_FLAGS`, `ROCM_FLAGS` | empty | extra compiler flags appended only for that backend |
 | `RESOURCE_REPORT` | empty | on ROCm, any value prints per-kernel register and LDS usage |
 
@@ -164,15 +164,15 @@ linker limit at the fiducial `N_X = 1024`, which is why ROCm defaults to the blo
 ### Executables, objects, and cleaning
 
 A production model's executable is written beside its flags as `mod/<MODEL>/gamedev`, and its
-objects go to `obj/<MODEL>/<fluid|swarm>/<backend>/<sweep or search>/<target>/`. Validation models
-keep both below `val/fluid/obj/` or `val/swarm/obj/`, and their output below `val/*/out/`.
+objects go to `obj/<MODEL>/<swarm|fluid>/<backend>/<search or sweep>/<target>/`. Validation models
+keep both below `val/swarm/obj/` or `val/fluid/obj/`, and their output below `val/*/out/`.
 Each object directory keeps a configuration stamp, so a change of command-line definitions,
 compiler flags, include or source selection, or output path recompiles the affected objects;
 switching between configurations reuses their cached objects and always relinks the requested
 executable. Remove one model's executable and objects, or everything generated:
 
 ```bash
-make MODEL=fluid_fiducial clean
+make MODEL=swarm_fiducial clean
 ```
 
 ```bash
@@ -180,7 +180,7 @@ make clean
 ```
 
 Build messages report the selected model, representation, constant header, header overrides,
-fluid sweep or collision search, and for every compiled object which source file won the
+collision search or fluid sweep, and for every compiled object which source file won the
 model-over-production search order.
 
 ## Configuring a model
@@ -197,8 +197,8 @@ mod/
     └── const_defs.cuh    # optional: complete replacement of the default constants
 ```
 
-`MODEL` is looked up under `mod/`, `val/fluid/mod/`, and `val/swarm/mod/` and must resolve to
-exactly one directory. `flags.mk` lists `DUST_REPR`, then `FLUID_SWEEP`, `COLLISION_SEARCH`, and
+`MODEL` is looked up under `mod/`, `val/swarm/mod/`, and `val/fluid/mod/` and must resolve to
+exactly one directory. `flags.mk` lists `DUST_REPR`, then `COLLISION_SEARCH`, `FLUID_SWEEP`, and
 `MODEL_PARENT` as needed, a blank line, and one compile-time feature flag per line:
 
 ```make
@@ -209,19 +209,6 @@ GPU_FLAGS += -DRADIATION
 GPU_FLAGS += -DSAVE_DENS
 GPU_FLAGS += -DCODE_UNIT
 ```
-
-### Fluid feature flags
-
-Transport and the local drag, gravity, and geometric sources are always active in the fluid branch.
-
-| Flag | Effect |
-|---|---|
-| `DIFFUSION` | spherical dust diffusion with Stokes-dependent diffusivity; required in 3D |
-| `DIFFUSE_CONCENTRATION` | diffuse the dust-to-gas concentration instead of the dust density; requires `DIFFUSION` |
-| `RADIATION` | attenuated radiation pressure |
-| `VISC_FLOW` | prescribed viscous gas radial flow; requires `DIFFUSION` |
-| `CONST_NU` | constant kinematic viscosity instead of constant $\alpha$ |
-| `HALF_DISK` | 3D upper half disk with a reflecting midplane (`Z_MAX` must be $\pi/2$) |
 
 ### Swarm feature flags
 
@@ -249,6 +236,20 @@ A swarm model enables at least one of `TRANSPORT` and `COLLISION`. A collision b
 one search, chosen with `COLLISION_SEARCH := kdtree` (exact KD tree) or `COLLISION_SEARCH := morton`
 (adaptive Morton index with periodic ghosts). The collision integrator is always the frozen-bath
 chain; the removed flags `BERNOULLI`, `KNN_CACHE`, and `COL_CHAIN` stop the build with an error.
+
+### Fluid feature flags
+
+Transport and the local drag, gravity, and geometric sources are always active in the fluid branch.
+
+| Flag | Effect |
+|---|---|
+| `DIFFUSION` | spherical dust diffusion with Stokes-dependent diffusivity; required in 3D |
+| `DIFFUSE_CONCENTRATION` | diffuse the dust-to-gas concentration instead of the dust density; requires `DIFFUSION` |
+| `RADIATION` | attenuated radiation pressure |
+| `VISC_FLOW` | prescribed viscous gas radial flow; requires `DIFFUSION` |
+| `CONST_NU` | constant kinematic viscosity instead of constant $\alpha$ |
+| `HALF_DISK` | 3D upper half disk with a reflecting midplane (`Z_MAX` must be $\pi/2$) |
+
 The dependencies marked "requires" or "excludes" are compile-time errors from
 `inc/swarm/swarm_kern.cuh`, `inc/fluid/fluid_kern.cuh`, or the constant headers.
 
@@ -256,8 +257,8 @@ The dependencies marked "requires" or "excludes" are compile-time errors from
 
 Grid dimensions and extents, disk and dust parameters, particle count, KNN settings, output
 cadence, and launch widths are `constexpr` constants in the representation's default header,
-[`inc/fluid/const_defs.cuh`](inc/fluid/const_defs.cuh) or
-[`inc/swarm/const_defs.cuh`](inc/swarm/const_defs.cuh). To change any of them, copy the default
+[`inc/swarm/const_defs.cuh`](inc/swarm/const_defs.cuh) or
+[`inc/fluid/const_defs.cuh`](inc/fluid/const_defs.cuh). To change any of them, copy the default
 into the model directory and edit the copy; the model's `const_defs.cuh` replaces the default
 entirely. Constants a user most often changes are:
 
@@ -289,33 +290,34 @@ analytical tests; physics meant for every model belongs in the branch source.
 
 ### Console output and failure behavior
 
-A run starts from frame 0 and advances to `SAVE_MAX`. The fluid branch prints each step's frame
-index, timestep, and elapsed and total time, plus a `[CFL]` line naming the rate-limiting cell. The
-swarm branch prints the frame index `idx`, the total time `clock_sim`, the time within the current
-output interval `clock_out`, and, when enabled, the dynamics (`count_dyn`, `dt_dyn`) and collision
-(`count_col`, `dt_col`) step counts and sizes. Both print `NNN/SAVE_MAX finished on <date>` after
-each frame.
+A run starts from frame 0 and advances to `SAVE_MAX`. The swarm branch prints the frame index
+`idx`, the total time `clock_sim`, the time within the current output interval `clock_out`, and,
+when enabled, the dynamics (`count_dyn`, `dt_dyn`) and collision (`count_col`, `dt_col`) step counts
+and sizes. The fluid branch prints each step's frame index, timestep, and elapsed and total time,
+plus a `[CFL]` line naming the rate-limiting cell. Both print
+`NNN/SAVE_MAX finished on <date>` after each frame.
 
-The runtimes check the evolved state for non-finite values: the fluid branch after its operators,
-the swarm branch before every collision-neighbor search. A non-finite cell or particle, a failed
-file read or write, or any GPU runtime or kernel error prints a message beginning with `Error:` and
-exits with a nonzero status, so a batch job fails visibly instead of writing corrupted frames.
-Internal consistency
-failures of the collision chain, the Morton index, the controller, and initialization throw a C++
-exception instead; the runtime then terminates with the exception's message and a nonzero status.
+The runtimes check the evolved state for non-finite values: the swarm branch before every
+collision-neighbor search, the fluid branch after its operators. A non-finite cell or particle, a
+failed file read or write, or any GPU runtime or kernel error prints a message beginning with
+`Error:` and exits with a nonzero status, so a batch job fails visibly instead of writing corrupted
+frames. Internal consistency failures of the collision chain, the Morton index, the controller, and
+initialization throw a C++ exception instead; the runtime then terminates with the exception's
+message and a nonzero status.
 [`doc/swarm_numeric.md`](doc/swarm_numeric.md#116-failure-behavior) and
 [`doc/fluid_numeric.md`](doc/fluid_numeric.md#84-finite-state-checks-and-failure-behavior) list the
 checks.
 
 ### GPU memory
 
-The fluid branch keeps about eight double-precision device arrays per cell (density, momenta,
-primitive velocities, and CFL rates), nine with `RADIATION`; the block sweep adds a
-twelve-field workspace, roughly 96 bytes per cell. A swarm representative costs 48 bytes of state,
-64 with `MULTISIZE`, plus one RNG state with `DIFFUSION` or `COLLISION`. Collisions add roughly
-$146+4N_K$ bytes per representative, dominated by the neighbor cache, plus the search index: about
-1.15 kB per representative, or 11.5 GB for the default $10^7$ representatives at `N_K = 200`.
+A swarm representative costs 48 bytes of state, 64 with `MULTISIZE`, plus one RNG state with
+`DIFFUSION` or `COLLISION`. Collisions add roughly $146+4N_K$ bytes per representative, dominated by
+the neighbor cache, plus the search index: about 1.15 kB per representative, or 11.5 GB for the
+default $10^7$ representatives at `N_K = 200`.
 [`doc/swarm_numeric.md`](doc/swarm_numeric.md#114-memory-footprint) gives the complete estimate.
+The fluid branch keeps about eight double-precision device arrays per cell (density, momenta,
+primitive velocities, and CFL rates), nine with `RADIATION`; the block sweep adds a twelve-field
+workspace, roughly 96 bytes per cell.
 
 ## Restarting a simulation
 
@@ -325,12 +327,12 @@ Pass a saved frame index to the executable:
 mod/swarm_fiducial/gamedev 10
 ```
 
-The restart time is reconstructed from the model's output schedule. The fluid branch reloads
-density and physical linear velocities, converts them to its internal angular state, and rebuilds
-momentum and optical depth. The swarm branch reloads its particle checkpoint and, when diffusion or
-collisions use random numbers, the matching RNG-state checkpoint, so a swarm restart frame must be
-one at which a particle checkpoint was written; with `LIN_BASE > 1` or `LOGOUTPUT`, mesh-only
-frames cannot be resumed. A restart continues writing frames into the same output directory and
+The restart time is reconstructed from the model's output schedule. The swarm branch reloads its
+particle checkpoint and, when diffusion or collisions use random numbers, the matching RNG-state
+checkpoint, so a swarm restart frame must be one at which a particle checkpoint was written; with
+`LIN_BASE > 1` or `LOGOUTPUT`, mesh-only frames cannot be resumed. The fluid branch reloads density
+and physical linear velocities, converts them to its internal angular state, and rebuilds momentum
+and optical depth. A restart continues writing frames into the same output directory and
 does not rewrite `variables.txt`. Restart files are not an interchange format between versions or
 backends: raw swarm RNG state depends on the backend's RNG layout.
 
@@ -343,8 +345,8 @@ interpret them in INI format.
 
 | Branch | Files per frame | Notes |
 |---|---|---|
-| fluid | `dustdens`, `dustvelx`, `dustvely`, `dustvelz`, `optdepth` (with `RADIATION`) | `N_X*N_Y*N_Z` values, $x$-first; velocities are physical linear components |
 | swarm | `particle`, `rngstate` (with `DIFFUSION` or `COLLISION`), `dustdens` (with `SAVE_DENS`), `optdepth` (with `RADIATION`) | mesh fields every frame; particle and RNG checkpoints at frame 0 and then every `LIN_BASE` frames, at powers of `LOG_BASE` with `LOGOUTPUT`, or every frame with `LOGTIMING` |
+| fluid | `dustdens`, `dustvelx`, `dustvely`, `dustvelz`, `optdepth` (with `RADIATION`) | `N_X*N_Y*N_Z` values, $x$-first; velocities are physical linear components |
 
 `dustdens` is a surface density for `N_Z == 1` and a volume density for `N_Z > 1`.
 `particle_*.dat` stores physical positions and linear velocities and, with `MULTISIZE`, grain size
@@ -359,7 +361,7 @@ and nonnegative, with a finite positive total dust mass.
 
 ### Reading output with Python
 
-Take the dimensions and the particle layout from `variables.txt`:
+Take the particle layout and the dimensions from `variables.txt`:
 
 ```python
 from configparser import ConfigParser
@@ -367,6 +369,15 @@ from pathlib import Path
 
 import numpy as np
 
+output = Path("out/swarm_fiducial")
+config = ConfigParser()
+config.read(output / "variables.txt")
+
+particle_dtype = np.dtype(list(config["SWARM_DTYPE"].items()))
+particles = np.fromfile(output / "particle_00000.dat", dtype=particle_dtype)
+```
+
+```python
 output = Path("out/fluid_fiducial")
 config = ConfigParser()
 config.read(output / "variables.txt")
@@ -375,22 +386,17 @@ nx, ny, nz = (int(config["PARAMETERS"][key]) for key in ("N_X", "N_Y", "N_Z"))
 dustdens = np.fromfile(output / "dustdens_00000.dat", dtype=np.float64).reshape(nz, ny, nx)
 ```
 
-```python
-particle_dtype = np.dtype(list(config["SWARM_DTYPE"].items()))
-particles = np.fromfile(Path("out/swarm_fiducial") / "particle_00000.dat", dtype=particle_dtype)
-```
-
-For the swarm example, read that model's `variables.txt` into `config` first. The reshaped fluid
-array is indexed `[iz, iy, ix]`. For output written on a machine with a different byte order, give
-NumPy an explicitly byte-ordered dtype.
+The second example reuses the imports of the first. The reshaped fluid array is indexed
+`[iz, iy, ix]`. For output written on a machine with a different byte order, give NumPy an
+explicitly byte-ordered dtype.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | `MODEL is not defined` | run `make MODEL=<directory-name>` from the repository root |
-| model not found or ambiguous | the name must occur exactly once under `mod/`, `val/fluid/mod/`, or `val/swarm/mod/` |
-| `DUST_REPR is not defined` | every `flags.mk` sets `DUST_REPR := fluid` or `swarm` |
+| model not found or ambiguous | the name must occur exactly once under `mod/`, `val/swarm/mod/`, or `val/fluid/mod/` |
+| `DUST_REPR is not defined` | every `flags.mk` sets `DUST_REPR := swarm` or `fluid` |
 | feature-dependency `#error` | check the flag constraints in [Configuring a model](#configuring-a-model) |
 | unsupported GPU architecture | pass the correct `GPU_TARGET` for the installed GPU and rebuild |
 | an unexpected source is compiled | read the `Compiling ...` lines and look for model-local files that shadow production names |
@@ -409,7 +415,7 @@ python3 -B val/run_all.py --backend cuda
 ```
 
 [`val/README.md`](val/README.md) explains the campaign, its outputs, and the CUDA–ROCm comparison;
-[`doc/fluid_testset.md`](doc/fluid_testset.md) and [`doc/swarm_testset.md`](doc/swarm_testset.md)
+[`doc/swarm_testset.md`](doc/swarm_testset.md) and [`doc/fluid_testset.md`](doc/fluid_testset.md)
 state what each test establishes and its acceptance criteria. The scientific campaigns under
 `val/paper/` have their own READMEs.
 
@@ -419,13 +425,13 @@ For every scientific run, retain:
 
 - the repository commit or an exact source archive
 - the complete model directory, including `flags.mk`, `const_defs.cuh`, and local overrides
-- the backend, `GPU_TARGET`, `FLUID_SWEEP` or `COLLISION_SEARCH`, compiler and toolkit versions,
+- the backend, `GPU_TARGET`, `COLLISION_SEARCH` or `FLUID_SWEEP`, compiler and toolkit versions,
   driver, and GPU model
 - `variables.txt`, runtime logs, the initial frame, any restart frame, and validation metrics
 - the RNG-state checkpoints of stochastic swarm calculations
 
 Byte-for-byte agreement is not expected after changing the GPU architecture, compiler,
-optimization flags, fluid sweep, or KNN tie-breaking. Compare deterministic fields first at short,
+optimization flags, KNN tie-breaking, or fluid sweep. Compare deterministic fields first at short,
 roundoff-sensitive times and then by error norms and conserved quantities; compare stochastic or
 chaotic calculations through ensemble distributions of scientifically relevant observables.
 
@@ -433,13 +439,13 @@ chaotic calculations through ensemble distributions of scientifically relevant o
 
 - The gas is prescribed and receives no dust backreaction, and neither representation includes
   dust self-gravity.
-- The fluid branch is pressureless and monodisperse and cannot represent multistream velocity
-  distributions after trajectory crossing; its diffusive momentum closure is a documented modeling
-  approximation.
 - Swarm diffusion and collisions are stochastic and need particle-number and ensemble convergence,
   not only mesh convergence; the frozen-bath tolerance and the fixed neighbor reservoir need
   convergence checks for each scientific use.
 - Collision neighbor searches use a local planar metric with a documented search-radius limit.
+- The fluid branch is pressureless and monodisperse and cannot represent multistream velocity
+  distributions after trajectory crossing; its diffusive momentum closure is a documented modeling
+  approximation.
 - Runs use one GPU; multi-GPU domain decomposition is not implemented.
 - Checkpoints and RNG-state files are not portable between CUDA and ROCm, and the backend and GPU
   target can change rounding and long-time trajectories.
@@ -455,11 +461,11 @@ The numerical guides document representation-specific limitations in detail.
 ├── Makefile           # model, representation, and GPU-backend build rules
 ├── inc/
 │   ├── gpu.cuh        # CUDA/HIP API mappings and GPU error checks
-│   ├── fluid/         # fluid headers
-│   └── swarm/         # swarm headers, including the collision chain and KNN searches
+│   ├── swarm/         # swarm headers, including the collision chain and KNN searches
+│   └── fluid/         # fluid headers
 ├── src/
-│   ├── fluid/         # fluid kernels and runtime, one kernel per file
-│   └── swarm/         # swarm kernels and runtime, one kernel per file
+│   ├── swarm/         # swarm kernels and runtime, one kernel per file
+│   └── fluid/         # fluid kernels and runtime, one kernel per file
 ├── mod/               # production model setups
 ├── val/               # validation suites, scientific campaigns, and campaign utilities
 ├── doc/               # numerical and test-set guides
@@ -475,10 +481,10 @@ validation interface.
 | Document | Purpose |
 |---|---|
 | [`doc/README.md`](doc/README.md) | documentation map, conventions shared by both representations, and authority order |
-| [`doc/fluid_numeric.md`](doc/fluid_numeric.md) | fluid equations, initialization, numerics, accuracy, and implementation |
 | [`doc/swarm_numeric.md`](doc/swarm_numeric.md) | swarm equations, mass weighting, trajectories, diffusion, collisions, and neighbor search |
-| [`doc/fluid_testset.md`](doc/fluid_testset.md) | fluid validation cases, references, and acceptance criteria |
+| [`doc/fluid_numeric.md`](doc/fluid_numeric.md) | fluid equations, initialization, numerics, accuracy, and implementation |
 | [`doc/swarm_testset.md`](doc/swarm_testset.md) | swarm validation cases, statistical references, and acceptance criteria |
+| [`doc/fluid_testset.md`](doc/fluid_testset.md) | fluid validation cases, references, and acceptance criteria |
 | [`val/README.md`](val/README.md) | running, archiving, and comparing the validation suites |
 
 Where prose and code disagree, the current source and matching machine-readable results take
@@ -488,7 +494,7 @@ precedence.
 
 When changing a numerical method or physical prescription:
 
-1. keep the fluid and swarm implementations owned by their own branches
+1. keep the swarm and fluid implementations owned by their own branches
 2. update the corresponding `doc/*_numeric.md` guide with the equation, assumptions, and reference
 3. add or update an analytical, statistical, boundary, or regression test under `val/`
 4. archive enough metrics and environment information to support the new claim
