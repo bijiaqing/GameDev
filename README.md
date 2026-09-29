@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/banner.jpg" alt="GameDev banner" width="100%">
+</p>
+
 # GameDev
 
 **GameDev: GPU-Accelerated ModEl for Dust EVolution**
@@ -603,6 +607,7 @@ limitations](doc/guide_fluid.md#92-known-limitations).
 
 ```text
 .
+├── .github/           # repository banner
 ├── Makefile           # model, representation, and GPU-backend build rules
 ├── CHANGELOG.md       # contents of each release
 ├── requirements.txt   # Python packages for the validation and analysis scripts
