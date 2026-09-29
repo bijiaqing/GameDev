@@ -121,7 +121,7 @@ constexpr int   COL_BIN_Z     = 2;
 constexpr int   COL_BIN_S     = 64;
 constexpr int   COL_BIN_MIN   = 64;
 #ifndef SWEEP_COL_BATH_EPS
-#define SWEEP_COL_BATH_EPS 1.0e-2
+#define SWEEP_COL_BATH_EPS 1.0e-02
 #endif // !SWEEP_COL_BATH_EPS
 constexpr real COL_BATH_EPS   = SWEEP_COL_BATH_EPS;
 constexpr real COL_BATH_ALPHA = 1.0e-03;

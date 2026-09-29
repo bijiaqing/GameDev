@@ -62,27 +62,27 @@ real compact_bump (real value, real lower, real upper)
     real center = 0.5*(lower + upper);
     real half_width = 0.5*(upper - lower);
     real u = (value - center) / half_width;
-    return exp(1.0 - 1.0 / (1.0 - u*u));
+    return std::exp(1.0 - 1.0 / (1.0 - u*u));
 }
 
 real spherical_j0 (real value)
 {
-    return sin(value) / value;
+    return std::sin(value) / value;
 }
 
 real spherical_y0 (real value)
 {
-    return -cos(value) / value;
+    return -std::cos(value) / value;
 }
 
 real spherical_j0_deriv (real value)
 {
-    return (value*cos(value) - sin(value)) / (value*value);
+    return (value*std::cos(value) - std::sin(value)) / (value*value);
 }
 
 real spherical_y0_deriv (real value)
 {
-    return (value*sin(value) + cos(value)) / (value*value);
+    return (value*std::sin(value) + std::cos(value)) / (value*value);
 }
 
 real radial_mode (real y, int dimension)
@@ -114,12 +114,12 @@ real radial_mode (real y, int dimension)
 real host_gas_dens (real R, real Z)
 {
     // reproduce the gas profile used as the radial baseline of the ring density
-    real sigma_g = SIGMA_0*pow(R / R_0, IDX_P);
+    real sigma_g = SIGMA_0*std::pow(R / R_0, IDX_P);
     if (N_Z == 1) return sigma_g;
 
-    real h_g = ASPR_0*pow(R / R_0, 0.5*(IDX_Q + 1.0));
-    real rhog_mid = sigma_g / (sqrt(2.0*M_PI)*h_g*R);
-    return rhog_mid*exp((R / sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g));
+    real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
+    real rhog_mid = sigma_g / (std::sqrt(2.0*M_PI)*h_g*R);
+    return rhog_mid*std::exp((R / std::sqrt(R*R + Z*Z) - 1.0) / (h_g*h_g));
 }
 
 const char *case_name ()
@@ -167,7 +167,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
     std::vector<real> &my, std::vector<real> &mz)
 {
     real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
 
     // traverse cells in the same x-fastest ordering used by all production kernels and binary output files
@@ -179,11 +179,11 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y0 = Y_MIN*pow(dy, static_cast<real>(iy));
+            real y0 = Y_MIN*std::pow(dy, static_cast<real>(iy));
             real y1 = y0*dy;
-            real yc = sqrt(y0*y1);
-            real Rc = yc*sin(zc);
-            real Zc = yc*cos(zc);
+            real yc = std::sqrt(y0*y1);
+            real Rc = yc*std::sin(zc);
+            real Zc = yc*std::cos(zc);
 
             for (int ix = 0; ix < N_X; ix++)
             {
@@ -194,7 +194,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 #if defined(VERIFY_X_TRANSPORT)
                 // cell-average a periodic Fourier mode and assign specific angular momentum R^2, giving unit angular
                 // speed
-                real q = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
+                real q = VERIFY_Q0 + VERIFY_EPS*(std::sin(VERIFY_M*x1) - std::sin(VERIFY_M*x0)) / (VERIFY_M*dx);
                 real velx = Rc*Rc;
                 rhod[idx] = q;
                 mx[idx] = q*velx;
@@ -205,14 +205,14 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 // volume measure; dividing by volume produces the finite-volume cell averages consumed by the advection
                 // kernel
                 int dimension = (N_Z > 1) ? 3 : 2;
-                real volume = (pow(y1, dimension) - pow(y0, dimension)) / static_cast<real>(dimension);
+                real volume = (std::pow(y1, dimension) - std::pow(y0, dimension)) / static_cast<real>(dimension);
                 real rho_int = gauss8([&](real y)
                 {
-                    return compact_bump(y, 1.0, 1.8)*pow(y, dimension - 1);
+                    return compact_bump(y, 1.0, 1.8)*std::pow(y, dimension - 1);
                 }, y0, y1);
                 real my_int = gauss8([&](real y)
                 {
-                    return compact_bump(y, 1.0, 1.8)*VERIFY_A*y*pow(y, dimension - 1);
+                    return compact_bump(y, 1.0, 1.8)*VERIFY_A*y*std::pow(y, dimension - 1);
                 }, y0, y1);
                 rhod[idx] = rho_int / volume;
                 mx[idx] = 0.7*rhod[idx];
@@ -222,10 +222,10 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 // initialize exact finite-volume averages of a smooth pulse touching the outer-boundary region
                 // constant radial velocity then leaves the interior state and escaped mass analytically integrable
                 int dimension = (N_Z > 1) ? 3 : 2;
-                real volume = (pow(y1, dimension) - pow(y0, dimension)) / static_cast<real>(dimension);
+                real volume = (std::pow(y1, dimension) - std::pow(y0, dimension)) / static_cast<real>(dimension);
                 real rho_int = gauss8([&](real y)
                 {
-                    return compact_bump(y, 1.7, 2.5)*pow(y, dimension - 1);
+                    return compact_bump(y, 1.7, 2.5)*std::pow(y, dimension - 1);
                 }, y0, y1);
                 rhod[idx] = rho_int / volume;
                 mx[idx] = 0.0;
@@ -235,7 +235,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 // average the compact bump with the polar finite-volume measure and choose the shell momentum so the
                 // exact integrated polar face-area-to-volume factor gives the same known angular rate in every radial
                 // shell
-                real volume = cos(z0) - cos(z1);
+                real volume = std::cos(z0) - std::cos(z1);
                 real rho_int = gauss8([&](real z)
                 {
                     return compact_bump(z, 0.80, 1.30);
@@ -251,7 +251,7 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 // a periodic Fourier mode is an exact azimuthal diffusion eigenfunction; constant primitive momentum
                 // ratios also test whether diffusing mass transports all three conserved momentum components
                 // consistently
-                real rhod_init = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
+                real rhod_init = VERIFY_Q0 + VERIFY_EPS*(std::sin(VERIFY_M*x1) - std::sin(VERIFY_M*x0)) / (VERIFY_M*dx);
                 rhod[idx] = rhod_init;
                 mx[idx] = 0.7*rhod_init;
                 my[idx] = -0.15*rhod_init;
@@ -259,10 +259,10 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 #elif defined(VERIFY_Y_DIFFUSION_CYL) || defined(VERIFY_Y_DIFFUSION_SPH)
                 // average the zero-flux radial eigenmode with the correct dimension-dependent volume measure
                 int dimension = (N_Z > 1) ? 3 : 2;
-                real volume = (pow(y1, dimension) - pow(y0, dimension)) / static_cast<real>(dimension);
+                real volume = (std::pow(y1, dimension) - std::pow(y0, dimension)) / static_cast<real>(dimension);
                 real mode_avg = gauss8([&](real y)
                 {
-                    return radial_mode(y, dimension)*pow(y, dimension - 1);
+                    return radial_mode(y, dimension)*std::pow(y, dimension - 1);
                 }, y0, y1) / volume;
                 real rhod_init = VERIFY_Q0 + VERIFY_EPS*mode_avg;
                 rhod[idx] = rhod_init;
@@ -272,11 +272,11 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 #elif defined(VERIFY_Z_DIFFUSION)
                 // p2(cos z) is an angular Laplacian eigenmode; multiplication by sin(z) supplies the spherical volume
                 // measure before division by the exact polar cell volume
-                real volume = cos(z0) - cos(z1);
+                real volume = std::cos(z0) - std::cos(z1);
                 real mode_avg = gauss8([&](real z)
                 {
-                    real mu = cos(z);
-                    return 0.5*(3.0*mu*mu - 1.0)*sin(z);
+                    real mu = std::cos(z);
+                    return 0.5*(3.0*mu*mu - 1.0)*std::sin(z);
                 }, z0, z1) / volume;
                 real rhod_init = VERIFY_Q0 + VERIFY_EPS*mode_avg;
                 rhod[idx] = rhod_init;
@@ -292,19 +292,19 @@ void initialize_state (std::vector<real> &rhod, std::vector<real> &mx,
                 mz[idx] = 0.6;
                 #elif defined(VERIFY_OPTDEPTH)
                 // choose surface density so the reconstructed midplane volume density is the requested radial power law
-                real h_g = ASPR_0*pow(Rc / R_0, 0.5*(IDX_Q + 1.0));
-                rhod[idx] = sqrt(2.0*M_PI)*h_g*Rc*pow(yc, static_cast<real>(VERIFY_POWER));
+                real h_g = ASPR_0*std::pow(Rc / R_0, 0.5*(IDX_Q + 1.0));
+                rhod[idx] = std::sqrt(2.0*M_PI)*h_g*Rc*std::pow(yc, static_cast<real>(VERIFY_POWER));
                 mx[idx] = my[idx] = mz[idx] = 0.0;
                 #elif defined(VERIFY_RING)
                 // initialize a relative Fourier density perturbation on circular equilibrium rings; radiation modifies
                 // the equilibrium angular momentum, while optional diffusion supplies the known Fourier-mode damping
-                real rhod_mode = VERIFY_Q0 + VERIFY_EPS*(sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
+                real rhod_mode = VERIFY_Q0 + VERIFY_EPS*(std::sin(VERIFY_M*x1) - std::sin(VERIFY_M*x0)) / (VERIFY_M*dx);
                 #ifdef VERIFY_RING_RADIATION
                 const real beta = BETA_0;
                 #else  // !VERIFY_RING_RADIATION
                 const real beta = 0.0;
                 #endif // VERIFY_RING_RADIATION
-                real ell = sqrt((1.0 - beta)*G*M_S*Rc);
+                real ell = std::sqrt((1.0 - beta)*G*M_S*Rc);
                 rhod[idx] = host_gas_dens(Rc, Zc)*rhod_mode;
                 mx[idx] = rhod[idx]*ell;
                 my[idx] = 0.0;
@@ -581,7 +581,7 @@ int main ()
     // combined ring tests exercise the production operator composition; their target timestep is tied to one quarter of
     // an azimuthal cell at the fastest equilibrium orbit, then clipped so the final step lands exactly on VERIFY_TEND
     real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    real omega_max = sqrt((1.0
+    real omega_max = std::sqrt((1.0
         #ifdef VERIFY_RING_RADIATION
         - BETA_0
         #endif // VERIFY_RING_RADIATION
@@ -590,7 +590,7 @@ int main ()
 
     while (clock < VERIFY_TEND)
     {
-        real dt = fmin(dt_target, VERIFY_TEND - clock);
+        real dt = std::fmin(dt_target, VERIFY_TEND - clock);
 
         #ifdef DIFFUSION
         // opening diffusion half-step in y then x; z is absent in these 2D ring models
@@ -648,23 +648,23 @@ int main ()
         // prescribe the azimuthal displacement in cell widths so integer and fractional FARGO shifts can be studied
         // directly
         real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-        dt = fmin(static_cast<real>(VERIFY_SHIFT)*dx, VERIFY_TEND - clock);
+        dt = std::fmin(static_cast<real>(VERIFY_SHIFT)*dx, VERIFY_TEND - clock);
         #elif defined(VERIFY_Y_TRANSPORT_CYL) || defined(VERIFY_Y_TRANSPORT_SPH) || defined(VERIFY_Y_OUTFLOW_2D) \
             || defined(VERIFY_Z_TRANSPORT)
         // radial and polar transport use the current global production CFL condition
-        dt = fmin(cfl_step(), VERIFY_TEND - clock);
+        dt = std::fmin(cfl_step(), VERIFY_TEND - clock);
         #else  // other VERIFY_* cases
         // diffusion is implicit, but a resolution-dependent timestep is retained to measure convergence of the complete
         // space-time discretization rather than allowing temporal error to remain fixed as the grid is refined
-        real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+        real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
         real min_length = Y_MIN*(dy - 1.0);
         if (N_Z > 1)
         {
-            min_length = fmin(min_length, Y_MIN*(Z_MAX - Z_MIN) / static_cast<real>(N_Z));
+            min_length = std::fmin(min_length, Y_MIN*(Z_MAX - Z_MIN) / static_cast<real>(N_Z));
         }
         real dx_length = Y_MIN*(X_MAX - X_MIN) / static_cast<real>(N_X);
-        min_length = fmin(min_length, dx_length);
-        dt = fmin(0.25*min_length, VERIFY_TEND - clock);
+        min_length = std::fmin(min_length, dx_length);
+        dt = std::fmin(0.25*min_length, VERIFY_TEND - clock);
         #endif // VERIFY_* case selection
 
         // compile exactly one of these calls into an isolated-kernel test executable

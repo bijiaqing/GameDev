@@ -67,7 +67,7 @@ real compact_bump_periodic (real x)
     real center = 0.5*(BUMP_LOWER + BUMP_UPPER);
     real half_width = 0.5*(BUMP_UPPER - BUMP_LOWER);
     real coordinate = (value - center) / half_width;
-    return exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
+    return std::exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -99,13 +99,13 @@ int main ()
     std::vector<real> dustdens_initial(N_G);
 
     real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real wave_number = 2.0*M_PI / (X_MAX - X_MIN);
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real y_i = Y_MIN*pow(dy, static_cast<real>(iy));
+        real y_i = Y_MIN*std::pow(dy, static_cast<real>(iy));
         real y_o = y_i*dy;
-        real R = sqrt(y_i*y_o);
+        real R = std::sqrt(y_i*y_o);
 
         for (int ix = 0; ix < N_X; ix++)
         {
@@ -123,8 +123,8 @@ int main ()
             dustmomz[idx_cell] = -0.05*density;
             #else  // VERIFY_X_WEDGE_DIFFUSION
             // one wedge-periodic Fourier mode has an exact radius-dependent exponential decay under azimuthal diffusion
-            real mode_avg = (sin(wave_number*(x_o - MODE_PHASE))
-                - sin(wave_number*(x_i - MODE_PHASE))) / (wave_number*dx);
+            real mode_avg = (std::sin(wave_number*(x_o - MODE_PHASE))
+                - std::sin(wave_number*(x_i - MODE_PHASE))) / (wave_number*dx);
             real density = 1.0 + 0.1*mode_avg;
             dustdens[idx_cell] = density;
             dustmomx[idx_cell] = 0.70*density;
@@ -201,7 +201,7 @@ int main ()
     #ifdef VERIFY_X_WEDGE_TRANSPORT
     real final_time = TRANSPORT_TIME;
     // ten-thirds cells makes the standard power-of-two grids take exactly 2, 4, 8, and 16 equal steps
-    real dt_nominal = (10.0 / 3.0)*dx / TRANSPORT_RATE;
+    real dt_nominal = (10.0/3.0)*dx / TRANSPORT_RATE;
     #else  // VERIFY_X_WEDGE_DIFFUSION
     real final_time = DIFFUSION_TIME;
     real dt_nominal = 0.25*Y_MIN*dx;
@@ -211,7 +211,7 @@ int main ()
     int steps = 0;
     while (clock < final_time)
     {
-        real dt = fmin(dt_nominal, final_time - clock);
+        real dt = std::fmin(dt_nominal, final_time - clock);
             #ifdef VERIFY_X_WEDGE_TRANSPORT
             #ifdef FLUID_BLOCK_SWEEP
             advection_xbl <<< N_Y*N_Z, TPB_BLOCK >>> (

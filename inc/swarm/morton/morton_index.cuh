@@ -438,7 +438,7 @@ void _morton_pair_merge (float *dist_sq, int *idx_old, int candidate_count)
         // after the first split, only the smallest HALF keys are retained
         for (int j = threadIdx.x; j < (stride == HALF ? SORT_SIZE : HALF); j += BLOCK_SIZE)
         {
-            int other = j^stride;
+            int other = j ^ stride;
             if (other > j && _morton_neighbor_less(dist_sq[other], idx_old[other], dist_sq[j], idx_old[j]))
             {
                 float d = dist_sq[j];

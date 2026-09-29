@@ -268,18 +268,18 @@ int main (int argc, char **argv)
         );
         GPU_KERNEL_CHECK("particle_init");
 
-        GPU_CHECK(gpuFreeHost(randposx));
-        GPU_CHECK(gpuFree(dev_randposx));
-        GPU_CHECK(gpuFreeHost(randposy));
-        GPU_CHECK(gpuFree(dev_randposy));
-        GPU_CHECK(gpuFreeHost(randposz));
-        GPU_CHECK(gpuFree(dev_randposz));
-
         #ifdef MULTISIZE
-        GPU_CHECK(gpuFreeHost(randsize));
-        GPU_CHECK(gpuFree(dev_randsize));
         GPU_CHECK(gpuFree(dev_mass_bank));
+        GPU_CHECK(gpuFree(dev_randsize));
+        GPU_CHECK(gpuFreeHost(randsize));
         #endif // MULTISIZE
+
+        GPU_CHECK(gpuFree(dev_randposz));
+        GPU_CHECK(gpuFreeHost(randposz));
+        GPU_CHECK(gpuFree(dev_randposy));
+        GPU_CHECK(gpuFreeHost(randposy));
+        GPU_CHECK(gpuFree(dev_randposx));
+        GPU_CHECK(gpuFreeHost(randposx));
 
         #if defined(COLLISION) || defined(DIFFUSION)
         rngstate_init <<< NB_P, TPB >>> (dev_rngstate);

@@ -28,8 +28,8 @@ real eccentric_anomaly (real mean_anomaly, real eccentricity)
     real anomaly = mean_anomaly;
     for (int iteration = 0; iteration < 20; iteration++)
     {
-        real residual = anomaly - eccentricity*sin(anomaly) - mean_anomaly;
-        anomaly -= residual / (1.0 - eccentricity*cos(anomaly));
+        real residual = anomaly - eccentricity*std::sin(anomaly) - mean_anomaly;
+        anomaly -= residual / (1.0 - eccentricity*std::cos(anomaly));
     }
     return anomaly;
 }
@@ -49,7 +49,7 @@ int main ()
     constexpr real eccentricity = 0.2;
     constexpr real time_end = 1.3;
     const real mean_initial[N_P] = {0.1, 0.7, 1.4, 2.2};
-    const real angular_momentum = sqrt(G*M_S*semimajor*(1.0 - eccentricity*eccentricity));
+    const real angular_momentum = std::sqrt(G*M_S*semimajor*(1.0 - eccentricity*eccentricity));
 
     std::vector<swarm> particle(N_P);
     std::vector<real> mean_anomaly(N_P);
@@ -57,9 +57,9 @@ int main ()
     for (int idx = 0; idx < N_P; idx++)
     {
         real E = eccentric_anomaly(mean_initial[idx], eccentricity);
-        real x = atan2(sqrt(1.0 - eccentricity*eccentricity)*sin(E), cos(E) - eccentricity);
-        real y = semimajor*(1.0 - eccentricity*cos(E));
-        real vy = sqrt(G*M_S / semimajor)*eccentricity*sin(E) / (1.0 - eccentricity*cos(E));
+        real x = std::atan2(std::sqrt(1.0 - eccentricity*eccentricity)*std::sin(E), std::cos(E) - eccentricity);
+        real y = semimajor*(1.0 - eccentricity*std::cos(E));
+        real vy = std::sqrt(G*M_S / semimajor)*eccentricity*std::sin(E) / (1.0 - eccentricity*std::cos(E));
         particle[idx].position = make_double3(x, y, 0.5*M_PI);
         particle[idx].velocity = make_double3(angular_momentum, vy, 0.0);
         mean_anomaly[idx] = mean_initial[idx];

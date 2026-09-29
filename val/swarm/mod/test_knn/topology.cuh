@@ -99,7 +99,7 @@ static void check (morton_index &index, const std::vector<float3> &points, int d
         {
             int first = cursor;
             // independent linear partition, rather than the device binary search
-            while (cursor<end && int((key_of(points[order[cursor]], dim, depth) >> shift)&7) == code) ++cursor;
+            while (cursor < end && int((key_of(points[order[cursor]], dim, depth) >> shift) & 7) == code) ++cursor;
             if (cursor == first) continue;
             float3 child_lower = lower;
             if (code&1) child_lower.x += 0.5f*width;

@@ -26,7 +26,7 @@ real eccentric_anomaly (real mean_anomaly, real eccentricity)
     real anomaly = mean_anomaly;
     for (int iteration = 0; iteration < 20; iteration++)
     {
-        anomaly -= (anomaly - eccentricity*sin(anomaly) - mean_anomaly) / (1.0 - eccentricity*cos(anomaly));
+        anomaly -= (anomaly - eccentricity*std::sin(anomaly) - mean_anomaly) / (1.0 - eccentricity*std::cos(anomaly));
     }
     return anomaly;
 }
@@ -34,11 +34,11 @@ real eccentric_anomaly (real mean_anomaly, real eccentricity)
 real3 rotate_orbit (real xp, real yp, real node, real inclination, real periapsis)
 {
     // rotate one orbital-plane vector through periapsis, inclination, and ascending node
-    real x1 = cos(periapsis)*xp - sin(periapsis)*yp;
-    real y1 = sin(periapsis)*xp + cos(periapsis)*yp;
-    real y2 = cos(inclination)*y1;
-    real z2 = sin(inclination)*y1;
-    return make_double3(cos(node)*x1 - sin(node)*y2, sin(node)*x1 + cos(node)*y2, z2);
+    real x1 = std::cos(periapsis)*xp - std::sin(periapsis)*yp;
+    real y1 = std::sin(periapsis)*xp + std::cos(periapsis)*yp;
+    real y2 = std::cos(inclination)*y1;
+    real z2 = std::sin(inclination)*y1;
+    return make_double3(std::cos(node)*x1 - std::sin(node)*y2, std::sin(node)*x1 + std::cos(node)*y2, z2);
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -66,16 +66,16 @@ int main ()
     for (int idx = 0; idx < N_P; idx++)
     {
         real E = eccentric_anomaly(mean_initial[idx], eccentricity);
-        real denom = 1.0 - eccentricity*cos(E);
-        real dE_dt = sqrt(G*M_S / (semimajor*semimajor*semimajor)) / denom;
-        real3 pos = rotate_orbit(semimajor*(cos(E) - eccentricity),
-            semimajor*sqrt(1.0 - eccentricity*eccentricity)*sin(E), node, inclination, periapsis);
-        real3 vel = rotate_orbit(-semimajor*sin(E)*dE_dt,
-            semimajor*sqrt(1.0 - eccentricity*eccentricity)*cos(E)*dE_dt, node, inclination, periapsis);
-        real y = sqrt(pos.x*pos.x + pos.y*pos.y + pos.z*pos.z);
-        real x = atan2(pos.y, pos.x);
+        real denom = 1.0 - eccentricity*std::cos(E);
+        real dE_dt = std::sqrt(G*M_S / (semimajor*semimajor*semimajor)) / denom;
+        real3 pos = rotate_orbit(semimajor*(std::cos(E) - eccentricity),
+            semimajor*std::sqrt(1.0 - eccentricity*eccentricity)*std::sin(E), node, inclination, periapsis);
+        real3 vel = rotate_orbit(-semimajor*std::sin(E)*dE_dt,
+            semimajor*std::sqrt(1.0 - eccentricity*eccentricity)*std::cos(E)*dE_dt, node, inclination, periapsis);
+        real y = std::sqrt(pos.x*pos.x + pos.y*pos.y + pos.z*pos.z);
+        real x = std::atan2(pos.y, pos.x);
         real z = acos(pos.z / y);
-        real sinz = sin(z), cosz = cos(z), sinx = sin(x), cosx = cos(x);
+        real sinz = std::sin(z), cosz = std::cos(z), sinx = std::sin(x), cosx = std::cos(x);
         real vy = vel.x*sinz*cosx + vel.y*sinz*sinx + vel.z*cosz;
         real vphi = -vel.x*sinx + vel.y*cosx;
         real vtheta = vel.x*cosz*cosx + vel.y*cosz*sinx - vel.z*sinz;

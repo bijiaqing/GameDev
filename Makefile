@@ -10,38 +10,38 @@ ifeq ($(filter cuda rocm,$(GPU_BACKEND)),)
 $(error GPU_BACKEND must be cuda or rocm)
 endif
 
-MOD_ROOT        = $(ROOT_DIR)/mod
-OBJ_ROOT        = $(ROOT_DIR)/obj
-OUT_ROOT        = $(ROOT_DIR)/out
-VAL_ROOT        = $(ROOT_DIR)/val
-VAL_FLUID_DIR   = $(VAL_ROOT)/fluid/mod
-VAL_SWARM_DIR   = $(VAL_ROOT)/swarm/mod
-INC_DIR    = $(ROOT_DIR)/inc
-SRC_DIR    = $(ROOT_DIR)/src
-MODEL_EXEC_DIRS = $(dir $(wildcard $(MOD_ROOT)/*/flags.mk))
-MODEL_EXECUTABLES = $(addsuffix gamedev,$(MODEL_EXEC_DIRS))
+MOD_ROOT        := $(ROOT_DIR)/mod
+OBJ_ROOT        := $(ROOT_DIR)/obj
+OUT_ROOT        := $(ROOT_DIR)/out
+VAL_ROOT        := $(ROOT_DIR)/val
+VAL_FLUID_DIR   := $(VAL_ROOT)/fluid/mod
+VAL_SWARM_DIR   := $(VAL_ROOT)/swarm/mod
+INC_DIR    := $(ROOT_DIR)/inc
+SRC_DIR    := $(ROOT_DIR)/src
+MODEL_EXEC_DIRS := $(dir $(wildcard $(MOD_ROOT)/*/flags.mk))
+MODEL_EXECUTABLES := $(addsuffix gamedev,$(MODEL_EXEC_DIRS))
 
 ifeq ($(GPU_BACKEND),cuda)
 GPU_COMPILER ?= nvcc
 GPU_TARGET ?= sm_80
-GPU_BASE_FLAGS = -arch=$(GPU_TARGET) -O2 -std=c++17 --diag-suppress 177,550
-GPU_DEVICE_FLAG = --device-c
-GPU_LANGUAGE_FLAG =
-GPU_LINK_FLAGS =
-BACKEND_EXT = cu
-BACKEND_DEFINE = -DGAMEDEV_CUDA
+GPU_BASE_FLAGS := -arch=$(GPU_TARGET) -O2 -std=c++17 --diag-suppress 177,550
+GPU_DEVICE_FLAG := --device-c
+GPU_LANGUAGE_FLAG :=
+GPU_LINK_FLAGS :=
+BACKEND_EXT := cu
+BACKEND_DEFINE := -DGAMEDEV_CUDA
 
 
 else
 GPU_COMPILER ?= hipcc
 GPU_TARGET ?= gfx942
-GPU_BASE_FLAGS = --offload-arch=$(GPU_TARGET) -O2 -std=c++17 -fgpu-rdc \
+GPU_BASE_FLAGS := --offload-arch=$(GPU_TARGET) -O2 -std=c++17 -fgpu-rdc \
     -include hip/hip_runtime.h -Wno-unused-command-line-argument
-GPU_DEVICE_FLAG = -c
-GPU_LANGUAGE_FLAG = -x hip
-GPU_LINK_FLAGS = -fgpu-rdc
-BACKEND_EXT = hip
-BACKEND_DEFINE = -DGAMEDEV_ROCM
+GPU_DEVICE_FLAG := -c
+GPU_LANGUAGE_FLAG := -x hip
+GPU_LINK_FLAGS := -fgpu-rdc
+BACKEND_EXT := hip
+BACKEND_DEFINE := -DGAMEDEV_ROCM
 ifneq ($(strip $(RESOURCE_REPORT)),)
 GPU_BASE_FLAGS += -Rpass-analysis=kernel-resource-usage
 endif
@@ -126,7 +126,7 @@ GPU_FLAGS += $(if $(filter x,$(DIRECTION)),-DTEST_DIRECTION_X,$(if $(filter y,$(
 endif
 endif
 
-VAL_REPR_SRC_DIR = $(VAL_ROOT)/$(DUST_REPR)/src
+VAL_REPR_SRC_DIR := $(VAL_ROOT)/$(DUST_REPR)/src
 
 MODEL_SOURCE_DIRS := $(MODEL_DIR)
 MODEL_HEADER_DIRS := $(MODEL_SOURCE_DIRS)
@@ -151,29 +151,16 @@ endif
 MODEL_CONST := $(firstword $(foreach dir,$(MODEL_HEADER_DIRS),$(wildcard $(dir)/const_defs.cuh)))
 
 ifeq ($(IS_VAL),)
-EXEC = $(dir $(MODEL_FLAG_FILE))gamedev
+EXEC := $(dir $(MODEL_FLAG_FILE))gamedev
 else
 # keep generated validation build products out of the source and production trees
-OBJ_ROOT = $(VAL_ROOT)/$(DUST_REPR)/obj
-EXEC = $(OBJ_ROOT)/$(MODEL)/$(GPU_BACKEND)/gamedev
+OBJ_ROOT := $(VAL_ROOT)/$(DUST_REPR)/obj
+EXEC := $(OBJ_ROOT)/$(MODEL)/$(GPU_BACKEND)/gamedev
 endif
 
-ifeq ($(IS_VAL),)
-OUT_DIR = $(OUT_ROOT)/$(MODEL)
-else
-OUT_TAG_DIR = $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
-VAL_SCOPE ?= all
-VAL_SCOPE_DIR = $(if $(filter all,$(VAL_SCOPE)),,/groups/$(VAL_SCOPE))
-ifeq ($(DUST_REPR),fluid)
-VAL_SWEEP ?= $(FLUID_SWEEP)$(if $(filter cuda,$(GPU_BACKEND)),_precise)
-OUT_DIR = $(VAL_ROOT)/fluid/out/$(MODEL)/$(GPU_BACKEND)/$(VAL_SWEEP)$(VAL_SCOPE_DIR)$(OUT_TAG_DIR)
-else
-OUT_DIR = $(VAL_ROOT)/swarm/out/$(MODEL)/$(GPU_BACKEND)$(VAL_SCOPE_DIR)$(OUT_TAG_DIR)
-endif
-endif
 endif
 
-_OBJ_FLUID_THREAD = \
+_OBJ_FLUID_THREAD := \
     advection_xth.o \
     advection_yth.o \
     advection_zth.o \
@@ -181,7 +168,7 @@ _OBJ_FLUID_THREAD = \
     diffusion_yth.o \
     diffusion_zth.o
 
-_OBJ_FLUID_BLOCK = \
+_OBJ_FLUID_BLOCK := \
     advection_xbl.o \
     advection_ybl.o \
     advection_zbl.o \
@@ -189,7 +176,7 @@ _OBJ_FLUID_BLOCK = \
     diffusion_ybl.o \
     diffusion_zbl.o
 
-_OBJ_FLUID = \
+_OBJ_FLUID := \
     cfl_rate_calc.o \
     fluid_runtime.o \
     inf_cell_flag.o \
@@ -201,7 +188,7 @@ _OBJ_FLUID = \
     optdepth_csum.o \
     source_update.o
 
-_OBJ_SWARM = \
+_OBJ_SWARM := \
     col_audit_bin.o \
     col_bath_init.o \
     col_bath_rate.o \
@@ -238,8 +225,8 @@ _OBJ_SWARM = \
 
 ifdef MODEL
 RELINK_TRIGGER := FORCE
-INC_BRANCH_DIR = $(INC_DIR)/$(DUST_REPR)
-SRC_BRANCH_DIR = $(SRC_DIR)/$(DUST_REPR)
+INC_BRANCH_DIR := $(INC_DIR)/$(DUST_REPR)
+SRC_BRANCH_DIR := $(SRC_DIR)/$(DUST_REPR)
 
 ifeq ($(DUST_REPR),fluid)
 FLUID_SWEEP ?= $(if $(filter rocm,$(GPU_BACKEND)),block,thread)
@@ -256,8 +243,8 @@ _OBJ_FLUID += $(_OBJ_FLUID_BLOCK)
 else
 _OBJ_FLUID += $(_OBJ_FLUID_THREAD)
 endif
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/fluid/$(GPU_BACKEND)/$(FLUID_SWEEP)/$(GPU_TARGET)
-_OBJ = $(_OBJ_FLUID)
+OBJ_DIR := $(OBJ_ROOT)/$(MODEL)/fluid/$(GPU_BACKEND)/$(FLUID_SWEEP)/$(GPU_TARGET)
+_OBJ := $(_OBJ_FLUID)
 else
 ifneq ($(filter -DCOLLISION,$(GPU_FLAGS)),)
 COLLISION_SEARCH ?= $(if $(filter rocm,$(GPU_BACKEND)),morton,kdtree)
@@ -272,22 +259,37 @@ GPU_FLAGS += -DCOLLISION_MORTON
 else
 GPU_FLAGS += -DCOLLISION_KDTREE
 endif
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(COLLISION_SEARCH)/$(GPU_TARGET)
+OBJ_DIR := $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(COLLISION_SEARCH)/$(GPU_TARGET)
 else
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(GPU_TARGET)
+OBJ_DIR := $(OBJ_ROOT)/$(MODEL)/swarm/$(GPU_BACKEND)/$(GPU_TARGET)
 endif
-_OBJ = $(_OBJ_SWARM)
+_OBJ := $(_OBJ_SWARM)
 endif
 
 ifneq ($(IS_VAL),)
-OBJ_DIR = $(OBJ_ROOT)/$(MODEL)/$(GPU_BACKEND)$(if $(filter fluid,$(DUST_REPR)),/$(FLUID_SWEEP),$(if $(strip $(COLLISION_SEARCH)),/$(COLLISION_SEARCH)))/$(GPU_TARGET)
+OBJ_DIR := $(OBJ_ROOT)/$(MODEL)/$(GPU_BACKEND)$(if $(filter fluid,$(DUST_REPR)),/$(FLUID_SWEEP),$(if $(strip $(COLLISION_SEARCH)),/$(COLLISION_SEARCH)))/$(GPU_TARGET)
 endif
 
 _OBJ += $(_OBJ_MOD)
-OBJ = $(foreach file,$(strip $(_OBJ)),$(OBJ_DIR)/$(strip $(file)))
-SOURCE_SEARCH_DIRS = $(MODEL_SOURCE_DIRS) $(SRC_BRANCH_DIR)
-INC_SEARCH_FLAGS = -I $(INC_DIR) $(MODEL_INCLUDE_FLAGS) -I $(INC_BRANCH_DIR)
-BUILD_CONFIG = $(OBJ_DIR)/.build_config
+OBJ := $(foreach file,$(strip $(_OBJ)),$(OBJ_DIR)/$(strip $(file)))
+SOURCE_SEARCH_DIRS := $(MODEL_SOURCE_DIRS) $(SRC_BRANCH_DIR)
+INC_SEARCH_FLAGS := -I $(INC_DIR) $(MODEL_INCLUDE_FLAGS) -I $(INC_BRANCH_DIR)
+BUILD_CONFIG := $(OBJ_DIR)/.build_config
+
+# the output directory needs the final fluid sweep, which is defaulted above
+ifeq ($(IS_VAL),)
+OUT_DIR := $(OUT_ROOT)/$(MODEL)
+else
+OUT_TAG_DIR := $(if $(strip $(OUT_TAG)),/$(OUT_TAG))
+VAL_SCOPE ?= all
+VAL_SCOPE_DIR := $(if $(filter all,$(VAL_SCOPE)),,/groups/$(VAL_SCOPE))
+ifeq ($(DUST_REPR),fluid)
+VAL_SWEEP ?= $(FLUID_SWEEP)$(if $(filter cuda,$(GPU_BACKEND)),_precise)
+OUT_DIR := $(VAL_ROOT)/fluid/out/$(MODEL)/$(GPU_BACKEND)/$(VAL_SWEEP)$(VAL_SCOPE_DIR)$(OUT_TAG_DIR)
+else
+OUT_DIR := $(VAL_ROOT)/swarm/out/$(MODEL)/$(GPU_BACKEND)$(VAL_SCOPE_DIR)$(OUT_TAG_DIR)
+endif
+endif
 
 INC_HEADER_PATHS := $(INC_DIR)/gpu.cuh $(shell find $(INC_BRANCH_DIR) -type f \
     \( -name '*.cuh' -o -name '*.h' -o -name '*.hpp' \) 2>/dev/null)

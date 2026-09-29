@@ -54,7 +54,7 @@ real compact_bump (real value, real lower, real upper)
     real center = 0.5*(lower + upper);
     real half_width = 0.5*(upper - lower);
     real coordinate = (value - center) / half_width;
-    return exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
+    return std::exp(1.0 - 1.0 / (1.0 - coordinate*coordinate));
 }
 
 void write_binary (const std::string &name, const std::vector<real> &values)
@@ -88,19 +88,19 @@ int main ()
     std::vector<real> ppm_weight_z(4*(N_Z + 1));
     ppm_geometry_weights_calc(ppm_weight_y.data(), ppm_weight_z.data());
 
-    real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     real dz = (Z_MAX - Z_MIN) / static_cast<real>(N_Z);
     for (int iz = 0; iz < N_Z; iz++)
     {
         real z_i = Z_MIN + static_cast<real>(iz)*dz;
         real z_o = z_i + dz;
-        real vol_z = cos(z_i) - cos(z_o);
+        real vol_z = std::cos(z_i) - std::cos(z_o);
 
         for (int iy = 0; iy < N_Y; iy++)
         {
-            real y_i = Y_MIN*pow(dy, static_cast<real>(iy));
+            real y_i = Y_MIN*std::pow(dy, static_cast<real>(iy));
             real y_o = y_i*dy;
-            real y = sqrt(y_i*y_o);
+            real y = std::sqrt(y_i*y_o);
             real area_z = 0.5*(y_o*y_o - y_i*y_i);
             real vol_y = (y_o*y_o*y_o - y_i*y_i*y_i) / 3.0;
             real geom_z = area_z / vol_y;
@@ -171,7 +171,7 @@ int main ()
     int steps = 0;
     while (clock < FINAL_TIME)
     {
-        real dt = fmin(dt_nominal, FINAL_TIME - clock);
+        real dt = std::fmin(dt_nominal, FINAL_TIME - clock);
         #ifdef FLUID_BLOCK_SWEEP
         advection_zbl <<< N_X*N_Y, TPB_BLOCK >>> (
             dev_dustdens, dev_dustmomx, dev_dustmomy, dev_dustmomz,

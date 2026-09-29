@@ -26,8 +26,8 @@ real eccentric_anomaly (real mean_anomaly, real eccentricity)
     real anomaly = mean_anomaly;
     for (int iteration = 0; iteration < 20; iteration++)
     {
-        real residual = anomaly - eccentricity*sin(anomaly) - mean_anomaly;
-        anomaly -= residual / (1.0 - eccentricity*cos(anomaly));
+        real residual = anomaly - eccentricity*std::sin(anomaly) - mean_anomaly;
+        anomaly -= residual / (1.0 - eccentricity*std::cos(anomaly));
     }
     return anomaly;
 }
@@ -58,10 +58,10 @@ int main ()
         real E = eccentric_anomaly(mean_initial[idx], eccentricity);
         real beta = BETA_0 / (size_initial[idx] / S_0);
         real mu_eff = (1.0 - beta)*G*M_S;
-        real angular_momentum = sqrt(mu_eff*semimajor*(1.0 - eccentricity*eccentricity));
-        real x = atan2(sqrt(1.0 - eccentricity*eccentricity)*sin(E), cos(E) - eccentricity);
-        real y = semimajor*(1.0 - eccentricity*cos(E));
-        real vy = sqrt(mu_eff / semimajor)*eccentricity*sin(E) / (1.0 - eccentricity*cos(E));
+        real angular_momentum = std::sqrt(mu_eff*semimajor*(1.0 - eccentricity*eccentricity));
+        real x = std::atan2(std::sqrt(1.0 - eccentricity*eccentricity)*std::sin(E), std::cos(E) - eccentricity);
+        real y = semimajor*(1.0 - eccentricity*std::cos(E));
+        real vy = std::sqrt(mu_eff / semimajor)*eccentricity*std::sin(E) / (1.0 - eccentricity*std::cos(E));
         particle[idx].position = make_double3(x, y, 0.5*M_PI);
         particle[idx].velocity = make_double3(angular_momentum, vy, 0.0);
         particle[idx].par_size = size_initial[idx];

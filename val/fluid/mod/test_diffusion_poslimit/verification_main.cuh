@@ -56,7 +56,7 @@ void diffuse (real *rhod, real *mx, real *my, real *mz, real dt)
 real front_dt ()
 {
     #ifdef TEST_DIRECTION_X
-    real dx_len = _get_ycent(0)*sin(_get_zcent(0))*_get_dx();
+    real dx_len = _get_ycent(0)*std::sin(_get_zcent(0))*_get_dx();
     return 0.89*dx_len*dx_len / VERIFY_D;
     #elif defined(TEST_DIRECTION_Y)
     real max_cn_sum = 0.0;
@@ -80,9 +80,9 @@ real front_dt ()
         {
             real vol_z = _get_vol_z(iz);
             real cn_i = (iz > 0)
-                ? 0.5*sin(_get_zface(iz))*VERIFY_D / (y*dz_len*vol_z) : 0.0;
+                ? 0.5*std::sin(_get_zface(iz))*VERIFY_D / (y*dz_len*vol_z) : 0.0;
             real cn_o = (iz < N_Z - 1)
-                ? 0.5*sin(_get_zface(iz + 1))*VERIFY_D / (y*dz_len*vol_z) : 0.0;
+                ? 0.5*std::sin(_get_zface(iz + 1))*VERIFY_D / (y*dz_len*vol_z) : 0.0;
             max_cn_sum = std::max(max_cn_sum, cn_i + cn_o);
         }
     }
@@ -306,13 +306,13 @@ int main ()
     return run_front();
     #else  // !(TEST_DIRECTION_X || TEST_DIRECTION_Y || TEST_DIRECTION_Z)
     const real dx = (X_MAX - X_MIN) / static_cast<real>(N_X);
-    const real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
-    const real R = sqrt(Y_MIN*Y_MIN*dy);
+    const real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    const real R = std::sqrt(Y_MIN*Y_MIN*dy);
     const real dt = 1.0;
     // reproduce the production positivity estimate outside the kernel solely to construct an independent manual call
     // sequence
     const int sub_count = std::max(
-        1, static_cast<int>(ceil(dt*VERIFY_D / (R*R*dx*dx) / POS_LIMIT))
+        1, static_cast<int>(std::ceil(dt*VERIFY_D / (R*R*dx*dx) / POS_LIMIT))
     );
 
     // the large Fourier amplitude forces more than one positivity substep while retaining strictly positive initial
@@ -322,7 +322,7 @@ int main ()
     {
         real x0 = X_MIN + static_cast<real>(ix)*dx;
         real x1 = x0 + dx;
-        real mode_avg = (sin(VERIFY_M*x1) - sin(VERIFY_M*x0)) / (VERIFY_M*dx);
+        real mode_avg = (std::sin(VERIFY_M*x1) - std::sin(VERIFY_M*x0)) / (VERIFY_M*dx);
         rhod_initial[ix] = VERIFY_Q0 + 0.9*mode_avg;
         mx_initial[ix] = 0.7*rhod_initial[ix];
         my_initial[ix] = -0.15*rhod_initial[ix];

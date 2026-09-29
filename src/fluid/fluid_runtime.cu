@@ -543,30 +543,30 @@ int main (int argc, char **argv)
         }
     }
 
-    // release all persistent host and device allocations
-    GPU_CHECK(gpuFreeHost(dustdens));
-    GPU_CHECK(gpuFree(dev_dustdens));
-    GPU_CHECK(gpuFree(dev_cfl_rate));
-    GPU_CHECK(gpuFree(dev_bad_cell));
-    GPU_CHECK(gpuFree(dev_ppm_weight_y));
-    GPU_CHECK(gpuFree(dev_ppm_weight_z));
+    // release all persistent host and device allocations in reverse allocation order
+    #ifdef RADIATION
+    GPU_CHECK(gpuFree(dev_optdepth));
+    GPU_CHECK(gpuFreeHost(optdepth));
+    #endif // RADIATION
+
     #ifdef FLUID_BLOCK_SWEEP
     GPU_CHECK(gpuFree(dev_adv_work));
     #endif // FLUID_BLOCK_SWEEP
-    GPU_CHECK(gpuFreeHost(dustvelx));
-    GPU_CHECK(gpuFree(dev_dustvelx));
-    GPU_CHECK(gpuFree(dev_dustmomx));
-    GPU_CHECK(gpuFreeHost(dustvely));
-    GPU_CHECK(gpuFree(dev_dustvely));
-    GPU_CHECK(gpuFree(dev_dustmomy));
-    GPU_CHECK(gpuFreeHost(dustvelz));
-    GPU_CHECK(gpuFree(dev_dustvelz));
+    GPU_CHECK(gpuFree(dev_ppm_weight_z));
+    GPU_CHECK(gpuFree(dev_ppm_weight_y));
+    GPU_CHECK(gpuFree(dev_bad_cell));
+    GPU_CHECK(gpuFree(dev_cfl_rate));
     GPU_CHECK(gpuFree(dev_dustmomz));
-
-    #ifdef RADIATION
-    GPU_CHECK(gpuFreeHost(optdepth));
-    GPU_CHECK(gpuFree(dev_optdepth));
-    #endif // RADIATION
+    GPU_CHECK(gpuFree(dev_dustvelz));
+    GPU_CHECK(gpuFreeHost(dustvelz));
+    GPU_CHECK(gpuFree(dev_dustmomy));
+    GPU_CHECK(gpuFree(dev_dustvely));
+    GPU_CHECK(gpuFreeHost(dustvely));
+    GPU_CHECK(gpuFree(dev_dustmomx));
+    GPU_CHECK(gpuFree(dev_dustvelx));
+    GPU_CHECK(gpuFreeHost(dustvelx));
+    GPU_CHECK(gpuFree(dev_dustdens));
+    GPU_CHECK(gpuFreeHost(dustdens));
 
     return 0;
 }

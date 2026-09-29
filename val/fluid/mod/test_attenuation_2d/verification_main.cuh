@@ -32,15 +32,15 @@ void write_binary (const std::string &name, const std::vector<real> &values)
 
 int main ()
 {
-    const real dy = pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
+    const real dy = std::pow(Y_MAX / Y_MIN, 1.0 / static_cast<real>(N_Y));
     const real dt = 0.2;
     std::vector<real> rhod(N_G), lx(N_G, 0.0), vy(N_G, 0.0), lz(N_G, 0.0);
     for (int iy = 0; iy < N_Y; iy++)
     {
-        real y = Y_MIN*pow(dy, static_cast<real>(iy) + 0.5);
-        real h_g = ASPR_0*pow(y / R_0, 0.5*(IDX_Q + 1.0));
+        real y = Y_MIN*std::pow(dy, static_cast<real>(iy) + 0.5);
+        real h_g = ASPR_0*std::pow(y / R_0, 0.5*(IDX_Q + 1.0));
         // choose Sigma_d so the production 2D well-mixed reconstruction gives rho_d,mid proportional to y^VERIFY_POWER
-        real sigma_d = sqrt(2.0*M_PI)*h_g*y*pow(y / R_0, static_cast<real>(VERIFY_POWER));
+        real sigma_d = std::sqrt(2.0*M_PI)*h_g*y*std::pow(y / R_0, static_cast<real>(VERIFY_POWER));
         for (int ix = 0; ix < N_X; ix++) rhod[ix + iy*N_X] = sigma_d;
     }
 
