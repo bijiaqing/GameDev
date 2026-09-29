@@ -6,7 +6,7 @@ flags, or model configuration change incompatibly, the minor number when capabil
 the patch number for fixes. Record the release you used, together with the model directory and
 build settings listed under [Reproducibility](README.md#reproducibility).
 
-## [1.0.0] - unreleased
+## [1.0.0] - 2026-09-29
 
 The first public release.
 
