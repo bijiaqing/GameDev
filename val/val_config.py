@@ -11,6 +11,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 sys.dont_write_bytecode = True
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -204,6 +205,40 @@ def val_output_path(val_root: Path, requested: Path | None, default_name: str) -
     if not output.is_relative_to(output_root):
         raise ValueError(f"validation output must remain below {output_root}: {requested}")
     return output
+
+
+def portable(value: Any, project_root: Path) -> Any:
+    """return a copy of a JSON-like record with checkout, home, and interpreter paths portable"""
+
+    # both the resolved and the symlinked spelling of a directory can appear in build output
+    replacements: dict[str, str] = {}
+    for executable in {sys.executable, os.path.realpath(sys.executable)}:
+        replacements[executable] = "python3"
+    roots = {str(project_root), os.path.realpath(project_root)}
+    if os.path.realpath(os.environ.get("PWD", "")) == os.path.realpath(project_root):
+        roots.add(os.environ["PWD"])
+    for root in roots:
+        replacements[root + "/"] = ""
+        replacements[root] = "."
+    for home in {str(Path.home()), os.path.realpath(Path.home()), os.environ.get("HOME", "")}:
+        if home and home != "/":
+            replacements[home + "/"] = "~/"
+            replacements[home] = "~"
+    ordered = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+
+    def convert(item: Any) -> Any:
+        """replace the machine-specific prefixes in one value"""
+        if isinstance(item, str):
+            for old, new in ordered:
+                item = item.replace(old, new)
+            return item
+        if isinstance(item, list):
+            return [convert(element) for element in item]
+        if isinstance(item, dict):
+            return {key: convert(element) for key, element in item.items()}
+        return item
+
+    return convert(value)
 
 
 def source_fingerprint(project_root: Path) -> tuple[str, int]:

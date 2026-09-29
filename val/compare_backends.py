@@ -21,6 +21,7 @@ from val_config import (
     EXPECTED_SWARM_METRICS,
     SWARM_CHAIN_MODELS,
     model_output,
+    portable,
     val_output_path,
 )
 
@@ -548,6 +549,7 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
     output.parent.mkdir(parents=True, exist_ok=True)
+    report = portable(report, Path(__file__).resolve().parents[1])
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     if provenance["available"]:
         print(

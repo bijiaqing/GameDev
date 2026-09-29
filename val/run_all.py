@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -16,7 +17,9 @@ from typing import Any
 sys.dont_write_bytecode = True
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
-from val_config import fluid_archive_sweep, model_output, source_fingerprint
+from val_config import fluid_archive_sweep, model_output, portable, source_fingerprint
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def utc_now() -> str:
@@ -30,7 +33,8 @@ def write_json(path: Path, record: dict[str, Any]) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    portable_record = portable(record, PROJECT_ROOT)
+    temporary.write_text(json.dumps(portable_record, indent=2, sort_keys=True) + "\n")
     temporary.replace(path)
 
 
@@ -178,6 +182,7 @@ def main() -> None:
             "gpu_target": target,
             "fluid_sweep": sweep,
             "fluid_sweeps_in_run": sweeps,
+            "python_version": platform.python_version(),
             "source_sha256": fingerprint,
             "source_files": source_files,
             "requested_resolutions": args.res,

@@ -92,6 +92,11 @@ at the end, and the campaign fails if the source changed while it ran. The run p
 `COMPLETE VALIDATION: PASS` and exits with status zero only when every stage passes; it stops at
 the first failing stage.
 
+The campaign records, archive-check reports, and comparison reports store paths relative to the
+checkout, write the home directory as `~` and the interpreter as `python3`, and record the Python
+version separately, so they can be shared or published without revealing where the checkout
+lives.
+
 The runners clean each build configuration before compiling it, so campaigns for different
 backends can share one checkout. Do not run `make clean` while a campaign is building.
 

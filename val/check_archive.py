@@ -26,6 +26,7 @@ from val_config import (
     fluid_archive_sweep,
     fluid_cases,
     model_output,
+    portable,
     swarm_models,
     val_output_path,
 )
@@ -412,6 +413,7 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
     output.parent.mkdir(parents=True, exist_ok=True)
+    report = portable(report, Path(__file__).resolve().parents[1])
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 
     for component in components:
