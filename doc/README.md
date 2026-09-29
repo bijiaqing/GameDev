@@ -198,6 +198,6 @@ qualification rules.
 - Define each project term at its first use in a file and link it once to the
   [glossary](#glossary); add new terms here.
 
-The code style, naming, and commenting rules are kept in the local, untracked
-`doc/code_style.md` and checked by `val/tools/check_style.py`; `val/tools/check_github_md.py`
-reports Markdown that GitHub renders incorrectly.
+The code style, naming, and commenting rules, including the Markdown rules that keep these files
+rendering correctly on GitHub, are kept in the local, untracked `doc/code_style.md` and checked by
+`val/tools/check_style.py`.
