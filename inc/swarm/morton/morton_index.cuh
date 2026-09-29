@@ -60,7 +60,7 @@ void morton_keygen (std::uint64_t *dev_key, morton_point *dev_point,
 }
 
 // the input range shares all key bits above this child digit
-__host__ __device__ inline int _morton_child_end (const std::uint64_t *keys, int begin, int end,
+inline __host__ __device__ int _morton_child_end (const std::uint64_t *keys, int begin, int end,
                                     int shift, int code)
 {
     while (begin < end)

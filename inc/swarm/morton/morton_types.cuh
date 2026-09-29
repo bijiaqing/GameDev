@@ -43,7 +43,7 @@ struct morton_view
 };
 
 // separate one 21-bit coordinate into every third bit of a 64-bit Morton key
-__host__ __device__ inline
+inline __host__ __device__
 std::uint64_t _expand_morton_3d (std::uint32_t value)
 {
     std::uint64_t bits = value & 0x1fffffU;
@@ -56,7 +56,7 @@ std::uint64_t _expand_morton_3d (std::uint32_t value)
 }
 
 // interleave integer Cartesian coordinates into one deterministic spatial key
-__host__ __device__ inline
+inline __host__ __device__
 std::uint64_t _get_morton_key (int ix, int iy, int iz)
 {
     return _expand_morton_3d(static_cast<std::uint32_t>(ix))

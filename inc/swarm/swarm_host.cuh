@@ -88,7 +88,7 @@ void rand_powerlaw (real *randsize, int count, real p_min, real p_max, real powe
 // =====================================================================================================================
 
 // calculate the same physical convolved dust surface-density profile used by the fluid initializer
-inline static __host__
+static inline __host__
 void initdens_calc (std::vector <real> &initdens)
 {
     const real smooth = 0.05*R_0;
@@ -124,7 +124,7 @@ void initdens_calc (std::vector <real> &initdens)
 }
 
 // interpolate a tabulated convolved profile on its uniform axis
-inline static __host__
+static inline __host__
 real initdens_lerp (real R, const std::vector <real> &initdens)
 {
     real R_min = _get_init_Rmin();
@@ -139,7 +139,7 @@ real initdens_lerp (real R, const std::vector <real> &initdens)
 }
 
 // calculate the initialized dust scale height for one cylindrical radius and grain size
-inline static __host__
+static inline __host__
 real _get_init_Hd (real R, real size)
 {
     real h_g = ASPR_0*std::pow(R / R_0, 0.5*(IDX_Q + 1.0));
@@ -159,7 +159,7 @@ real _get_init_Hd (real R, real size)
 }
 
 // select the common log-size resolution for domain-mass and conditional-CDF tables
-inline static __host__
+static inline __host__
 int _get_mass_bin_count ()
 {
     #ifdef MULTISIZE
@@ -175,7 +175,7 @@ int _get_mass_bin_count ()
 }
 
 // return a radial resolution independent of the simulation polar mesh
-inline static __host__
+static inline __host__
 int _get_init_Rbin_count ()
 { return std::max(2048, 4*N_Y); }
 
@@ -187,7 +187,7 @@ struct init_Zspan
 };
 
 // intersect one cylindrical line with the configured spherical radial-polar domain
-inline static __host__
+static inline __host__
 init_Zspan _get_init_Zspan (real R)
 {
     init_Zspan span = {{0.0, 0.0}, {0.0, 0.0}, 0};
@@ -230,7 +230,7 @@ init_Zspan _get_init_Zspan (real R)
 }
 
 // integrate a normalized zero-mean Gaussian over one finite interval
-inline static __host__
+static inline __host__
 real _get_normal_mass (real Z_lo, real Z_hi, real H_d)
 {
     if (Z_hi <= Z_lo) return 0.0;
@@ -249,7 +249,7 @@ real _get_normal_mass (real Z_lo, real Z_hi, real H_d)
 }
 
 // approximate the inverse standard-normal cumulative distribution
-inline static __host__
+static inline __host__
 real _get_normal_quantile (real probability)
 {
     constexpr real a1 = -3.969683028665376e+01;
@@ -301,7 +301,7 @@ real _get_normal_quantile (real probability)
 }
 
 // sample one Gaussian restricted to a selected finite interval
-inline static __host__
+static inline __host__
 real _sample_normal_interval (real Z_lo, real Z_hi, real H_d, real frac)
 {
     real inv_width = 1.0 / (std::sqrt(2.0)*H_d);
@@ -328,7 +328,7 @@ real _sample_normal_interval (real Z_lo, real Z_hi, real H_d, real frac)
 }
 
 // integrate the vertical Gaussian over every allowed interval at one cylindrical radius
-inline static __host__
+static inline __host__
 real _get_init_containment (real R, real size)
 {
     if (N_Z == 1) return 1.0;
@@ -347,7 +347,7 @@ real _get_init_containment (real R, real size)
 }
 
 // sample the exact truncated vertical Gaussian at one cylindrical radius
-inline static __host__
+static inline __host__
 real _sample_init_Z (real R, real size, real frac)
 {
     if (N_Z == 1) return 0.0;
@@ -387,7 +387,7 @@ real _sample_init_Z (real R, real size, real frac)
 }
 
 // evaluate the cylindrical radial mass density after exact vertical containment
-inline static __host__
+static inline __host__
 real _get_init_Rmass (real R, const std::vector <real> &initdens, real size)
 {
     if (R <= 0.0 || R > Y_MAX) return 0.0;
@@ -399,7 +399,7 @@ real _get_init_Rmass (real R, const std::vector <real> &initdens, real size)
 }
 
 // tabulate the continuous cylindrical-radius CDF and its finite-domain physical mass
-inline static __host__
+static inline __host__
 real disk_cdf_calc (std::vector <real> &cdf, const std::vector <real> &initdens, real size)
 {
     int radial_bin_count = _get_init_Rbin_count();
@@ -497,7 +497,7 @@ real get_total_dust_mass (const std::vector <real> &mass_bank)
 
 #ifndef IMPORTGAS
 // invert one linearly interpolated radial CDF
-inline static __host__
+static inline __host__
 real _sample_init_R (const real *cdf_lo, const real *cdf_hi, real frac_size, real cdf_sample)
 {
     int radial_bin_count = _get_init_Rbin_count();
@@ -523,7 +523,7 @@ real _sample_init_R (const real *cdf_lo, const real *cdf_hi, real frac_size, rea
 }
 
 // sample one continuous cylindrical position from a radial CDF and exact conditional Gaussian
-inline static __host__
+static inline __host__
 void _sample_disk_pos (real &x, real &y, real &z, real size, const real *cdf_lo, const real *cdf_hi,
     real frac_size, std::uniform_real_distribution <real> &random)
 {
@@ -776,7 +776,7 @@ real _get_dt_out (int idx_file)
 constexpr std::size_t binary_chunk_bytes = 64ULL*1024ULL*1024ULL;
 
 // write a contiguous host array without format conversion
-template <typename DataType> __host__ inline
+template <typename DataType> inline __host__
 bool save_host_binary (const std::string &file_name, const DataType *data, std::size_t count)
 {
     std::ofstream file(file_name, std::ios::binary);
@@ -794,7 +794,7 @@ bool save_host_binary (const std::string &file_name, const DataType *data, std::
 }
 
 // read a contiguous host array without format conversion
-template <typename DataType> __host__ inline
+template <typename DataType> inline __host__
 bool load_host_binary (const std::string &file_name, DataType *data, std::size_t count)
 {
     std::ifstream file(file_name, std::ios::binary);
@@ -817,7 +817,7 @@ bool load_host_binary (const std::string &file_name, DataType *data, std::size_t
 }
 
 // write a device array through a bounded host buffer
-template <typename DataType> __host__ inline
+template <typename DataType> inline __host__
 bool save_device_binary (const std::string &file_name, const DataType *dev_data, std::size_t count)
 {
     std::ofstream file(file_name, std::ios::binary);
@@ -838,7 +838,7 @@ bool save_device_binary (const std::string &file_name, const DataType *dev_data,
 }
 
 // read a device array through a bounded host buffer
-template <typename DataType> __host__ inline
+template <typename DataType> inline __host__
 bool load_device_binary (const std::string &file_name, DataType *dev_data, std::size_t count)
 {
     std::ifstream file(file_name, std::ios::binary);

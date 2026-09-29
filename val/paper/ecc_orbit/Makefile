@@ -1,4 +1,4 @@
-# Reuse production kernels; src/ contains only the test-specific overrides.
+# reuse production kernels; src/ contains only the test-specific overrides
 PAPER_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 GPU_BACKEND ?= cuda
 GPU_TARGET ?= $(if $(filter rocm,$(GPU_BACKEND)),gfx942,sm_80)

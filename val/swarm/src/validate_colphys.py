@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 ALPHA = 1.0e-4
 ASPR_0 = 0.05

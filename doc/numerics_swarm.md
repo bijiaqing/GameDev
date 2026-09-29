@@ -2877,7 +2877,7 @@ and random-number APIs. Each kernel has its own file.
 | chain workspace and host driver `evolve_local_collisions()` | `inc/swarm/_col_chain.cuh` |
 | packed neighbor codes and cache slot offsets | `inc/swarm/_col_image.cuh` |
 | neighbor-cache kernel `col_cache_get` | `inc/swarm/_col_cache.cuh` |
-| search records and nonfinite-state screen (`col_site_init`, `colstate_flag`) | `src/swarm/col_site_init.cu` |
+| search records (`col_site_init`) and nonfinite-state screen (`colstate_flag`) | `src/swarm/col_site_init.cu`, `src/swarm/colstate_flag.cu` |
 | chain kernels, one per file | `src/swarm/col_*.cu` |
 | KD tree and Morton search | `inc/swarm/kdtree/`, `inc/swarm/morton/` |
 | operator driver, geometry rebuild, collision operator calls, and output clock | `src/swarm/swarm_runtime.cu` |

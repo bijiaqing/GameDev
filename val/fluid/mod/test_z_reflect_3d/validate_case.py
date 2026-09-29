@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 _source = Path(__file__).resolve().parents[2] / "src" / "polar_boundary_validate.py"
 _spec = importlib.util.spec_from_file_location("val_polar_boundary_shared", _source)

@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import configparser
 import json
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 LOG_MASS_EDGES = np.linspace(-0.5, 9.5, 201)
 LOG_MASS_CDF_EDGES = np.linspace(-0.5, 9.5, 4097)

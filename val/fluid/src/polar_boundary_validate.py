@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -13,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 OUTFLOW_SUPPORT = (2.45, 2.75)
 REFLECT_SUPPORT = (0.70, math.pi - 0.70)

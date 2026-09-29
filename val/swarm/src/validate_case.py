@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 X_MIN, X_MAX = -math.pi, math.pi
 Y_MIN, Y_MAX = 0.5, 1.5

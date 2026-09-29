@@ -346,7 +346,7 @@ real _get_vrel (const swarm *dev_particle, const real *dev_size_old,
 // =====================================================================================================================
 
 // calculate the pair-propensity numerator before division by the local KNN measure
-template <kernel_type kernel> __device__ __forceinline__
+template <kernel_type KERNEL> __device__ __forceinline__
 real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, const real *dev_numr_old,
     #ifdef IMPORTGAS
     const real *dev_gas_dens,
@@ -365,11 +365,11 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
     // include the owner's own swarm when i == j, using the large-number approximation N_i - 1 ~= N_i
     real numr_j = dev_numr_old[idx_old_j];
 
-    if constexpr (kernel == CONSTANT_KERNEL)
+    if constexpr (KERNEL == CONSTANT_KERNEL)
     {
         return lambda_0*numr_j;
     }
-    else if constexpr (kernel == LINEAR_KERNEL)
+    else if constexpr (KERNEL == LINEAR_KERNEL)
     {
         real size_i = dev_size_old[idx_old_i];
         real size_j = dev_size_old[idx_old_j];
@@ -377,7 +377,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         // m_i + m_j
         return lambda_0*numr_j*(_get_grain_mass(size_i) + _get_grain_mass(size_j));
     }
-    else if constexpr (kernel == PRODUCT_KERNEL)
+    else if constexpr (KERNEL == PRODUCT_KERNEL)
     {
         real size_i = dev_size_old[idx_old_i];
         real size_j = dev_size_old[idx_old_j];
@@ -385,7 +385,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         // m_i * m_j
         return lambda_0*numr_j*_get_grain_mass(size_i)*_get_grain_mass(size_j);
     }
-    else if constexpr (kernel == CUSTOM_KERNEL)
+    else if constexpr (KERNEL == CUSTOM_KERNEL)
     {
         // use K_ij = sigma_ij delta_v_ij for the physical collision kernel
 
@@ -423,7 +423,7 @@ real _get_col_rate_ij (const swarm *dev_particle, const real *dev_size_old, cons
         // kernel is a compile-time constant
         if (threadIdx.x == 0 && blockIdx.x == 0)
         {
-            printf("ERROR: Invalid COAG_KERNEL value = %d\n", static_cast<int>(kernel));
+            printf("ERROR: Invalid COAG_KERNEL value = %d\n", static_cast<int>(KERNEL));
         }
 
         assert(false);

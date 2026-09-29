@@ -205,6 +205,7 @@ _OBJ_SWARM := \
     col_size_zero.o \
     col_skip_scan.o \
     col_space_bin.o \
+    colstate_flag.o \
     diffusion_pos.o \
     dustdens_calc.o \
     dustdens_depo.o \

@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 
 def read_values(out_dir: Path, name: str, resolution: int, count: int) -> np.ndarray:

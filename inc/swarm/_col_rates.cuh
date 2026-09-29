@@ -164,7 +164,7 @@ void _col_atomic_max (real *address, real value)
 }
 
 // evaluate one pair with the same synthetic or physical normalization as _get_col_rate_ij
-template <kernel_type kernel> __device__ __forceinline__
+template <kernel_type KERNEL> __device__ __forceinline__
 real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     const real *dev_size_old, const real *dev_numr_old,
     #ifdef IMPORTGAS
@@ -177,19 +177,19 @@ real _get_col_chain_rate (const swarm *dev_particle, real size_i,
     real size_j = dev_size_old[idx_old_j];
     // include the owner's own swarm when i == j, using the large-number approximation N_i - 1 ~= N_i
     real numr_j = dev_numr_old[idx_old_j];
-    if constexpr (kernel == CONSTANT_KERNEL)
+    if constexpr (KERNEL == CONSTANT_KERNEL)
     {
         return lambda_0*numr_j;
     }
-    else if constexpr (kernel == LINEAR_KERNEL)
+    else if constexpr (KERNEL == LINEAR_KERNEL)
     {
         return lambda_0*numr_j*(_get_grain_mass(size_i) + _get_grain_mass(size_j));
     }
-    else if constexpr (kernel == PRODUCT_KERNEL)
+    else if constexpr (KERNEL == PRODUCT_KERNEL)
     {
         return lambda_0*numr_j*_get_grain_mass(size_i)*_get_grain_mass(size_j);
     }
-    else if constexpr (kernel == CUSTOM_KERNEL)
+    else if constexpr (KERNEL == CUSTOM_KERNEL)
     {
         #ifdef COL_QUERY_ENV_CACHE
         vrel = _cached_pair_velocity(environment[idx_old_i], size_i, size_j);

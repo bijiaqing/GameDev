@@ -177,8 +177,8 @@ void _get_force_term (real y, real z, real R, real lx, real lz, real beta, real 
 }
 
 // advance the staggered drag-force stages with a prescribed midpoint environment; production and tests share this body
-// DragFree selects the exact zero-relaxation limit for the Kepler reference tests
-template<bool DragFree = false, typename Force>
+// DRAG_FREE selects the exact zero-relaxation limit for the Kepler reference tests
+template <bool DRAG_FREE = false, typename Force>
 __device__ __forceinline__
 void _ssa_advance (real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
     real beta, real lx_i, real vy_i, real lz_i, real x_1, real y_1, real z_1,
@@ -216,7 +216,7 @@ void _ssa_advance (real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
     real lz_1 = (1.0 - relax_z1)*lz_i + resp_z1*(inv_ts1*lz_g1 + torq_z1);
     #else  // NO PR_EFFECT
     real lx_1, vy_1, lz_1;
-    if constexpr (DragFree)
+    if constexpr (DRAG_FREE)
     {
         lx_1 = lx_i;
         vy_1 = vy_i + 0.5*dt*(grav_y1 + cent_y1);
@@ -248,7 +248,7 @@ void _ssa_advance (real dt, real ts_1, real lx_g1, real vy_g1, real lz_g1,
     vy_j = (1.0 - relax_yj)*vy_i + resp_yj*(inv_ts1*vy_g1 + grav_y2 + cent_y2);
     lz_j = (1.0 - relax_zj)*lz_i + resp_zj*(inv_ts1*lz_g1 + torq_z2);
     #else  // NO PR_EFFECT
-    if constexpr (DragFree)
+    if constexpr (DRAG_FREE)
     {
         lx_j = lx_i;
         vy_j = vy_i + dt*(grav_y2 + cent_y2);

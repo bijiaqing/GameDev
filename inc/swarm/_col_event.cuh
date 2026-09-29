@@ -6,19 +6,19 @@
 #ifdef COLLISION
 #include <_col_types.cuh>
 
-__host__ __device__ inline void _record_event_work (event_work &work, int category, real log_mass)
+inline __host__ __device__ void _record_event_work (event_work &work, int category, real log_mass)
 {
     ++work.count[category];
     work.log_mass[category] += log_mass;
 }
 // group G identical tiny sticking projectiles into one event so each packet adds at most 0.01% target mass
-__host__ __device__ inline real _sticking_packet (real q, bool fragmentation)
+inline __host__ __device__ real _sticking_packet (real q, bool fragmentation)
 {
     return !fragmentation && q > 0.0 && q <= 1.0e-06
         ? fmax(1.0, floor(1.0e-04 / q)) : 1.0;
 }
 // projectile-to-target grain mass ratio q for compact grains of equal material density
-__host__ __device__ inline real _sticking_mass_ratio (real size_i, real size_j)
+inline __host__ __device__ real _sticking_mass_ratio (real size_i, real size_j)
 {
     real ratio = size_j / size_i;
     return ratio*ratio*ratio;
@@ -28,7 +28,7 @@ __host__ __device__ inline real _sticking_mass_ratio (real size_i, real size_j)
 
 // return the sampled-to-physical rate factor and conditional absolute log-diameter jump moments
 // erosion superposes grouped remnant transitions and ungrouped debris transitions
-__host__ __device__ inline real _erosion_outcome_moments (real si, real sj,
+inline __host__ __device__ real _erosion_outcome_moments (real si, real sj,
     bool high_speed, real &mean, real &second, real &maximum)
 {
     real q = _sticking_mass_ratio(si, sj);
@@ -76,7 +76,7 @@ __host__ __device__ inline real _erosion_outcome_moments (real si, real sj,
 // sample one outcome and return the new owner diameter; categories are four sticking q bins,
 // fragmentation, remnant erosion, and debris erosion
 // u is used only for high-speed events, and the caller supplies one independent draw
-__host__ __device__ inline real _sample_erosion_outcome (real si, real sj,
+inline __host__ __device__ real _sample_erosion_outcome (real si, real sj,
     bool high_speed, real u, int &category, real &log_mass)
 {
     real q = _sticking_mass_ratio(si, sj);
