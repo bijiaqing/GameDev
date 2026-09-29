@@ -24,7 +24,8 @@ criteria, are in [`doc/guide_tests.md`](../doc/guide_tests.md); project terms ar
 - the GPU toolchain and GPU of the backend under test (see the top-level
   [`README.md`](../README.md#requirements)); the default targets are `sm_80` and `gfx942`, so pass
   `--target` for other GPUs
-- Python 3.10 or later with NumPy
+- Python 3.10 or later with NumPy (`python3 -m pip install -r requirements.txt` from the
+  repository root)
 - one GPU allocation per backend; a complete campaign takes several hours
 
 Run every command from the repository root. The validation scripts disable Python bytecode

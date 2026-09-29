@@ -1,0 +1,2 @@
+# Python packages for the validation runners, validators, and analysis scripts (Python 3.10 or later)
+numpy>=1.24

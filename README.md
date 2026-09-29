@@ -90,7 +90,8 @@ fluid needs an active azimuth (`N_X > 1`) and so supports only radial–azimutha
   target is `GPU_TARGET=sm_80` (Ampere, for example A100).
 - **ROCm:** `hipcc`, the HIP runtime, hipRAND, rocThrust, and hipCUB, and an AMD GPU supported by
   `GPU_TARGET`. The default target is `gfx942` (MI300A).
-- Python 3.10 or later with NumPy for the validation runners, validators, and analysis scripts
+- Python 3.10 or later with NumPy for the validation runners, validators, and analysis scripts;
+  `python3 -m pip install -r requirements.txt` installs the Python packages
 
 Both backends compile with `-O2 -std=c++17` and without fast-math, because finite-only assumptions
 would invalidate the production NaN and Inf guards. There is no installation step.
@@ -560,7 +561,8 @@ criteria. The scientific campaigns under `val/paper/` have their own READMEs.
 
 For every scientific run, retain:
 
-- the repository commit or an exact source archive
+- the release version ([`CHANGELOG.md`](CHANGELOG.md)) and repository commit, or an exact source
+  archive
 - the complete model directory, including `flags.mk`, `const_defs.cuh`, and local overrides
 - the backend, `GPU_TARGET`, `COLLISION_SEARCH` or `FLUID_SWEEP`, compiler and toolkit versions,
   driver, and GPU model
@@ -602,6 +604,8 @@ limitations](doc/guide_fluid.md#92-known-limitations).
 ```text
 .
 ├── Makefile           # model, representation, and GPU-backend build rules
+├── CHANGELOG.md       # contents of each release
+├── requirements.txt   # Python packages for the validation and analysis scripts
 ├── inc/
 │   ├── gpu.cuh        # CUDA/HIP API mappings and GPU error checks
 │   ├── swarm/         # swarm headers, including the collision chain and KNN searches
@@ -615,7 +619,7 @@ limitations](doc/guide_fluid.md#92-known-limitations).
 │   │                  #   generated results (out/) and objects (obj/)
 │   ├── *.py           # campaign, archive-check, and comparison utilities
 │   └── paper/         # scientific campaigns with their own READMEs
-├── doc/               # numerical and test-set guides
+├── doc/               # shared disk model, numerical guides, and validation guide
 ├── obj/               # generated objects (not tracked)
 └── out/               # generated production output (not tracked)
 ```
