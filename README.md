@@ -11,7 +11,7 @@ independent dust representations:
 - an Eulerian, pressureless **dust fluid** for conservative continuum evolution
 
 Both representations evolve dust in a prescribed gas disk with one-way gas-to-dust coupling. They
-share the disk model of [`doc/numerics_basis.md`](doc/numerics_basis.md) but own separate headers,
+share the disk model of [`doc/guide_basis.md`](doc/guide_basis.md) but own separate headers,
 kernels, and runtimes. Simulation setups, units, resolutions, physical switches, and output
 cadence are compile-time choices of a model directory, so GameDev is a research code rather than a
 packaged application. This file is the user guide: it covers building, configuring, running,
@@ -63,25 +63,25 @@ interchangeable discretizations of every physical closure.
 
 - **Swarm:** staggered semi-analytic drag and gravity trajectories, radiation pressure and optional
   Poynting–Robertson drag, Itô Euler–Maruyama diffusion, and Strang composition of the enabled
-  operators ([`doc/numerics_swarm.md`](doc/numerics_swarm.md)). Collisions use a frozen-bath
+  operators ([`doc/guide_swarm.md`](doc/guide_swarm.md)). Collisions use a frozen-bath
   continuous-time event chain with exact top-$`K`$ neighbors from a KD tree or an adaptive Morton
-  hierarchy ([swarm collisions](doc/numerics_swarm.md#8-collisions)). Stochastic diffusion and
+  hierarchy ([swarm collisions](doc/guide_swarm.md#8-collisions)). Stochastic diffusion and
   collisions need statistical convergence tests rather than a pointwise order claim.
 - **Fluid:** finite-volume PPM reconstruction with HLL fluxes and invariant-domain limiting, integer
   FARGO orbital shifts, SSPRK(3,3) sweeps, exponentially weighted drag and force sources,
   Crank–Nicolson diffusion with a conservative donor-momentum closure, and a palindromic operator
-  composition ([`doc/numerics_fluid.md`](doc/numerics_fluid.md)). PPM is nominally third order in
+  composition ([`doc/guide_fluid.md`](doc/guide_fluid.md)). PPM is nominally third order in
   space, and the composed scheme is second order overall for smooth transport.
 
 ### Coordinates and geometries
 
 The computational coordinates are spherical, $(x,y,z)=(\phi,r,\theta)$, with a mesh uniform in
 azimuth and polar angle and logarithmic in radius
-([coordinates](doc/numerics_basis.md#21-computational-coordinates)). With `N_Z == 1` the evolved
+([coordinates](doc/guide_basis.md#21-computational-coordinates)). With `N_Z == 1` the evolved
 density is a vertically integrated surface density; with `N_Z > 1` it is a volume density. The
 swarm supports all four geometries (radial-only, radial–azimuthal, radial–polar, and full 3D); the
 fluid needs an active azimuth (`N_X > 1`) and so supports only radial–azimuthal and full 3D
-([supported geometries](doc/numerics_basis.md#24-supported-geometries)).
+([supported geometries](doc/guide_basis.md#24-supported-geometries)).
 
 ## Requirements
 
@@ -152,11 +152,11 @@ model's `flags.mk` sets the variable. Any value other than the two listed stops 
   search. Objects of the two searches go to separate directories, so switching never reuses
   objects compiled for the other search. `variables.txt` records the choice as `COLLISION_SEARCH`,
   with `MORTON_LEAF_TARGET` and `MORTON_MAX_LEVEL` for the Morton search.
-  [Choosing a search](doc/numerics_swarm.md#96-choosing-a-search) compares them.
+  [Choosing a search](doc/guide_swarm.md#96-choosing-a-search) compares them.
 - `FLUID_SWEEP=block` defines `FLUID_BLOCK_SWEEP`. The two sweeps implement the same numerical
   method with different work decomposition and memory, and their objects also go to separate
   directories. Their relative speed depends on the resolution and GPU, so check both on the
-  intended machine ([Choosing a sweep](doc/numerics_fluid.md#107-choosing-a-sweep)). On gfx942 the
+  intended machine ([Choosing a sweep](doc/guide_fluid.md#107-choosing-a-sweep)). On gfx942 the
   thread sweep exceeds a linker limit at the fiducial `N_X = 1024`, which is why ROCm defaults to
   the block sweep. `mod/fluid_fiducial/flags.mk` sets `FLUID_SWEEP := thread`, so pass
   `FLUID_SWEEP=block` on the command line to build it for ROCm.
@@ -255,7 +255,7 @@ runs; and a resolved vertical layer needs vertical mixing. The `N_Z > 1` rule is
 in the default header `inc/swarm/const_defs.cuh`, so a model `const_defs.cuh` that replaces the
 header should keep it. The collision integrator is always the frozen-bath chain: the flags
 `BERNOULLI`, `KNN_CACHE`, and `COL_CHAIN` stop the build with an error. Compile-time checks on the
-collision constants are listed in [collision parameters](doc/numerics_swarm.md#24-parameters).
+collision constants are listed in [collision parameters](doc/guide_swarm.md#24-parameters).
 
 ### Fluid feature flags
 
@@ -273,7 +273,7 @@ branch and have no flag.
 
 The `N_Z > 1` and `HALF_DISK` rules are `static_assert`s in the default header
 `inc/fluid/const_defs.cuh`, which also checks the grid and `CFL_DYN`
-([fluid parameters](doc/numerics_fluid.md#24-parameters)). A model `const_defs.cuh` replaces those
+([fluid parameters](doc/guide_fluid.md#24-parameters)). A model `const_defs.cuh` replaces those
 checks together with the rest of the header, so it should keep them.
 
 ### Constants
@@ -296,9 +296,9 @@ entirely. Constants a user most often changes are:
 | `N_K`, `H_SEARCH` | retained collision neighbors and the search cap in gas scale heights |
 
 Every constant, its default, and its role are listed in [swarm
-parameters](doc/numerics_swarm.md#24-parameters), [collision
-parameters](doc/numerics_swarm.md#24-parameters), and [fluid
-parameters](doc/numerics_fluid.md#24-parameters). Do not add preprocessor parameters to the default
+parameters](doc/guide_swarm.md#24-parameters), [collision
+parameters](doc/guide_swarm.md#24-parameters), and [fluid
+parameters](doc/guide_fluid.md#24-parameters). Do not add preprocessor parameters to the default
 headers only to configure one model.
 
 ### Source and header overrides
@@ -346,8 +346,8 @@ diffusion direction. Ordinary builds skip this printout.
 
 The runtimes stop rather than continue from an invalid state; neither retries or rolls back a
 step, and the most recent saved frame remains a valid restart point. Where checks run is described
-in [swarm finite-state checks](doc/numerics_swarm.md#127-finite-state-and-error-checks) and [fluid
-finite-state checks](doc/numerics_fluid.md#105-finite-state-checks). Messages go to standard error.
+in [swarm finite-state checks](doc/guide_swarm.md#127-finite-state-and-error-checks) and [fluid
+finite-state checks](doc/guide_fluid.md#105-finite-state-checks). Messages go to standard error.
 `EXIT_FAILURE` is a normal nonzero exit; "abort" means an uncaught C++ exception, which the runtime
 does not catch, so the process terminates through the C++ runtime with the exception's message and
 a nonzero status.
@@ -376,7 +376,7 @@ a nonzero status.
 | Swarm, `COL_DIAGNOSTICS`: diagnostics file cannot be opened or written | `cannot open local collision diagnostics` or `cannot write local collision diagnostics` | abort |
 
 The chain error codes, the controller messages, and their limits are listed in [collision error
-checks](doc/numerics_swarm.md#127-finite-state-and-error-checks). The swarm branch does not check
+checks](doc/guide_swarm.md#127-finite-state-and-error-checks). The swarm branch does not check
 the write of `variables.txt`. Controller audit overshoots, including persistent ones, are recorded
 but never stop a run. Negative fluid densities are not failures: transport converts a negative
 low-order density to exact vacuum, and diffusion cannot produce one.
@@ -390,9 +390,9 @@ diffusion at the default `N_K = 200` needs about 1.15 kB per representative in t
 for the default $10^7$ representatives. The fluid branch keeps eight double-precision device arrays
 per cell (density, three conserved momenta, three primitive velocities, and the CFL rate), nine
 with `RADIATION`; the block sweep adds a twelve-field workspace, 96 bytes per cell. The complete
-estimates are in [swarm memory](doc/numerics_swarm.md#126-memory-footprint), [collision
-memory](doc/numerics_swarm.md#126-memory-footprint), and [fluid
-memory](doc/numerics_fluid.md#104-memory-footprint).
+estimates are in [swarm memory](doc/guide_swarm.md#126-memory-footprint), [collision
+memory](doc/guide_swarm.md#126-memory-footprint), and [fluid
+memory](doc/guide_fluid.md#104-memory-footprint).
 
 ## Restarting a simulation
 
@@ -420,8 +420,8 @@ rewrite it.
 
 A resumed run is not bitwise identical to an uninterrupted one, because the checkpoints store
 linear rather than angular velocity; [swarm restart
-semantics](doc/numerics_swarm.md#128-output-and-restart-semantics) and [fluid restart
-semantics](doc/numerics_fluid.md#106-output-and-restart-semantics) explain why. Restart files are
+semantics](doc/guide_swarm.md#128-output-and-restart-semantics) and [fluid restart
+semantics](doc/guide_fluid.md#106-output-and-restart-semantics) explain why. Restart files are
 not an interchange format between versions or backends: the raw swarm RNG state depends on the
 backend's RNG layout, so CUDA checkpoints resume only on CUDA and ROCm checkpoints only on ROCm.
 
@@ -485,7 +485,7 @@ and represented grain count; its exact record layout is the `[SWARM_DTYPE]` sect
 `collision_chain_<frame>.json` (the controller schedule of each output interval) and one
 `collision_local_<timestamp>.jsonl` per run (timing and event statistics of every collision
 operator), described in [collision
-diagnostics](doc/numerics_swarm.md#1210-collision-diagnostics-output).
+diagnostics](doc/guide_swarm.md#1210-collision-diagnostics-output).
 
 ### Imported gas input
 
@@ -553,8 +553,8 @@ python3 -B val/run_all.py --backend cuda
 
 [`val/README.md`](val/README.md) explains [the campaign](val/README.md#running-a-complete-campaign),
 its outputs, and [the CUDA–ROCm comparison](val/README.md#comparing-cuda-and-rocm);
-[`doc/testsets.md`](doc/testsets.md) states what each test establishes and its acceptance criteria.
-The scientific campaigns under `val/paper/` have their own READMEs.
+[`doc/guide_tests.md`](doc/guide_tests.md) states what each test establishes and its acceptance
+criteria. The scientific campaigns under `val/paper/` have their own READMEs.
 
 ## Reproducibility
 
@@ -593,9 +593,9 @@ scientifically relevant observables.
   thoroughly exercised than the analytical core.
 
 The representation-specific limitations are indexed in [swarm
-limitations](doc/numerics_swarm.md#113-known-limitations), [collision
-limitations](doc/numerics_swarm.md#113-known-limitations), and [fluid
-limitations](doc/numerics_fluid.md#92-known-limitations).
+limitations](doc/guide_swarm.md#113-known-limitations), [collision
+limitations](doc/guide_swarm.md#113-known-limitations), and [fluid
+limitations](doc/guide_fluid.md#92-known-limitations).
 
 ## Repository layout
 
@@ -649,7 +649,7 @@ When changing a numerical method or physical prescription:
    [Maintaining the documentation](doc/README.md#maintaining-the-documentation))
 3. add or update an analytical, statistical, boundary, or regression test under `val/`
 4. archive enough metrics and environment information to support the new claim
-5. update the relevant test in `doc/testsets.md`, following the same maintenance rules
+5. update the relevant test in `doc/guide_tests.md`, following the same maintenance rules
 6. keep the established names, formatting, and coordinate conventions of the affected branch
 
 Record surviving invariants, limitations, and regression requirements in the guides rather than a

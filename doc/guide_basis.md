@@ -3,7 +3,7 @@
 This guide defines the parts of the model that the Lagrangian swarm and the Eulerian fluid share:
 the grid, the prescribed gas disk, the drag and diffusion coefficients, the initial dust profile
 and drift, and the radiation definitions. Each definition appears here once, and both numeric
-guides, [`numerics_swarm.md`](numerics_swarm.md) and [`numerics_fluid.md`](numerics_fluid.md), build
+guides, [`guide_swarm.md`](guide_swarm.md) and [`guide_fluid.md`](guide_fluid.md), build
 on it. Project terms are collected in the [glossary](README.md#glossary).
 
 ## Contents
@@ -36,8 +36,8 @@ shared disk is defined here; how each representation moves its dust is defined i
 | radiation | startup ramp, optical depth, 2D closure | size dependence, interpolation to particles or cells |
 
 Constant defaults differ between the representations (for example, the default `ALPHA`), so this
-guide gives none; each guide lists its own in §2.4 ([swarm](numerics_swarm.md#24-parameters),
-[fluid](numerics_fluid.md#24-parameters)). Which geometries and flags each representation accepts is
+guide gives none; each guide lists its own in §2.4 ([swarm](guide_swarm.md#24-parameters),
+[fluid](guide_fluid.md#24-parameters)). Which geometries and flags each representation accepts is
 summarized in [Section 2.4](#24-supported-geometries) and in the user guide's flag tables
 ([swarm](../README.md#swarm-feature-flags), [fluid](../README.md#fluid-feature-flags)).
 
@@ -84,8 +84,8 @@ formula with the same scales.
 
 The shared quantities have the dimensions below. Swarm-only quantities (represented mass, grain
 count, grain size, material density) are in
-[`numerics_swarm.md`](numerics_swarm.md#23-units-and-dimensions), and collision parameters in
-[swarm parameters](numerics_swarm.md#24-parameters).
+[`guide_swarm.md`](guide_swarm.md#23-units-and-dimensions), and collision parameters in
+[swarm parameters](guide_swarm.md#24-parameters).
 
 | Quantity | Symbol | Dimension |
 |---|---|---|
@@ -138,7 +138,7 @@ The symbols below are used in the same sense in all three numeric guides.
   label, a line index in a one-dimensional solve) says so where it does.
 - Half-integer indices denote cell faces: $y_{j-1/2}$ is the inner radial face of radial cell $j$.
 - Both representations store the velocity as $(\ell_\phi,v_r,\ell_\theta)=(Rv_\phi,v_r,rv_\theta)$
-  ([swarm](numerics_swarm.md#21-stored-state), [fluid](numerics_fluid.md#21-stored-state)). A
+  ([swarm](guide_swarm.md#21-stored-state), [fluid](guide_fluid.md#21-stored-state)). A
   subscript $g$ marks the gas value of a quantity, $d$ the dust value.
 - $u=R/\sqrt{R^2+Z^2}$ is a scalar ([Section 3.4](#34-rotation-support)); the bold
   $\boldsymbol u_d$ is the mean dust velocity ([Section 9](#9-dust-distribution-and-its-moments)).
@@ -186,9 +186,9 @@ z_{k-1/2}=Z_{\min}+k\Delta z,
 
 for $j=0,\dots,N_Y$ and $k=0,\dots,N_Z$. The ratio $a_y$ of neighboring radial faces is the
 code's `_get_dy()`. Where each representation places the value of a cell differs: the fluid uses
-the logarithmic center ([`numerics_fluid.md`](numerics_fluid.md#22-mesh-measures-and-face-areas)),
+the logarithmic center ([`guide_fluid.md`](guide_fluid.md#22-mesh-measures-and-face-areas)),
 and the swarm interpolates between measure centroids
-([`numerics_swarm.md`](numerics_swarm.md#22-mesh-measures-and-particlemesh-transfer)).
+([`guide_swarm.md`](guide_swarm.md#22-mesh-measures-and-particlemesh-transfer)).
 
 ### 2.3 Cell measure
 
@@ -221,7 +221,7 @@ V_{ijk}=\Delta x\,
 Consequently a grid with `N_Z == 1` holds the surface density $\Sigma_d$, and a grid with
 `N_Z > 1` the volume density $\rho_d$. The swarm also supports an inactive azimuth (`N_X == 1`), in
 which one cell stands for the complete ring and $\Delta x$ is replaced by $2\pi$
-([`numerics_swarm.md`](numerics_swarm.md#22-mesh-measures-and-particlemesh-transfer)).
+([`guide_swarm.md`](guide_swarm.md#22-mesh-measures-and-particlemesh-transfer)).
 
 ### 2.4 Supported geometries
 
@@ -242,10 +242,10 @@ where a volume density is needed ([Section 8.2](#82-radial-optical-depth)). The 
 geometries resolve the vertical structure. Both representations require `DIFFUSION` when
 `N_Z > 1`, so that turbulent mixing holds up the settling dust layer. The swarm's radial-only
 model keeps $v_R$ and $\ell_\phi$ as dynamical variables
-([`numerics_swarm.md`](numerics_swarm.md#25-radial-only-closure)); which configurations each
+([`guide_swarm.md`](guide_swarm.md#25-radial-only-closure)); which configurations each
 representation accepts is listed in
-[`numerics_swarm.md`](numerics_swarm.md#12-supported-configurations) and
-[`numerics_fluid.md`](numerics_fluid.md#12-supported-configurations).
+[`guide_swarm.md`](guide_swarm.md#12-supported-configurations) and
+[`guide_fluid.md`](guide_fluid.md#12-supported-configurations).
 
 In a resolved volume the dust mass obeys the continuity equation
 
@@ -271,8 +271,8 @@ Here $(u_r,u_\theta,u_\phi)$ and $(u_R,u_\phi)$ are components of the mean dust 
 $\boldsymbol u_d$ ([Section 9](#9-dust-distribution-and-its-moments)), which the fluid writes as
 $\boldsymbol v_d$. The right-hand sides are the diffusion terms of
 [Section 5.2](#52-density-and-concentration-diffusion) in each geometry; each guide expands them in
-its §7.1 ([swarm](numerics_swarm.md#71-target-equation),
-[fluid](numerics_fluid.md#71-target-equation)). The radial–polar model drops the $\phi$ derivative
+its §7.1 ([swarm](guide_swarm.md#71-target-equation),
+[fluid](guide_fluid.md#71-target-equation)). The radial–polar model drops the $\phi$ derivative
 from the first equation, and the radial-only model drops it from the second.
 
 **Limits.** One pair of continuity equations covers all four geometries, but the reductions are not
@@ -285,7 +285,7 @@ active.
 The gas is prescribed, not evolved. This section defines the analytic disk that sets the drag
 target, the stopping time, and the turbulent viscosity in both representations. The swarm can
 instead import gridded gas density and velocity (`IMPORTGAS`,
-[`numerics_swarm.md`](numerics_swarm.md#36-imported-gas)); the orbital frequency and aspect ratio
+[`guide_swarm.md`](guide_swarm.md#36-imported-gas)); the orbital frequency and aspect ratio
 below stay analytic in that case.
 
 ### 3.1 Surface density and temperature
@@ -463,7 +463,7 @@ For constant $\nu$, the equivalent local turbulence parameter is
 ```
 
 The flags that define $\nu$ differ between the representations and are listed in each guide's
-§2.4 ([swarm](numerics_swarm.md#24-parameters), [fluid](numerics_fluid.md#24-parameters)).
+§2.4 ([swarm](guide_swarm.md#24-parameters), [fluid](guide_fluid.md#24-parameters)).
 
 ### 3.6 Viscous radial flow
 
@@ -559,8 +559,8 @@ t_s(R,Z,s)=\frac{\mathrm{St}(R,Z,s)}{\Omega_K(R)}.
 ```
 
 The swarm evaluates the size factor for each particle's grain size; its `CONST_ST` option and its
-Stokes number for imported gas are in [`numerics_swarm.md`](numerics_swarm.md#61-drag-and-gravity)
-and [`numerics_swarm.md`](numerics_swarm.md#36-imported-gas). The fluid is monodisperse at $s=S_0$,
+Stokes number for imported gas are in [`guide_swarm.md`](guide_swarm.md#61-drag-and-gravity)
+and [`guide_swarm.md`](guide_swarm.md#36-imported-gas). The fluid is monodisperse at $s=S_0$,
 so its size factor is one.
 
 ## 5. Turbulent diffusivity
@@ -582,9 +582,9 @@ number of [Section 4](#4-stopping-time-and-stokes-number) enters in both diffusi
 representations use this definition in different bases:
 
 - The swarm diffuses along cylindrical directions, $a=\phi,R,Z$, with `SCHMIDT_X`, `SCHMIDT_R`, and
-  `SCHMIDT_Z` ([`numerics_swarm.md`](numerics_swarm.md#71-target-equation)).
+  `SCHMIDT_Z` ([`guide_swarm.md`](guide_swarm.md#71-target-equation)).
 - The fluid diffuses along spherical grid directions, $a=x,y,z$, with `SCHMIDT_X`, `SCHMIDT_Y`,
-  and `SCHMIDT_Z` ([`numerics_fluid.md`](numerics_fluid.md#71-target-equation)).
+  and `SCHMIDT_Z` ([`guide_fluid.md`](guide_fluid.md#71-target-equation)).
 
 ### 5.2 Density and concentration diffusion
 
@@ -618,8 +618,8 @@ operator.
 
 Both representations start from the same dust surface-density profile. It fixes where the dust mass
 lies initially; how that mass is spread vertically and normalized is representation-specific
-([swarm](numerics_swarm.md#31-dust-density-profile),
-[fluid](numerics_fluid.md#31-dust-density-profile)).
+([swarm](guide_swarm.md#31-dust-density-profile),
+[fluid](guide_fluid.md#31-dust-density-profile)).
 
 ### 6.1 Metallicity profile
 
@@ -674,7 +674,7 @@ $[R_{\min,\rm init},Y_{\max}]$. The swarm and the fluid host code (`initdens_cal
 
 **Limits.** The taper is not renormalized, so it removes mass near both edges; the initial dust
 mass is not $\int Z_{\rm metal}\Sigma_g$ over the domain. The swarm normalizes its represented mass
-from this tapered profile ([`numerics_swarm.md`](numerics_swarm.md#33-dust-mass-in-the-domain)); the
+from this tapered profile ([`guide_swarm.md`](guide_swarm.md#33-dust-mass-in-the-domain)); the
 fluid's mass is the integral of its initialized field.
 
 ## 7. Steady drift velocity
@@ -696,8 +696,8 @@ v_{\phi,d}=v_{\phi,g}-\frac{\mathrm{St}}{2}v_{R,d}.
 
 The vertical part of the initial velocity differs by design: the swarm adds terminal settling,
 the fluid a polar velocity that balances its diffusive flux. Each guide gives its vertical term and
-how the velocity is stored ([swarm](numerics_swarm.md#32-initial-velocity),
-[fluid](numerics_fluid.md#32-initial-velocity)).
+how the velocity is stored ([swarm](guide_swarm.md#32-initial-velocity),
+[fluid](guide_fluid.md#32-initial-velocity)).
 
 ## 8. Radiation pressure and optical depth
 
@@ -719,8 +719,8 @@ s_t=\mathrm{clip}(t/T_\beta,0,1).
 The ramp is evaluated at the midpoint time $t^n+\Delta t/2$ of each step, and a value
 $T_\beta\le0$ disables it ($f_\beta=1$). Both representations write the radiation ratio as
 $\beta=\beta_0f_\beta(t)e^{-\tau}$ times a size factor: $S_0/s$ in the swarm and one in the
-monodisperse fluid ([swarm](numerics_swarm.md#62-radiation-pressure-and-optical-depth),
-[fluid](numerics_fluid.md#62-radiation-pressure-and-optical-depth)). The radial acceleration is
+monodisperse fluid ([swarm](guide_swarm.md#62-radiation-pressure-and-optical-depth),
+[fluid](guide_fluid.md#62-radiation-pressure-and-optical-depth)). The radial acceleration is
 
 ```math
 \boldsymbol a_{\rm rad}
@@ -735,7 +735,7 @@ so gravity and radiation combine to
 ```
 
 The swarm's optional Poynting–Robertson drag adds velocity-dependent terms to this acceleration
-([`numerics_swarm.md`](numerics_swarm.md#63-poyntingrobertson-drag)).
+([`guide_swarm.md`](guide_swarm.md#63-poyntingrobertson-drag)).
 
 ### 8.2 Radial optical depth
 
@@ -768,7 +768,7 @@ where $\Delta r_j=y_{j+1/2}-y_{j-1/2}$ is the radial width of the cell and
 
 The swarm deposits per-particle extinction weights that already include $\kappa_0$ and its size
 factor, so its deposited cell value plays the role of $\kappa_0\rho_{\rm ext}$
-([`numerics_swarm.md`](numerics_swarm.md#62-radiation-pressure-and-optical-depth)).
+([`guide_swarm.md`](guide_swarm.md#62-radiation-pressure-and-optical-depth)).
 
 When `N_Z == 1`, the [well-mixed closure](README.md#glossary) converts surface density to a
 midplane extinction density by assuming that the dust shares the gas vertical profile. The closure
@@ -792,8 +792,8 @@ The zero at the inner face assumes that no material lies inside the domain,
 ```
 
 Each representation interpolates the stored face values to where it needs them, particles or cell
-centers ([swarm](numerics_swarm.md#62-radiation-pressure-and-optical-depth),
-[fluid](numerics_fluid.md#62-radiation-pressure-and-optical-depth)).
+centers ([swarm](guide_swarm.md#62-radiation-pressure-and-optical-depth),
+[fluid](guide_fluid.md#62-radiation-pressure-and-optical-depth)).
 
 **Limits.** Because no material is assumed inside `Y_MIN`, the shielding near the inner edge
 depends on the chosen radial domain. In vertically integrated models the well-mixed closure ignores
@@ -820,9 +820,9 @@ flux, and the momentum flux:
 Here $\boldsymbol u_d$ is the mass-weighted mean dust velocity and $\boldsymbol P_d$ the
 velocity-dispersion tensor. The swarm samples $f_d$ itself with weighted particles, so it keeps a
 nonzero $\boldsymbol P_d$ where dust streams cross
-([`numerics_swarm.md`](numerics_swarm.md#13-relation-to-the-fluid-model)). The fluid closes this
+([`guide_swarm.md`](guide_swarm.md#13-relation-to-the-fluid-model)). The fluid closes this
 hierarchy with $\boldsymbol P_d=0$ and a single velocity at each point
-([`numerics_fluid.md`](numerics_fluid.md#13-relation-to-the-swarm-model)).
+([`guide_fluid.md`](guide_fluid.md#13-relation-to-the-swarm-model)).
 
 ## 10. References
 

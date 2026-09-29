@@ -4,12 +4,13 @@ This campaign measures how the error of the production semi-analytic swarm traje
 converges with the timestep in its exact zero-drag limit, using a single particle on a planar
 eccentric Kepler orbit for 100 orbital periods. It exercises the Lagrangian dust model through the
 production runtime, the `ssa_transport` kernel with its first drift stage and force evaluation of
-the [staggered update](../../../doc/numerics_swarm.md#51-staggered-update), and the transport
-boundaries. The routine [eccentric-orbit test](../../../doc/testsets.md#31-eccentric-kepler-orbit)
-checks the same zero-drag specialization with its own test driver over a resolution sweep; this
-campaign runs it inside the production runtime loop over many orbits. Finite-drag accuracy is a
-separate test ([drag path](../../../doc/testsets.md#34-drag-path)). Project terms are defined in
-the [glossary](../../../doc/README.md#glossary).
+the [staggered update](../../../doc/guide_swarm.md#51-staggered-update), and the transport
+boundaries. The routine [eccentric-orbit
+test](../../../doc/guide_tests.md#31-eccentric-kepler-orbit) checks the same zero-drag
+specialization with its own test driver over a resolution sweep; this campaign runs it inside the
+production runtime loop over many orbits. Finite-drag accuracy is a separate test ([drag
+path](../../../doc/guide_tests.md#34-drag-path)). Project terms are defined in the
+[glossary](../../../doc/README.md#glossary).
 
 ## Contents
 
@@ -98,7 +99,7 @@ header overrides](../../../README.md#source-and-header-overrides)) and contains 
 - `const_defs.cuh`: the constants above.
 - `particle_init.cu`: the pericenter initial state.
 - `dyn_rate_calc.cu`: a fixed step `DT_MAX` in place of the production CFL policy of [timestep
-  control](../../../doc/numerics_swarm.md#102-timestep-control); the runtime still shortens the
+  control](../../../doc/guide_swarm.md#102-timestep-control); the runtime still shortens the
   last step to reach each output time.
 - `_transport.cuh`: includes the production `inc/swarm/_transport.cuh` and replaces only its second
   SSA stage, `_ssa_substep_2`, with a call to the production `_ssa_advance<true>` helper in the
@@ -172,7 +173,7 @@ with the simulated Cartesian position $X=R\cos\phi$, $Y=R\sin\phi$. Also monitor
 energy $E=\tfrac12(v_R^2+v_\phi^2)-GM/R$, whose exact value is $-GM/(2a)=-1/2$, and the specific
 angular momentum $Rv_\phi=\sqrt{3}/2$. Energy error alone does not measure phase accuracy. The
 staggered update is second order for smooth forcing
-([accuracy](../../../doc/numerics_swarm.md#111-accuracy)), so compare the observed order across the
+([accuracy](../../../doc/guide_swarm.md#111-accuracy)), so compare the observed order across the
 four timesteps with two.
 
 ## Limits

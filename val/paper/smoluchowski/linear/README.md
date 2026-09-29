@@ -7,7 +7,7 @@ other two kernels. It is the `linear/` family of the
 [Smoluchowski kernel benchmarks](../README.md), which own the shared sweep, parameters, seeds,
 production-code reuse, build layout, output format, scorer structure, and limits; this page gives
 only what differs. The additive kernel is described with the other synthetic kernels in
-[collision kernels](../../../../doc/numerics_swarm.md#841-collision-kernels).
+[collision kernels](../../../../doc/guide_swarm.md#841-collision-kernels).
 
 ## Contents
 

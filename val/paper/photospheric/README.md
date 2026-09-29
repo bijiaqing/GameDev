@@ -1,21 +1,20 @@
 # Photospheric dust transport
 
-This campaign runs one photospheric transport problem with both dust representations, the
-Lagrangian swarm and the Eulerian fluid, so that the two formulations can be compared at production
-resolution. Both evolve a single dust species under stellar gravity, gas drag, radiation pressure
-attenuated by the dust's own radial optical depth, and density diffusion with a Stokes-dependent
-diffusivity
-([swarm radiation](../../../doc/numerics_swarm.md#62-radiation-pressure-and-optical-depth) and
-[diffusion](../../../doc/numerics_swarm.md#7-diffusion);
-[fluid radiation](../../../doc/numerics_fluid.md#62-radiation-pressure-and-optical-depth) and
-[diffusion](../../../doc/numerics_fluid.md#7-diffusion)). The routine suites test these operators
-in isolation, for example the [radiation-pressure
-orbit](../../../doc/testsets.md#32-radiation-pressure-orbit),
-[swarm diffusion](../../../doc/testsets.md#4-swarm-diffusion), the fluid [optical
-depth](../../../doc/testsets.md#132-optical-depth) and [attenuated
-radiation](../../../doc/testsets.md#133-attenuated-radiation), and the fluid [coupled
-composition](../../../doc/testsets.md#14-fluid-coupled-composition); this campaign combines them in
-one disk and compares the representations. Project terms are defined in the
+This campaign runs one photospheric transport problem with both dust representations, the Lagrangian
+swarm and the Eulerian fluid, so that the two formulations can be compared at production resolution.
+Both evolve a single dust species under stellar gravity, gas drag, radiation pressure attenuated by
+the dust's own radial optical depth, and density diffusion with a Stokes-dependent diffusivity
+([swarm radiation](../../../doc/guide_swarm.md#62-radiation-pressure-and-optical-depth) and
+[diffusion](../../../doc/guide_swarm.md#7-diffusion); [fluid
+radiation](../../../doc/guide_fluid.md#62-radiation-pressure-and-optical-depth) and
+[diffusion](../../../doc/guide_fluid.md#7-diffusion)). The routine suites test these operators in
+isolation, for example the [radiation-pressure
+orbit](../../../doc/guide_tests.md#32-radiation-pressure-orbit), [swarm
+diffusion](../../../doc/guide_tests.md#4-swarm-diffusion), the fluid [optical
+depth](../../../doc/guide_tests.md#132-optical-depth) and [attenuated
+radiation](../../../doc/guide_tests.md#133-attenuated-radiation), and the fluid [coupled
+composition](../../../doc/guide_tests.md#14-fluid-coupled-composition); this campaign combines them
+in one disk and compares the representations. Project terms are defined in the
 [glossary](../../../doc/README.md#glossary).
 
 ## Contents
@@ -34,7 +33,7 @@ one disk and compares the representations. Project terms are defined in the
 | Item | Value |
 |---|---|
 | Representations | swarm (`swarm/`) and fluid (`fluid/`) |
-| Geometry | vertically integrated [radial–azimuthal](../../../doc/numerics_basis.md#24-supported-geometries) quarter-disk wedge (`N_Z = 1`) |
+| Geometry | vertically integrated [radial–azimuthal](../../../doc/guide_basis.md#24-supported-geometries) quarter-disk wedge (`N_Z = 1`) |
 | Backends | CUDA (`sm_80`; `sm_90` for H200) and ROCm (`gfx942`); fluid sweep `block` on both |
 | Models | one per representation; no `MODEL` argument |
 | Planned runs | 4: 2 representations $\times$ 2 backends |
@@ -56,7 +55,7 @@ is needed.
 Collisions, imported gas, viscous gas flow, concentration diffusion, and Poynting–Robertson drag are
 not enabled. The swarm is monodisperse (`MULTISIZE` is off), and its `CODE_UNIT` flag acts only
 with `COLLISION`, so it has no effect here. The fluid always transports, so it needs no `TRANSPORT`
-flag; `FLUID_SWEEP := block` fixes the [sweep](../../../doc/numerics_fluid.md#102-parallel-mapping)
+flag; `FLUID_SWEEP := block` fixes the [sweep](../../../doc/guide_fluid.md#102-parallel-mapping)
 on both backends, whereas the root default on CUDA is `thread`.
 
 ## Setup
@@ -77,9 +76,9 @@ Both representations use code units with $G=M_\star=R_0=1$ and the same physical
 
 `KAPPA_0` is an opacity with dimensions of area per mass. `STOKES_0` is the reference midplane value
 at `R_0`, not a spatially constant Stokes number: $\mathrm{St}(R)=\mathrm{St}_0(R/R_0)^{1/2}$
-([Stokes number](../../../doc/numerics_basis.md#4-stopping-time-and-stokes-number)). Radiation
+([Stokes number](../../../doc/guide_basis.md#4-stopping-time-and-stokes-number)). Radiation
 switches on smoothly over `T_BETA`
-([radiation ramp](../../../doc/numerics_basis.md#81-radiation-ratio-and-startup-ramp)).
+([radiation ramp](../../../doc/guide_basis.md#81-radiation-ratio-and-startup-ramp)).
 
 ### Representation-specific parameters
 
@@ -91,18 +90,18 @@ switches on smoothly over `T_BETA`
 | Fluid limiter | not applicable | `POS_LIMIT = 0.9`, `RHO_VAC = 1e-30` |
 
 `POS_LIMIT` and `RHO_VAC` set the fluid's [positivity
-subcycling](../../../doc/numerics_fluid.md#72-cranknicolson-solve) and vacuum state.
+subcycling](../../../doc/guide_fluid.md#72-cranknicolson-solve) and vacuum state.
 
 ### Initialization
 
 Both root host initializers construct the same
-[edge-tapered](../../../doc/numerics_basis.md#62-edge-taper) dust surface density:
+[edge-tapered](../../../doc/guide_basis.md#62-edge-taper) dust surface density:
 $Z\Sigma_0(R/R_0)^{p}$ with sources on $0.6\le R/R_0\le1.4$ (at least $0.1R_0$ inside each edge),
 convolved with a Gaussian of standard deviation $0.025R_0$. Each
 tabulates the profile on its own `N_Y + 1`-point radial axis, so the swarm table has 1025 points
 and the fluid table 3073. Both use the same gas surface-density and pressure-support prescriptions
 and start from the steady drag-coupled drift velocities
-([steady drift](../../../doc/numerics_basis.md#7-steady-drift-velocity)).
+([steady drift](../../../doc/guide_basis.md#7-steady-drift-velocity)).
 
 The swarm reuses the root initializer: it samples radius with probability proportional to
 $`R\,\Sigma_d(R)`$ and azimuth uniformly, with equal represented masses and no size distribution.
@@ -113,17 +112,17 @@ $1+10^{-10}\xi$, where $\xi$ is a standard normal deviate shared across radius.
 
 Both optical-depth calculations use the 2D well-mixed closure $`\rho_d=\Sigma_d/(\sqrt{2\pi}\,H_g)`$
 and integrate $\kappa_0\rho_d$ radially outward from the inner boundary
-([radial optical depth](../../../doc/numerics_basis.md#82-radial-optical-depth)). The swarm deposits
+([radial optical depth](../../../doc/guide_basis.md#82-radial-optical-depth)). The swarm deposits
 each particle's extinction with the gas scale height at its own radius; the fluid uses cell-center
 scale heights.
 
 ### Timestep policies
 
 `DT_MAX` and `CFL_DYN` are shared, but the timestep criteria differ
-([swarm](../../../doc/numerics_swarm.md#102-timestep-control),
-[fluid](../../../doc/numerics_fluid.md#82-timestep-control)). The swarm keeps absolute orbital and
+([swarm](../../../doc/guide_swarm.md#102-timestep-control),
+[fluid](../../../doc/guide_fluid.md#82-timestep-control)). The swarm keeps absolute orbital and
 cell-crossing bounds and explicit stochastic-displacement bounds; its particle drift has no
-[FARGO](../../../doc/numerics_fluid.md#55-fargo-azimuthal-transport) residual-step policy, whereas
+[FARGO](../../../doc/guide_fluid.md#55-fargo-azimuthal-transport) residual-step policy, whereas
 fluid FARGO advection limits the step by the residual azimuthal motion. On the swarm mesh the
 orbital bound at the inner edge is
 
@@ -133,8 +132,8 @@ orbital bound at the inner edge is
 
 Both schemes evaluate radiation at their intermediate state: the swarm reconstructs it at the
 midpoint of its staggered transport step, and the fluid rebuilds the optical depth at the midpoint
-of its symmetric composition ([swarm](../../../doc/numerics_swarm.md#101-operator-composition),
-[fluid](../../../doc/numerics_fluid.md#81-operator-composition)).
+of its symmetric composition ([swarm](../../../doc/guide_swarm.md#101-operator-composition),
+[fluid](../../../doc/guide_fluid.md#81-operator-composition)).
 
 ## Production code and overrides
 
@@ -219,7 +218,7 @@ writes about 10.6 GB. File formats are described in
 [Output files](../../../README.md#output-files).
 
 Estimated swarm array sizes at one billion representatives, in decimal GB and not measured peak
-usage ([memory footprint](../../../doc/numerics_swarm.md#126-memory-footprint)):
+usage ([memory footprint](../../../doc/guide_swarm.md#126-memory-footprint)):
 
 | Storage | Size |
 |---|---|

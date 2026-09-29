@@ -1,17 +1,17 @@
 # Smoluchowski kernel benchmarks
 
-These campaigns test whether the swarm model's collision code reproduces analytical solutions of
-the Smoluchowski coagulation equation. They run the three normalized synthetic
-[collision kernels](../../../doc/numerics_swarm.md#841-collision-kernels) (constant, additive, and
-product) through the production
-[frozen-bath event chain](../../../doc/numerics_swarm.md#86-frozen-bath-event-chain),
-[bath controller](../../../doc/numerics_swarm.md#87-bath-controller), and
-[KD-tree search](../../../doc/numerics_swarm.md#93-kd-tree), with the particles held in place, and
-sweep the neighbor count and the refresh tolerance. The routine
-[collision-chain tests](../../../doc/testsets.md#8-swarm-collision-chain) check that the same code
-conserves mass and is reproducible; these campaigns measure its accuracy instead, as summarized in
-[`testsets.md`](../../../doc/testsets.md#9-swarm-coagulation-campaigns). This README covers all
-three kernels; what is specific to the additive kernel is in the companion
+These campaigns test whether the swarm model's collision code reproduces analytical solutions of the
+Smoluchowski coagulation equation. They run the three normalized synthetic [collision
+kernels](../../../doc/guide_swarm.md#841-collision-kernels) (constant, additive, and product)
+through the production [frozen-bath event
+chain](../../../doc/guide_swarm.md#86-frozen-bath-event-chain), [bath
+controller](../../../doc/guide_swarm.md#87-bath-controller), and [KD-tree
+search](../../../doc/guide_swarm.md#93-kd-tree), with the particles held in place, and sweep the
+neighbor count and the refresh tolerance. The routine [collision-chain
+tests](../../../doc/guide_tests.md#8-swarm-collision-chain) check that the same code conserves mass
+and is reproducible; these campaigns measure its accuracy instead, as summarized in
+[`guide_tests.md`](../../../doc/guide_tests.md#9-swarm-coagulation-campaigns). This README covers
+all three kernels; what is specific to the additive kernel is in the companion
 [`linear/README.md`](linear/README.md).
 
 ## Contents
@@ -104,7 +104,7 @@ is the operator horizon, which in these collision-only runs is the output interv
 | Partner mixing | none | none | before every refresh |
 
 `COL_BIN_Z = 2` in `const/` and `linear/` collapses to one bin because the model has no polar
-extent ([controller groups](../../../doc/numerics_swarm.md#871-controller-groups-and-size-bins)).
+extent ([controller groups](../../../doc/guide_swarm.md#871-controller-groups-and-size-bins)).
 
 ### Seeds
 
@@ -142,9 +142,9 @@ The additive-kernel solution, a continuous distribution, is given in the
 The campaigns compile the root runtime, particle initializer, KD-tree builder and search,
 collision controller, cached rates, sticking grouping, event updates, and moving size-bin bounds
 directly; the bounds follow the production per-group policy of the
-[bath controller](../../../doc/numerics_swarm.md#871-controller-groups-and-size-bins). With neither
+[bath controller](../../../doc/guide_swarm.md#871-controller-groups-and-size-bins). With neither
 transport nor diffusion enabled, the
-[geometry epoch](../../../doc/numerics_swarm.md#125-geometry-epochs) never ends: tree build,
+[geometry epoch](../../../doc/guide_swarm.md#125-geometry-epochs) never ends: tree build,
 neighbor search, and neighbor-dependency graph construction occur once per fresh run, while grain
 properties, rates, and collision refreshes continue to evolve.
 
@@ -285,7 +285,7 @@ bath durations, reproduces the analytical solutions at the sampled `N_K` and `CO
 - Assess neighbor-count and refresh-tolerance dependence separately from seed scatter; a small
   controller tolerance is not a histogram-error bound.
 - Distribution distances measure the actual numerical approximation, including production sticking
-  grouping ([sticking packets](../../../doc/numerics_swarm.md#851-outcome-channels)). Stored
+  grouping ([sticking packets](../../../doc/guide_swarm.md#851-outcome-channels)). Stored
   diameters carry roundoff, so cluster masses are integers only approximately; the scorer reports
   the largest deviation.
 - Product results hold only before gelation and with partner mixing; they do not establish that a

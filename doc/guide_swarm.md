@@ -4,9 +4,9 @@ This guide derives the equations of the Lagrangian dust model and explains how t
 and integrates them, including the representative-particle collisions and the nearest-neighbor
 search that finds collision partners. The disk that the dust moves in (coordinates, gas, stopping
 time, diffusivity, radiation definitions) is described once for both dust models in
-[`numerics_basis.md`](numerics_basis.md). How to build, configure, and run a model is in the
+[`guide_basis.md`](guide_basis.md). How to build, configure, and run a model is in the
 [user guide](../README.md), and the tests that check this model, including the collision code, are
-in [`testsets.md`](testsets.md). Project terms are collected in the
+in [`guide_tests.md`](guide_tests.md). Project terms are collected in the
 [glossary](README.md#glossary).
 
 ## Contents
@@ -33,7 +33,7 @@ The swarm model represents dust by computational
 [representative particles](README.md#glossary). Each one carries a position, a velocity and, in
 multisize models, one grain size and the number of physical grains it stands for. The gas is
 prescribed analytically or imported from files and does not feel the dust
-([one-way coupling](numerics_basis.md#37-one-way-coupling)).
+([one-way coupling](guide_basis.md#37-one-way-coupling)).
 
 Up to four processes advance the particles:
 
@@ -52,7 +52,7 @@ source files are listed in [Section 12.1](#121-source-map).
 ### 1.2 Supported configurations
 
 The swarm runs in all four geometries of
-[the shared disk model](numerics_basis.md#24-supported-geometries): radial-only, radial–azimuthal,
+[the shared disk model](guide_basis.md#24-supported-geometries): radial-only, radial–azimuthal,
 radial–polar, and full 3D. The grid alone selects the geometry; the radial-only case has its own
 closure ([Section 2.5](#25-radial-only-closure)). Which operators exist in an executable is fixed
 at compile time by the feature flags listed, with their dependencies, in
@@ -60,15 +60,15 @@ at compile time by the feature flags listed, with their dependencies, in
 compiled; it does not switch an operator on or off during a run.
 
 The tests that establish each configuration, including the radial analytical cases, are described
-in [`testsets.md`](testsets.md).
+in [`guide_tests.md`](guide_tests.md).
 
 ### 1.3 Relation to the fluid model
 
-Both dust models share the disk of [`numerics_basis.md`](numerics_basis.md) and differ in how they
+Both dust models share the disk of [`guide_basis.md`](guide_basis.md) and differ in how they
 approximate the dust distribution. The fluid model evolves the first two
-[moments of the distribution](numerics_basis.md#9-dust-distribution-and-its-moments) and closes them
+[moments of the distribution](guide_basis.md#9-dust-distribution-and-its-moments) and closes them
 by setting the velocity dispersion $\boldsymbol P_d$ to zero
-([fluid model, Section 1.3](numerics_fluid.md#13-relation-to-the-swarm-model)). The swarm instead
+([fluid model, Section 1.3](guide_fluid.md#13-relation-to-the-swarm-model)). The swarm instead
 approximates the whole mass distribution $f_d(\boldsymbol x,\boldsymbol v,s,t)$ by the empirical
 measure
 
@@ -88,7 +88,7 @@ place of the fluid model's closure error.
 
 The two models also diffuse along different radial directions: the swarm along cylindrical radius,
 the fluid along spherical radius. [Why the diffusion bases
-differ](numerics_basis.md#53-why-the-diffusion-bases-differ) explains the consequence. A
+differ](guide_basis.md#53-why-the-diffusion-bases-differ) explains the consequence. A
 side-by-side comparison of the two representations is in [Dust
 representations](../README.md#dust-representations).
 
@@ -97,7 +97,7 @@ representations](../README.md#dust-representations).
 ### 2.1 Stored state
 
 Each particle stores its position in the
-[computational coordinates](numerics_basis.md#21-computational-coordinates) and three velocity
+[computational coordinates](guide_basis.md#21-computational-coordinates) and three velocity
 variables chosen so that the drift of the angles is a simple ratio:
 
 ```math
@@ -131,7 +131,7 @@ $x=(X_{\min}+X_{\max})/2$. The radial-only model still evolves $v_R$ and $\ell_\
 
 The mesh is used only to interpolate fields to particles and to deposit particle quantities (density
 and extinction) onto cells. Its spacing, faces, and cell measures are defined in
-[Mesh](numerics_basis.md#22-mesh) and [Cell measure](numerics_basis.md#23-cell-measure); this
+[Mesh](guide_basis.md#22-mesh) and [Cell measure](guide_basis.md#23-cell-measure); this
 section gives the swarm-specific parts.
 
 **Cell measure.** Deposition divides by the exact cell measure, with $d=2$ for a vertically
@@ -194,8 +194,8 @@ averages.
 ### 2.3 Units and dimensions
 
 The dynamics uses the orbital code units of [Units and
-scales](numerics_basis.md#12-units-and-scales), and the dimensionless disk parameters are defined in
-[Dimensionless parameters](numerics_basis.md#13-dimensionless-parameters). The swarm adds these
+scales](guide_basis.md#12-units-and-scales), and the dimensionless disk parameters are defined in
+[Dimensionless parameters](guide_basis.md#13-dimensionless-parameters). The swarm adds these
 quantities:
 
 | Quantity | Symbol | Dimension |
@@ -343,7 +343,7 @@ the sample realizes them.
 ### 3.1 Dust density profile
 
 The target is a settled Gaussian layer whose surface density follows the tapered profile
-$\Sigma_{d,\rm conv}(R)$ of [Edge taper](numerics_basis.md#62-edge-taper), interpolated linearly
+$\Sigma_{d,\rm conv}(R)$ of [Edge taper](guide_basis.md#62-edge-taper), interpolated linearly
 from its tabulated axis. A vertically integrated model uses $\Sigma_{d,\rm conv}$ directly. With a
 resolved polar dimension, the dust scale height of a grain of size $s$ follows the
 settling–diffusion balance of [Youdin & Lithwick (2007)](https://arxiv.org/abs/0707.2975),
@@ -399,16 +399,16 @@ where $\Phi$ is the standard normal CDF. The code evaluates it with `erf` or `er
 to avoid subtracting two nearly equal tail probabilities.
 
 **Limits.** This layer is not an equilibrium of the evolved diffusion operator. Unlike the fluid
-initializer ([fluid model, Section 3.1](numerics_fluid.md#31-dust-density-profile)), $H_d$ has no
+initializer ([fluid model, Section 3.1](guide_fluid.md#31-dust-density-profile)), $H_d$ has no
 finite-Stokes suppression factor $(1+\mathrm{St}^2)$ and does not change with
 `DIFFUSE_CONCENTRATION`.
 
 ### 3.2 Initial velocity
 
 Particles start with the steady drift of dust in a gas disk without back-reaction, given in
-[Steady drift velocity](numerics_basis.md#7-steady-drift-velocity), evaluated at each particle's
+[Steady drift velocity](guide_basis.md#7-steady-drift-velocity), evaluated at each particle's
 position and Stokes number. With `VISC_FLOW`, the gas radial velocity of that drift is the viscous
-flow of [Viscous radial flow](numerics_basis.md#36-viscous-radial-flow). A resolved polar dimension
+flow of [Viscous radial flow](guide_basis.md#36-viscous-radial-flow). A resolved polar dimension
 adds terminal settling,
 
 ```math
@@ -426,7 +426,7 @@ v_r=v_{R,d}\sin z+v_Z\cos z,
 ```
 
 The swarm adds terminal settling but no velocity that balances its diffusive flux; the fluid does
-the opposite ([fluid model, Section 3.2](numerics_fluid.md#32-initial-velocity)). This difference
+the opposite ([fluid model, Section 3.2](guide_fluid.md#32-initial-velocity)). This difference
 is intended: swarm diffusion stays a separate stochastic operator and is not folded into a
 deterministic velocity. The two models therefore do not start from the same vertical dynamical
 state.
@@ -460,7 +460,7 @@ radial marginal
 
 with $\Delta\phi=X_{\max}-X_{\min}$ for an active azimuth and $2\pi$ otherwise. The code integrates
 it with the trapezoidal rule on $\max(2048,4N_Y)$ uniform intervals from $R_{\min,\rm init}$
-(defined in [Edge taper](numerics_basis.md#62-edge-taper)) to $Y_{\max}$. The table of $I(s)$ over
+(defined in [Edge taper](guide_basis.md#62-edge-taper)) to $Y_{\max}$. The table of $I(s)$ over
 size, the [mass bank](README.md#glossary), has 128 entries on a logarithmic size axis when
 size-dependent 3D settling is active (multisize, analytic gas, `N_Z > 1`, and
 $s_{\min}\ne s_{\max}$) and one entry otherwise. Neither resolution depends on the polar grid, so a
@@ -642,7 +642,7 @@ uses a single CDF.
 
 No azimuthal density perturbation is added, unlike in the fluid initializer. The random sampling
 supplies the finite-$`N_P`$ seed fluctuations. The initialization tests are described in
-[Initialization](testsets.md#5-swarm-initialization).
+[Initialization](guide_tests.md#5-swarm-initialization).
 
 ### 3.6 Imported gas
 
@@ -773,7 +773,7 @@ the zeroth and first velocity moments of a monodisperse population in density mo
 ```
 
 The moments themselves are defined in
-[Dust distribution and its moments](numerics_basis.md#9-dust-distribution-and-its-moments).
+[Dust distribution and its moments](guide_basis.md#9-dust-distribution-and-its-moments).
 
 With several sizes, the diffusivity stays inside the size integrals: the mass and momentum diffusion
 terms are $`\nabla\cdot\int\boldsymbol D(s)\nabla f_d\,d^3v\,ds`$ and
@@ -798,7 +798,7 @@ dynamical closure are fixed:
 | radial-only | $\Sigma_d(R)$ | vertical integration and $\partial_\phi=0$ | midplane radial dynamics, $u_\phi$ retained |
 
 The continuity equation of each geometry is in
-[Supported geometries](numerics_basis.md#24-supported-geometries). Vertical integration changes the
+[Supported geometries](guide_basis.md#24-supported-geometries). Vertical integration changes the
 evolved density and requires a midplane closure, so the reduced models are not identical physics
 even though one set of particle equations serves all four.
 
@@ -973,7 +973,7 @@ applied after the first drift and again after the full step ([Section
 10.3](#103-boundary-conditions)). With radiation, the first drift is a separate kernel so that the
 optical depth can be rebuilt at the midpoint positions ([Section 10.1](#101-operator-composition)).
 The accuracy of the scheme is discussed in [Section 11.1](#111-accuracy), and the trajectory tests
-in [Deterministic trajectories](testsets.md#3-swarm-trajectories).
+in [Deterministic trajectories](guide_tests.md#3-swarm-trajectories).
 
 ### 5.2 Imported-gas time interpolation
 
@@ -1015,7 +1015,7 @@ Poynting–Robertson drag.
 At the midpoint position of [Section 5.1](#51-staggered-update), the velocity update integrates drag
 exactly for coefficients frozen at that point. The stopping time is $t_s=\mathrm{St}/\Omega_K(R)$
 with the Stokes number of [Stopping time and Stokes
-number](numerics_basis.md#4-stopping-time-and-stokes-number), including its size factor $s/S_0$.
+number](guide_basis.md#4-stopping-time-and-stokes-number), including its size factor $s/S_0$.
 `CONST_ST` keeps only that size factor, $`\mathrm{St}=\mathrm{St}_0\,s/S_0`$; imported gas uses the
 variants of [Section 3.6](#36-imported-gas).
 
@@ -1025,9 +1025,9 @@ The drag targets are the gas velocities in the stored variables. For analytic ga
 \ell_{\phi,g}=Rv_{\phi,g},
 ```
 
-with the gas rotation $v_{\phi,g}$ of [Rotation support](numerics_basis.md#34-rotation-support), and
+with the gas rotation $v_{\phi,g}$ of [Rotation support](guide_basis.md#34-rotation-support), and
 $v_{r,g}=\ell_{\theta,g}=0$ unless `VISC_FLOW` supplies the projected viscous flow of
-[Viscous radial flow](numerics_basis.md#36-viscous-radial-flow). Imported gas velocities are linear
+[Viscous radial flow](guide_basis.md#36-viscous-radial-flow). Imported gas velocities are linear
 velocities; they are interpolated to the particle and converted by $\ell_{\phi,g}=Rv_{\phi,g}$ and
 $\ell_{\theta,g}=yv_{\theta,g}$, while $\Omega_K$ in $t_s$ stays analytic.
 
@@ -1076,8 +1076,8 @@ but the timestep must still resolve the variation of the coefficients
 With `RADIATION`, the stellar radiation pressure pushes each grain outward with a strength that
 falls with grain size and with the optical depth of the dust between it and the star. The
 definitions of the radiation ratio, its startup ramp $f_\beta$, and the radial optical depth are in
-[Radiation ratio and startup ramp](numerics_basis.md#81-radiation-ratio-and-startup-ramp) and
-[Radial optical depth](numerics_basis.md#82-radial-optical-depth). The swarm-specific parts are the
+[Radiation ratio and startup ramp](guide_basis.md#81-radiation-ratio-and-startup-ramp) and
+[Radial optical depth](guide_basis.md#82-radial-optical-depth). The swarm-specific parts are the
 size factor, the deposit that builds the optical depth from particles, and the interpolation back
 to particles.
 
@@ -1089,7 +1089,7 @@ For geometric opacity $\kappa\propto s^{-1}$, each particle's radiation ratio is
 ```
 
 with the startup ramp $f_\beta$ of
-[Radiation ratio and startup ramp](numerics_basis.md#81-radiation-ratio-and-startup-ramp).
+[Radiation ratio and startup ramp](guide_basis.md#81-radiation-ratio-and-startup-ramp).
 
 **Extinction deposit.** Particle $p$ represents the mass
 
@@ -1136,7 +1136,7 @@ Because $Q_p$ already contains $\kappa_0$, $E_c/V_c$ is the product $\kappa_0\rh
 shared notation $\Delta\tau=\kappa_0\rho_{\rm ext}\Delta r$, with $\rho_{\rm ext}$ the size-weighted
 density $V_c^{-1}\sum_pw_{pc}W_pS_0/s_p$ (divided by $\sqrt{2\pi}H_g$ in 2D), which reduces to the
 dust density for grains of size $S_0$. The shared inclusive prefix sum over radius
-([Radial optical depth](numerics_basis.md#82-radial-optical-depth)) then gives the optical depth
+([Radial optical depth](guide_basis.md#82-radial-optical-depth)) then gives the optical depth
 $\tau_{i,j+1/2,k}$ at every outer radial face, with $\tau_{i,-1/2,k}=0$ at the inner boundary.
 
 **Interpolation to the particle.** A particle interpolates the face values of its own radial cell,
@@ -1250,8 +1250,8 @@ unchanged.
 ### 7.1 Target equation
 
 The target equation and the directional diffusivities are defined in
-[Density and concentration diffusion](numerics_basis.md#52-density-and-concentration-diffusion) and
-[Directional diffusivities](numerics_basis.md#51-directional-diffusivities). For the swarm the
+[Density and concentration diffusion](guide_basis.md#52-density-and-concentration-diffusion) and
+[Directional diffusivities](guide_basis.md#51-directional-diffusivities). For the swarm the
 diffusion tensor is diagonal in cylindrical coordinates $(\phi,R,Z)$,
 
 ```math
@@ -1304,7 +1304,7 @@ One Euler–Maruyama step draws independent standard normal deviates and uses th
 variance $2D_a\Delta t$ exactly, with no further rescaling. The coefficients are evaluated at the
 start of the step. The method has strong order $1/2$ and weak order $1$ for smooth coefficients
 ([Kloeden & Platen 1992](https://doi.org/10.1007/978-3-662-12616-5)). The diffusion tests are
-described in [Stochastic diffusion](testsets.md#4-swarm-diffusion).
+described in [Stochastic diffusion](guide_tests.md#4-swarm-diffusion).
 
 **Limits.** The finite step and the boundary folding of [Section 10.3](#103-boundary-conditions)
 limit the accuracy near steep coefficient gradients and walls.
@@ -1379,10 +1379,10 @@ the stored angle. The projection uses $x_u$, before the position is wrapped to $
 equivalent to rotating both the position and the velocity by the wedge identification
 $-m\Delta\phi_w$; projecting at $x_w$ would give the particle a spurious velocity kick at the seam.
 The same ordering holds after the axis continuation of [Section 10.3](#103-boundary-conditions). The
-wedge tests are described in [Stochastic diffusion](testsets.md#4-swarm-diffusion).
+wedge tests are described in [Stochastic diffusion](guide_tests.md#4-swarm-diffusion).
 
 **Limits.** This velocity treatment is internally consistent but is not the donor-momentum closure
-of the fluid diffusion ([fluid model, Section 7.4](numerics_fluid.md#74-donor-momentum-closure)).
+of the fluid diffusion ([fluid model, Section 7.4](guide_fluid.md#74-donor-momentum-closure)).
 Swarm–fluid comparisons of diffusion are valid for the density only.
 
 ## 8. Collisions
@@ -1548,11 +1548,11 @@ overlap of the two species gives
 ```
 
 where $H_{g,i}$ and $H_{g,j}$ are the gas scale heights at the two particles' own cylindrical radii
-([`numerics_basis.md`](numerics_basis.md#32-vertical-structure)).
+([`guide_basis.md`](guide_basis.md#32-vertical-structure)).
 
 This physical prescription is selected by `COAG_KERNEL = 3`. The values `0`, `1`, and `2` select
 normalized synthetic kernel shapes for controlled coagulation studies, such as the Smoluchowski
-campaigns of [`testsets.md`](testsets.md#9-swarm-coagulation-campaigns):
+campaigns of [`guide_tests.md`](guide_tests.md#9-swarm-coagulation-campaigns):
 
 ```math
 \kappa_0(m_i,m_j)=1,
@@ -1656,8 +1656,8 @@ The speed combines drift, settling, Brownian, and turbulent contributions:
 
 **Drift and settling.** Let $f_k=(1+\mathrm{St}_k^2)^{-1}$ and $v_n=-\eta R\Omega_K$ at the owner's
 position, with the Stokes numbers of
-[`numerics_basis.md`](numerics_basis.md#4-stopping-time-and-stokes-number) and the rotation-support
-parameter $\eta$ of [`numerics_basis.md`](numerics_basis.md#34-rotation-support). Then
+[`guide_basis.md`](guide_basis.md#4-stopping-time-and-stokes-number) and the rotation-support
+parameter $\eta$ of [`guide_basis.md`](guide_basis.md#34-rotation-support). Then
 
 ```math
 \Delta v_R=2v_n(\mathrm{St}_if_i-\mathrm{St}_jf_j),\qquad
@@ -1704,7 +1704,7 @@ y_a=1.6,
 y_s=1.6015125-0.63119577S+0.32938936S^2-0.29847604S^3,
 ```
 
-with $\alpha$ from [`numerics_basis.md`](numerics_basis.md#35-viscosity). The turbulent Reynolds
+with $\alpha$ from [`guide_basis.md`](guide_basis.md#35-viscosity). The turbulent Reynolds
 number is calibrated as
 
 ```math
@@ -1919,7 +1919,7 @@ compensators, and the random-number state persist across continuation launches, 
 checked before another clock is drawn, so a continued owner resumes exactly where it stopped. The
 host relaunches the chain kernel until the queue is empty. The random path is therefore independent
 of the cap, and the chain tests require identical results at caps 1 and 32
-([`testsets.md`](testsets.md#8-swarm-collision-chain)).
+([`guide_tests.md`](guide_tests.md#8-swarm-collision-chain)).
 
 **Limits.** More than $10^6$ continuation launches in one refresh wave stop the run
 ([Section 12.7](#127-finite-state-and-error-checks)).
@@ -2441,7 +2441,7 @@ use the cheaper disjoint-image path.
 The two searches therefore need not admit identical image sets. In a nearly full wedge, minimizing
 over all three images can select an image that Morton never created. Neighbor validation must use
 the retained image, not reconstruct the nearest image from positions, and each search is validated
-against its own candidate set ([`testsets.md`](testsets.md#7-swarm-neighbor-search)).
+against its own candidate set ([`guide_tests.md`](guide_tests.md#7-swarm-neighbor-search)).
 
 **Limits.** A wedge whose missing angle is at most $10^{-6}$ radians is treated as a full period.
 A model whose search cap or relevant neighbor separation is comparable to $10^{-6}R$ should use an
@@ -2468,7 +2468,7 @@ Morton hierarchy is smaller, whereas partial wedges favor Morton more strongly
 candidate-set difference of [Section 9.5](#95-periodic-images) can change the retained
 neighborhood in a wide wedge. Timing and memory must be measured for the intended model, compiler,
 backend, and GPU; the correctness checks are in
-[`testsets.md`](testsets.md#7-swarm-neighbor-search). For broader context on
+[`guide_tests.md`](guide_tests.md#7-swarm-neighbor-search). For broader context on
 cooperative GPU similarity search, see
 [Johnson, Douze & Jégou (2017)](https://arxiv.org/abs/1702.08734); the exact top-$`K`$ and periodic
 deduplication procedures used here are specific to this code.
@@ -2785,14 +2785,14 @@ compare at least two successively smaller bath tolerances across independent see
 distributional observables at equal physical time. This qualification belongs to the physical
 model, not to a permanent matrix of synthetic validation cases. The retained chain tests and their
 evidence boundary are described in
-[`testsets.md`](testsets.md#8-swarm-collision-chain) and
-[its limits](testsets.md#16-limits); the rate tests are in
-[`testsets.md`](testsets.md#6-swarm-collision-rates).
+[`guide_tests.md`](guide_tests.md#8-swarm-collision-chain) and
+[its limits](guide_tests.md#16-limits); the rate tests are in
+[`guide_tests.md`](guide_tests.md#6-swarm-collision-rates).
 
 ### 11.3 Known limitations
 
 Each item links to the Limits paragraph of its section. Verification evidence and untested regimes
-are in [`testsets.md`](testsets.md#16-limits), and the limitations shared with the fluid
+are in [`guide_tests.md`](guide_tests.md#16-limits), and the limitations shared with the fluid
 model in [Current limitations](../README.md#current-limitations).
 
 - [Section 2.2](#22-mesh-measures-and-particlemesh-transfer): edge cells are one-sided deposition
@@ -3284,4 +3284,4 @@ largest age of a neighboring group's published reservoir at the start of an upda
 - Youdin & Lithwick (2007), [particle stirring and settling](https://arxiv.org/abs/0707.2975)
 - Zsom & Dullemond (2008), [representative-particle coagulation](https://arxiv.org/abs/0807.5052)
 
-References for the disk model are in [`numerics_basis.md`](numerics_basis.md#10-references).
+References for the disk model are in [`guide_basis.md`](guide_basis.md#10-references).

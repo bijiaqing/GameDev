@@ -4,10 +4,10 @@ This guide explains what the two validation suites prove about GameDev's dust mo
 works, and when it passes: the swarm suite tests the Lagrangian dust model ([Sections
 3–9](#3-swarm-trajectories)) and the fluid suite the Eulerian dust model ([Sections
 10–14](#10-fluid-transport)). The equations under test are derived in
-[`numerics_swarm.md`](numerics_swarm.md), including the [collisions](numerics_swarm.md#8-collisions)
-and [neighbor search](numerics_swarm.md#9-nearest-neighbor-search) behind [Sections
-6–9](#6-swarm-collision-rates), and in [`numerics_fluid.md`](numerics_fluid.md), with the shared
-disk model in [`numerics_basis.md`](numerics_basis.md); the commands that run the suites are in
+[`guide_swarm.md`](guide_swarm.md), including the [collisions](guide_swarm.md#8-collisions)
+and [neighbor search](guide_swarm.md#9-nearest-neighbor-search) behind [Sections
+6–9](#6-swarm-collision-rates), and in [`guide_fluid.md`](guide_fluid.md), with the shared
+disk model in [`guide_basis.md`](guide_basis.md); the commands that run the suites are in
 [`val/README.md`](../val/README.md#running-part-of-the-suites). Project terms are defined in the
 [glossary](README.md#glossary).
 
@@ -312,7 +312,7 @@ with the exact remaining mass; they do not demand mass conservation.
 
 These tests check that particles move along exactly known paths. The orbit and drag-path tests call
 the production transport stages `_ssa_advance`
-([`numerics_swarm.md`](numerics_swarm.md#51-staggered-update)) and change only the forcing: the
+([`guide_swarm.md`](guide_swarm.md#51-staggered-update)) and change only the forcing: the
 orbits set the drag to zero, and the drag path prescribes the stopping time, the gas velocity, and a
 constant radial force. Comparing the full stored state, position and velocity together, catches
 compensating errors that a comparison of radius alone would miss.
@@ -373,7 +373,7 @@ least 1.8.
 ### 3.4 Drag path
 
 **Test.** `test_drag_path_1d` checks the exponential drag response
-([`numerics_swarm.md`](numerics_swarm.md#61-drag-and-gravity)). It follows three particles with
+([`guide_swarm.md`](guide_swarm.md#61-drag-and-gravity)). It follows three particles with
 constant stopping times
 $t_s=0.02$, $0.2$, and $2$ in a constant gas velocity $v_g$ under a constant radial force $F$, up to
 $t=1$.
@@ -397,7 +397,7 @@ inactive-variable error below $2\times10^{-14}$, and the final position order at
 
 **Test.** `test_prdrag_2d` checks the combined radiation and drag response of eight grain sizes
 over one step $\Delta t=0.1$
-([`numerics_swarm.md`](numerics_swarm.md#63-poyntingrobertson-drag)).
+([`guide_swarm.md`](guide_swarm.md#63-poyntingrobertson-drag)).
 
 **Reference.** To first order in $v/c$, Poynting–Robertson drag adds to the radial radiation
 pressure the acceleration
@@ -426,7 +426,7 @@ dX=A(X)\,dt+\sqrt{2D(X)}\,dW,
 
 where the drift $A$ contains the diffusivity-gradient and coordinate terms. Each test applies one
 production `diffusion_pos` Euler–Maruyama step
-([`numerics_swarm.md`](numerics_swarm.md#72-eulermaruyama-step)) from prescribed positions. With
+([`guide_swarm.md`](guide_swarm.md#72-eulermaruyama-step)) from prescribed positions. With
 $D=\nu/(1+{\rm St}^2)$ at the starting position, the displacement variance is
 
 ```math
@@ -459,7 +459,7 @@ $\Delta t=0.002$. The 3D population starts one gas scale height above the midpla
 polar velocity, which exercises the full spherical basis transformation.
 
 **Reference.** A particle that crosses a wedge face reappears at the opposite face, and its velocity
-vector must be rotated with it ([`numerics_swarm.md`](numerics_swarm.md#74-velocity-reprojection)).
+vector must be rotated with it ([`guide_swarm.md`](guide_swarm.md#74-velocity-reprojection)).
 For each displacement the validator reconstructs the unique unwrapped endpoint $x_u$ with
 
 ```math
@@ -482,7 +482,7 @@ off by the radial and polar domain boundaries. It calls the production host init
 populations at the grain sizes $s_{\min}$, $\sqrt{s_{\min}s_{\max}}$, and $s_{\max}$.
 
 **Reference.** For grain size $s$, the radial distribution of mass inside the domain
-([`numerics_swarm.md`](numerics_swarm.md#33-dust-mass-in-the-domain)) is
+([`guide_swarm.md`](guide_swarm.md#33-dust-mass-in-the-domain)) is
 
 ```math
 \frac{dI}{dR}
@@ -496,10 +496,10 @@ I(s)=\int \frac{dI}{dR}\,dR,
 ```
 
 where $\Sigma_{d,\rm conv}$ is the dust surface density after the Gaussian [edge
-taper](numerics_basis.md#62-edge-taper), which the validator rebuilds independently, $\Phi$ is the
+taper](guide_basis.md#62-edge-taper), which the validator rebuilds independently, $\Phi$ is the
 standard normal CDF, and the sum runs over the one or two allowed vertical intervals. The sampler
 draws $R$ from the normalized radial CDF and then $Z$ from the matching truncated Gaussian
-([`numerics_swarm.md`](numerics_swarm.md#35-spatial-sampling)). It sets the number of grains each
+([`guide_swarm.md`](guide_swarm.md#35-spatial-sampling)). It sets the number of grains each
 particle represents so that
 
 ```math
@@ -538,7 +538,7 @@ Brownian motion.
 ### 6.1 Rates under test
 
 The relative speed of a pair
-([`numerics_swarm.md`](numerics_swarm.md#843-relative-velocities)) combines three contributions,
+([`guide_swarm.md`](guide_swarm.md#843-relative-velocities)) combines three contributions,
 
 ```math
 \Delta v_{ij}=
@@ -550,9 +550,9 @@ two grain sizes at the owner's position. The owner is the particle whose collisi
 computed; its partners are its retained nearest neighbors $\mathcal N_i$.
 
 Each partner contributes a pair term
-([`numerics_swarm.md`](numerics_swarm.md#841-collision-kernels)), and the owner's total rate
+([`guide_swarm.md`](guide_swarm.md#841-collision-kernels)), and the owner's total rate
 divides their sum by the area or volume that its neighbors occupy (the
-[KNN measure](numerics_swarm.md#842-knn-measure)). With cross section
+[KNN measure](guide_swarm.md#842-knn-measure)). With cross section
 $\sigma_{ij}=\frac{\pi}{4}(s_i+s_j)^2$ and $h_i$ the distance to the farthest retained neighbor:
 
 | Model | Pair term | Total rate |
@@ -576,7 +576,7 @@ midplane instead of reusing the midplane formulas.
 ### 6.3 Periodic images
 
 In a periodic wedge a neighbor can be the rotated copy (image) of a particle across the wedge seam
-([`numerics_swarm.md`](numerics_swarm.md#95-periodic-images)). The search returns such a neighbor
+([`guide_swarm.md`](guide_swarm.md#95-periodic-images)). The search returns such a neighbor
 as the image code
 
 ```math
@@ -625,7 +625,7 @@ searches pass.
 ## 7. Swarm neighbor search
 
 `test_knn` checks that both collision searches, the KD tree and the Morton index
-([`numerics_swarm.md`](numerics_swarm.md#9-nearest-neighbor-search)), return exactly the same
+([`guide_swarm.md`](guide_swarm.md#9-nearest-neighbor-search)), return exactly the same
 neighbors as a brute-force search, with $K=200$ and $10^5$ particles. It tests correctness;
 timing is recorded for information only.
 
@@ -680,11 +680,11 @@ reproduces its own results exactly.
 **How the integrator works.** The controller divides each collision interval into frozen
 [baths](README.md#glossary), during which particle positions and neighbor lists are fixed while an
 event chain updates grain sizes and numbers
-([`numerics_swarm.md`](numerics_swarm.md#86-frozen-bath-event-chain)). Spatial groups of particles
+([`guide_swarm.md`](guide_swarm.md#86-frozen-bath-event-chain)). Spatial groups of particles
 whose baths fall due together are advanced in one [refresh wave](README.md#glossary). After each
 interval an audit flags baths that changed the particles more than intended (an
 [overshoot](README.md#glossary)) and adjusts later refreshes without rejecting or replaying the
-random path ([`numerics_swarm.md`](numerics_swarm.md#87-bath-controller)). An [event
+random path ([`guide_swarm.md`](guide_swarm.md#87-bath-controller)). An [event
 cap](README.md#glossary) limits the events per kernel launch, and an owner that reaches it continues
 in a further launch.
 
@@ -737,7 +737,7 @@ each time into an emptied output directory.
 
 These tests establish conservation, exact continuation, coverage of both searches, and the
 integrity of the production path. They do not show that a physical coagulation history has
-converged; see [`numerics_swarm.md`](numerics_swarm.md#112-finite-bath-convergence)
+converged; see [`guide_swarm.md`](guide_swarm.md#112-finite-bath-convergence)
 and [Limits](#16-limits).
 
 ## 9. Swarm coagulation campaigns
@@ -776,7 +776,7 @@ READMEs.
 
 These tests check the directional advection operators: PPM reconstruction, the pressureless HLL
 flux, FARGO azimuthal transport, and the SSPRK radial and polar steps
-([`numerics_fluid.md`](numerics_fluid.md#51-directional-finite-volume-update)). Each reduces the
+([`guide_fluid.md`](guide_fluid.md#51-directional-finite-volume-update)). Each reduces the
 continuity equation to
 
 ```math
@@ -795,7 +795,7 @@ Fourier mode $`\rho_d=1+0.1\,\overline{\sin2\phi}`$, where the overbar denotes t
 with specific angular momentum $R^2$, that is, unit angular speed $\Omega$. Each step moves the
 profile by a prescribed noninteger FARGO shift of 3.25 cells, until one full orbit $t=2\pi$; the
 last step is shortened to end there. The case tests the FARGO integer shift, residual transport, PPM
-reconstruction ([`numerics_fluid.md`](numerics_fluid.md#55-fargo-azimuthal-transport)), momentum
+reconstruction ([`guide_fluid.md`](guide_fluid.md#55-fargo-azimuthal-transport)), momentum
 transport, and the periodic seam in one calculation.
 
 **Reference.** For constant angular speed,
@@ -839,7 +839,7 @@ averages; the exact momenta are $\rho_dR^2\cdot0.25$, $0.10\rho_d$, and $-0.05\r
 expansion. Every parcel keeps its initial radial speed $aR_0$ with $a=0.2$, so $R=\lambda R_0$ with
 $\lambda=1+at$. The initial profile is a smooth compact bump on $1.0\le R\le1.8$, advanced to
 $t=0.25$ with the production CFL timestep at CFL number 0.05 and SSPRK integration
-([`numerics_fluid.md`](numerics_fluid.md#56-radial-and-polar-time-integration)).
+([`guide_fluid.md`](guide_fluid.md#56-radial-and-polar-time-integration)).
 
 **Reference.** In effective radial dimension $d$ (2 for the cylindrical midplane, 3 for the
 spherical shell),
@@ -914,7 +914,7 @@ integrated with the $\sin\theta$ cell measure.
 **Test.** `test_z_outflow_3d` (`DIFFUSION`, `CONST_NU`) translates a compact profile on
 $2.45\le\theta\le2.75$ at angular rate 0.15 across the outer polar face $\theta=\pi-0.35$ until
 $t=1$. The production kernel lets flux leave through that face and suppresses inflow
-([`numerics_fluid.md`](numerics_fluid.md#83-boundary-conditions)).
+([`guide_fluid.md`](guide_fluid.md#83-boundary-conditions)).
 
 **Test.** `test_z_reflect_3d` (`DIFFUSION`, `CONST_NU`, `HALF_DISK`) uses the polar domain
 $0.35\le\theta\le\pi/2$, which ends at the midplane, where the production kernel imposes zero flux.
@@ -955,8 +955,8 @@ mass, and the case tests whether the discrete wall preserves the symmetric solut
 ## 11. Fluid diffusion
 
 These tests check the Crank–Nicolson diffusion solve
-([`numerics_fluid.md`](numerics_fluid.md#72-cranknicolson-solve)) and the donor-momentum closure
-([`numerics_fluid.md`](numerics_fluid.md#74-donor-momentum-closure)). They solve
+([`guide_fluid.md`](guide_fluid.md#72-cranknicolson-solve)) and the donor-momentum closure
+([`guide_fluid.md`](guide_fluid.md#74-donor-momentum-closure)). They solve
 
 ```math
 \frac{\partial\rho_d}{\partial t}=\nabla\!\cdot(D\nabla\rho_d)
@@ -1046,7 +1046,7 @@ controller neither changes the intended Crank–Nicolson solution nor creates ne
 **Test.** The three limiter variants, `--direction x --res 8`, `--direction y --res 8`, and
 `--direction z --res 8`, exercise the donor-outflow limiter of the azimuthal, radial, and polar
 production kernels on the fixed lines $8\times1\times1$, $4\times8\times1$, and $4\times4\times8$
-([`numerics_fluid.md`](numerics_fluid.md#72-cranknicolson-solve)). Each starts from a $20{:}1$
+([`guide_fluid.md`](guide_fluid.md#72-cranknicolson-solve)). Each starts from a $20{:}1$
 density front and nonuniform values of all three stored primitives, and takes one step of 0.89 times
 the inverse of the largest sum of Crank–Nicolson coefficients.
 
@@ -1069,7 +1069,7 @@ nonlinear correction that the smooth eigenmodes leave inactive.
 ## 12. Fluid initialization
 
 **Test.** `test_startup_3d` (`DIFFUSION`) initializes the three-dimensional dust density, its
-balancing polar velocity ([`numerics_fluid.md`](numerics_fluid.md#32-initial-velocity)), and the
+balancing polar velocity ([`guide_fluid.md`](guide_fluid.md#32-initial-velocity)), and the
 conserved momenta through the production initialization kernels. From two identical copies of that
 state it applies the production polar-advection operator to one and the production polar-diffusion
 operator to the other over the probe interval $\Delta t=\Delta\theta/4$. The model uses a narrow
@@ -1127,7 +1127,7 @@ parameter index rather than a spatial grid: they carry $\Delta t/t_s=10^{-6}$, $
 $1$, $10$, $10^2$, $10^4$, and $10^6$, so the test covers weak through strongly stiff drag. The
 model replaces `source_update` with a test-local kernel that prescribes the gas velocity, stopping
 times, and force endpoints and calls the production quadrature `_get_drag_weights`
-([`numerics_fluid.md`](numerics_fluid.md#61-drag-and-gravity)). It validates that stiff response,
+([`guide_fluid.md`](guide_fluid.md#61-drag-and-gravity)). It validates that stiff response,
 not the disk-dependent production source integration, which the attenuation and coupled ring tests
 exercise.
 
@@ -1142,8 +1142,8 @@ most $10^{-8}$, and a maximum error of at most $10^{-12}$ over every compared fi
 **Test.** `test_optdepth` (`RADIATION`, `--power -1.0`) builds the cumulative radial optical depth
 once, with unit opacity and a midplane density $\rho_d\propto R^{-1}$ reconstructed by the
 two-dimensional well-mixed closure
-([`numerics_basis.md`](numerics_basis.md#82-radial-optical-depth),
-[`numerics_fluid.md`](numerics_fluid.md#62-radiation-pressure-and-optical-depth)).
+([`guide_basis.md`](guide_basis.md#82-radial-optical-depth),
+[`guide_fluid.md`](guide_fluid.md#62-radiation-pressure-and-optical-depth)).
 
 **Reference.** The radial accumulation
 
@@ -1197,7 +1197,7 @@ test does not validate only a duplicated discrete prefix sum.
 mode on the power-law gas background $\Sigma_g\propto R^{1.2}$, chosen to be consistent with the
 radiation strength, through the palindromic composition of diffusion, transport, optical depth,
 drag and source terms, and radiation pressure
-([`numerics_fluid.md`](numerics_fluid.md#81-operator-composition)). It runs to $t=1$ with a timestep
+([`guide_fluid.md`](guide_fluid.md#81-operator-composition)). It runs to $t=1$ with a timestep
 of one quarter of an azimuthal cell at the fastest orbit. Radiation uses $\beta=0.2$ with zero
 opacity, so the force is known and unattenuated and the exact optical depth is zero. The test finds
 ordering, buffer, and conserved-to-primitive conversion errors that isolated operator tests cannot

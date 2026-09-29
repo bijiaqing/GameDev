@@ -4,15 +4,15 @@ This campaign tests whether the production swarm diffusion operator, run for man
 production runtime, reproduces the analytical log-normal solution of radial density and
 concentration diffusion at four constant Stokes numbers. It exercises the Lagrangian dust model in
 the [radial-only closure](../../../doc/README.md#glossary): the production `diffusion_pos` kernel
-with its cylindrical [Itô drift](../../../doc/numerics_swarm.md#72-eulermaruyama-step), the
+with its cylindrical [Itô drift](../../../doc/guide_swarm.md#72-eulermaruyama-step), the
 Stokes-suppressed diffusivity, the gas-density-gradient term of [concentration
-diffusion](../../../doc/numerics_swarm.md#73-concentration-diffusion), the reflecting radial
+diffusion](../../../doc/guide_swarm.md#73-concentration-diffusion), the reflecting radial
 boundaries, the backend random-number streams, and the [operator
-composition](../../../doc/numerics_swarm.md#101-operator-composition) that applies diffusion as two
+composition](../../../doc/guide_swarm.md#101-operator-composition) that applies diffusion as two
 half-steps around transport. The routine [swarm diffusion
-tests](../../../doc/testsets.md#4-swarm-diffusion) check one step from prescribed positions; this
+tests](../../../doc/guide_tests.md#4-swarm-diffusion) check one step from prescribed positions; this
 campaign checks the distribution that a thousand composed steps produce. The operator is derived in
-[Diffusion](../../../doc/numerics_swarm.md#7-diffusion), and project terms are defined in the
+[Diffusion](../../../doc/guide_swarm.md#7-diffusion), and project terms are defined in the
 [glossary](../../../doc/README.md#glossary).
 
 ## Contents
@@ -56,7 +56,7 @@ Each `mod/<model>/const_defs.cuh` sets only `DIFFUSION_STOKES` and includes the 
 `src/const_defs.cuh`. Every `flags.mk` selects `DUST_REPR := swarm`, `MODEL_PARENT := ../src`,
 `TRANSPORT`, `DIFFUSION`, `CONST_ST`, and `CODE_UNIT`; only the concentration models add
 `DIFFUSE_CONCENTRATION`, which switches from [density to concentration
-diffusion](../../../doc/numerics_basis.md#52-density-and-concentration-diffusion). `TRANSPORT` is
+diffusion](../../../doc/guide_basis.md#52-density-and-concentration-diffusion). `TRANSPORT` is
 required because `DIFFUSION` without it is rejected at compile time (`inc/swarm/swarm_kern.cuh`).
 `CODE_UNIT` acts only with `COLLISION` and has no effect here.
 
@@ -86,8 +86,8 @@ of the diffusion step.
 
 The chosen gas profile makes the radial dust diffusivity a pure power of radius. With the aspect
 ratio $h=h_0(R/R_0)^{(q+1)/2}$ and the viscosity $\nu=\alpha h^2R^2\Omega_K$ of the [shared disk
-model](../../../doc/numerics_basis.md#35-viscosity), $q=0.5$ gives $\nu=\alpha h_0^2R^2=10^{-4}R^2$,
-and the [directional diffusivity](../../../doc/numerics_basis.md#51-directional-diffusivities) is
+model](../../../doc/guide_basis.md#35-viscosity), $q=0.5$ gives $\nu=\alpha h_0^2R^2=10^{-4}R^2$,
+and the [directional diffusivity](../../../doc/guide_basis.md#51-directional-diffusivities) is
 
 ```math
 D(R)=aR^2,\qquad a=\frac{10^{-4}}{1+\mathrm{St}^2}.
@@ -102,7 +102,7 @@ The initial state is a narrow log-normal ring at $R_0$ with zero velocity. The l
 `particle_init` draws $\ln(R/R_0)$ for particle $i$ from its own stream (seed
 `RING_INIT_SEED = 17`, subsequence $i$), so the ring does not consume the evolution streams. The
 evolution uses the production per-particle streams, seed 1 with subsequence equal to the particle
-index ([random streams](../../../doc/numerics_swarm.md#129-random-streams)). The azimuth and polar
+index ([random streams](../../../doc/guide_swarm.md#129-random-streams)). The azimuth and polar
 angle stay at their inactive values, $\phi=0$ and $\theta=\pi/2$.
 
 ### Timestep and output schedule
@@ -124,7 +124,7 @@ overrides](../../../README.md#source-and-header-overrides)) and contains only:
 - `const_defs.cuh`: the constants above.
 - `particle_init.cu`: the initial log-normal ring, drawn from independent streams.
 - `dyn_rate_calc.cu`: a fixed step `DT_MAX` in place of the dynamics CFL policy of [timestep
-  control](../../../doc/numerics_swarm.md#102-timestep-control); the runtime still shortens the
+  control](../../../doc/guide_swarm.md#102-timestep-control); the runtime still shortens the
   last step to reach each output time.
 - `ssa_transport.cu`: a no-op deterministic transport kernel, which isolates diffusion while keeping
   the production operator composition.

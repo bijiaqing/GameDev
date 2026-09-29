@@ -25,9 +25,9 @@ convergence, or agreement over a parameter range and leaves the judgment to the 
 | [`photospheric/`](photospheric/README.md) | swarm and fluid | How do the two representations compare on the same photospheric transport problem with radiation pressure? | 2 models |
 
 The numerical methods under test are described in
-[`../../doc/numerics_swarm.md`](../../doc/numerics_swarm.md),
-[`../../doc/numerics_fluid.md`](../../doc/numerics_fluid.md), and the shared disk model in
-[`../../doc/numerics_basis.md`](../../doc/numerics_basis.md). Project terms are defined in the
+[`../../doc/guide_swarm.md`](../../doc/guide_swarm.md),
+[`../../doc/guide_fluid.md`](../../doc/guide_fluid.md), and the shared disk model in
+[`../../doc/guide_basis.md`](../../doc/guide_basis.md). Project terms are defined in the
 [glossary](../../doc/README.md#glossary).
 
 ## What the campaigns share

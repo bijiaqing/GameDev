@@ -12,6 +12,5 @@ out/
 
 # unpublished development notes; retain maintained public guides
 /doc/*
-!/doc/numerics_*.md
-!/doc/testsets.md
+!/doc/guide_*.md
 !/doc/README.md

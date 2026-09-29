@@ -5,7 +5,7 @@ drivers and judge them against analytical, statistical, and invariant references
 explains how to run, archive, check, and compare them, and it owns the rules that apply to every
 suite: when an archive is accepted, how CUDA and ROCm archives are compared, what qualifies a
 result, and when a new case belongs in the suites. What each case establishes, and its acceptance
-criteria, are in [`doc/testsets.md`](../doc/testsets.md); project terms are defined in the
+criteria, are in [`doc/guide_tests.md`](../doc/guide_tests.md); project terms are defined in the
 [glossary](../doc/README.md#glossary).
 
 ## Contents
@@ -163,8 +163,8 @@ A run of a suite leaves a hierarchy of JSON files, each level summarizing the on
   overall status.
 
 The swarm suite adds a KNN suite manifest and four collision-chain manifests. The files of each
-suite are listed in [swarm archive](../doc/testsets.md#15-reading-the-archive) and [fluid
-archive](../doc/testsets.md#15-reading-the-archive).
+suite are listed in [swarm archive](../doc/guide_tests.md#15-reading-the-archive) and [fluid
+archive](../doc/guide_tests.md#15-reading-the-archive).
 
 Every record and manifest carries an evidence **tier**. Only one tier, `publication`, is defined
 (`VAL_TIERS` in `val_config.py`), and the suite manifest records `campaign_tier`,
@@ -186,8 +186,8 @@ swarm suite adds `environment_all.json`.
 - the suite-specific manifests pass (swarm: the KNN suite manifest and all four chain manifests).
 
 Only the full-suite scope is read. The expected counts and the suite-specific conditions are in
-[swarm acceptance](../doc/testsets.md#151-swarm-archive) and [fluid
-acceptance](../doc/testsets.md#152-fluid-archive). A passing archive means that
+[swarm acceptance](../doc/guide_tests.md#151-swarm-archive) and [fluid
+acceptance](../doc/guide_tests.md#152-fluid-archive). A passing archive means that
 every case met its criteria at the recorded resolutions, on one backend and, for the fluid, one
 sweep.
 
@@ -239,13 +239,13 @@ checks the copied archive; after the native stages it runs the comparison for ea
 A few fields and manifests are judged differently, for the reasons given in each test set:
 
 - swarm collision-rate KNN-measure diagnostics are bounded natively, not compared ([swarm
-  comparison](../doc/testsets.md#153-comparing-cuda-and-rocm));
+  comparison](../doc/guide_tests.md#153-comparing-cuda-and-rocm));
 - swarm diffusion records are the stochastic records above ([swarm
-  comparison](../doc/testsets.md#153-comparing-cuda-and-rocm));
+  comparison](../doc/guide_tests.md#153-comparing-cuda-and-rocm));
 - swarm KNN and collision-chain manifests are compared by coverage, and chain hashes only within one
-  backend ([swarm comparison](../doc/testsets.md#153-comparing-cuda-and-rocm));
+  backend ([swarm comparison](../doc/guide_tests.md#153-comparing-cuda-and-rocm));
 - the vendor-dependent initialized mass of the fluid `test_startup_3d` is excluded ([fluid
-  comparison](../doc/testsets.md#153-comparing-cuda-and-rocm)).
+  comparison](../doc/guide_tests.md#153-comparing-cuda-and-rocm)).
 
 ## What qualifies a result
 

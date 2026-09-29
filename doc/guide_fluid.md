@@ -3,9 +3,9 @@
 This guide states the equations of the Eulerian dust-fluid model, how GameDev discretizes them, and
 the numerical properties that decide what a fluid run means. The disk the dust moves in
 (coordinates, gas, stopping time, diffusivities, and the shared radiation definitions) is described
-once in the [shared disk model](numerics_basis.md). Building, configuring, and running a model are
+once in the [shared disk model](guide_basis.md). Building, configuring, and running a model are
 covered in the [user guide](../README.md), and the tests behind each claim in
-[`testsets.md`](testsets.md).
+[`guide_tests.md`](guide_tests.md).
 
 ## Contents
 
@@ -30,8 +30,8 @@ relates to the swarm model.
 
 The fluid model represents dust of a single grain size as a pressureless continuum on the disk grid:
 each cell stores a density and three momenta, and conservative finite-volume operators evolve them.
-The gas is prescribed analytically ([shared disk model §3](numerics_basis.md#3-gas-disk)) and feels
-no back-reaction from the dust ([§3.7](numerics_basis.md#37-one-way-coupling)). One step combines
+The gas is prescribed analytically ([shared disk model §3](guide_basis.md#3-gas-disk)) and feels
+no back-reaction from the dust ([§3.7](guide_basis.md#37-one-way-coupling)). One step combines
 four kinds of operator:
 
 - conservative pressureless transport, one direction at a time ([Section 5](#5-transport));
@@ -45,7 +45,7 @@ four kinds of operator:
 ### 1.2 Supported configurations
 
 The fluid model supports two of the four geometries of the
-[shared disk model](numerics_basis.md#24-supported-geometries):
+[shared disk model](guide_basis.md#24-supported-geometries):
 
 - the radial–azimuthal disk, `N_Z == 1`, which evolves the dust surface density $\Sigma_d$;
 - the full 3D spherical grid, `N_Z > 1`, which evolves the dust volume density $\rho_d$.
@@ -66,10 +66,10 @@ layer vertically. The feature flags and their rules are listed in the
 ### 1.3 Relation to the swarm model
 
 The two dust models share the disk but approximate the dust distribution differently. The [swarm
-model](numerics_swarm.md#13-relation-to-the-fluid-model) advances a finite sample of the dust
+model](guide_swarm.md#13-relation-to-the-fluid-model) advances a finite sample of the dust
 phase-space distribution; the fluid model advances its low-order moments, density $\rho_d$ and
 momentum $\rho_d\boldsymbol u_d$ ([shared disk model
-§9](numerics_basis.md#9-dust-distribution-and-its-moments)), with one velocity at each point. It
+§9](guide_basis.md#9-dust-distribution-and-its-moments)), with one velocity at each point. It
 closes the moment hierarchy with a zero pressure tensor, $\boldsymbol P_d=0$, so its momentum flux
 is
 
@@ -80,7 +80,7 @@ is
 and contains no velocity-dispersion tensor.
 
 The two models also differ in the coordinate basis of diffusion
-([shared disk model §5.3](numerics_basis.md#53-why-the-diffusion-bases-differ)) and in their initial
+([shared disk model §5.3](guide_basis.md#53-why-the-diffusion-bases-differ)) and in their initial
 vertical velocity ([Section 3.2](#32-initial-velocity)). The user guide compares all their closures
 in one table ([Dust representations](../README.md#dust-representations)).
 
@@ -109,7 +109,7 @@ the [stored angular variables](README.md#glossary): the specific angular momentu
 the spherical radial velocity, and the polar specific angular momentum. The conserved arrays
 `dustdens`, `dustmomx`, `dustmomy`, and `dustmomz` hold the density and the three momenta. With
 $\varrho_d$ the evolved density ($\Sigma_d$ when `N_Z == 1`, $\rho_d$ otherwise; see
-[shared disk model §1.4](numerics_basis.md#14-notation)), the state is
+[shared disk model §1.4](guide_basis.md#14-notation)), the state is
 
 ```math
 \boldsymbol U=
@@ -154,9 +154,9 @@ $\ell_\theta$ to linear velocities without changing the device state
 
 ### 2.2 Mesh measures and face areas
 
-The fluid uses the mesh of the [shared disk model](numerics_basis.md#22-mesh), uniform in $x$ and
+The fluid uses the mesh of the [shared disk model](guide_basis.md#22-mesh), uniform in $x$ and
 $z$ and logarithmic in $y$ with ratio $a_y$, and its cell measures $\Delta V_y$, $\Delta V_z$, and
-$V_{ijk}$ ([§2.3](numerics_basis.md#23-cell-measure)), where $d=2$ when `N_Z == 1` and $d=3$
+$V_{ijk}$ ([§2.3](guide_basis.md#23-cell-measure)), where $d=2$ when `N_Z == 1` and $d=3$
 otherwise. This section adds the cell centers and face areas the finite-volume operators use.
 
 The coordinate centers are
@@ -178,7 +178,7 @@ face factor $A_{y,j+1/2}=y_{j+1/2}^{d-1}$. In 3D, the radial contribution to a p
 
 so the separated polar face factor is $A_{z,j,k+1/2}=\Delta A_{z,j}\sin z_{k+1/2}$.
 
-Cells are indexed $(i,j,k)$ as in the [shared disk model](numerics_basis.md#14-notation). Where a
+Cells are indexed $(i,j,k)$ as in the [shared disk model](guide_basis.md#14-notation). Where a
 later derivation works on one directional line (tridiagonal solves, reconstruction), $i$ denotes a
 generic index along that line, not a second radial-index convention.
 
@@ -193,8 +193,8 @@ periodicity is part of the model definition ([Section 8.3](#83-boundary-conditio
 
 Code units, the orbital scales $t_0$, $v_0$, and $\Omega_0$, the dimensions of every quantity, and
 the dimensionless parameters are defined in the
-[shared disk model](numerics_basis.md#12-units-and-scales) and
-[§1.3](numerics_basis.md#13-dimensionless-parameters). With the default $G=M_\star=R_0=1$, one orbit
+[shared disk model](guide_basis.md#12-units-and-scales) and
+[§1.3](guide_basis.md#13-dimensionless-parameters). With the default $G=M_\star=R_0=1$, one orbit
 at $R_0$ lasts $2\pi$ code time units. Lengths are in units of $R_0$, times in units of $t_0$, and
 angles in radians. The evolved density $\varrho_d$ has dimension $ML^{-2}$ when `N_Z == 1` and
 $ML^{-3}$ otherwise; $\ell_\phi$ and $\ell_\theta$ are specific angular momenta ($L^2T^{-1}$), and
@@ -232,8 +232,8 @@ parameter with a flag in the last column exists only when that flag is defined.
 | `TPB` | 64 | threads per block for elementwise and thread-line kernels | always |
 
 The fluid is monodisperse: its Stokes number has no grain-size factor
-([shared disk model §4](numerics_basis.md#4-stopping-time-and-stokes-number)). The viscosity $\nu$
-([§3.5](numerics_basis.md#35-viscosity)) exists only with `DIFFUSION`, from `ALPHA` without
+([shared disk model §4](guide_basis.md#4-stopping-time-and-stokes-number)). The viscosity $\nu$
+([§3.5](guide_basis.md#35-viscosity)) exists only with `DIFFUSION`, from `ALPHA` without
 `CONST_NU` and from `NU` with it. Without `DIFFUSION` no viscosity is defined, `CONST_NU` has no
 effect, and `VISC_FLOW` is rejected.
 
@@ -262,7 +262,7 @@ The `static_assert` checks live in the constants header, so a build enforces the
 `inc/fluid/const_defs.cuh`. The validation header `val/fluid/src/const_defs.cuh` (lines 262 and
 265) relaxes them to `N_Y >= 1`, `Z_MIN >= 0`, and `Z_MAX` $\le\pi$, so that fluid tests can run
 one-cell radial lines ($N\times1\times1$ and $8\times1\times1$ grids) and a polar hemisphere
-$0\le\theta\le\pi/2$ ([`testsets.md`](testsets.md)). The `#error` checks sit in the
+$0\le\theta\le\pi/2$ ([`guide_tests.md`](guide_tests.md)). The `#error` checks sit in the
 kernel header and apply to every build.
 
 **Limits.** There is no upper bound on `X_MAX - X_MIN`; a range that is not a divisor of $2\pi$
@@ -277,8 +277,8 @@ perturbation, and the polar diffusion velocity.
 ### 3.1 Dust density profile
 
 The initial dust surface density is the tapered profile $\Sigma_{d,\rm conv}$: the metallicity
-profile of [shared disk model §6.1](numerics_basis.md#61-metallicity-profile) convolved near the
-radial edges as in [§6.2](numerics_basis.md#62-edge-taper), which also defines the lower axis bound
+profile of [shared disk model §6.1](guide_basis.md#61-metallicity-profile) convolved near the
+radial edges as in [§6.2](guide_basis.md#62-edge-taper), which also defines the lower axis bound
 $R_{\min,\rm init}$. The host tabulates it on `N_Y + 1` points of a uniform cylindrical-radius axis
 from $R_{\min,\rm init}$ to $Y_{\max}$. Each cell takes the linear interpolation of this table at
 its center cylindrical radius $R=y_j\sin z_k$; the profile is zero outside
@@ -341,11 +341,11 @@ individually reproducible noise realizations, so their initial masses differ.
 ### 3.2 Initial velocity
 
 The initial velocity is the steady drift of [shared disk model
-§7](numerics_basis.md#7-steady-drift-velocity), a local no-back-reaction drift relative to the
+§7](guide_basis.md#7-steady-drift-velocity), a local no-back-reaction drift relative to the
 pressure-supported gas. It uses the effective rotation-support parameter $\eta(R,Z)$ and the gas
-azimuthal velocity $v_{\phi,g}$ of [§3.4](numerics_basis.md#34-rotation-support), and, with
+azimuthal velocity $v_{\phi,g}$ of [§3.4](guide_basis.md#34-rotation-support), and, with
 `VISC_FLOW`, the viscous gas radial velocity $v_{R,g}$ of
-[§3.6](numerics_basis.md#36-viscous-radial-flow); without `VISC_FLOW`, $v_{R,g}=0$. The drift gives
+[§3.6](guide_basis.md#36-viscous-radial-flow); without `VISC_FLOW`, $v_{R,g}=0$. The drift gives
 the cylindrical components $v_{R,d}$ and $v_{\phi,d}$.
 
 In 3D the polar primitive also carries the velocity that approximately balances the initial polar
@@ -360,7 +360,7 @@ where $w=1$ for density diffusion and $w=\rho_g$ for concentration diffusion. Th
 one-sided differences at the polar boundaries and centered differences inside.
 
 The fluid adds this polar diffusive-balance velocity but not the swarm's terminal-settling velocity
-$`v_Z=-\mathrm{St}\,\Omega_KZ`$ ([`numerics_swarm.md`](numerics_swarm.md#32-initial-velocity)). The
+$`v_Z=-\mathrm{St}\,\Omega_KZ`$ ([`guide_swarm.md`](guide_swarm.md#32-initial-velocity)). The
 asymmetry is intentional: the swarm evolves diffusion as a separate stochastic positional operator
 and does not encode it in its initial deterministic velocity.
 
@@ -379,10 +379,10 @@ with the vacuum reset of [Section 2.1](#21-stored-state).
 
 **Limits.** The 3D initializer balances polar advection and the selected diffusion flux only to
 discretization error. `test_startup_3d` measures the normalized instantaneous mismatch and its
-convergence with polar resolution ([`testsets.md`](testsets.md#12-fluid-initialization)); later
-momentum relaxation can still produce a physical startup transient, which is not assumed to vanish
-under mesh refinement. The swarm and fluid models therefore do not begin from an identical vertical
-dynamical equilibrium.
+convergence with polar resolution ([`guide_tests.md`](guide_tests.md#12-fluid-initialization));
+later momentum relaxation can still produce a physical startup transient, which is not assumed to
+vanish under mesh refinement. The swarm and fluid models therefore do not begin from an identical
+vertical dynamical equilibrium.
 
 ## 4. Governing equations
 
@@ -433,7 +433,7 @@ operators and physical closures differ:
 | full 3D | $\varrho_d=\rho_d(r,\theta,\phi)$ | three-dimensional spherical divergence | explicitly resolved polar structure |
 
 The continuity equation of each geometry is written out in the
-[shared disk model](numerics_basis.md#24-supported-geometries), and the diffusion operators
+[shared disk model](guide_basis.md#24-supported-geometries), and the diffusion operators
 $\mathcal D_{2D}$ and $\mathcal D_{3D}$ on its right-hand side are expanded in
 [Section 7.1](#71-target-equation). There is no production 1D fluid model. The momentum components
 are not written again for each geometry: they are the same covariant conservation law, and only the
@@ -468,8 +468,8 @@ t_s=\frac{\mathrm{St}}{\Omega_K}.
 ```
 
 Here $\ell_{\phi,g}=Rv_{\phi,g}$ is the gas azimuthal target ([shared disk model
-§3.4](numerics_basis.md#34-rotation-support)), and $v_{r,g}$ and $\ell_{\theta,g}$ are the spherical
-projections of the viscous gas radial velocity ([§3.6](numerics_basis.md#36-viscous-radial-flow)),
+§3.4](guide_basis.md#34-rotation-support)), and $v_{r,g}$ and $\ell_{\theta,g}$ are the spherical
+projections of the viscous gas radial velocity ([§3.6](guide_basis.md#36-viscous-radial-flow)),
 which vanish without `VISC_FLOW`. The polar torque and $\ell_\theta$ are absent when `N_Z == 1`. The
 radiation ratio $\beta$ is defined in [Section 6.2](#62-radiation-pressure-and-optical-depth).
 
@@ -950,9 +950,9 @@ factor $1-\beta$. The fluid is monodisperse, so its radiation ratio has no grain
 ```
 
 The startup ramp $f_\beta$ and the combined acceleration $\boldsymbol a_{\rm grav+rad}$ are defined
-in [shared disk model §8.1](numerics_basis.md#81-radiation-ratio-and-startup-ramp). The optical
+in [shared disk model §8.1](guide_basis.md#81-radiation-ratio-and-startup-ramp). The optical
 depth is the [outer-face optical depth](README.md#glossary) of
-[§8.2](numerics_basis.md#82-radial-optical-depth). The fluid computes each cell's increment
+[§8.2](guide_basis.md#82-radial-optical-depth). The fluid computes each cell's increment
 $\Delta\tau=\kappa_0\rho_{\rm ext}\Delta r$ directly from its density (`optdepth_calc`), with
 $\rho_{\rm ext}=\rho_d$ in 3D and the well-mixed extinction density in 2D, whose gas scale height
 $H_g$ it evaluates at the logarithmic cell center $y_j$. The inclusive radial prefix sum
@@ -982,9 +982,9 @@ direction and moves momentum with the diffused mass. It is compiled only with `D
 ### 7.1 Target equation
 
 The fluid solves the density or concentration equation of
-[shared disk model §5.2](numerics_basis.md#52-density-and-concentration-diffusion) with the
+[shared disk model §5.2](guide_basis.md#52-density-and-concentration-diffusion) with the
 directional diffusivities $D_x$, $D_y$, and $D_z$ of
-[§5.1](numerics_basis.md#51-directional-diffusivities), a diagonal tensor in the spherical
+[§5.1](guide_basis.md#51-directional-diffusivities), a diagonal tensor in the spherical
 $(x,y,z)=(\phi,r,\theta)$ basis with Schmidt numbers `SCHMIDT_X`, `SCHMIDT_Y`, and `SCHMIDT_Z`. The
 default is density diffusion; `DIFFUSE_CONCENTRATION` selects concentration diffusion, whose gas
 weight $w$ is the analytic gas surface density in 2D and volume density in 3D, up to a common
@@ -1017,7 +1017,7 @@ suppression. The disk profiles that set $\nu$ depend on cylindrical $R$; this do
 coordinate basis of the operator.
 
 **Limits.** Because $D_y$ acts along spherical radius, the fluid and swarm radial diffusion agree
-only where $r=R$ ([shared disk model §5.3](numerics_basis.md#53-why-the-diffusion-bases-differ)).
+only where $r=R$ ([shared disk model §5.3](guide_basis.md#53-why-the-diffusion-bases-differ)).
 
 ### 7.2 Crank–Nicolson solve
 
@@ -1271,7 +1271,7 @@ exactly time-centered CN locally. The invariants above do not give second-order 
 for spatially varying primitives: the mass flux is time-centered when unlimited, but the transported
 primitive is the old upwind value. The constant-primitive eigenmode tests exercise CN density
 accuracy and consistent momentum scaling; the nonuniform-front tests establish bounds and
-conservation, not general momentum order ([`testsets.md`](testsets.md#11-fluid-diffusion)).
+conservation, not general momentum order ([`guide_tests.md`](guide_tests.md#11-fluid-diffusion)).
 
 ### 7.5 Why not a Reynolds-stress closure
 
@@ -1483,10 +1483,10 @@ This flux is first order: it uses the adjacent cell average, not a reconstructed
 "reflecting" means an impermeable finite-volume symmetry wall: the operator does not move a parcel
 through the face and then reverse its polar momentum. Reflection-symmetric continuum states instead
 have zero normal velocity at the midplane, which is the case the validation suite exercises
-([`testsets.md`](testsets.md#10-fluid-transport)).
+([`guide_tests.md`](guide_tests.md#10-fluid-transport)).
 
 The optical depth additionally assumes no unresolved material inside the radial domain,
-$\tau(Y_{\min})=0$ ([shared disk model §8.2](numerics_basis.md#82-radial-optical-depth)).
+$\tau(Y_{\min})=0$ ([shared disk model §8.2](guide_basis.md#82-radial-optical-depth)).
 
 **Limits.** The transport and diffusion boundaries differ on purpose: an advected parcel may leave
 the modeled disk, whereas turbulent diffusion is held back by a numerical wall. Mass and radiation
@@ -1533,7 +1533,7 @@ error.
 
 Each item links to the Limits paragraph that explains it. Limitations shared with the swarm model
 are summarized in the [user guide](../README.md#current-limitations); untested regimes are listed in
-[`testsets.md`](testsets.md#16-limits).
+[`guide_tests.md`](guide_tests.md#16-limits).
 
 - [Section 1.3](#13-relation-to-the-swarm-model): pressureless, monodisperse closure with no
   multistreaming.
@@ -1666,7 +1666,7 @@ perturbation uses the vendor generator, so CUDA and ROCm start from different no
 ([Section 3.1](#31-dust-density-profile)). Cross-backend validation therefore compares metric
 records within tolerances, excluding the backend-dependent initial mass of `test_startup_3d`, rather
 than requiring byte-identical fields
-([`testsets.md`](testsets.md#153-comparing-cuda-and-rocm)).
+([`guide_tests.md`](guide_tests.md#153-comparing-cuda-and-rocm)).
 
 **Trace builds.** The global CFL reduction is quiet by default: it keeps the nonfinite-state check
 but skips the three diagnostic velocity copies, the ring-velocity reduction, and the printout of the
@@ -1830,4 +1830,4 @@ with the run. Sweep performance is not part of the validation suite.
 
 The disk-model references (Epstein 1924; Kanagawa et al. 2017; Nakagawa, Sekiya & Hayashi 1986;
 Shakura & Sunyaev 1973; Takeuchi & Lin 2002) are listed in the
-[shared disk model](numerics_basis.md#10-references).
+[shared disk model](guide_basis.md#10-references).

@@ -4,12 +4,12 @@ This campaign asks how monomer dust grows and fragments in a turbulent disk when
 production swarm physics acts together: transport, Stokes-dependent concentration diffusion, and the
 physical collision kernel with sticking, erosion, and fragmentation. It follows the physical
 ingredients of the coagulation comparison of Eriksson et al. at two turbulence levels, and runs each
-with both [neighbor searches](../../../doc/numerics_swarm.md#9-nearest-neighbor-search) on both GPU
+with both [neighbor searches](../../../doc/guide_swarm.md#9-nearest-neighbor-search) on both GPU
 backends. The routine swarm suite checks the ingredients one at a time, namely the [collision
-rates](../../../doc/testsets.md#6-swarm-collision-rates), the [neighbor
-search](../../../doc/testsets.md#7-swarm-neighbor-search), and the [collision
-chain](../../../doc/testsets.md#8-swarm-collision-chain); the
-[Smoluchowski campaigns](../../../doc/testsets.md#9-swarm-coagulation-campaigns) test the chain
+rates](../../../doc/guide_tests.md#6-swarm-collision-rates), the [neighbor
+search](../../../doc/guide_tests.md#7-swarm-neighbor-search), and the [collision
+chain](../../../doc/guide_tests.md#8-swarm-collision-chain); the
+[Smoluchowski campaigns](../../../doc/guide_tests.md#9-swarm-coagulation-campaigns) test the chain
 against synthetic kernels. This campaign is the physical-kernel application that neither covers.
 Project terms are defined in the [glossary](../../../doc/README.md#glossary).
 
@@ -29,7 +29,7 @@ Project terms are defined in the [glossary](../../../doc/README.md#glossary).
 | Item | Value |
 |---|---|
 | Representation | swarm (`DUST_REPR := swarm`), multisize, physical CGS units |
-| Geometry | axisymmetric [radial–polar](../../../doc/numerics_basis.md#24-supported-geometries), mesh `(N_X, N_Y, N_Z) = (1, 128, 64)` |
+| Geometry | axisymmetric [radial–polar](../../../doc/guide_basis.md#24-supported-geometries), mesh `(N_X, N_Y, N_Z) = (1, 128, 64)` |
 | Backends and searches | CUDA and ROCm, each with `COLLISION_SEARCH=kdtree` and `morton` |
 | Models | 2: `alpha_1e-3` and `alpha_1e-4` |
 | Planned runs | 8: 2 models $\times$ 2 searches $\times$ 2 backends |
@@ -77,16 +77,16 @@ relative velocity needs the molecular gas constants.
 
 The Stokes number scales from `STOKES_0` with the grain diameter, the midplane gas surface density,
 and the exact spherical stratification ([Stokes
-number](../../../doc/numerics_basis.md#4-stopping-time-and-stokes-number)). With
+number](../../../doc/guide_basis.md#4-stopping-time-and-stokes-number)). With
 `DIFFUSE_CONCENTRATION` the dust diffuses toward a uniform dust-to-gas ratio ([concentration
-diffusion](../../../doc/numerics_swarm.md#73-concentration-diffusion)).
+diffusion](../../../doc/guide_swarm.md#73-concentration-diffusion)).
 
 ### Collisions and neighbor search
 
 The physical kernel (`COAG_KERNEL = 3`) evaluates pair rates from the neighbors of each owner and
 applies sticking below `V_FRAG` and erosion or fragmentation above it ([collision
-kernels](../../../doc/numerics_swarm.md#841-collision-kernels), [outcome
-channels](../../../doc/numerics_swarm.md#851-outcome-channels)). Fragments never become smaller than
+kernels](../../../doc/guide_swarm.md#841-collision-kernels), [outcome
+channels](../../../doc/guide_swarm.md#851-outcome-channels)). Fragments never become smaller than
 `INIT_SMIN`, the monomer diameter.
 
 | Parameter | Value |
@@ -102,7 +102,7 @@ channels](../../../doc/numerics_swarm.md#851-outcome-channels)). Fragments never
 `src/const_defs.cuh` asserts `N_K == 256` and `COL_BATH_EPS == 0.08`, so all variants share these
 benchmark settings. The root default is `COL_BATH_EPS = 0.02`. The controller groups, size bins, and
 bath tolerance are explained in
-[bath controller](../../../doc/numerics_swarm.md#87-bath-controller).
+[bath controller](../../../doc/guide_swarm.md#87-bath-controller).
 
 ### Initialization
 
@@ -112,13 +112,13 @@ density at the inner radius and polar edge, where it is largest. All representat
 The dust mass is `METAL_Z` times the gas mass in the domain, computed by a Simpson integral
 ($512\times512$ intervals) over both hemispheres. This replaces the root initializer, which samples
 a size-dependent settled distribution from the
-[edge-tapered](../../../doc/numerics_basis.md#62-edge-taper) profile
-([spatial sampling](../../../doc/numerics_swarm.md#35-spatial-sampling)); the campaign applies no
+[edge-tapered](../../../doc/guide_basis.md#62-edge-taper) profile
+([spatial sampling](../../../doc/guide_swarm.md#35-spatial-sampling)); the campaign applies no
 edge taper.
 
 The seeds are fixed by design: the host position generator uses seed 0 and the per-particle
 random streams use device seed 1
-([random streams](../../../doc/numerics_swarm.md#129-random-streams)). Every run therefore starts
+([random streams](../../../doc/guide_swarm.md#129-random-streams)). Every run therefore starts
 from the same particle state and random streams, so the eight runs form a controlled comparison in
 which only the collision search and the GPU backend change.
 
@@ -145,7 +145,7 @@ The campaign `src/` directory contains only:
   diameter; all other host and output helpers are reused.
 
 On ROCm the root collision code specializes some kernels for this shape ([collision and search
-kernels](../../../doc/numerics_swarm.md#123-collision-and-search-kernels)). When compiled for
+kernels](../../../doc/guide_swarm.md#123-collision-and-search-kernels)). When compiled for
 `gfx942`, the rate and chain kernels (`col_bath_rate`, `col_chain_run`) use wavefront reductions
 for `N_K = 256` with `COL_BATH_TPB = 128`. On every ROCm target, the KD-tree neighbor-cache query
 keeps a private per-thread heap with 64 queries per block. The Morton search uses the same query
@@ -230,13 +230,13 @@ and ROCm builds and fresh runs from the current source.
 
 - **Search and backend effects, not seed scatter.** Because the seeds are fixed, differences
   between the eight runs come only from the search (which stores the same neighbor set in a
-  different order, see [search contract](../../../doc/numerics_swarm.md#92-search-contract)) and
+  different order, see [search contract](../../../doc/guide_swarm.md#92-search-contract)) and
   from backend arithmetic. The campaign does not measure the spread between independent
   realizations.
 - **No bath-tolerance convergence.** `COL_BATH_EPS` controls refreshes and is not an 8% accuracy
   guarantee. The campaign fixes it at 0.08 and uses one seed, so it does not provide the refinement
   of the bath tolerance and the comparison of independent seeds that a size-distribution result
-  needs ([finite-bath convergence](../../../doc/numerics_swarm.md#112-finite-bath-convergence)).
+  needs ([finite-bath convergence](../../../doc/guide_swarm.md#112-finite-bath-convergence)).
 - **Not the MCDUST equations.** The setup follows the physical ingredients of the Eriksson
   comparison, not identical MCDUST equations. It keeps the production hydrostatic gas
   stratification, fixed spherical boundaries, relative-velocity prescriptions, and Gaussian
