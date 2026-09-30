@@ -1,11 +1,12 @@
 # Scientific campaigns
 
-The campaigns in this directory produce the numerical experiments behind the GameDev code paper.
-Each one runs the production kernels on a specific scientific problem, such as an analytical
-diffusion solution, a convergence study, or a coagulation benchmark, and writes the outputs its
-analysis needs. They complement the routine validation suites of [`../README.md`](../README.md): the
-suites check each operator against a pass-or-fail criterion, whereas a campaign measures accuracy,
-convergence, or agreement over a parameter range and leaves the judgment to the analysis.
+The campaigns in this directory produce the numerical experiments behind the GameDev code paper,
+[Bi (2026)](https://arxiv.org/abs/2609.35967). Each one runs the production kernels on a specific
+scientific problem, such as an analytical diffusion solution, a convergence study, or a coagulation
+benchmark, and writes the outputs its analysis needs. They complement the routine validation suites
+of [`../README.md`](../README.md): the suites check each operator against a pass-or-fail criterion,
+whereas a campaign measures accuracy, convergence, or agreement over a parameter range and leaves
+the judgment to the analysis.
 
 ## Contents
 

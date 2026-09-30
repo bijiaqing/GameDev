@@ -6,9 +6,9 @@
 
 **GameDev: GPU-Accelerated ModEl for Dust EVolution**
 
-GameDev is a GPU research code for dust evolution in protoplanetary disks. One repository and one
-Makefile build it for either NVIDIA CUDA or AMD HIP/ROCm, and each build selects one of two
-independent dust representations:
+GameDev is a GPU research code for dust evolution in protoplanetary disks, described in
+[Bi (2026)](https://arxiv.org/abs/2609.35967). One repository and one Makefile build it for either
+NVIDIA CUDA or AMD HIP/ROCm, and each build selects one of two independent dust representations:
 
 - a Lagrangian **dust swarm** for particle trajectories, stochastic diffusion, and
   representative-particle collisions
@@ -610,6 +610,7 @@ limitations](doc/guide_fluid.md#92-known-limitations).
 ├── .github/           # repository banner
 ├── Makefile           # model, representation, and GPU-backend build rules
 ├── CHANGELOG.md       # contents of each release
+├── CITATION.cff       # how to cite GameDev (the code paper)
 ├── requirements.txt   # Python packages for the validation and analysis scripts
 ├── inc/
 │   ├── gpu.cuh        # CUDA/HIP API mappings and GPU error checks
@@ -666,9 +667,28 @@ history of resolved work.
 
 ## Citation and license
 
-A formal software citation is not yet provided. Until one is, cite the repository version or commit
-used for a calculation and record the model constants, compile-time flags, GPU backend, toolkit,
-compiler, target architecture, and relevant validation results.
+If you use GameDev in published work, please cite the code paper,
+[Bi (2026)](https://arxiv.org/abs/2609.35967). The "Cite this repository" button on the GitHub page
+gives the same reference, from [`CITATION.cff`](CITATION.cff).
+
+```bibtex
+@ARTICLE{Bi2026,
+    author = {{Bi}, Jiaqing},
+    title = "{GameDev: GPU-accelerated model for dust evolution}",
+    journal = {arXiv e-prints},
+    year = 2026,
+    month = sep,
+    eid = {arXiv:2609.35967},
+    eprint = {2609.35967},
+    archivePrefix = {arXiv},
+    primaryClass = {astro-ph.EP},
+    doi = {10.48550/arXiv.2609.35967}
+}
+```
+
+For reproducibility, also state the GameDev release you used (for example `v1.0.0`, see
+[`CHANGELOG.md`](CHANGELOG.md)) or, for a modified version, the commit, and record the items listed
+under [Reproducibility](#reproducibility).
 
 GameDev's original code is distributed under the [MIT License](LICENSE). Copyright 2026 Jiaqing Bi.
 
